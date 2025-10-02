@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/core/**)",
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/react/**)",
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

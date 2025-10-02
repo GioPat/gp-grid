@@ -3,31 +3,19 @@
   "description": "A typescript library that enables grid creation",
   "private": true,
   "version": "0.0.0",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.esm.js",
-  "types": "dist/index.dt.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "author": "Giovanni Patruno (giovanni.patruno@outlook.com)",
   "type": "module",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "test": "vitest",
-    "test:ui": "vitest-ui",
-    "test:coverage": "vitest --coverage"
+    "build": "tsdown"
   },
   "devDependencies": {
-    "typescript": "~5.8.3",
-    "vite": "npm:rolldown-vite@7.1.12",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^3.2.4"
-  },
-  "pnpm": {
-    "overrides": {
-      "vite": "npm:rolldown-vite@7.1.12"
-    }
-  },
-  "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706"
+    "@types/node": "^24.6.0",
+    "tsdown": "^0.15.5",
+    "typescript": "~5.8.3"
+  }
 }
