@@ -11,6 +11,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
   inner.style.position = "relative";
   inner.style.width = engine.totalWidth + "px";
   inner.style.height = engine.totalHeight + "px";
+  inner.style.overflow = "auto";
   container.appendChild(inner);
 
   const cellPool: HTMLDivElement[] = [];
@@ -32,7 +33,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       cell!.style.top = c.y + "px";
       cell!.style.width = c.width + "px";
       cell!.style.height = c.height + "px";
-      cell!.textContent = c.value;
+      cell!.textContent = String(c.value ?? "");
     });
   });
 

@@ -2,7 +2,28 @@ import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
-import { Grid } from "gp-grid-react";
+import { Grid, type ColumnDefinition } from "gp-grid-react";
+
+interface Person {
+  id: number;
+  name: string;
+  age: number;
+  email: string;
+}
+
+const columns: ColumnDefinition[] = [
+  { field: "id", cellDataType: "number", width: 80, headerName: "ID" },
+  { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
+  { field: "age", cellDataType: "number", width: 80, headerName: "Age" },
+  { field: "email", cellDataType: "text", width: 250, headerName: "Email" },
+];
+
+const rowData: Person[] = Array.from({ length: 1000 }, (_, i) => ({
+  id: i + 1,
+  name: `Person ${i + 1}`,
+  age: 20 + (i % 50),
+  email: `person${i + 1}@example.com`,
+}));
 
 function App() {
   const [count, setCount] = useState(0);
@@ -16,14 +37,10 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
       </div>
-      <h1>Vite + React</h1>
-      <Grid
-        rowCount={100}
-        colCount={10}
-        rowHeight={30}
-        colWidth={100}
-        getCellValue={(row: number, col: number) => `R${row} C${col}`}
-      />
+      <h1>GP Grid Demo</h1>
+      <div style={{ width: "600px", height: "400px" }}>
+        <Grid columns={columns} rowData={rowData} rowHeight={30} />
+      </div>
       <div className="card">
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
