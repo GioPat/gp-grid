@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/react/src/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

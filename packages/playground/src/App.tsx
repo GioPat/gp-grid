@@ -11,6 +11,14 @@ interface Person {
   email: string;
 }
 
+function getRandomInt(min: number, max: number): number {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+const names = ["Giuseppe", "Giovanni", "Mario"];
+
 const columns: ColumnDefinition[] = [
   { field: "id", cellDataType: "number", width: 80, headerName: "ID" },
   { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
@@ -20,8 +28,8 @@ const columns: ColumnDefinition[] = [
 
 const rowData: Person[] = Array.from({ length: 1000 }, (_, i) => ({
   id: i + 1,
-  name: `Person ${i + 1}`,
-  age: 20 + (i % 50),
+  name: `Person ${names[getRandomInt(0, 2)]}`,
+  age: getRandomInt(18, 90),
   email: `person${i + 1}@example.com`,
 }));
 
@@ -39,7 +47,12 @@ function App() {
       </div>
       <h1>GP Grid Demo</h1>
       <div style={{ width: "600px", height: "400px" }}>
-        <Grid columns={columns} rowData={rowData} rowHeight={30} />
+        <Grid
+          columns={columns}
+          rowData={rowData}
+          rowHeight={30}
+          showFilters={true}
+        />
       </div>
       <div className="card">
         <button onClick={() => setCount((count) => count + 1)}>

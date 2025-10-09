@@ -31,6 +31,10 @@ export interface GridOptions {
   rowData: any[];
   // Default row height in pixels
   rowHeight: number;
+  // Header row height in pixels (default: same as rowHeight)
+  headerHeight?: number;
+  // Show filter row below headers (default: false)
+  showFilters?: boolean;
 }
 
 // Cell position in the grid
@@ -53,17 +57,50 @@ export interface CellInfo extends CellPosition, CellLayout {
   column: ColumnDefinition;
 }
 
-type RenderCallback = (cells: CellInfo[]) => void;
+// Header cell information for rendering
+export interface HeaderCellInfo extends CellLayout {
+  col: number;
+  column: ColumnDefinition;
+  sortDirection?: "asc" | "desc";
+  sortIndex?: number; // 1-based index for multi-column sort display
+}
+
+export type SortDirection = "asc" | "desc";
+
+export interface SortModel {
+  colId: string;
+  direction: SortDirection;
+}
+
+export type FilterModel = Record<string, string>;
+
+type RenderCallback = (cells: CellInfo[], headers: HeaderCellInfo[]) => void;
 
 export class GridEngine {
   private opts: GridOptions;
   private renderCb?: RenderCallback;
   private columnPositions: number[];
   private maxColumnWidth: number = 0;
+  private sortModel: SortModel[] = [];
+  private filterModel: FilterModel = {};
+  private processedData: any[];
+  private columnMap: Map<string, ColumnDefinition>;
+  private fieldPathCache: Map<string, string[]>;
 
   constructor(opts: GridOptions) {
     this.opts = opts;
     this.columnPositions = this.computeColumnPositions();
+    this.processedData = [...opts.rowData];
+
+    // Build column lookup cache for O(1) access
+    this.columnMap = new Map();
+    for (const col of opts.columns) {
+      const colId = col.colId || col.field;
+      this.columnMap.set(colId, col);
+    }
+
+    // Initialize field path cache for memoization
+    this.fieldPathCache = new Map();
   }
 
   private computeColumnPositions(): number[] {
@@ -80,13 +117,119 @@ export class GridEngine {
   }
 
   private getFieldValue(data: any, field: string): CellValue {
-    const parts = field.split(".");
+    // Get cached field path or compute and cache it
+    let parts = this.fieldPathCache.get(field);
+    if (!parts) {
+      parts = field.split(".");
+      this.fieldPathCache.set(field, parts);
+    }
+
     let value = data;
     for (const part of parts) {
-      if (value == null) return null;
+      if (value == null) break;
       value = value[part];
     }
-    return value;
+    return value ?? null;
+  }
+
+  private compareValues(
+    aVal: CellValue,
+    bVal: CellValue,
+    direction: SortDirection,
+  ): number {
+    const aNum = aVal == null ? null : Number(aVal);
+    const bNum = bVal == null ? null : Number(bVal);
+
+    let comparison = 0;
+    if (aVal == null && bVal == null) comparison = 0;
+    else if (aVal == null) comparison = 1;
+    else if (bVal == null) comparison = -1;
+    else if (!isNaN(aNum!) && !isNaN(bNum!)) {
+      comparison = aNum! - bNum!;
+    } else {
+      comparison = String(aVal).localeCompare(String(bVal));
+    }
+
+    return direction === "asc" ? comparison : -comparison;
+  }
+
+  private applyFiltersAndSort() {
+    let data = [...this.opts.rowData];
+
+    // Apply filters
+    if (Object.keys(this.filterModel).length > 0) {
+      data = data.filter((row) => {
+        let matches = true;
+        Object.entries(this.filterModel).forEach(([colId, filterValue]) => {
+          if (!filterValue || !matches) return;
+          const column = this.columnMap.get(colId);
+          if (!column) return;
+          const cellValue = this.getFieldValue(row, column.field);
+          const cellStr = String(cellValue ?? "").toLowerCase();
+          const filterStr = filterValue.toLowerCase();
+          if (!cellStr.includes(filterStr)) {
+            matches = false;
+          }
+        });
+        return matches;
+      });
+    }
+
+    // Apply multi-column sort
+    if (this.sortModel.length > 0) {
+      data.sort((a, b) => {
+        // Compare by each sort column in order
+        for (const sort of this.sortModel) {
+          const column = this.columnMap.get(sort.colId);
+          if (!column) continue;
+          const aVal = this.getFieldValue(a, column.field);
+          const bVal = this.getFieldValue(b, column.field);
+          const result = this.compareValues(aVal, bVal, sort.direction);
+          if (result !== 0) return result; // Order determined by this column
+        }
+        return 0; // All columns equal
+      });
+    }
+
+    this.processedData = data;
+  }
+
+  getSortModel(): SortModel[] {
+    return [...this.sortModel];
+  }
+
+  setSort(
+    colId: string,
+    direction: SortDirection | null,
+    addToExisting: boolean = false,
+  ) {
+    const existingIndex = this.sortModel.findIndex((s) => s.colId === colId);
+
+    if (!addToExisting) {
+      // Replace entire sort array (single sort mode)
+      this.sortModel = direction === null ? [] : [{ colId, direction }];
+    } else {
+      // Add/update/remove from existing array (multi-sort mode)
+      if (direction === null) {
+        if (existingIndex >= 0) {
+          this.sortModel.splice(existingIndex, 1);
+        }
+      } else if (existingIndex >= 0) {
+        this.sortModel[existingIndex]!.direction = direction;
+      } else {
+        this.sortModel.push({ colId, direction });
+      }
+    }
+    this.applyFiltersAndSort();
+  }
+
+  setFilter(colId: string, value: string) {
+    if (value === "") {
+      delete this.filterModel[colId];
+    } else {
+      this.filterModel[colId] = value;
+    }
+    this.applyFiltersAndSort();
   }
 
   onRender(cb: RenderCallback) {
@@ -101,8 +244,8 @@ export class GridEngine {
     viewportH: number,
     overscan: number = 1,
   ) {
-    const { rowHeight, columns, rowData } = this.opts;
-    const rowCount = rowData.length;
+    const { rowHeight, columns, headerHeight = rowHeight } = this.opts;
+    const rowCount = this.processedData.length;
     const colCount = columns.length;
 
     const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
@@ -121,9 +264,30 @@ export class GridEngine {
       startCol + Math.ceil(viewportW / this.maxColumnWidth) + 1 + overscan * 2,
     );
 
+    // Generate header cells
+    const headers: HeaderCellInfo[] = [];
+    for (let c = startCol; c < endCol; c++) {
+      const column = columns[c]!;
+      const colId = column.colId || column.field;
+      const sortIndex = this.sortModel.findIndex((s) => s.colId === colId);
+      const sortInfo = sortIndex >= 0 ? this.sortModel[sortIndex] : null;
+
+      headers.push({
+        col: c,
+        x: this.columnPositions[c]!,
+        y: 0,
+        width: column.width,
+        height: headerHeight,
+        column,
+        sortDirection: sortInfo?.direction,
+        sortIndex: sortInfo ? sortIndex + 1 : undefined, // 1-based for display
+      });
+    }
+
+    // Generate data cells
     const cells: CellInfo[] = [];
     for (let r = startRow; r < endRow; r++) {
-      const rowDataItem = rowData[r];
+      const rowDataItem = this.processedData[r];
       for (let c = startCol; c < endCol; c++) {
         const column = columns[c]!;
         const value = this.getFieldValue(rowDataItem, column.field);
@@ -139,7 +303,7 @@ export class GridEngine {
         });
       }
     }
-    this.renderCb?.(cells);
+    this.renderCb?.(cells, headers);
   }
 
   get totalWidth() {
@@ -147,6 +311,15 @@ export class GridEngine {
   }
 
   get totalHeight() {
-    return this.opts.rowData.length * this.opts.rowHeight;
+    const headerHeight = this.opts.headerHeight ?? this.opts.rowHeight;
+    return this.processedData.length * this.opts.rowHeight + headerHeight;
+  }
+
+  get headerHeight() {
+    return this.opts.headerHeight ?? this.opts.rowHeight;
+  }
+
+  get showFilters() {
+    return this.opts.showFilters ?? false;
   }
 }

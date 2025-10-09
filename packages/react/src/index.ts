@@ -9,4 +9,8 @@ export type {
   CellPosition,
   CellLayout,
   CellInfo,
+  HeaderCellInfo,
+  SortDirection,
+  SortModel,
+  FilterModel,
 } from "gp-grid-core";

@@ -11,6 +11,7 @@
     "dist"
   ],
   "scripts": {
+    "dev": "tsdown --watch",
     "build": "tsdown"
   },
   "devDependencies": {
