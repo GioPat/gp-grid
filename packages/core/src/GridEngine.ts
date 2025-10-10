@@ -86,6 +86,7 @@ export class GridEngine {
   private processedData: any[];
   private columnMap: Map<string, ColumnDefinition>;
   private fieldPathCache: Map<string, string[]>;
+  private sortInfoMap: Map<string, { direction: SortDirection; index: number }>;
 
   constructor(opts: GridOptions) {
     this.opts = opts;
@@ -101,6 +102,9 @@ export class GridEngine {
 
     // Initialize field path cache for memoization
     this.fieldPathCache = new Map();
+
+    // Initialize sort info cache
+    this.sortInfoMap = new Map();
   }
 
   private computeColumnPositions(): number[] {
@@ -154,30 +158,36 @@ export class GridEngine {
   }
 
   private applyFiltersAndSort() {
-    let data = [...this.opts.rowData];
-
     // Apply filters
     if (Object.keys(this.filterModel).length > 0) {
-      data = data.filter((row) => {
-        let matches = true;
-        Object.entries(this.filterModel).forEach(([colId, filterValue]) => {
-          if (!filterValue || !matches) return;
-          const column = this.columnMap.get(colId);
-          if (!column) return;
-          const cellValue = this.getFieldValue(row, column.field);
-          const cellStr = String(cellValue ?? "").toLowerCase();
-          const filterStr = filterValue.toLowerCase();
-          if (!cellStr.includes(filterStr)) {
-            matches = false;
-          }
-        });
-        return matches;
-      });
+      // Filter from original data into processedData
+      this.processedData.splice(
+        0,
+        this.processedData.length,
+        ...this.opts.rowData.filter((row) => {
+          let matches = true;
+          Object.entries(this.filterModel).forEach(([colId, filterValue]) => {
+            if (!filterValue || !matches) return;
+            const column = this.columnMap.get(colId);
+            if (!column) return;
+            const cellValue = this.getFieldValue(row, column.field);
+            const cellStr = String(cellValue ?? "").toLowerCase();
+            const filterStr = filterValue.toLowerCase();
+            if (!cellStr.includes(filterStr)) {
+              matches = false;
+            }
+          });
+          return matches;
+        }),
+      );
+    } else {
+      // No filters - restore full dataset
+      this.processedData.splice(0, this.processedData.length, ...this.opts.rowData);
     }
 
     // Apply multi-column sort
     if (this.sortModel.length > 0) {
-      data.sort((a, b) => {
+      this.processedData.sort((a, b) => {
         // Compare by each sort column in order
         for (const sort of this.sortModel) {
           const column = this.columnMap.get(sort.colId);
@@ -190,8 +200,16 @@ export class GridEngine {
         return 0; // All columns equal
       });
     }
+  }
 
-    this.processedData = data;
+  private rebuildSortInfoMap() {
+    this.sortInfoMap.clear();
+    this.sortModel.forEach((sort, index) => {
+      this.sortInfoMap.set(sort.colId, {
+        direction: sort.direction,
+        index: index + 1, // 1-based for display
+      });
+    });
   }
 
   getSortModel(): SortModel[] {
@@ -220,6 +238,7 @@ export class GridEngine {
         this.sortModel.push({ colId, direction });
       }
     }
+    this.rebuildSortInfoMap();
     this.applyFiltersAndSort();
   }
 
@@ -230,6 +249,16 @@ export class GridEngine {
       this.filterModel[colId] = value;
     }
     this.applyFiltersAndSort();
+  }
+
+  updateRowData(newRowData: any[]) {
+    this.opts.rowData = newRowData;
+    this.applyFiltersAndSort();
+    // Trigger re-render by calling computeVisible with current scroll position
+    if (this.renderCb) {
+      // Force a re-render - the container should call computeVisible
+      // This is a simple approach; ideally the renderer tracks scroll state
+    }
   }
 
   onRender(cb: RenderCallback) {
@@ -269,8 +298,7 @@ export class GridEngine {
     for (let c = startCol; c < endCol; c++) {
       const column = columns[c]!;
       const colId = column.colId || column.field;
-      const sortIndex = this.sortModel.findIndex((s) => s.colId === colId);
-      const sortInfo = sortIndex >= 0 ? this.sortModel[sortIndex] : null;
+      const sortInfo = this.sortInfoMap.get(colId);
 
       headers.push({
         col: c,
@@ -280,7 +308,7 @@ export class GridEngine {
         height: headerHeight,
         column,
         sortDirection: sortInfo?.direction,
-        sortIndex: sortInfo ? sortIndex + 1 : undefined, // 1-based for display
+        sortIndex: sortInfo?.index,
       });
     }
 

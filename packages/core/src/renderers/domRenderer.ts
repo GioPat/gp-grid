@@ -85,6 +85,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       headerCell.style.top = "0px";
       headerCell.style.width = h.width + "px";
       headerCell.style.height = h.height + "px";
+      headerCell.style.display = "flex"; // Ensure visible headers are shown
 
       // Store colId in dataset so click handler can access it
       headerCell.dataset.colId = h.column.colId || h.column.field;
@@ -101,6 +102,11 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       headerCell.textContent =
         (h.column.headerName || h.column.field) + sortIndicator;
     });
+
+    // Hide unused headers in the pool
+    for (let i = headers.length; i < headerPool.length; i++) {
+      headerPool[i]!.style.display = "none";
+    }
 
     // Update filter inputs if showFilters is enabled
     if (engine.showFilters) {
@@ -132,10 +138,16 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         filterInput.style.top = engine.headerHeight + "px";
         filterInput.style.width = h.width + "px";
         filterInput.style.height = engine.headerHeight + "px";
+        filterInput.style.display = "block"; // Ensure visible filters are shown
 
         // Store colId in dataset so handler can access it
         filterInput.dataset.colId = h.column.colId || h.column.field;
       });
+
+      // Hide unused filter inputs in the pool
+      for (let i = headers.length; i < filterPool.length; i++) {
+        filterPool[i]!.style.display = "none";
+      }
     }
 
     // ensure pool size for data cells
@@ -158,7 +170,13 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       cell!.style.width = c.width + "px";
       cell!.style.height = c.height + "px";
       cell!.textContent = String(c.value ?? "");
+      cell!.style.display = "flex"; // Ensure visible cells are shown
     });
+
+    // Hide unused cells in the pool
+    for (let i = cells.length; i < cellPool.length; i++) {
+      cellPool[i]!.style.display = "none";
+    }
   });
 
   const update = () => {
