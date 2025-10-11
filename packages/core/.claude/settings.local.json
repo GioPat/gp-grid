@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/react/src/**)"
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/react/src/**)",
+      "Read(//c/Users/GiovanniPatruno/repos/personal/gp-grid/packages/playground/src/**)"
     ],
     "deny": [],
     "ask": []

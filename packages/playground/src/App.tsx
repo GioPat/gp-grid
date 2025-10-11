@@ -23,10 +23,16 @@ const columns: ColumnDefinition[] = [
   { field: "id", cellDataType: "number", width: 80, headerName: "ID" },
   { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
   { field: "age", cellDataType: "number", width: 80, headerName: "Age" },
-  { field: "email", cellDataType: "text", width: 250, headerName: "Email" },
+  {
+    field: "email",
+    cellDataType: "text",
+    width: 250,
+    headerName: "Email",
+    editable: true,
+  },
 ];
 
-const rowData: Person[] = Array.from({ length: 1000 }, (_, i) => ({
+const rowData: Person[] = Array.from({ length: 150000 }, (_, i) => ({
   id: i + 1,
   name: `Person ${names[getRandomInt(0, 2)]}`,
   age: getRandomInt(18, 90),
@@ -51,6 +57,7 @@ function App() {
           columns={columns}
           rowData={rowData}
           rowHeight={30}
+          useWorkers="auto"
           showFilters={true}
         />
       </div>
