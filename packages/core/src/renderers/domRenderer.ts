@@ -56,6 +56,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       align-items: center;
       cursor: cell;
       color: #000;
+      overflow: hidden;
     }
     .gp-grid-cell-default {
       border: 1px solid #ddd;
@@ -91,19 +92,31 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
   headerContainer.style.position = "sticky";
   headerContainer.style.top = "0";
   headerContainer.style.left = "0";
+  headerContainer.style.width = "100%"; // Take full width of parent container
   headerContainer.style.height = totalHeaderHeight + "px";
-  headerContainer.style.overflow = "hidden";
+  headerContainer.style.overflow = "hidden"; // Hide overflow for horizontal scrolling
   headerContainer.style.backgroundColor = "#f5f5f5";
   headerContainer.style.color = "#000";
   headerContainer.style.borderBottom = "2px solid #ccc";
-  headerContainer.style.zIndex = "10";
+  headerContainer.style.zIndex = "100";
+  headerContainer.style.isolation = "isolate"; // Create new stacking context
+  headerContainer.style.pointerEvents = "auto"; // Ensure header captures all pointer events
   container.appendChild(headerContainer);
+
+  // Inner header content container - this will be scrolled
+  const headerInner = document.createElement("div");
+  headerInner.style.position = "relative";
+  headerInner.style.width = engine.totalWidth + "px"; // Match total grid width
+  headerInner.style.height = totalHeaderHeight + "px";
+  headerContainer.appendChild(headerInner);
 
   // big inner content to make scrollbar correct
   const inner = document.createElement("div");
   inner.style.position = "relative";
   inner.style.width = engine.totalWidth + "px";
   inner.style.height = engine.totalHeight + "px";
+  inner.style.zIndex = "1"; // Ensure cells stay below header (z-index: 100)
+  inner.style.isolation = "isolate"; // Create separate stacking context for cells
   container.appendChild(inner);
 
   const cellPool: HTMLDivElement[] = [];
@@ -145,6 +158,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       headerCell.style.padding = "0 8px";
       headerCell.style.backgroundColor = "#f5f5f5";
       headerCell.style.color = "#000";
+      headerCell.style.overflow = "hidden";
 
       // Attach click handler ONCE when creating the cell
       headerCell.onclick = async (event: MouseEvent) => {
@@ -166,7 +180,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         // update() is now called automatically by engine.onRefresh callback
       };
 
-      headerContainer.appendChild(headerCell);
+      headerInner.appendChild(headerCell);
       headerPool.push(headerCell);
     }
 
@@ -247,7 +261,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         }, debounceDelay);
 
         filterInput.oninput = debouncedFilter;
-        headerContainer.appendChild(filterInput);
+        headerInner.appendChild(filterInput);
         filterPool.push(filterInput);
       }
 
@@ -274,6 +288,8 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       const cell = document.createElement("div");
       cell.className = "gp-grid-cell gp-grid-cell-default";
       cell.tabIndex = -1; // Make focusable for keyboard navigation
+      // Enforce strict clipping of child content (portals)
+      cell.style.maxWidth = "100%";
 
       // Attach click handler ONCE when creating the cell
       cell.onclick = () => {
@@ -679,9 +695,11 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
 
   const update = () => {
     const rect = container.getBoundingClientRect();
-    // Sync header horizontal scroll
-    headerContainer.style.transform = `translateX(-${container.scrollLeft}px)`;
-    headerContainer.style.width = engine.totalWidth + "px";
+    // Sync header horizontal scroll by setting scrollLeft directly
+    // This ensures pixel-perfect alignment with the body content
+    headerContainer.scrollLeft = container.scrollLeft;
+    // Update header inner width to match total grid width
+    headerInner.style.width = engine.totalWidth + "px";
     // Update inner height to reflect filtered data
     inner.style.height = engine.totalHeight + "px";
 

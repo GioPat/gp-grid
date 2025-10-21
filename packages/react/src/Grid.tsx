@@ -29,14 +29,22 @@ export const Grid = (props: GridProps): React.JSX.Element => {
   const engineRef = useRef<GridEngine | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
-  // State to track portal renders
+  // State to track portal renders - use Map for O(1) updates
   const [portals, setPortals] = React.useState<
-    Array<{
-      id: string;
-      container: HTMLElement;
-      content: React.ReactNode;
-    }>
-  >([]);
+    Map<string, { container: HTMLElement; content: React.ReactNode }>
+  >(new Map());
+
+  // Memoization: track previous render params to avoid unnecessary portal updates
+  const portalParamsRef = useRef<Map<string, { value: unknown; rowIndex?: number; colIndex?: number }>>(new Map());
+
+  // Stable container ID counter - each DOM container gets a unique ID that persists across recycling
+  const containerIdCounter = useRef<number>(0);
+  const getContainerId = (container: HTMLElement): string => {
+    if (!container.dataset.portalId) {
+      container.dataset.portalId = `portal-${containerIdCounter.current++}`;
+    }
+    return container.dataset.portalId;
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -54,57 +62,158 @@ export const Grid = (props: GridProps): React.JSX.Element => {
     // Helper to wrap React renderer into DOM renderer with portal
     const wrapCellRenderer = (reactRenderer: (params: CellRendererParams) => React.ReactNode) => {
       return (container: HTMLElement, params: CellRendererParams) => {
-        const id = `cell-${params.rowIndex}-${params.colIndex}`;
-        const content = reactRenderer(params);
+        // Use stable container-based ID instead of row-col position
+        // This prevents portal destruction when cells are recycled to show different data
+        const id = getContainerId(container);
 
-        setPortals((prev) => {
-          const filtered = prev.filter((p) => p.id !== id);
-          return [...filtered, { id, container, content }];
-        });
+        // Check if params have changed to avoid unnecessary portal updates
+        const prevParams = portalParamsRef.current.get(id);
+        const hasChanged = !prevParams ||
+          prevParams.value !== params.value ||
+          prevParams.rowIndex !== params.rowIndex ||
+          prevParams.colIndex !== params.colIndex;
 
-        return () => {
-          // Cleanup: remove portal from state synchronously using flushSync
-          // This ensures React unmounts the portal immediately before container is reused
-          flushSync(() => {
-            setPortals((prev) => prev.filter((p) => p.id !== id));
+        if (hasChanged) {
+          // Update memoization cache
+          portalParamsRef.current.set(id, {
+            value: params.value,
+            rowIndex: params.rowIndex,
+            colIndex: params.colIndex,
           });
-        };
+
+          // Render new content and update portal SYNCHRONOUSLY
+          // This ensures portal content updates in sync with core engine's position changes
+          const rawContent = reactRenderer(params);
+          // Wrap content in a constraining div to prevent overflow
+          // Background color matches cell background to avoid flashing during scroll
+          const content = (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 0,
+              flexShrink: 1,
+              backgroundColor: '#FAFAFA'
+            }}>
+              {rawContent}
+            </div>
+          );
+          flushSync(() => {
+            setPortals((prev) => {
+              const next = new Map(prev);
+              next.set(id, { container, content });
+              return next;
+            });
+          });
+        }
+
+        // Don't return a cleanup function!
+        // Portals should persist as long as the container exists.
+        // They'll be cleaned up when the component unmounts or when we detect hidden containers.
+        return undefined;
       };
     };
 
     const wrapEditRenderer = (reactRenderer: (params: EditRendererParams) => React.ReactNode) => {
       return (container: HTMLElement, params: EditRendererParams) => {
-        const id = "edit";
-        const content = reactRenderer(params);
+        // Edit uses a stable container, so we can use a fixed ID
+        const id = getContainerId(container);
 
-        setPortals((prev) => {
-          const filtered = prev.filter((p) => p.id !== id);
-          return [...filtered, { id, container, content }];
-        });
+        // Check if params have changed (for edit, we always update since it's a single active cell)
+        const prevParams = portalParamsRef.current.get(id);
+        const hasChanged = !prevParams ||
+          prevParams.value !== params.value ||
+          prevParams.rowIndex !== params.rowIndex ||
+          prevParams.colIndex !== params.colIndex;
 
-        return () => {
-          flushSync(() => {
-            setPortals((prev) => prev.filter((p) => p.id !== id));
+        if (hasChanged) {
+          // Update memoization cache
+          portalParamsRef.current.set(id, {
+            value: params.value,
+            rowIndex: params.rowIndex,
+            colIndex: params.colIndex,
           });
-        };
+
+          // Render new content and update portal SYNCHRONOUSLY
+          const rawContent = reactRenderer(params);
+          // Wrap content in a constraining div to prevent overflow
+          // Background color matches cell background to avoid flashing during scroll
+          const content = (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 0,
+              flexShrink: 1,
+              backgroundColor: '#FAFAFA'
+            }}>
+              {rawContent}
+            </div>
+          );
+          flushSync(() => {
+            setPortals((prev) => {
+              const next = new Map(prev);
+              next.set(id, { container, content });
+              return next;
+            });
+          });
+        }
+
+        return undefined;
       };
     };
 
     const wrapHeaderRenderer = (reactRenderer: (params: HeaderRendererParams) => React.ReactNode) => {
       return (container: HTMLElement, params: HeaderRendererParams) => {
-        const id = `header-${params.colIndex}`;
-        const content = reactRenderer(params);
+        // Use stable container-based ID for headers too
+        const id = getContainerId(container);
 
-        setPortals((prev) => {
-          const filtered = prev.filter((p) => p.id !== id);
-          return [...filtered, { id, container, content }];
-        });
+        // For headers, track sort state changes
+        const sortKey = `${params.sortDirection}-${params.sortIndex}`;
+        const prevParams = portalParamsRef.current.get(id);
+        const hasChanged = !prevParams ||
+          prevParams.value !== sortKey ||
+          prevParams.colIndex !== params.colIndex;
 
-        return () => {
-          flushSync(() => {
-            setPortals((prev) => prev.filter((p) => p.id !== id));
+        if (hasChanged) {
+          // Update memoization cache
+          portalParamsRef.current.set(id, {
+            value: sortKey,
+            colIndex: params.colIndex,
           });
-        };
+
+          // Render new content and update portal SYNCHRONOUSLY
+          const rawContent = reactRenderer(params);
+          // Wrap content in a constraining div to prevent overflow
+          // Background color matches cell background to avoid flashing during scroll
+          const content = (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 0,
+              flexShrink: 1,
+              backgroundColor: '#FAFAFA'
+            }}>
+              {rawContent}
+            </div>
+          );
+          flushSync(() => {
+            setPortals((prev) => {
+              const next = new Map(prev);
+              next.set(id, { container, content });
+              return next;
+            });
+          });
+        }
+
+        return undefined;
       };
     };
 
@@ -157,7 +266,8 @@ export const Grid = (props: GridProps): React.JSX.Element => {
 
     return () => {
       cleanup();
-      setPortals([]);
+      setPortals(new Map());
+      portalParamsRef.current.clear();
       engineRef.current = null;
       cleanupRef.current = null;
     };
@@ -170,6 +280,39 @@ export const Grid = (props: GridProps): React.JSX.Element => {
     }
   }, [props.rowData]);
 
+  // Cleanup portals for hidden containers periodically
+  // Use requestIdleCallback or a less frequent interval to avoid blocking scroll
+  useEffect(() => {
+    let timeoutId: number;
+
+    const cleanupHiddenPortals = () => {
+      setPortals((prev) => {
+        const next = new Map(prev);
+        let changed = false;
+
+        for (const [id, { container }] of prev.entries()) {
+          if (!container.isConnected || container.style.display === 'none') {
+            next.delete(id);
+            portalParamsRef.current.delete(id);
+            changed = true;
+          }
+        }
+
+        return changed ? next : prev;
+      });
+
+      // Schedule next cleanup after a delay to avoid running on every render
+      timeoutId = window.setTimeout(cleanupHiddenPortals, 100);
+    };
+
+    // Start the cleanup loop
+    timeoutId = window.setTimeout(cleanupHiddenPortals, 100);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   return (
     <>
       <div
@@ -180,10 +323,10 @@ export const Grid = (props: GridProps): React.JSX.Element => {
         }}
       />
       {/* Render all portals */}
-      {portals.map(({ id, container, content }) => {
-        // Defensive check: only create portal if container is still in the DOM
+      {Array.from(portals.entries()).map(([id, { container, content }]) => {
+        // Defensive check: only create portal if container is visible and in the DOM
         try {
-          if (container && container.isConnected) {
+          if (container && container.isConnected && container.style.display !== 'none') {
             return createPortal(content, container, id);
           }
         } catch (e) {
