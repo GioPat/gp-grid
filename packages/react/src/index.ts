@@ -13,4 +13,7 @@ export type {
   SortDirection,
   SortModel,
   FilterModel,
+  CellRendererParams,
+  EditRendererParams,
+  HeaderRendererParams,
 } from "gp-grid-core";

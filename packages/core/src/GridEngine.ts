@@ -26,7 +26,41 @@ export interface ColumnDefinition {
   headerName?: string;
   // Whether this column is editable (default: false)
   editable?: boolean;
+  // Optional cell renderer: string key (lookup in cellRenderers registry) or inline function
+  cellRenderer?: string | CellRenderer;
+  // Optional edit renderer: string key (lookup in editRenderers registry) or inline function
+  editRenderer?: string | EditRenderer;
+  // Optional header renderer: string key (lookup in headerRenderers registry) or inline function
+  headerRenderer?: string | HeaderRenderer;
 }
+
+// Custom renderer parameters passed to framework-specific renderers
+export interface CellRendererParams {
+  value: CellValue;
+  rowData: any;
+  column: ColumnDefinition;
+  rowIndex: number;
+  colIndex: number;
+}
+
+export interface EditRendererParams extends CellRendererParams {
+  initialValue: string;
+  onValueChange: (newValue: any) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}
+
+export interface HeaderRendererParams {
+  column: ColumnDefinition;
+  colIndex: number;
+  sortDirection?: SortDirection;
+  sortIndex?: number;
+}
+
+// Custom renderer callbacks - framework adapters provide these to render into DOM elements
+export type CellRenderer = (container: HTMLElement, params: CellRendererParams) => (() => void) | void;
+export type EditRenderer = (container: HTMLElement, params: EditRendererParams) => (() => void) | void;
+export type HeaderRenderer = (container: HTMLElement, params: HeaderRendererParams) => (() => void) | void;
 
 export interface GridOptions {
   // Column definitions
@@ -46,6 +80,14 @@ export interface GridOptions {
   useWorkers?: boolean | "auto";
   // Debounce delay for filters in milliseconds (default: 300)
   filterDebounce?: number;
+  // Renderer registries: reusable renderers referenced by key in column definitions
+  cellRenderers?: Record<string, CellRenderer>;
+  editRenderers?: Record<string, EditRenderer>;
+  headerRenderers?: Record<string, HeaderRenderer>;
+  // Global default renderers (deprecated in favor of registries, but kept for backward compatibility)
+  cellRenderer?: CellRenderer;
+  editRenderer?: EditRenderer;
+  headerRenderer?: HeaderRenderer;
 }
 
 // Cell position in the grid
@@ -351,6 +393,14 @@ export class GridEngine {
 
   getColumnPositions(): number[] {
     return this.columnPositions;
+  }
+
+  getProcessedData(): any[] {
+    return this.processedData;
+  }
+
+  getColumns(): ColumnDefinition[] {
+    return this.opts.columns;
   }
 
   async setSort(

@@ -1,5 +1,5 @@
 // src/renderers/domRenderer.ts
-import type { GridEngine, CellInfo, HeaderCellInfo } from "../GridEngine";
+import type { GridEngine, CellInfo, HeaderCellInfo, ColumnDefinition, GridOptions, HeaderRenderer, CellRenderer, EditRenderer } from "../GridEngine";
 
 // Debounce helper: delays function execution until after wait time has elapsed
 function debounce<T extends (...args: any[]) => void>(
@@ -11,6 +11,37 @@ function debounce<T extends (...args: any[]) => void>(
     clearTimeout(timeoutId);
     timeoutId = window.setTimeout(() => func.apply(this, args), wait);
   };
+}
+
+// Renderer resolution helpers: priority is column inline > column key > global
+function resolveHeaderRenderer(column: ColumnDefinition, opts: GridOptions): HeaderRenderer | undefined {
+  if (typeof column.headerRenderer === 'function') {
+    return column.headerRenderer; // Column inline renderer
+  }
+  if (typeof column.headerRenderer === 'string' && opts.headerRenderers) {
+    return opts.headerRenderers[column.headerRenderer]; // Column key → registry lookup
+  }
+  return opts.headerRenderer; // Global default
+}
+
+function resolveCellRenderer(column: ColumnDefinition, opts: GridOptions): CellRenderer | undefined {
+  if (typeof column.cellRenderer === 'function') {
+    return column.cellRenderer; // Column inline renderer
+  }
+  if (typeof column.cellRenderer === 'string' && opts.cellRenderers) {
+    return opts.cellRenderers[column.cellRenderer]; // Column key → registry lookup
+  }
+  return opts.cellRenderer; // Global default
+}
+
+function resolveEditRenderer(column: ColumnDefinition, opts: GridOptions): EditRenderer | undefined {
+  if (typeof column.editRenderer === 'function') {
+    return column.editRenderer; // Column inline renderer
+  }
+  if (typeof column.editRenderer === 'string' && opts.editRenderers) {
+    return opts.editRenderers[column.editRenderer]; // Column key → registry lookup
+  }
+  return opts.editRenderer; // Global default
 }
 
 export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
@@ -63,6 +94,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
   headerContainer.style.height = totalHeaderHeight + "px";
   headerContainer.style.overflow = "hidden";
   headerContainer.style.backgroundColor = "#f5f5f5";
+  headerContainer.style.color = "#000";
   headerContainer.style.borderBottom = "2px solid #ccc";
   headerContainer.style.zIndex = "10";
   container.appendChild(headerContainer);
@@ -77,6 +109,10 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
   const cellPool: HTMLDivElement[] = [];
   const headerPool: HTMLDivElement[] = [];
   const filterPool: HTMLInputElement[] = [];
+
+  // Track cleanup functions for custom renderers
+  const cellCleanupMap = new Map<string, () => void>();
+  const headerCleanupMap = new Map<number, () => void>();
 
   // Edit input overlay
   let editInput: HTMLInputElement | null = null;
@@ -107,7 +143,8 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       headerCell.style.display = "flex";
       headerCell.style.alignItems = "center";
       headerCell.style.padding = "0 8px";
-      headerCell.style.backgroundColor = "black";
+      headerCell.style.backgroundColor = "#f5f5f5";
+      headerCell.style.color = "#000";
 
       // Attach click handler ONCE when creating the cell
       headerCell.onclick = async (event: MouseEvent) => {
@@ -144,18 +181,43 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       // Store colId in dataset so click handler can access it
       headerCell.dataset.colId = h.column.colId || h.column.field;
 
-      // Build sort indicator with priority number for multi-sort
-      let sortIndicator = "";
-      if (h.sortDirection) {
-        const arrow = h.sortDirection === "asc" ? "▲" : "▼";
-        // Show priority number only when sorting by multiple columns
-        const sortModel = engine.getSortModel();
-        const priority =
-          sortModel.length > 1 && h.sortIndex ? String(h.sortIndex) : "";
-        sortIndicator = ` ${priority}${arrow}`;
+      // Resolve header renderer with priority: column inline > column key > global
+      const opts = engine.getOptions();
+      const headerRenderer = resolveHeaderRenderer(h.column, opts);
+
+      // Clean up previous custom render if exists
+      const cleanup = headerCleanupMap.get(h.col);
+      if (cleanup) {
+        cleanup();
+        headerCleanupMap.delete(h.col);
       }
-      headerCell.textContent =
-        (h.column.headerName || h.column.field) + sortIndicator;
+
+      if (headerRenderer) {
+        // Use custom renderer
+        headerCell.textContent = ""; // Clear default content
+        const cleanupFn = headerRenderer(headerCell, {
+          column: h.column,
+          colIndex: h.col,
+          sortDirection: h.sortDirection,
+          sortIndex: h.sortIndex,
+        });
+        if (cleanupFn) {
+          headerCleanupMap.set(h.col, cleanupFn);
+        }
+      } else {
+        // Build sort indicator with priority number for multi-sort
+        let sortIndicator = "";
+        if (h.sortDirection) {
+          const arrow = h.sortDirection === "asc" ? "▲" : "▼";
+          // Show priority number only when sorting by multiple columns
+          const sortModel = engine.getSortModel();
+          const priority =
+            sortModel.length > 1 && h.sortIndex ? String(h.sortIndex) : "";
+          sortIndicator = ` ${priority}${arrow}`;
+        }
+        headerCell.textContent =
+          (h.column.headerName || h.column.field) + sortIndicator;
+      }
     });
 
     // Hide unused headers in the pool
@@ -236,6 +298,10 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
     const fillHandleState = engine.getFillHandleState();
     const isFillDragging = fillHandleState !== null;
 
+    // Get options and processed data
+    const opts = engine.getOptions();
+    const processedData = engine.getProcessedData();
+
     // update cell positions & content
     cells.forEach((c, i) => {
       const cell = cellPool[i];
@@ -244,7 +310,36 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       cell!.style.width = c.width + "px";
       cell!.style.height = c.height + "px";
 
-      // Store position in dataset for click handlers
+      // Get OLD position from dataset BEFORE updating (for cleanup)
+      const oldRow = cell!.dataset.row;
+      const oldCol = cell!.dataset.col;
+      const oldCellKey = oldRow !== undefined && oldCol !== undefined
+        ? `${oldRow}-${oldCol}`
+        : null;
+
+      // Generate NEW cell key
+      const newCellKey = `${c.row}-${c.col}`;
+
+      // Clean up OLD portal if this cell was previously showing a different position
+      if (oldCellKey && oldCellKey !== newCellKey) {
+        const oldCleanup = cellCleanupMap.get(oldCellKey);
+        if (oldCleanup) {
+          oldCleanup();
+          cellCleanupMap.delete(oldCellKey);
+        }
+      }
+
+      // Clean up NEW position's portal if it exists elsewhere (shouldn't happen but defensive)
+      // This handles the case where the same logical cell might be rendered in multiple pool cells
+      if (oldCellKey !== newCellKey) {
+        const newCleanup = cellCleanupMap.get(newCellKey);
+        if (newCleanup) {
+          newCleanup();
+          cellCleanupMap.delete(newCellKey);
+        }
+      }
+
+      // NOW update dataset to NEW position
       cell!.dataset.row = String(c.row);
       cell!.dataset.col = String(c.col);
 
@@ -280,80 +375,182 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         cell!.style.zIndex = "0";
       }
 
+      // Resolve cell renderer with priority: column inline > column key > global
+      const cellRenderer = resolveCellRenderer(c.column, opts);
+
       // Show/hide content based on edit state
       if (c.isEditing) {
-        cell!.textContent = "";
+        // Old portal already cleaned up above
+        cell!.innerHTML = ""; // Use innerHTML to clear safely
         cell!.style.padding = "0"; // Remove padding when editing
       } else {
-        cell!.textContent = String(c.value ?? "");
-        cell!.style.padding = "0 8px";
+        if (cellRenderer) {
+          // Use custom renderer
+          cell!.style.padding = "0 8px";
+
+          // Only clear text content if the cell previously had text (not a portal)
+          if (cell!.textContent && !cell!.hasChildNodes()) {
+            cell!.textContent = ""; // Clear text only
+          }
+
+          // Get full row data for custom renderer
+          const rowData = processedData[c.row];
+          const cleanupFn = cellRenderer(cell!, {
+            value: c.value,
+            rowData,
+            column: c.column,
+            rowIndex: c.row,
+            colIndex: c.col,
+          });
+          if (cleanupFn) {
+            cellCleanupMap.set(newCellKey, cleanupFn);
+          }
+        } else {
+          // Default text rendering
+          // Old portal already cleaned up above
+          // Set text content - at this point React has already unmounted the portal
+          cell!.textContent = String(c.value ?? "");
+          cell!.style.padding = "0 8px";
+        }
       }
 
       cell!.style.display = "flex"; // Ensure visible cells are shown
     });
 
-    // Hide unused cells in the pool
+    // Hide unused cells in the pool and clean up their portals
     for (let i = cells.length; i < cellPool.length; i++) {
-      cellPool[i]!.style.display = "none";
+      const cell = cellPool[i]!;
+      cell.style.display = "none";
+
+      // Clean up any custom renderer for this hidden cell
+      // Use dataset to find the cleanup key
+      const row = cell.dataset.row;
+      const col = cell.dataset.col;
+      if (row !== undefined && col !== undefined) {
+        const cellKey = `${row}-${col}`;
+        const cleanup = cellCleanupMap.get(cellKey);
+        if (cleanup) {
+          cleanup();
+          cellCleanupMap.delete(cellKey);
+        }
+      }
     }
 
     // Handle edit input
     const editState = engine.getEditState();
+
     if (editState) {
       const editCell = cells.find(
         (c) => c.row === editState.row && c.col === editState.col,
       );
 
       if (editCell) {
-        // Show edit input
-        if (!editInput) {
-          editInput = document.createElement("input");
-          editInput.type = "text";
-          editInput.style.position = "absolute";
-          editInput.style.boxSizing = "border-box";
-          editInput.style.border = "2px solid #0078D4";
-          editInput.style.padding = "0 8px";
-          editInput.style.outline = "none";
-          editInput.style.zIndex = "10";
-          editInput.style.fontSize = "inherit";
-          editInput.style.fontFamily = "inherit";
+        // Resolve edit renderer with priority: column inline > column key > global
+        const editRenderer = resolveEditRenderer(editCell.column, opts);
 
-          editInput.onkeydown = async (e: KeyboardEvent) => {
-            if (e.key === "Enter") {
+        if (editRenderer) {
+          // Use custom edit renderer
+          if (!editInput) {
+            editInput = document.createElement("input");
+            editInput.type = "text";
+            editInput.style.position = "absolute";
+            editInput.style.boxSizing = "border-box";
+            editInput.style.border = "2px solid #0078D4";
+            editInput.style.padding = "0 8px";
+            editInput.style.outline = "none";
+            editInput.style.zIndex = "10";
+            editInput.style.fontSize = "inherit";
+            editInput.style.fontFamily = "inherit";
+            inner.appendChild(editInput);
+          }
+
+          editInput.style.left = editCell.x + "px";
+          editInput.style.top = editCell.y + "px";
+          editInput.style.width = editCell.width + "px";
+          editInput.style.height = editCell.height + "px";
+          editInput.style.display = "block";
+          editInput.textContent = ""; // Clear default content
+
+          // Get full row data
+          const rowData = processedData[editState.row];
+          const cleanupFn = editRenderer(editInput, {
+            value: editCell.value,
+            rowData,
+            column: editCell.column,
+            rowIndex: editState.row,
+            colIndex: editState.col,
+            initialValue: editState.value,
+            onValueChange: (newValue: any) => {
+              engine.updateEditValue(String(newValue));
+            },
+            onCommit: async () => {
               await engine.commitEdit();
               update();
-              e.preventDefault();
-              e.stopPropagation();
-            } else if (e.key === "Escape") {
+            },
+            onCancel: () => {
               engine.cancelEdit();
               update();
-              e.preventDefault();
-              e.stopPropagation();
-            } else if (e.key.startsWith("Arrow")) {
-              // Allow arrow keys for cursor navigation in edit mode
-              e.stopPropagation();
-            }
-          };
+            },
+          });
 
-          editInput.oninput = () => {
-            engine.updateEditValue(editInput!.value);
-          };
+          // Store cleanup for later
+          if (cleanupFn) {
+            const editCleanupKey = 'edit';
+            const prevCleanup = cellCleanupMap.get(editCleanupKey);
+            if (prevCleanup) prevCleanup();
+            cellCleanupMap.set(editCleanupKey, cleanupFn);
+          }
+        } else {
+          // Show default edit input
+          if (!editInput) {
+            editInput = document.createElement("input");
+            editInput.type = "text";
+            editInput.style.position = "absolute";
+            editInput.style.boxSizing = "border-box";
+            editInput.style.border = "2px solid #0078D4";
+            editInput.style.padding = "0 8px";
+            editInput.style.outline = "none";
+            editInput.style.zIndex = "10";
+            editInput.style.fontSize = "inherit";
+            editInput.style.fontFamily = "inherit";
 
-          inner.appendChild(editInput);
+            editInput.onkeydown = async (e: KeyboardEvent) => {
+              if (e.key === "Enter") {
+                await engine.commitEdit();
+                update();
+                e.preventDefault();
+                e.stopPropagation();
+              } else if (e.key === "Escape") {
+                engine.cancelEdit();
+                update();
+                e.preventDefault();
+                e.stopPropagation();
+              } else if (e.key.startsWith("Arrow")) {
+                // Allow arrow keys for cursor navigation in edit mode
+                e.stopPropagation();
+              }
+            };
+
+            editInput.oninput = () => {
+              engine.updateEditValue(editInput!.value);
+            };
+
+            inner.appendChild(editInput);
+          }
+
+          editInput.style.left = editCell.x + "px";
+          editInput.style.top = editCell.y + "px";
+          editInput.style.width = editCell.width + "px";
+          editInput.style.height = editCell.height + "px";
+          editInput.value = editState.value;
+          editInput.style.display = "block";
+
+          // Focus and select all text
+          requestAnimationFrame(() => {
+            editInput?.focus();
+            editInput?.select();
+          });
         }
-
-        editInput.style.left = editCell.x + "px";
-        editInput.style.top = editCell.y + "px";
-        editInput.style.width = editCell.width + "px";
-        editInput.style.height = editCell.height + "px";
-        editInput.value = editState.value;
-        editInput.style.display = "block";
-
-        // Focus and select all text
-        requestAnimationFrame(() => {
-          editInput?.focus();
-          editInput?.select();
-        });
       } else {
         // Edit cell not visible, hide input
         if (editInput) {
@@ -361,9 +558,15 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         }
       }
     } else {
-      // No edit state, hide input
+      // No edit state, hide input and cleanup
       if (editInput) {
         editInput.style.display = "none";
+        const editCleanupKey = 'edit';
+        const prevCleanup = cellCleanupMap.get(editCleanupKey);
+        if (prevCleanup) {
+          prevCleanup();
+          cellCleanupMap.delete(editCleanupKey);
+        }
       }
     }
 
@@ -749,6 +952,12 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
   return () => {
     // Stop any active auto-scroll
     stopAutoScroll();
+
+    // Clean up all custom renderers
+    cellCleanupMap.forEach((cleanup) => cleanup());
+    cellCleanupMap.clear();
+    headerCleanupMap.forEach((cleanup) => cleanup());
+    headerCleanupMap.clear();
 
     container.removeEventListener("keydown", handleKeydown);
     container.removeEventListener("mousemove", handleMousemove);
