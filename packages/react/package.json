@@ -12,7 +12,11 @@
     "react-dom": "^19.1.1"
   },
   "scripts": {
-    "build": "tsdown"
+    "dev": "tsdown --watch",
+    "build": "tsdown",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "bench": "vitest bench"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

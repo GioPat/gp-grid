@@ -12,7 +12,10 @@
   ],
   "scripts": {
     "dev": "tsdown --watch",
-    "build": "tsdown"
+    "build": "tsdown",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "bench": "vitest bench"
   },
   "devDependencies": {
     "@types/node": "^24.6.0",

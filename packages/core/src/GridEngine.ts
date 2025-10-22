@@ -58,9 +58,18 @@ export interface HeaderRendererParams {
 }
 
 // Custom renderer callbacks - framework adapters provide these to render into DOM elements
-export type CellRenderer = (container: HTMLElement, params: CellRendererParams) => (() => void) | void;
-export type EditRenderer = (container: HTMLElement, params: EditRendererParams) => (() => void) | void;
-export type HeaderRenderer = (container: HTMLElement, params: HeaderRendererParams) => (() => void) | void;
+export type CellRenderer = (
+  container: HTMLElement,
+  params: CellRendererParams,
+) => (() => void) | void;
+export type EditRenderer = (
+  container: HTMLElement,
+  params: EditRendererParams,
+) => (() => void) | void;
+export type HeaderRenderer = (
+  container: HTMLElement,
+  params: HeaderRendererParams,
+) => (() => void) | void;
 
 export interface GridOptions {
   // Column definitions
@@ -670,7 +679,7 @@ export class GridEngine {
   async commitFillDrag(): Promise<void> {
     if (!this.fillHandleState) return;
 
-    const { sourceRow, sourceCol, targetRow, targetCol } = this.fillHandleState;
+    const { sourceRow, sourceCol, targetRow } = this.fillHandleState;
 
     // Get source value
     const sourceData = this.processedData[sourceRow];
