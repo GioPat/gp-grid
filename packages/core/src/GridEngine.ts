@@ -12,6 +12,9 @@ export type CellDataType =
 
 export type CellValue = string | number | boolean | Date | object | null;
 
+// Recursive type for row values that can be nested objects
+export type RowValue = CellValue | { [key: string]: RowValue };
+
 // TODO: A valueGetter might be needed to access the value with custom logic instead of the "simple" dot notation
 export interface ColumnDefinition {
   // The field that should use the dot notation to access sub-objects
@@ -37,15 +40,15 @@ export interface ColumnDefinition {
 // Custom renderer parameters passed to framework-specific renderers
 export interface CellRendererParams {
   value: CellValue;
-  rowData: any;
+  rowData: unknown;
   column: ColumnDefinition;
   rowIndex: number;
   colIndex: number;
 }
 
 export interface EditRendererParams extends CellRendererParams {
-  initialValue: string;
-  onValueChange: (newValue: any) => void;
+  initialValue: CellValue;
+  onValueChange: (newValue: CellValue) => void;
   onCommit: () => void;
   onCancel: () => void;
 }
@@ -75,7 +78,7 @@ export interface GridOptions {
   // Column definitions
   columns: ColumnDefinition[];
   // Row data array
-  rowData: any[];
+  rowData: Row[];
   // Default row height in pixels
   rowHeight: number;
   // Header row height in pixels (default: same as rowHeight)
@@ -165,6 +168,8 @@ export interface FillHandleState {
   targetCol: number;
 }
 
+type Row = unknown;
+
 type RenderCallback = (cells: CellInfo[], headers: HeaderCellInfo[]) => void;
 
 export class GridEngine {
@@ -176,8 +181,8 @@ export class GridEngine {
   private maxColumnWidth: number = 0;
   private sortModel: SortModel[] = [];
   private filterModel: FilterModel = {};
-  private processedData: any[];
-  private sourceData: any[]; // Mutable reference to source data
+  private processedData: Row[];
+  private sourceData: Row[]; // Mutable reference to source data
   private columnMap: Map<string, ColumnDefinition>;
   private fieldPathCache: Map<string, string[]>;
   private sortInfoMap: Map<string, { direction: SortDirection; index: number }>;
@@ -236,7 +241,7 @@ export class GridEngine {
     return positions;
   }
 
-  private getFieldValue(data: any, field: string): CellValue {
+  private getFieldValue(data: Row, field: string): CellValue {
     // Get cached field path or compute and cache it
     let parts = this.fieldPathCache.get(field);
     if (!parts) {
@@ -244,12 +249,14 @@ export class GridEngine {
       this.fieldPathCache.set(field, parts);
     }
 
-    let value = data;
+    let value: unknown = data;
     for (const part of parts) {
-      if (value == null) break;
-      value = value[part];
+      if (value == null || typeof value !== "object") {
+        return null;
+      }
+      value = (value as Record<string, unknown>)[part];
     }
-    return value ?? null;
+    return (value ?? null) as CellValue;
   }
 
   private compareValues(
@@ -293,7 +300,7 @@ export class GridEngine {
       }
 
       // Filter from original data into processedData
-      const filtered: any[] = [];
+      const filtered: Row[] = [];
       for (const row of this.sourceData) {
         let matches = true;
         // Use for...of with break for early exit
@@ -404,7 +411,7 @@ export class GridEngine {
     return this.columnPositions;
   }
 
-  getProcessedData(): any[] {
+  getProcessedData(): Row[] {
     return this.processedData;
   }
 
@@ -451,7 +458,7 @@ export class GridEngine {
     this.refreshCb?.();
   }
 
-  async updateRowData(newData: any[]) {
+  async updateRowData(newData: Row[]) {
     this.sourceData = newData;
     await this.applyFiltersAndSort();
     // Trigger re-render after updating data
@@ -598,6 +605,9 @@ export class GridEngine {
 
     const { row, col, value } = this.editState;
     const rowData = this.processedData[row]; // Track the row data object
+    if (rowData === undefined) {
+      return;
+    }
     this.setCellValue(row, col, value);
     this.editState = null;
 
@@ -624,21 +634,21 @@ export class GridEngine {
 
   setCellValue(row: number, col: number, value: CellValue): void {
     const rowData = this.processedData[row];
-    if (!rowData) return;
+    if (!rowData || typeof rowData !== "object") return;
 
     const column = this.opts.columns[col];
     if (!column) return;
 
     // Set value using field path (supports dot notation)
     const parts = column.field.split(".");
-    let obj = rowData;
+    let obj: Record<string, unknown> = rowData as Record<string, unknown>;
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i]!;
       if (!(part in obj)) {
         obj[part] = {};
       }
-      obj = obj[part];
+      obj = obj[part] as Record<string, unknown>;
     }
 
     const lastPart = parts[parts.length - 1]!;

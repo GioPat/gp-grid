@@ -10,4 +10,11 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    sourcemap: true, // Enable source maps for production builds
+  },
+  // Ensure source maps work in dev mode
+  server: {
+    sourcemapIgnoreList: false, // Don't ignore any sources
+  },
 });

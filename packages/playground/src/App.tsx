@@ -88,14 +88,14 @@ const columns: ColumnDefinition[] = [
     cellDataType: "text",
     width: 120,
     headerName: "Status",
-    cellRenderer: "statusBadge" // Reference renderer by key
+    // cellRenderer: "statusBadge" // Reference renderer by key
   },
   {
     field: "salary",
     cellDataType: "number",
     width: 150,
     headerName: "Salary",
-    cellRenderer: "currency" // Reference renderer by key
+    // cellRenderer: "currency" // Reference renderer by key
   },
 ];
 

@@ -18,8 +18,8 @@
     "bench": "vitest bench"
   },
   "devDependencies": {
-    "@types/node": "^24.6.0",
-    "tsdown": "^0.15.5",
+    "@types/node": "^24.9.1",
+    "tsdown": "^0.15.9",
     "typescript": "~5.8.3"
   }
 }

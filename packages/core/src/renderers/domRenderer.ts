@@ -288,7 +288,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       const cell = document.createElement("div");
       cell.className = "gp-grid-cell gp-grid-cell-default";
       cell.tabIndex = -1; // Make focusable for keyboard navigation
-      // Enforce strict clipping of child content (portals)
+      // Enforce strict clipping of child content
       cell.style.maxWidth = "100%";
 
       // Attach click handler ONCE when creating the cell
@@ -336,8 +336,12 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       // Generate NEW cell key
       const newCellKey = `${c.row}-${c.col}`;
 
-      // Clean up OLD portal if this cell was previously showing a different position
-      if (oldCellKey && oldCellKey !== newCellKey) {
+      // Check if cell position actually changed
+      const positionChanged = oldCellKey !== null && oldCellKey !== newCellKey;
+
+      // Debug logging
+      // Clean up old position if this cell moved to a new position
+      if (oldCellKey && positionChanged) {
         const oldCleanup = cellCleanupMap.get(oldCellKey);
         if (oldCleanup) {
           oldCleanup();
@@ -345,19 +349,11 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         }
       }
 
-      // Clean up NEW position's portal if it exists elsewhere (shouldn't happen but defensive)
-      // This handles the case where the same logical cell might be rendered in multiple pool cells
-      if (oldCellKey !== newCellKey) {
-        const newCleanup = cellCleanupMap.get(newCellKey);
-        if (newCleanup) {
-          newCleanup();
-          cellCleanupMap.delete(newCellKey);
-        }
+      // NOW update dataset to NEW position (only if changed)
+      if (positionChanged) {
+        cell!.dataset.row = String(c.row);
+        cell!.dataset.col = String(c.col);
       }
-
-      // NOW update dataset to NEW position
-      cell!.dataset.row = String(c.row);
-      cell!.dataset.col = String(c.col);
 
       // Check if cell is in fill range
       let isInFillRange = false;
@@ -390,23 +386,29 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         cell!.className = "gp-grid-cell gp-grid-cell-default";
         cell!.style.zIndex = "0";
       }
-
+      cell!.id = `gp-grid-cell-${c.row}-${c.col}`;
       // Resolve cell renderer with priority: column inline > column key > global
       const cellRenderer = resolveCellRenderer(c.column, opts);
 
       // Show/hide content based on edit state
       if (c.isEditing) {
-        // Old portal already cleaned up above
         cell!.innerHTML = ""; // Use innerHTML to clear safely
         cell!.style.padding = "0"; // Remove padding when editing
       } else {
         if (cellRenderer) {
-          // Use custom renderer
+          // Use custom renderer - always call it
           cell!.style.padding = "0 8px";
 
-          // Only clear text content if the cell previously had text (not a portal)
+          // Clean up existing renderer for this position if it exists
+          const existingCleanup = cellCleanupMap.get(newCellKey);
+          if (existingCleanup) {
+            existingCleanup();
+            cellCleanupMap.delete(newCellKey);
+          }
+
+          // Clear text content if present
           if (cell!.textContent && !cell!.hasChildNodes()) {
-            cell!.textContent = ""; // Clear text only
+            cell!.textContent = "";
           }
 
           // Get full row data for custom renderer
@@ -418,13 +420,12 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
             rowIndex: c.row,
             colIndex: c.col,
           });
+          
           if (cleanupFn) {
             cellCleanupMap.set(newCellKey, cleanupFn);
           }
         } else {
           // Default text rendering
-          // Old portal already cleaned up above
-          // Set text content - at this point React has already unmounted the portal
           cell!.textContent = String(c.value ?? "");
           cell!.style.padding = "0 8px";
         }
@@ -433,7 +434,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       cell!.style.display = "flex"; // Ensure visible cells are shown
     });
 
-    // Hide unused cells in the pool and clean up their portals
+    // Hide unused cells in the pool and clean up their renderers
     for (let i = cells.length; i < cellPool.length; i++) {
       const cell = cellPool[i]!;
       cell.style.display = "none";
@@ -621,6 +622,10 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
               if (col?.editable === true) {
                 isDraggingFillHandle = true;
                 engine.startFillDrag(cell.row, cell.col);
+
+                // Attach handlers to document so they work even when mouse is outside container
+                document.addEventListener('mousemove', handleMousemove);
+                document.addEventListener('mouseup', handleMouseup);
               }
             }
           };
@@ -695,6 +700,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
 
   const update = () => {
     const rect = container.getBoundingClientRect();
+
     // Sync header horizontal scroll by setting scrollLeft directly
     // This ensures pixel-perfect alignment with the body content
     headerContainer.scrollLeft = container.scrollLeft;
@@ -746,7 +752,6 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
 
     const autoScrollLoop = () => {
       if (!isDraggingFillHandle) {
-        console.log('Auto-scroll stopped: isDraggingFillHandle is false');
         stopAutoScroll();
         return;
       }
@@ -759,32 +764,32 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       const distanceFromTop = mouseYRelativeToViewport - totalHeaderHeight;
       const distanceFromBottom = viewportHeight - mouseYRelativeToViewport;
 
-      console.log('Auto-scroll loop running:', {
-        'container.scrollTop': container.scrollTop,
-        'container.scrollHeight': container.scrollHeight,
-        'container.clientHeight': container.clientHeight,
-        distanceFromBottom,
-      });
-
       let scrollDelta = 0;
 
-      // Check if in auto-scroll zone at top
-      if (distanceFromTop < AUTO_SCROLL_ZONE && distanceFromTop > 0) {
-        // Scroll up: speed increases as mouse gets closer to edge
-        const intensity = 1 - distanceFromTop / AUTO_SCROLL_ZONE;
-        scrollDelta = -Math.ceil(intensity * MAX_SCROLL_SPEED);
+      // Check if in auto-scroll zone at top or above viewport
+      if (distanceFromTop < AUTO_SCROLL_ZONE) {
+        if (distanceFromTop > 0) {
+          // Mouse is within the auto-scroll zone near top
+          const intensity = 1 - distanceFromTop / AUTO_SCROLL_ZONE;
+          scrollDelta = -Math.ceil(intensity * MAX_SCROLL_SPEED);
+        } else {
+          // Mouse is above viewport - scroll up at max speed
+          scrollDelta = -MAX_SCROLL_SPEED;
+        }
       }
-      // Check if in auto-scroll zone at bottom
-      else if (
-        distanceFromBottom < AUTO_SCROLL_ZONE &&
-        distanceFromBottom > 0
-      ) {
-        // Scroll down: speed increases as mouse gets closer to edge
-        const intensity = 1 - distanceFromBottom / AUTO_SCROLL_ZONE;
-        scrollDelta = Math.ceil(intensity * MAX_SCROLL_SPEED);
+      // Check if in auto-scroll zone at bottom or below viewport
+      else if (distanceFromBottom < AUTO_SCROLL_ZONE) {
+        if (distanceFromBottom > 0) {
+          // Mouse is within the auto-scroll zone near bottom
+          const intensity = 1 - distanceFromBottom / AUTO_SCROLL_ZONE;
+          scrollDelta = Math.ceil(intensity * MAX_SCROLL_SPEED);
+        } else {
+          // Mouse is below viewport - scroll down at max speed
+          scrollDelta = MAX_SCROLL_SPEED;
+        }
       }
 
-      // Apply scroll and update target row
+      // Apply scroll if needed
       if (scrollDelta !== 0) {
         const maxScrollTop = container.scrollHeight - container.clientHeight;
         const oldScrollTop = container.scrollTop;
@@ -797,35 +802,40 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         container.scrollTop = newScrollTop;
 
         // Calculate how much scroll was actually applied
-        const actualScrollDelta = newScrollTop - oldScrollTop;
+        const actualScrollDelta = container.scrollTop - oldScrollTop;
 
         // Accumulate only the scroll that couldn't be applied (hit boundary)
         const unboundedScrollDelta = scrollDelta - actualScrollDelta;
         accumulatedScroll += unboundedScrollDelta;
+      }
 
-        // Calculate target row using accumulated scroll
-        // This allows selection to extend beyond visible area when at boundaries
-        const effectiveScrollTop = container.scrollTop + accumulatedScroll;
-        const mouseY =
-          lastMouseYClient - rect.top + effectiveScrollTop - totalHeaderHeight;
-        const targetRow = Math.floor(mouseY / rowHeight);
+      // Calculate target row based on mouse position
+      // When mouse is within viewport, calculate based on actual position
+      // When mouse is outside viewport, keep extending in that direction
+      let targetRow: number;
+      if (distanceFromBottom < 0) {
+        // Mouse is below viewport - calculate row based on how far below
+        const mouseDistanceBelowViewport = -distanceFromBottom;
+        const rowsBeyondViewport = Math.ceil(mouseDistanceBelowViewport / rowHeight);
+        const lastVisibleRow = Math.floor((container.scrollTop + viewportHeight - totalHeaderHeight) / rowHeight);
+        targetRow = lastVisibleRow + rowsBeyondViewport;
+      } else if (distanceFromTop < 0) {
+        // Mouse is above viewport - calculate row based on how far above
+        const mouseDistanceAboveViewport = -distanceFromTop;
+        const rowsAboveViewport = Math.ceil(mouseDistanceAboveViewport / rowHeight);
+        const firstVisibleRow = Math.floor(container.scrollTop / rowHeight);
+        targetRow = firstVisibleRow - rowsAboveViewport;
+      } else {
+        // Mouse is within viewport - use normal calculation
+        const mouseY = mouseYRelativeToViewport - totalHeaderHeight + container.scrollTop;
+        targetRow = Math.floor(mouseY / rowHeight);
+      }
 
-        console.log('Target row calculation:', {
-          scrollDelta,
-          actualScrollDelta,
-          unboundedScrollDelta,
-          'container.scrollTop': container.scrollTop,
-          accumulatedScroll,
-          effectiveScrollTop,
-          targetRow,
-        });
-
-        // Update fill drag state with new target row
-        const fillState = engine.getFillHandleState();
-        if (fillState) {
-          engine.updateFillDrag(targetRow, fillState.sourceCol);
-          update();
-        }
+      // Update fill drag state with new target row
+      const fillState = engine.getFillHandleState();
+      if (fillState) {
+        engine.updateFillDrag(targetRow, fillState.sourceCol);
+        update();
       }
 
       // Continue the loop
@@ -912,13 +922,25 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
     const distanceFromTop = mouseYRelativeToViewport - totalHeaderHeight;
     const distanceFromBottom = viewportHeight - mouseYRelativeToViewport;
 
+    // Allow auto-scroll when:
+    // - Mouse is near top edge (within AUTO_SCROLL_ZONE pixels below header)
+    // - Mouse is near bottom edge (within AUTO_SCROLL_ZONE pixels from bottom)
+    // - Mouse is below the viewport (for continuing to scroll down)
+    // - Mouse is above the viewport header (for continuing to scroll up)
     const isNearTopEdge =
       distanceFromTop < AUTO_SCROLL_ZONE && distanceFromTop > 0;
     const isNearBottomEdge =
       distanceFromBottom < AUTO_SCROLL_ZONE && distanceFromBottom > 0;
+    const isBelowViewport = mouseYRelativeToViewport > viewportHeight;
+    const isAboveContent = mouseYRelativeToViewport < totalHeaderHeight;
 
     // Start or stop auto-scroll based on mouse position
-    if (isNearTopEdge || isNearBottomEdge) {
+    if (
+      isNearTopEdge ||
+      isNearBottomEdge ||
+      isBelowViewport ||
+      isAboveContent
+    ) {
       if (autoScrollAnimationId === null) {
         startAutoScroll();
       }
@@ -956,14 +978,27 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
     stopAutoScroll();
 
     isDraggingFillHandle = false;
+
+    // Remove document-level handlers
+    document.removeEventListener('mousemove', handleMousemove);
+    document.removeEventListener('mouseup', handleMouseup);
+
     await engine.commitFillDrag();
     update();
+  };
+
+  // Store click handler reference for cleanup
+  const handleClick = () => {
+    if (document.activeElement !== container) {
+      container.focus();
+    }
   };
 
   container.addEventListener("keydown", handleKeydown);
   container.addEventListener("mousemove", handleMousemove);
   container.addEventListener("mouseup", handleMouseup);
   container.addEventListener("scroll", update);
+  container.addEventListener("click", handleClick);
   window.addEventListener("resize", update);
   update();
 
@@ -981,6 +1016,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
     container.removeEventListener("mousemove", handleMousemove);
     container.removeEventListener("mouseup", handleMouseup);
     container.removeEventListener("scroll", update);
+    container.removeEventListener("click", handleClick);
     window.removeEventListener("resize", update);
     container.innerHTML = "";
   };
