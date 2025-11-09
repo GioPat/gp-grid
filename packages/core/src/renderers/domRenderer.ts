@@ -349,11 +349,9 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         }
       }
 
-      // NOW update dataset to NEW position (only if changed)
-      if (positionChanged) {
-        cell!.dataset.row = String(c.row);
-        cell!.dataset.col = String(c.col);
-      }
+      // Update dataset to reflect current position
+      cell!.dataset.row = String(c.row);
+      cell!.dataset.col = String(c.col);
 
       // Check if cell is in fill range
       let isInFillRange = false;
