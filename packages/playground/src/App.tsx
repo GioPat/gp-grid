@@ -95,7 +95,7 @@ const columns: ColumnDefinition[] = [
     cellDataType: "number",
     width: 150,
     headerName: "Salary",
-    // cellRenderer: "currency" // Reference renderer by key
+    cellRenderer: "currency" // Reference renderer by key
   },
 ];
 

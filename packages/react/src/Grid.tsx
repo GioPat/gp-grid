@@ -54,6 +54,16 @@ export const Grid = (props: GridProps): React.JSX.Element => {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GridEngine | null>(null);
   const portalManagerRef = useRef<PortalManager>(new PortalManager());
+  const containerKeyMapRef = useRef<Map<HTMLElement, string>>(new Map());
+  const lastParamsRef = useRef<
+    Map<
+      string,
+      {
+        value: unknown;
+        rowData: unknown;
+      }
+    >
+  >(new Map());
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const [portals, setPortals] = useState<ReactElement[]>([]);
@@ -82,18 +92,54 @@ export const Grid = (props: GridProps): React.JSX.Element => {
           key = `header-${params.colIndex}`;
         }
 
-        // Always create/update portal when renderer is called
-        const content = reactRenderer(params);
-        if (content !== null && content !== undefined) {
-          const element = isValidElement(content) ? content : <>{content}</>;
-          
-          portalManagerRef.current.createPortal(
-            key,
-            container,
-            <div className={`${type}-wrapper`}>{element}</div>,
-          );
+        const manager = portalManagerRef.current;
+        const containerKeyMap = containerKeyMapRef.current;
+        const lastParamsMap = lastParamsRef.current;
 
-          // Focus input for edit mode
+        const previousKey = containerKeyMap.get(container);
+        const hasPortal = manager.hasPortal(key);
+        const lastParams = lastParamsMap.get(key);
+
+        const valueChanged =
+          !lastParams || !Object.is(lastParams.value, params.value);
+        const rowDataChanged =
+          !lastParams || lastParams.rowData !== params.rowData;
+        const needsNewPortal = !hasPortal;
+        const containerMoved = previousKey !== undefined && previousKey !== key;
+        const shouldUpdate = needsNewPortal || valueChanged || rowDataChanged || containerMoved;
+
+        const content = reactRenderer(params);
+        if (content === null || content === undefined) {
+          // Renderer returned nothing; remove existing portal if this container owns it
+          if (previousKey === key) {
+            manager.removePortal(key);
+            containerKeyMap.delete(container);
+            lastParamsMap.delete(key);
+          }
+          return () => {};
+        }
+
+          const element = isValidElement(content) ? content : <>{content}</>;
+        const wrappedElement = <div className={`${type}-wrapper`}>{element}</div>;
+
+        if (shouldUpdate) {
+          if (previousKey && previousKey !== key && manager.hasPortal(previousKey)) {
+            manager.recyclePortal(previousKey, key, wrappedElement);
+            lastParamsMap.delete(previousKey);
+          } else {
+            manager.createPortal(key, container, wrappedElement);
+          }
+
+          containerKeyMap.set(container, key);
+          lastParamsMap.set(key, {
+            value: params.value,
+            rowData: params.rowData,
+          });
+        } else if (!previousKey) {
+          // Portal already exists for this key; ensure mapping is recorded
+          containerKeyMap.set(container, key);
+        }
+
           if (type === "edit") {
             setTimeout(() => {
               const input = container.querySelector(
@@ -102,14 +148,17 @@ export const Grid = (props: GridProps): React.JSX.Element => {
               input?.focus();
             }, 0);
           }
-        }
 
-        // Simple cleanup - always remove portal
-        const cleanup = () => {
-          portalManagerRef.current.removePortal(key);
+          const cleanup = () => {
+          const currentKey = containerKeyMap.get(container);
+          if (currentKey === key) {
+            manager.removePortal(key);
+            containerKeyMap.delete(container);
+            lastParamsMap.delete(key);
+          }
         };
 
-        return cleanup;
+          return cleanup;
       };
     },
     [],
@@ -192,6 +241,7 @@ export const Grid = (props: GridProps): React.JSX.Element => {
     return () => {
       cleanupRef.current?.();
       portalManagerRef.current.clearAll();
+      containerKeyMapRef.current.clear();
       engineRef.current = null;
       cleanupRef.current = null;
     };

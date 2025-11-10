@@ -342,11 +342,7 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
       // Debug logging
       // Clean up old position if this cell moved to a new position
       if (oldCellKey && positionChanged) {
-        const oldCleanup = cellCleanupMap.get(oldCellKey);
-        if (oldCleanup) {
-          oldCleanup();
-          cellCleanupMap.delete(oldCellKey);
-        }
+        cellCleanupMap.delete(oldCellKey);
       }
 
       // Update dataset to reflect current position
@@ -396,13 +392,6 @@ export function attachDomRenderer(container: HTMLElement, engine: GridEngine) {
         if (cellRenderer) {
           // Use custom renderer - always call it
           cell!.style.padding = "0 8px";
-
-          // Clean up existing renderer for this position if it exists
-          const existingCleanup = cellCleanupMap.get(newCellKey);
-          if (existingCleanup) {
-            existingCleanup();
-            cellCleanupMap.delete(newCellKey);
-          }
 
           // Clear text content if present
           if (cell!.textContent && !cell!.hasChildNodes()) {

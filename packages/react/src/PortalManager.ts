@@ -7,6 +7,7 @@ export default class PortalManager {
     { container: HTMLElement; content: ReactElement }
   > = new Map();
   private updateCallback: ((portals: ReactElement[]) => void) | null = null;
+  private updatePending = false;
 
   setUpdateCallback(callback: (portals: ReactElement[]) => void) {
     this.updateCallback = callback;
@@ -56,15 +57,45 @@ export default class PortalManager {
     return this.portals.get(key);
   }
 
+  recyclePortal(
+    oldKey: string,
+    newKey: string,
+    newContent: ReactElement,
+  ): void {
+    const portal = this.portals.get(oldKey);
+    if (!portal) {
+      return;
+    }
+
+    this.portals.delete(oldKey);
+    this.portals.set(newKey, {
+      container: portal.container,
+      content: newContent,
+    });
+
+    this.notifyUpdate();
+  }
+
   clearAll(): void {
     this.portals.clear();
     this.notifyUpdate();
   }
 
   private notifyUpdate(): void {
-    if (this.updateCallback !== null) {
-      this.updateCallback(this.getPortals());
+    if (!this.updateCallback) {
+      return;
     }
+
+    if (this.updatePending) {
+      return;
+    }
+
+    this.updatePending = true;
+
+    requestAnimationFrame(() => {
+      this.updatePending = false;
+      this.updateCallback?.(this.getPortals());
+    });
    }
 
   getPortals(): ReactElement[] {
