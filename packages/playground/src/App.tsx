@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
-import { Grid, type ColumnDefinition, type CellRendererParams } from "gp-grid-react";
+import {
+  Grid,
+  createClientDataSource,
+  type ColumnDefinition,
+  type CellRendererParams,
+} from "gp-grid-react";
 
 interface Person {
   id: number;
@@ -72,7 +77,7 @@ const columns: ColumnDefinition[] = [
     cellDataType: "number",
     width: 80,
     headerName: "ID",
-    cellRenderer: "bold" // Reference renderer by key
+    cellRenderer: "bold", // Reference renderer by key
   },
   { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
   { field: "age", cellDataType: "number", width: 80, headerName: "Age" },
@@ -88,28 +93,37 @@ const columns: ColumnDefinition[] = [
     cellDataType: "text",
     width: 120,
     headerName: "Status",
-    // cellRenderer: "statusBadge" // Reference renderer by key
+    cellRenderer: "statusBadge", // Reference renderer by key
   },
   {
     field: "salary",
     cellDataType: "number",
     width: 150,
     headerName: "Salary",
-    cellRenderer: "currency" // Reference renderer by key
+    cellRenderer: "currency", // Reference renderer by key
   },
 ];
 
-const rowData: Person[] = Array.from({ length: 150000 }, (_, i) => ({
-  id: i + 1,
-  name: `Person ${names[getRandomInt(0, 2)]}`,
-  age: getRandomInt(18, 90),
-  email: `person${i + 1}@example.com`,
-  status: statuses[getRandomInt(0, 2)],
-  salary: getRandomInt(30000, 150000),
-}));
+// Generate sample data
+const generateRowData = (): Person[] =>
+  Array.from({ length: 150000 }, (_, i) => ({
+    id: i + 1,
+    name: `Person ${names[getRandomInt(0, 2)]}`,
+    age: getRandomInt(18, 90),
+    email: `person${i + 1}@example.com`,
+    status: statuses[getRandomInt(0, 2)],
+    salary: getRandomInt(30000, 150000),
+  }));
 
 function App() {
   const [count, setCount] = useState(0);
+
+  // Create data source (memoized to prevent recreating on every render)
+  const dataSource = useMemo(() => {
+    const rowData = generateRowData();
+    return createClientDataSource(rowData);
+  }, []);
+
   return (
     <>
       <div>
@@ -124,11 +138,11 @@ function App() {
       <div style={{ width: "800px", height: "400px" }}>
         <Grid
           columns={columns}
-          rowData={rowData}
-          rowHeight={30}
-          useWorkers="auto"
+          dataSource={dataSource}
+          rowHeight={36}
+          headerHeight={40}
           showFilters={true}
-          cellRenderers={cellRenderers} // Pass renderer registry
+          cellRenderers={cellRenderers}
         />
       </div>
       <div className="card">

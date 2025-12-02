@@ -3,15 +3,15 @@ import react from "@vitejs/plugin-react";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [["babel-plugin-react-compiler"]],
-      },
-    }),
-  ],
+  plugins: [react()],
   build: {
     sourcemap: true, // Enable source maps for production builds
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "react/jsx-runtime"],
+  },
+  resolve: {
+    dedupe: ["react", "react-dom"],
   },
   // Ensure source maps work in dev mode
   server: {

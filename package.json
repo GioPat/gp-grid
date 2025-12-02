@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "pnpm -r --parallel run dev",
+    "dev": "pnpm --parallel run dev",
     "build": "pnpm -r build",
     "test": "vitest",
     "test:ui": "vitest --ui",

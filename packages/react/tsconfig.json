@@ -1,19 +1,26 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "declaration": true,
     "outDir": "dist",
+    "noImplicitAny": false,
     "strict": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "gp-grid-core": ["../core/src"]
+      "gp-grid-core": [
+        "../core/src"
+      ]
     }
   },
   "include": [
