@@ -267,6 +267,10 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
   const [state, dispatch] = useReducer(gridReducer, null, createInitialState);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const filterTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [isDraggingFill, setIsDraggingFill] = useState(false);
+  const [fillTarget, setFillTarget] = useState<{ row: number; col: number } | null>(null);
+  const [fillSourceRange, setFillSourceRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
+  const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Computed heights
   const filterRowHeight = showFilters ? 40 : 0;
@@ -582,6 +586,150 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
     [columns, state.headers]
   );
 
+  // Fill handle drag handlers
+  const handleFillHandleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // console.log("[GP-Grid] Fill handle mousedown triggered");
+      e.preventDefault();
+      e.stopPropagation();
+
+      const core = coreRef.current;
+      if (!core) return;
+
+      const { activeCell, selectionRange } = state;
+      if (!activeCell && !selectionRange) return;
+
+      // Create source range from selection or active cell
+      const sourceRange = selectionRange ?? {
+        startRow: activeCell!.row,
+        startCol: activeCell!.col,
+        endRow: activeCell!.row,
+        endCol: activeCell!.col,
+      };
+
+      // console.log("[GP-Grid] Starting fill drag with source range:", sourceRange);
+      core.fill.startFillDrag(sourceRange);
+      setFillSourceRange(sourceRange);
+      setFillTarget({ 
+        row: Math.max(sourceRange.startRow, sourceRange.endRow),
+        col: Math.max(sourceRange.startCol, sourceRange.endCol)
+      });
+      setIsDraggingFill(true);
+    },
+    [state.activeCell, state.selectionRange]
+  );
+
+  // Handle mouse move during fill drag
+  useEffect(() => {
+    if (!isDraggingFill) return;
+
+    // Auto-scroll configuration
+    const SCROLL_THRESHOLD = 40; // pixels from edge to trigger scroll
+    const SCROLL_SPEED = 10; // pixels per frame
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const core = coreRef.current;
+      const container = containerRef.current;
+      if (!core || !container) return;
+
+      // Get container bounds
+      const rect = container.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft;
+      const scrollTop = container.scrollTop;
+
+      // Calculate mouse position relative to grid content
+      const mouseX = e.clientX - rect.left + scrollLeft;
+      const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
+
+      // Find the row and column under the mouse
+      const targetRow = Math.max(0, Math.floor(mouseY / rowHeight));
+      
+      // Find column by checking column positions
+      let targetCol = 0;
+      for (let i = 0; i < columnPositions.length - 1; i++) {
+        if (mouseX >= columnPositions[i]! && mouseX < columnPositions[i + 1]!) {
+          targetCol = i;
+          break;
+        }
+        if (mouseX >= columnPositions[columnPositions.length - 1]!) {
+          targetCol = columnPositions.length - 2;
+        }
+      }
+
+      core.fill.updateFillDrag(targetRow, targetCol);
+      setFillTarget({ row: targetRow, col: targetCol });
+
+      // Auto-scroll logic
+      const mouseYInContainer = e.clientY - rect.top;
+      const mouseXInContainer = e.clientX - rect.left;
+
+      // Clear any existing auto-scroll
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+
+      // Check if we need to auto-scroll
+      let scrollDeltaX = 0;
+      let scrollDeltaY = 0;
+
+      // Vertical scrolling
+      if (mouseYInContainer < SCROLL_THRESHOLD + totalHeaderHeight) {
+        scrollDeltaY = -SCROLL_SPEED;
+      } else if (mouseYInContainer > rect.height - SCROLL_THRESHOLD) {
+        scrollDeltaY = SCROLL_SPEED;
+      }
+
+      // Horizontal scrolling
+      if (mouseXInContainer < SCROLL_THRESHOLD) {
+        scrollDeltaX = -SCROLL_SPEED;
+      } else if (mouseXInContainer > rect.width - SCROLL_THRESHOLD) {
+        scrollDeltaX = SCROLL_SPEED;
+      }
+
+      // Start auto-scroll if needed
+      if (scrollDeltaX !== 0 || scrollDeltaY !== 0) {
+        autoScrollIntervalRef.current = setInterval(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop += scrollDeltaY;
+            containerRef.current.scrollLeft += scrollDeltaX;
+          }
+        }, 16); // ~60fps
+      }
+    };
+
+    const handleMouseUp = () => {
+      // Clear auto-scroll
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+
+      const core = coreRef.current;
+      if (core) {
+        core.fill.commitFillDrag();
+        // Refresh slots to show updated values
+        core.refreshSlotData();
+      }
+      setIsDraggingFill(false);
+      setFillTarget(null);
+      setFillSourceRange(null);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      // Clear auto-scroll on cleanup
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingFill, totalHeaderHeight, rowHeight, columnPositions]);
+
   // Render helpers
   const isSelected = useCallback(
     (row: number, col: number): boolean => {
@@ -610,6 +758,41 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
       return state.editingCell?.row === row && state.editingCell?.col === col;
     },
     [state.editingCell]
+  );
+
+  // Check if cell is in fill preview range
+  const isInFillPreview = useCallback(
+    (row: number, col: number): boolean => {
+      if (!isDraggingFill || !fillSourceRange || !fillTarget) return false;
+
+      const srcMinRow = Math.min(fillSourceRange.startRow, fillSourceRange.endRow);
+      const srcMaxRow = Math.max(fillSourceRange.startRow, fillSourceRange.endRow);
+      const srcMinCol = Math.min(fillSourceRange.startCol, fillSourceRange.endCol);
+      const srcMaxCol = Math.max(fillSourceRange.startCol, fillSourceRange.endCol);
+
+      // Determine fill direction and range
+      const fillDown = fillTarget.row > srcMaxRow;
+      const fillUp = fillTarget.row < srcMinRow;
+      const fillRight = fillTarget.col > srcMaxCol;
+      const fillLeft = fillTarget.col < srcMinCol;
+
+      // Check if cell is in the fill preview area (not the source area)
+      if (fillDown) {
+        return row > srcMaxRow && row <= fillTarget.row && col >= srcMinCol && col <= srcMaxCol;
+      }
+      if (fillUp) {
+        return row < srcMinRow && row >= fillTarget.row && col >= srcMinCol && col <= srcMaxCol;
+      }
+      if (fillRight) {
+        return col > srcMaxCol && col <= fillTarget.col && row >= srcMinRow && row <= srcMaxRow;
+      }
+      if (fillLeft) {
+        return col < srcMinCol && col >= fillTarget.col && row >= srcMinRow && row <= srcMaxRow;
+      }
+
+      return false;
+    },
+    [isDraggingFill, fillSourceRange, fillTarget]
   );
 
   // Get cell value from row data
@@ -792,21 +975,35 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
   // Convert slots map to array for rendering
   const slotsArray = useMemo(() => Array.from(state.slots.values()), [state.slots]);
 
-  // Calculate fill handle position
+  // Calculate fill handle position (only show for editable columns)
   const fillHandlePosition = useMemo(() => {
     const { activeCell, selectionRange } = state;
     if (!activeCell && !selectionRange) return null;
 
-    // Get the bottom-right corner of selection or active cell
+    // Get the bottom-right corner and column range of selection or active cell
     let row: number, col: number;
+    let minCol: number, maxCol: number;
+    
     if (selectionRange) {
       row = Math.max(selectionRange.startRow, selectionRange.endRow);
       col = Math.max(selectionRange.startCol, selectionRange.endCol);
+      minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
+      maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
     } else if (activeCell) {
       row = activeCell.row;
       col = activeCell.col;
+      minCol = col;
+      maxCol = col;
     } else {
       return null;
+    }
+
+    // Check if ALL columns in the selection are editable
+    for (let c = minCol; c <= maxCol; c++) {
+      const column = columns[c];
+      if (!column || column.editable !== true) {
+        return null; // Don't show fill handle if any column is not editable
+      }
     }
 
     const cellTop = row * rowHeight + totalHeaderHeight;
@@ -893,7 +1090,6 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
               height: filterRowHeight,
               width: Math.max(state.contentWidth, totalWidth),
               minWidth: "100%",
-              background: "#f5f5f5",
               zIndex: 99,
             }}
           >
@@ -909,7 +1105,6 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
                     top: 0,
                     width: `${column.width}px`,
                     height: `${filterRowHeight}px`,
-                    background: "#f5f5f5",
                   }}
                 >
                   <input
@@ -949,12 +1144,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
                 const isEditing = isEditingCell(slot.rowIndex, colIndex);
                 const active = isActiveCell(slot.rowIndex, colIndex);
                 const selected = isSelected(slot.rowIndex, colIndex);
+                const inFillPreview = isInFillPreview(slot.rowIndex, colIndex);
 
                 const cellClasses = [
                   "gp-grid-cell",
                   active && "gp-grid-cell--active",
                   selected && !active && "gp-grid-cell--selected",
                   isEditing && "gp-grid-cell--editing",
+                  inFillPreview && "gp-grid-cell--fill-preview",
                 ]
                   .filter(Boolean)
                   .join(" ");
@@ -997,7 +1194,9 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
               position: "absolute",
               top: fillHandlePosition.top,
               left: fillHandlePosition.left,
+              zIndex: 200,
             }}
+            onMouseDown={handleFillHandleMouseDown}
           />
         )}
 

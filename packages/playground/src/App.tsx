@@ -140,6 +140,7 @@ function App() {
           columns={columns}
           dataSource={dataSource}
           rowHeight={36}
+          darkMode={true}
           headerHeight={40}
           showFilters={true}
           cellRenderers={cellRenderers}

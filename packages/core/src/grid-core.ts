@@ -717,6 +717,14 @@ export class GridCore<TData extends Row = Row> {
   }
 
   /**
+   * Refresh slot display without refetching data.
+   * Useful after in-place data modifications like fill operations.
+   */
+  refreshSlotData(): void {
+    this.refreshAllSlots();
+  }
+
+  /**
    * Update the data source and refresh.
    */
   async setDataSource(dataSource: DataSource<TData>): Promise<void> {
