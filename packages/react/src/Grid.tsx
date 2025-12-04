@@ -1008,8 +1008,8 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
     const cellWidth = columns[col]?.width ?? 0;
 
     return {
-      top: cellTop + rowHeight - 4, // 4px offset for the handle
-      left: cellLeft + cellWidth - 4,
+      top: cellTop + rowHeight - 5,
+      left: cellLeft + cellWidth - 20, // Move significantly left to avoid scrollbar overlap
     };
   }, [state.activeCell, state.selectionRange, rowHeight, totalHeaderHeight, columnPositions, columns]);
 
