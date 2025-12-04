@@ -7,7 +7,9 @@ import {
   createClientDataSource,
   type ColumnDefinition,
   type CellRendererParams,
+  type EditRendererParams,
 } from "gp-grid-react";
+import Select from "react-select";
 
 interface Person {
   id: number;
@@ -16,7 +18,17 @@ interface Person {
   email: string;
   status: "active" | "inactive" | "pending";
   salary: number;
+  tags: string[];
 }
+
+// Available tag options for the multi-select
+const tagOptions = [
+  { value: "vip", label: "VIP" },
+  { value: "new", label: "New" },
+  { value: "priority", label: "Priority" },
+  { value: "archived", label: "Archived" },
+  { value: "verified", label: "Verified" },
+];
 
 function getRandomInt(min: number, max: number): number {
   min = Math.ceil(min);
@@ -69,6 +81,157 @@ const cellRenderers = {
   bold: (params: CellRendererParams) => {
     return <strong>{String(params.value ?? "")}</strong>;
   },
+
+  // Tags renderer - displays tags as badges with vertical scroll
+  tags: (params: CellRendererParams) => {
+    const tags = (params.value as string[]) || [];
+    if (tags.length === 0) {
+      return <span style={{ color: "#6b7280", fontStyle: "italic" }}>No tags</span>;
+    }
+    return (
+      <div
+        style={{
+          display: "flex",
+          gap: "4px",
+          flexWrap: "wrap",
+          maxHeight: "100%",
+          overflowY: "auto",
+          alignContent: "flex-start",
+          padding: "2px 0",
+        }}
+      >
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            style={{
+              backgroundColor: "#3b82f6",
+              color: "#ffffff",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontSize: "11px",
+              fontWeight: "500",
+              flexShrink: 0,
+            }}
+          >
+            {tag.toUpperCase()}
+          </span>
+        ))}
+      </div>
+    );
+  },
+};
+
+// Multi-select editor component with local state for live updates
+function MultiSelectEditor({ params }: { params: EditRendererParams }) {
+  const initialTags = (params.initialValue as string[]) || [];
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
+
+  const selectedOptions = tagOptions.filter((opt) =>
+    selectedTags.includes(opt.value)
+  );
+
+  const handleChange = (newValue: readonly { value: string; label: string }[]) => {
+    const newTags = newValue.map((opt) => opt.value);
+    setSelectedTags(newTags);
+    params.onValueChange(newTags);
+  };
+
+  return (
+    <Select
+      isMulti
+      autoFocus
+      menuIsOpen
+      options={tagOptions}
+      value={selectedOptions}
+      onChange={handleChange}
+      onBlur={() => params.onCommit()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          params.onCancel();
+        }
+      }}
+      // Use portal to render dropdown outside the cell's overflow:hidden
+      menuPortalTarget={document.body}
+      menuPosition="fixed"
+      styles={{
+        container: (base) => ({
+          ...base,
+          width: "100%",
+          height: "32px", // Match row height minus border
+        }),
+        control: (base) => ({
+          ...base,
+          minHeight: "32px",
+          height: "32px",
+          backgroundColor: "#1f2937",
+          borderColor: "#3b82f6",
+          boxShadow: "0 0 0 1px #3b82f6",
+          alignItems: "flex-start",
+          border: "none",
+        }),
+        valueContainer: (base) => ({
+          ...base,
+          height: "30px",
+          maxHeight: "30px",
+          overflowY: "auto",
+          overflowX: "hidden",
+          flexWrap: "wrap",
+          alignContent: "flex-start",
+          padding: "2px 8px",
+        }),
+        indicatorsContainer: (base) => ({
+          ...base,
+          height: "32px",
+        }),
+        menu: (base) => ({
+          ...base,
+          backgroundColor: "#1f2937",
+          zIndex: 9999,
+        }),
+        menuPortal: (base) => ({
+          ...base,
+          zIndex: 9999,
+        }),
+        option: (base, state) => ({
+          ...base,
+          backgroundColor: state.isFocused ? "#374151" : "#1f2937",
+          color: "#f3f4f6",
+          cursor: "pointer",
+        }),
+        multiValue: (base) => ({
+          ...base,
+          backgroundColor: "#3b82f6",
+          margin: "1px 2px",
+        }),
+        multiValueLabel: (base) => ({
+          ...base,
+          color: "#ffffff",
+          padding: "1px 4px",
+          fontSize: "11px",
+        }),
+        multiValueRemove: (base) => ({
+          ...base,
+          color: "#ffffff",
+          padding: "0 2px",
+          ":hover": {
+            backgroundColor: "#2563eb",
+            color: "#ffffff",
+          },
+        }),
+        input: (base) => ({
+          ...base,
+          color: "#f3f4f6",
+          margin: "0",
+          padding: "0",
+        }),
+      }}
+    />
+  );
+}
+
+// Define edit renderers
+const editRenderers = {
+  multiSelect: (params: EditRendererParams) => <MultiSelectEditor params={params} />,
 };
 
 const columns: ColumnDefinition[] = [
@@ -102,7 +265,23 @@ const columns: ColumnDefinition[] = [
     headerName: "Salary",
     cellRenderer: "currency", // Reference renderer by key
   },
+  {
+    field: "tags",
+    cellDataType: "object",
+    width: 200,
+    headerName: "Tags",
+    cellRenderer: "tags",
+    editRenderer: "multiSelect",
+    editable: true,
+  },
 ];
+
+// Helper to get random tags
+const getRandomTags = (): string[] => {
+  const numTags = getRandomInt(0, 3);
+  const shuffled = [...tagOptions].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, numTags).map((opt) => opt.value);
+};
 
 // Generate sample data
 const generateRowData = (): Person[] =>
@@ -113,16 +292,43 @@ const generateRowData = (): Person[] =>
     email: `person${i + 1}@example.com`,
     status: statuses[getRandomInt(0, 2)],
     salary: getRandomInt(30000, 150000),
+    tags: getRandomTags(),
   }));
 
 function App() {
   const [count, setCount] = useState(0);
 
-  // Create data source (memoized to prevent recreating on every render)
-  const dataSource = useMemo(() => {
-    const rowData = generateRowData();
-    return createClientDataSource(rowData);
-  }, []);
+  // Keep reference to raw data so we can access it later
+  const rowData = useMemo(() => generateRowData(), []);
+  
+  // Create data source from the row data
+  const dataSource = useMemo(
+    () => createClientDataSource(rowData),
+    [rowData]
+  );
+
+  // Handler to demonstrate reading all grid data
+  const handleGetAllData = () => {
+    console.log("=== All Grid Data ===");
+    console.log(`Total rows: ${rowData.length}`);
+    
+    // Show first 10 rows with their tags
+    console.log("First 10 rows with tags:");
+    rowData.slice(0, 10).forEach((row) => {
+      console.log(`  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`);
+    });
+    
+    // Count rows by tag
+    const tagCounts: Record<string, number> = {};
+    rowData.forEach((row) => {
+      row.tags.forEach((tag) => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+    console.log("Tag distribution:", tagCounts);
+    
+    alert("Data logged to console. Open DevTools to see the output.");
+  };
 
   return (
     <>
@@ -135,7 +341,7 @@ function App() {
         </a>
       </div>
       <h1>GP Grid Demo</h1>
-      <div style={{ width: "800px", height: "400px" }}>
+      <div style={{ width: "1000px", height: "400px" }}>
         <Grid
           columns={columns}
           dataSource={dataSource}
@@ -144,14 +350,29 @@ function App() {
           headerHeight={40}
           showFilters={true}
           cellRenderers={cellRenderers}
+          editRenderers={editRenderers}
         />
       </div>
-      <div className="card">
+      <div className="card" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
         </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
+        <button 
+          onClick={handleGetAllData}
+          style={{ 
+            backgroundColor: "#3b82f6", 
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "500",
+          }}
+        >
+          Get All Data
+        </button>
+        <p style={{ margin: 0 }}>
+          Double-click on Tags column to edit with multi-select
         </p>
       </div>
       <p className="read-the-docs">

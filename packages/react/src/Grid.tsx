@@ -482,7 +482,8 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
 
   // Scroll active cell into view when navigating with keyboard
   useEffect(() => {
-    if (!state.activeCell || !containerRef.current) return;
+    // Skip scrolling when editing - the user just clicked on the cell so it's already visible
+    if (!state.activeCell || !containerRef.current || state.editingCell) return;
 
     const { row, col } = state.activeCell;
     const container = containerRef.current;
@@ -512,14 +513,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
     } else if (cellRight > visibleRight) {
       container.scrollLeft = cellRight - container.clientWidth;
     }
-  }, [state.activeCell, rowHeight, totalHeaderHeight, columnPositions, columns]);
+  }, [state.activeCell, state.editingCell, rowHeight, totalHeaderHeight, columnPositions, columns]);
 
   // Cell click handler
   const handleCellClick = useCallback(
     (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
       // console.log("[GP-Grid] Cell click:", { rowIndex, colIndex, coreExists: !!coreRef.current });
       const core = coreRef.current;
-      if (!core) {
+      if (!core || core.getEditState() !== null) {
         // console.warn("[GP-Grid] Core not initialized on cell click");
         return;
       }
@@ -538,12 +539,8 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
   // Cell double-click handler
   const handleCellDoubleClick = useCallback(
     (rowIndex: number, colIndex: number) => {
-      // console.log("[GP-Grid] Cell double-click:", { rowIndex, colIndex, coreExists: !!coreRef.current });
       const core = coreRef.current;
-      if (!core) {
-        // console.warn("[GP-Grid] Core not initialized on double-click");
-        return;
-      }
+      if (!core) return;
 
       core.startEdit(rowIndex, colIndex);
     },
