@@ -4,7 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bundleDependencies": true,
+  "publishConfig": {
+    "link-workspace-packages": false
+  },
   "dependencies": {
     "gp-grid-core": "workspace:*"
   },

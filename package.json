@@ -1,5 +1,5 @@
 {
-  "name": "my-grid",
+  "name": "gp-grid",
   "private": true,
   "workspaces": [
     "packages/*"
