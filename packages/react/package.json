@@ -1,9 +1,33 @@
 {
   "name": "gp-grid-react",
+  "description": "A high-performance React data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
   "version": "0.1.2",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "keywords": [
+    "react",
+    "grid",
+    "data-grid",
+    "datagrid",
+    "react-grid",
+    "react-table",
+    "table",
+    "data-table",
+    "datatable",
+    "virtual-scroll",
+    "virtualization",
+    "typescript",
+    "high-performance",
+    "spreadsheet",
+    "excel",
+    "ag-grid-alternative",
+    "lightweight",
+    "cell-selection",
+    "sorting",
+    "filtering",
+    "editable"
+  ],
   "publishConfig": {
     "link-workspace-packages": false
   },
