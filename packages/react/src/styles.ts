@@ -100,6 +100,8 @@ export const gridStyles = `
   background-color: var(--gp-grid-bg);
   border: 1px solid var(--gp-grid-border);
   border-radius: 6px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .gp-grid-container:focus {
@@ -237,6 +239,8 @@ export const gridStyles = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Alternating row colors */

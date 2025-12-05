@@ -271,6 +271,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
   const [fillTarget, setFillTarget] = useState<{ row: number; col: number } | null>(null);
   const [fillSourceRange, setFillSourceRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
   const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   // Computed heights
   const filterRowHeight = showFilters ? 40 : 0;
@@ -515,15 +516,18 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
     }
   }, [state.activeCell, state.editingCell, rowHeight, totalHeaderHeight, columnPositions, columns]);
 
-  // Cell click handler
-  const handleCellClick = useCallback(
+  // Cell mouse down handler (starts selection and drag)
+  const handleCellMouseDown = useCallback(
     (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
-      // console.log("[GP-Grid] Cell click:", { rowIndex, colIndex, coreExists: !!coreRef.current });
+      // console.log("[GP-Grid] Cell mousedown:", { rowIndex, colIndex, coreExists: !!coreRef.current });
       const core = coreRef.current;
       if (!core || core.getEditState() !== null) {
-        // console.warn("[GP-Grid] Core not initialized on cell click");
+        // console.warn("[GP-Grid] Core not initialized on cell mousedown");
         return;
       }
+
+      // Only handle left mouse button
+      if (e.button !== 0) return;
 
       // Focus the container to enable keyboard navigation
       containerRef.current?.focus();
@@ -532,6 +536,11 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
         { row: rowIndex, col: colIndex },
         { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }
       );
+
+      // Start drag selection (unless shift is held - that's a one-time extend)
+      if (!e.shiftKey) {
+        setIsDraggingSelection(true);
+      }
     },
     []
   );
@@ -726,6 +735,111 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDraggingFill, totalHeaderHeight, rowHeight, columnPositions]);
+
+  // Handle mouse move/up during selection drag
+  useEffect(() => {
+    if (!isDraggingSelection) return;
+
+    // Auto-scroll configuration
+    const SCROLL_THRESHOLD = 40;
+    const SCROLL_SPEED = 10;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const core = coreRef.current;
+      const container = containerRef.current;
+      if (!core || !container) return;
+
+      // Get container bounds
+      const rect = container.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft;
+      const scrollTop = container.scrollTop;
+
+      // Calculate mouse position relative to grid content
+      const mouseX = e.clientX - rect.left + scrollLeft;
+      const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
+
+      // Find the row and column under the mouse
+      const targetRow = Math.max(0, Math.min(Math.floor(mouseY / rowHeight), core.getRowCount() - 1));
+      
+      // Find column by checking column positions
+      let targetCol = 0;
+      for (let i = 0; i < columnPositions.length - 1; i++) {
+        if (mouseX >= columnPositions[i]! && mouseX < columnPositions[i + 1]!) {
+          targetCol = i;
+          break;
+        }
+        if (mouseX >= columnPositions[columnPositions.length - 1]!) {
+          targetCol = columnPositions.length - 2;
+        }
+      }
+      targetCol = Math.max(0, Math.min(targetCol, columns.length - 1));
+
+      // Extend selection to target cell (like shift+click)
+      core.selection.startSelection(
+        { row: targetRow, col: targetCol },
+        { shift: true }
+      );
+
+      // Auto-scroll logic
+      const mouseYInContainer = e.clientY - rect.top;
+      const mouseXInContainer = e.clientX - rect.left;
+
+      // Clear any existing auto-scroll
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+
+      // Check if we need to auto-scroll
+      let scrollDeltaX = 0;
+      let scrollDeltaY = 0;
+
+      // Vertical scrolling
+      if (mouseYInContainer < SCROLL_THRESHOLD + totalHeaderHeight) {
+        scrollDeltaY = -SCROLL_SPEED;
+      } else if (mouseYInContainer > rect.height - SCROLL_THRESHOLD) {
+        scrollDeltaY = SCROLL_SPEED;
+      }
+
+      // Horizontal scrolling
+      if (mouseXInContainer < SCROLL_THRESHOLD) {
+        scrollDeltaX = -SCROLL_SPEED;
+      } else if (mouseXInContainer > rect.width - SCROLL_THRESHOLD) {
+        scrollDeltaX = SCROLL_SPEED;
+      }
+
+      // Start auto-scroll if needed
+      if (scrollDeltaX !== 0 || scrollDeltaY !== 0) {
+        autoScrollIntervalRef.current = setInterval(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop += scrollDeltaY;
+            containerRef.current.scrollLeft += scrollDeltaX;
+          }
+        }, 16); // ~60fps
+      }
+    };
+
+    const handleMouseUp = () => {
+      // Clear auto-scroll
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+      setIsDraggingSelection(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+        autoScrollIntervalRef.current = null;
+      }
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingSelection, totalHeaderHeight, rowHeight, columnPositions, columns.length]);
 
   // Render helpers
   const isSelected = useCallback(
@@ -1164,7 +1278,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
                       width: `${column.width}px`,
                       height: `${rowHeight}px`,
                     }}
-                    onClick={(e) => handleCellClick(slot.rowIndex, colIndex, e)}
+                    onMouseDown={(e) => handleCellMouseDown(slot.rowIndex, colIndex, e)}
                     onDoubleClick={() => handleCellDoubleClick(slot.rowIndex, colIndex)}
                   >
                     {isEditing && state.editingCell
