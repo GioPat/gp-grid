@@ -4,23 +4,22 @@
 // New Architecture Exports
 // =============================================================================
 
-// Core orchestrator
+/** Grid Core orchestrator */
 export { GridCore } from "./grid-core";
 
-// Managers
+/** Selection Manager */
 export { SelectionManager } from "./selection";
 export { FillManager } from "./fill";
 
-// Data sources
+/** Data sources */
 export {
   createClientDataSource,
   createServerDataSource,
   createDataSourceFromArray,
 } from "./data-source";
 
-// Types
+/** Types */
 export type {
-  // Basic types
   CellDataType,
   CellValue,
   Row,
@@ -28,20 +27,22 @@ export type {
   SortModel,
   FilterModel,
   
-  // Column definition
+  /** Column definition */
   ColumnDefinition,
-  
-  // Cell position & range
+
+  /** Cell Position coordinates: row and column, zero-based indices */
   CellPosition,
+  /** Cell range: start and end row and column, zero-based indices */
   CellRange,
   
-  // State types
+  /** Selection state */
   SelectionState,
+
   EditState,
   FillHandleState,
   SlotState,
   
-  // DataSource
+  /** DataSource */
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
@@ -67,7 +68,7 @@ export type {
   DataLoadedInstruction,
   DataErrorInstruction,
   
-  // Options
+  /** Options */
   GridCoreOptions,
   
   // Renderer params (for adapters)
@@ -80,5 +81,5 @@ export type {
   BatchInstructionListener,
 } from "./types";
 
-// Direction type from selection
+/** Direction type from selection */
 export type { Direction } from "./selection";
