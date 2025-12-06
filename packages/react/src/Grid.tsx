@@ -257,7 +257,7 @@ function createInitialState(): GridState {
  * @param props - Grid component props
  * @returns Grid React component
  */
-export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
+export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.ReactNode {
   // Inject styles on first render (safe to call multiple times)
   injectStyles();
 
