@@ -32,34 +32,46 @@ import { injectStyles } from "./styles";
 // Types
 // =============================================================================
 
+/** React cell renderer: A function that renders a cell */
 export type ReactCellRenderer = (params: CellRendererParams) => React.ReactNode;
+/** React edit renderer: A function that renders the cell while in edit mode */
 export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
+/** React header renderer: A function that renders a header cell */
 export type ReactHeaderRenderer = (params: HeaderRendererParams) => React.ReactNode;
 
+/** Grid component props */
 export interface GridProps<TData extends Row = Row> {
+  /** Column definitions */
   columns: ColumnDefinition[];
   /** Data source for the grid */
   dataSource?: DataSource<TData>;
   /** Legacy: Raw row data (will be wrapped in a client data source) */
   rowData?: TData[];
+  /** Row height in pixels */
   rowHeight: number;
+  /** Header height in pixels: Default to row height */
   headerHeight?: number;
+  /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
-  /** Show filter row below headers */
+  /** Show filter row below headers: Default to false */
   showFilters?: boolean;
-  /** Debounce time for filter input (ms) */
+  /** Debounce time for filter input (ms): Default to 300 */
   filterDebounce?: number;
-  /** Enable dark mode styling */
+  /** Enable dark mode styling: Default to false */
   darkMode?: boolean;
 
-  // Renderer registries
+  /** Renderer registries */
   cellRenderers?: Record<string, ReactCellRenderer>;
+  /** Edit renderer registries */
   editRenderers?: Record<string, ReactEditRenderer>;
+  /** Header renderer registries */
   headerRenderers?: Record<string, ReactHeaderRenderer>;
 
-  // Global fallback renderers
+  /** Global cell renderer */
   cellRenderer?: ReactCellRenderer;
+  /** Global edit renderer */
   editRenderer?: ReactEditRenderer;
+  /** Global header renderer */
   headerRenderer?: ReactHeaderRenderer;
 }
 
@@ -240,6 +252,11 @@ function createInitialState(): GridState {
 // Grid Component
 // =============================================================================
 
+/**
+ * Grid component
+ * @param props - Grid component props
+ * @returns Grid React component
+ */
 export function Grid<TData extends Row = Row>(props: GridProps<TData>) {
   // Inject styles on first render (safe to call multiple times)
   injectStyles();
