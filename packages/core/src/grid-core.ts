@@ -7,8 +7,6 @@ import type {
   BatchInstructionListener,
   ColumnDefinition,
   CellValue,
-  CellPosition,
-  CellRange,
   DataSource,
   DataSourceRequest,
   Row,

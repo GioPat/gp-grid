@@ -1,6 +1,6 @@
 # gp-grid-react
 
-A high-performance React data grid component built on [gp-grid-core](../core/README.md), featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
+A high-performance React data grid component built on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
 ## Features
 
@@ -18,6 +18,7 @@ A high-performance React data grid component built on [gp-grid-core](../core/REA
 ## Installation
 
 Use `npm`, `yarn` or `pnpm`
+
 ```bash
 pnpm add gp-grid-react
 ```
@@ -50,11 +51,7 @@ const data: Person[] = [
 function App() {
   return (
     <div style={{ width: "800px", height: "400px" }}>
-      <Grid
-        columns={columns}
-        rowData={data}
-        rowHeight={36}
-      />
+      <Grid columns={columns} rowData={data} rowHeight={36} />
     </div>
   );
 }
@@ -68,7 +65,11 @@ For larger datasets with client-side sort/filter operations:
 
 ```tsx
 import { useMemo } from "react";
-import { Grid, createClientDataSource, type ColumnDefinition } from "gp-grid-react";
+import {
+  Grid,
+  createClientDataSource,
+  type ColumnDefinition,
+} from "gp-grid-react";
 
 interface Product {
   id: number;
@@ -81,22 +82,29 @@ const columns: ColumnDefinition[] = [
   { field: "id", cellDataType: "number", width: 80, headerName: "ID" },
   { field: "name", cellDataType: "text", width: 200, headerName: "Product" },
   { field: "price", cellDataType: "number", width: 100, headerName: "Price" },
-  { field: "category", cellDataType: "text", width: 150, headerName: "Category" },
+  {
+    field: "category",
+    cellDataType: "text",
+    width: 150,
+    headerName: "Category",
+  },
 ];
 
 function ProductGrid() {
-  const products: Product[] = useMemo(() => 
-    Array.from({ length: 10000 }, (_, i) => ({
-      id: i + 1,
-      name: `Product ${i + 1}`,
-      price: Math.round(Math.random() * 1000) / 10,
-      category: ["Electronics", "Clothing", "Food", "Books"][i % 4],
-    })), 
-  []);
+  const products: Product[] = useMemo(
+    () =>
+      Array.from({ length: 10000 }, (_, i) => ({
+        id: i + 1,
+        name: `Product ${i + 1}`,
+        price: Math.round(Math.random() * 1000) / 10,
+        category: ["Electronics", "Clothing", "Food", "Books"][i % 4],
+      })),
+    [],
+  );
 
   const dataSource = useMemo(
     () => createClientDataSource(products),
-    [products]
+    [products],
   );
 
   return (
@@ -120,9 +128,9 @@ For datasets too large to load entirely in memory, use a server-side data source
 
 ```tsx
 import { useMemo } from "react";
-import { 
-  Grid, 
-  createServerDataSource, 
+import {
+  Grid,
+  createServerDataSource,
   type ColumnDefinition,
   type DataSourceRequest,
   type DataSourceResponse,
@@ -141,11 +149,18 @@ const columns: ColumnDefinition[] = [
   { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
   { field: "email", cellDataType: "text", width: 250, headerName: "Email" },
   { field: "role", cellDataType: "text", width: 120, headerName: "Role" },
-  { field: "createdAt", cellDataType: "dateString", width: 150, headerName: "Created" },
+  {
+    field: "createdAt",
+    cellDataType: "dateString",
+    width: 150,
+    headerName: "Created",
+  },
 ];
 
 // API fetch function that handles pagination, sorting, and filtering
-async function fetchUsers(request: DataSourceRequest): Promise<DataSourceResponse<User>> {
+async function fetchUsers(
+  request: DataSourceRequest,
+): Promise<DataSourceResponse<User>> {
   const { pagination, sort, filter } = request;
 
   // Build query parameters
@@ -157,9 +172,7 @@ async function fetchUsers(request: DataSourceRequest): Promise<DataSourceRespons
   // Add sorting parameters
   if (sort && sort.length > 0) {
     // Format: sortBy=name:asc,email:desc
-    const sortString = sort
-      .map((s) => `${s.colId}:${s.direction}`)
-      .join(",");
+    const sortString = sort.map((s) => `${s.colId}:${s.direction}`).join(",");
     params.set("sortBy", sortString);
   }
 
@@ -174,7 +187,7 @@ async function fetchUsers(request: DataSourceRequest): Promise<DataSourceRespons
 
   // Make API request
   const response = await fetch(`https://api.example.com/users?${params}`);
-  
+
   if (!response.ok) {
     throw new Error(`API error: ${response.status}`);
   }
@@ -183,7 +196,7 @@ async function fetchUsers(request: DataSourceRequest): Promise<DataSourceRespons
 
   // Return in DataSourceResponse format
   return {
-    rows: data.users,      // Array of User objects
+    rows: data.users, // Array of User objects
     totalRows: data.total, // Total count for virtual scrolling
   };
 }
@@ -192,7 +205,7 @@ function UserGrid() {
   // Create server data source - memoize to prevent recreation
   const dataSource = useMemo(
     () => createServerDataSource<User>(fetchUsers),
-    []
+    [],
   );
 
   return (
@@ -203,7 +216,7 @@ function UserGrid() {
         rowHeight={36}
         headerHeight={40}
         showFilters={true}
-        filterDebounce={500}  // Debounce filter requests
+        filterDebounce={500} // Debounce filter requests
         darkMode={true}
       />
     </div>
@@ -216,7 +229,11 @@ function UserGrid() {
 Use the registry pattern to define reusable renderers:
 
 ```tsx
-import { Grid, type ColumnDefinition, type CellRendererParams } from "gp-grid-react";
+import {
+  Grid,
+  type ColumnDefinition,
+  type CellRendererParams,
+} from "gp-grid-react";
 
 interface Order {
   id: number;
@@ -271,10 +288,33 @@ const cellRenderers = {
 };
 
 const columns: ColumnDefinition[] = [
-  { field: "id", cellDataType: "number", width: 80, headerName: "ID", cellRenderer: "bold" },
-  { field: "customer", cellDataType: "text", width: 200, headerName: "Customer" },
-  { field: "total", cellDataType: "number", width: 120, headerName: "Total", cellRenderer: "currency" },
-  { field: "status", cellDataType: "text", width: 120, headerName: "Status", cellRenderer: "statusBadge" },
+  {
+    field: "id",
+    cellDataType: "number",
+    width: 80,
+    headerName: "ID",
+    cellRenderer: "bold",
+  },
+  {
+    field: "customer",
+    cellDataType: "text",
+    width: 200,
+    headerName: "Customer",
+  },
+  {
+    field: "total",
+    cellDataType: "number",
+    width: 120,
+    headerName: "Total",
+    cellRenderer: "currency",
+  },
+  {
+    field: "status",
+    cellDataType: "text",
+    width: 120,
+    headerName: "Status",
+    cellRenderer: "statusBadge",
+  },
 ];
 
 function OrderGrid({ orders }: { orders: Order[] }) {
@@ -295,11 +335,11 @@ function OrderGrid({ orders }: { orders: Order[] }) {
 
 ```tsx
 import { useState } from "react";
-import { 
-  Grid, 
+import {
+  Grid,
   createClientDataSource,
-  type ColumnDefinition, 
-  type EditRendererParams 
+  type ColumnDefinition,
+  type EditRendererParams,
 } from "gp-grid-react";
 
 interface Task {
@@ -358,28 +398,28 @@ const editRenderers = {
 
 const columns: ColumnDefinition[] = [
   { field: "id", cellDataType: "number", width: 60, headerName: "ID" },
-  { 
-    field: "title", 
-    cellDataType: "text", 
-    width: 300, 
+  {
+    field: "title",
+    cellDataType: "text",
+    width: 300,
     headerName: "Title",
-    editable: true,  // Uses default text input
+    editable: true, // Uses default text input
   },
-  { 
-    field: "priority", 
-    cellDataType: "text", 
-    width: 120, 
+  {
+    field: "priority",
+    cellDataType: "text",
+    width: 120,
     headerName: "Priority",
     editable: true,
-    editRenderer: "prioritySelect",  // Custom editor
+    editRenderer: "prioritySelect", // Custom editor
   },
-  { 
-    field: "completed", 
-    cellDataType: "boolean", 
-    width: 100, 
+  {
+    field: "completed",
+    cellDataType: "boolean",
+    width: 100,
     headerName: "Done",
     editable: true,
-    editRenderer: "checkbox",  // Custom editor
+    editRenderer: "checkbox", // Custom editor
   },
 ];
 
@@ -408,63 +448,58 @@ function TaskGrid() {
 ### Dark Mode
 
 ```tsx
-<Grid
-  columns={columns}
-  rowData={data}
-  rowHeight={36}
-  darkMode={true}
-/>
+<Grid columns={columns} rowData={data} rowHeight={36} darkMode={true} />
 ```
 
 ## API Reference
 
 ### GridProps
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `columns` | `ColumnDefinition[]` | required | Column definitions |
-| `dataSource` | `DataSource<TData>` | - | Data source for fetching data |
-| `rowData` | `TData[]` | - | Alternative: raw data array (wrapped in client data source) |
-| `rowHeight` | `number` | required | Height of each row in pixels |
-| `headerHeight` | `number` | `rowHeight` | Height of header row |
-| `overscan` | `number` | `3` | Number of rows to render outside viewport |
-| `showFilters` | `boolean` | `false` | Show filter row below headers |
-| `filterDebounce` | `number` | `300` | Debounce time for filter input (ms) |
-| `darkMode` | `boolean` | `false` | Enable dark theme |
-| `cellRenderers` | `Record<string, ReactCellRenderer>` | `{}` | Cell renderer registry |
-| `editRenderers` | `Record<string, ReactEditRenderer>` | `{}` | Edit renderer registry |
-| `headerRenderers` | `Record<string, ReactHeaderRenderer>` | `{}` | Header renderer registry |
-| `cellRenderer` | `ReactCellRenderer` | - | Global fallback cell renderer |
-| `editRenderer` | `ReactEditRenderer` | - | Global fallback edit renderer |
-| `headerRenderer` | `ReactHeaderRenderer` | - | Global fallback header renderer |
+| Prop              | Type                                  | Default     | Description                                                 |
+| ----------------- | ------------------------------------- | ----------- | ----------------------------------------------------------- |
+| `columns`         | `ColumnDefinition[]`                  | required    | Column definitions                                          |
+| `dataSource`      | `DataSource<TData>`                   | -           | Data source for fetching data                               |
+| `rowData`         | `TData[]`                             | -           | Alternative: raw data array (wrapped in client data source) |
+| `rowHeight`       | `number`                              | required    | Height of each row in pixels                                |
+| `headerHeight`    | `number`                              | `rowHeight` | Height of header row                                        |
+| `overscan`        | `number`                              | `3`         | Number of rows to render outside viewport                   |
+| `showFilters`     | `boolean`                             | `false`     | Show filter row below headers                               |
+| `filterDebounce`  | `number`                              | `300`       | Debounce time for filter input (ms)                         |
+| `darkMode`        | `boolean`                             | `false`     | Enable dark theme                                           |
+| `cellRenderers`   | `Record<string, ReactCellRenderer>`   | `{}`        | Cell renderer registry                                      |
+| `editRenderers`   | `Record<string, ReactEditRenderer>`   | `{}`        | Edit renderer registry                                      |
+| `headerRenderers` | `Record<string, ReactHeaderRenderer>` | `{}`        | Header renderer registry                                    |
+| `cellRenderer`    | `ReactCellRenderer`                   | -           | Global fallback cell renderer                               |
+| `editRenderer`    | `ReactEditRenderer`                   | -           | Global fallback edit renderer                               |
+| `headerRenderer`  | `ReactHeaderRenderer`                 | -           | Global fallback header renderer                             |
 
 ### ColumnDefinition
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `field` | `string` | Property path in row data (supports dot notation: `"address.city"`) |
-| `colId` | `string` | Unique column ID (defaults to `field`) |
-| `cellDataType` | `CellDataType` | `"text"` \| `"number"` \| `"boolean"` \| `"date"` \| `"object"` |
-| `width` | `number` | Column width in pixels |
-| `headerName` | `string` | Display name in header (defaults to `field`) |
-| `editable` | `boolean` | Enable cell editing |
-| `cellRenderer` | `string` | Key in `cellRenderers` registry |
-| `editRenderer` | `string` | Key in `editRenderers` registry |
-| `headerRenderer` | `string` | Key in `headerRenderers` registry |
+| Property         | Type           | Description                                                         |
+| ---------------- | -------------- | ------------------------------------------------------------------- |
+| `field`          | `string`       | Property path in row data (supports dot notation: `"address.city"`) |
+| `colId`          | `string`       | Unique column ID (defaults to `field`)                              |
+| `cellDataType`   | `CellDataType` | `"text"` \| `"number"` \| `"boolean"` \| `"date"` \| `"object"`     |
+| `width`          | `number`       | Column width in pixels                                              |
+| `headerName`     | `string`       | Display name in header (defaults to `field`)                        |
+| `editable`       | `boolean`      | Enable cell editing                                                 |
+| `cellRenderer`   | `string`       | Key in `cellRenderers` registry                                     |
+| `editRenderer`   | `string`       | Key in `editRenderers` registry                                     |
+| `headerRenderer` | `string`       | Key in `headerRenderers` registry                                   |
 
 ### Renderer Types
 
 ```typescript
 // Cell renderer receives these params
 interface CellRendererParams {
-  value: CellValue;           // Current cell value
-  rowData: Row;               // Full row data
-  column: ColumnDefinition;   // Column definition
-  rowIndex: number;           // Row index
-  colIndex: number;           // Column index
-  isActive: boolean;          // Is this the active cell?
-  isSelected: boolean;        // Is this cell in selection?
-  isEditing: boolean;         // Is this cell being edited?
+  value: CellValue; // Current cell value
+  rowData: Row; // Full row data
+  column: ColumnDefinition; // Column definition
+  rowIndex: number; // Row index
+  colIndex: number; // Column index
+  isActive: boolean; // Is this the active cell?
+  isSelected: boolean; // Is this cell in selection?
+  isEditing: boolean; // Is this cell being edited?
 }
 
 // Edit renderer receives additional callbacks
@@ -480,26 +515,26 @@ interface HeaderRendererParams {
   column: ColumnDefinition;
   colIndex: number;
   sortDirection?: "asc" | "desc";
-  sortIndex?: number;         // For multi-column sort
+  sortIndex?: number; // For multi-column sort
   onSort: (direction: "asc" | "desc" | null, addToExisting: boolean) => void;
 }
 ```
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| Arrow keys | Navigate between cells |
-| Shift + Arrow | Extend selection |
-| Enter | Start editing / Commit edit |
-| Escape | Cancel edit / Clear selection |
-| Tab | Commit and move right |
-| Shift + Tab | Commit and move left |
-| F2 | Start editing |
-| Delete / Backspace | Start editing with empty value |
-| Ctrl + A | Select all |
-| Ctrl + C | Copy selection to clipboard |
-| Any character | Start editing with that character |
+| Key                | Action                            |
+| ------------------ | --------------------------------- |
+| Arrow keys         | Navigate between cells            |
+| Shift + Arrow      | Extend selection                  |
+| Enter              | Start editing / Commit edit       |
+| Escape             | Cancel edit / Clear selection     |
+| Tab                | Commit and move right             |
+| Shift + Tab        | Commit and move left              |
+| F2                 | Start editing                     |
+| Delete / Backspace | Start editing with empty value    |
+| Ctrl + A           | Select all                        |
+| Ctrl + C           | Copy selection to clipboard       |
+| Any character      | Start editing with that character |
 
 ## Styling
 
@@ -517,4 +552,3 @@ The grid injects its own styles automatically. The main container uses these CSS
 - `.gp-grid-filter-row` - Filter row container
 - `.gp-grid-filter-input` - Filter input field
 - `.gp-grid-fill-handle` - Fill handle element
-

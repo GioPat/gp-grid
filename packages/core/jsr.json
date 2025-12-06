@@ -1,0 +1,6 @@
+{
+  "name": "@gp-grid/core",
+  "version": "0.1.2",
+  "license": "CC-BY-4.0",
+  "exports": "./src/index.ts"
+}

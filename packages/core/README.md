@@ -2,6 +2,10 @@
 
 A framework-agnostic TypeScript library for building high-performance data grids with virtual scrolling, supporting 150,000+ rows with ease.
 
+## Available implementations
+
+- **gp-grid-react**
+
 ## Philosophy
 
 **gp-grid-core** is built on three core principles:
@@ -98,18 +102,18 @@ GridCore includes specialized managers for complex behaviors:
 
 The core emits these instruction types:
 
-| Instruction | Description |
-|-------------|-------------|
-| `CREATE_SLOT` | Create a new slot in the DOM pool |
-| `DESTROY_SLOT` | Remove a slot from the pool |
-| `ASSIGN_SLOT` | Assign row data to a slot |
-| `MOVE_SLOT` | Update slot position (translateY) |
-| `SET_ACTIVE_CELL` | Update active cell highlight |
-| `SET_SELECTION_RANGE` | Update selection range |
-| `START_EDIT` / `STOP_EDIT` | Toggle edit mode |
-| `COMMIT_EDIT` | Commit edited value |
-| `UPDATE_HEADER` | Update header with sort state |
-| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle |
+| Instruction                                   | Description                       |
+| --------------------------------------------- | --------------------------------- |
+| `CREATE_SLOT`                                 | Create a new slot in the DOM pool |
+| `DESTROY_SLOT`                                | Remove a slot from the pool       |
+| `ASSIGN_SLOT`                                 | Assign row data to a slot         |
+| `MOVE_SLOT`                                   | Update slot position (translateY) |
+| `SET_ACTIVE_CELL`                             | Update active cell highlight      |
+| `SET_SELECTION_RANGE`                         | Update selection range            |
+| `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode                  |
+| `COMMIT_EDIT`                                 | Commit edited value               |
+| `UPDATE_HEADER`                               | Update header with sort state     |
+| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle              |
 
 ## Data Sources
 
@@ -155,7 +159,11 @@ const dataSource = createClientDataSource(data, {
 For large datasets that require server-side pagination, sorting, and filtering.
 
 ```typescript
-import { createServerDataSource, DataSourceRequest, DataSourceResponse } from "gp-grid-core";
+import {
+  createServerDataSource,
+  DataSourceRequest,
+  DataSourceResponse,
+} from "gp-grid-core";
 
 interface Person {
   id: number;
@@ -163,34 +171,39 @@ interface Person {
   age: number;
 }
 
-const dataSource = createServerDataSource<Person>(async (request: DataSourceRequest) => {
-  // Build query parameters from request
-  const params = new URLSearchParams({
-    page: String(request.pagination.pageIndex),
-    pageSize: String(request.pagination.pageSize),
-  });
-
-  // Add sort parameters
-  if (request.sort && request.sort.length > 0) {
-    params.set("sortBy", request.sort.map(s => `${s.colId}:${s.direction}`).join(","));
-  }
-
-  // Add filter parameters
-  if (request.filter) {
-    Object.entries(request.filter).forEach(([field, value]) => {
-      params.set(`filter_${field}`, value);
+const dataSource = createServerDataSource<Person>(
+  async (request: DataSourceRequest) => {
+    // Build query parameters from request
+    const params = new URLSearchParams({
+      page: String(request.pagination.pageIndex),
+      pageSize: String(request.pagination.pageSize),
     });
-  }
 
-  // Fetch from your API
-  const response = await fetch(`/api/people?${params}`);
-  const data = await response.json();
+    // Add sort parameters
+    if (request.sort && request.sort.length > 0) {
+      params.set(
+        "sortBy",
+        request.sort.map((s) => `${s.colId}:${s.direction}`).join(","),
+      );
+    }
 
-  return {
-    rows: data.items,
-    totalRows: data.totalCount,
-  };
-});
+    // Add filter parameters
+    if (request.filter) {
+      Object.entries(request.filter).forEach(([field, value]) => {
+        params.set(`filter_${field}`, value);
+      });
+    }
+
+    // Fetch from your API
+    const response = await fetch(`/api/people?${params}`);
+    const data = await response.json();
+
+    return {
+      rows: data.items,
+      totalRows: data.totalCount,
+    };
+  },
+);
 ```
 
 ### DataSource Interface
@@ -223,15 +236,15 @@ interface DataSourceResponse<TData> {
 
 ```typescript
 interface ColumnDefinition {
-  field: string;                    // Property path in row data
-  colId?: string;                   // Unique column ID (defaults to field)
-  cellDataType: CellDataType;       // "text" | "number" | "boolean" | "date" | "object"
-  width: number;                    // Column width in pixels
-  headerName?: string;              // Display name (defaults to field)
-  editable?: boolean;               // Enable cell editing
-  cellRenderer?: string;            // Custom renderer key
-  editRenderer?: string;            // Custom edit renderer key
-  headerRenderer?: string;          // Custom header renderer key
+  field: string; // Property path in row data
+  colId?: string; // Unique column ID (defaults to field)
+  cellDataType: CellDataType; // "text" | "number" | "boolean" | "date" | "object"
+  width: number; // Column width in pixels
+  headerName?: string; // Display name (defaults to field)
+  editable?: boolean; // Enable cell editing
+  cellRenderer?: string; // Custom renderer key
+  editRenderer?: string; // Custom edit renderer key
+  headerRenderer?: string; // Custom header renderer key
 }
 ```
 
@@ -287,7 +300,7 @@ class MyGridAdapter {
 
   constructor(options: GridCoreOptions) {
     this.core = new GridCore(options);
-    
+
     // Process instructions to update UI
     this.core.onBatchInstruction((instructions) => {
       this.processInstructions(instructions);
@@ -322,12 +335,21 @@ class MyGridAdapter {
   }
 
   // Handle scroll events
-  onScroll(scrollTop: number, scrollLeft: number, width: number, height: number) {
+  onScroll(
+    scrollTop: number,
+    scrollLeft: number,
+    width: number,
+    height: number,
+  ) {
     this.core.setViewport(scrollTop, scrollLeft, width, height);
   }
 
   // Handle cell click
-  onCellClick(row: number, col: number, modifiers: { shift: boolean; ctrl: boolean }) {
+  onCellClick(
+    row: number,
+    col: number,
+    modifiers: { shift: boolean; ctrl: boolean },
+  ) {
     this.core.selection.startSelection({ row, col }, modifiers);
   }
 
@@ -341,22 +363,22 @@ class MyGridAdapter {
 
 ### GridCore Methods
 
-| Method | Description |
-|--------|-------------|
-| `initialize()` | Initialize grid and load initial data |
-| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize |
-| `setSort(colId, direction, addToExisting)` | Set column sort |
-| `setFilter(colId, value)` | Set column filter |
-| `startEdit(row, col)` | Start editing a cell |
-| `commitEdit()` | Commit current edit |
-| `cancelEdit()` | Cancel current edit |
-| `refresh()` | Refetch data from source |
-| `getRowCount()` | Get total row count |
-| `getRowData(rowIndex)` | Get data for a specific row |
+| Method                                              | Description                           |
+| --------------------------------------------------- | ------------------------------------- |
+| `initialize()`                                      | Initialize grid and load initial data |
+| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize      |
+| `setSort(colId, direction, addToExisting)`          | Set column sort                       |
+| `setFilter(colId, value)`                           | Set column filter                     |
+| `startEdit(row, col)`                               | Start editing a cell                  |
+| `commitEdit()`                                      | Commit current edit                   |
+| `cancelEdit()`                                      | Cancel current edit                   |
+| `refresh()`                                         | Refetch data from source              |
+| `getRowCount()`                                     | Get total row count                   |
+| `getRowData(rowIndex)`                              | Get data for a specific row           |
 
 ### GridCore Properties
 
-| Property | Description |
-|----------|-------------|
+| Property    | Description               |
+| ----------- | ------------------------- |
 | `selection` | SelectionManager instance |
-| `fill` | FillManager instance |
+| `fill`      | FillManager instance      |

@@ -1,6 +1,5 @@
 {
   "name": "gp-grid",
-  "private": true,
   "workspaces": [
     "packages/*"
   ],
