@@ -4,7 +4,7 @@ A framework-agnostic TypeScript library for building high-performance data grids
 
 ## Available implementations
 
-- **gp-grid-react**
+- [**gp-grid-react**](https://www.npmjs.com/package/gp-grid-react) | Official
 
 ## Philosophy
 

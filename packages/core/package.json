@@ -3,6 +3,7 @@
   "description": "A high-performance, framework-agnostic TypeScript data grid core with virtual scrolling",
   "private": false,
   "version": "0.1.3",
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": "Giovanni Patruno (giovanni.patruno@outlook.com)",
@@ -36,7 +37,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "@vitest/coverage-v8": "^4.0.15",
     "tsdown": "^0.15.9",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "vitest": "^4.0.15"
   }
 }
