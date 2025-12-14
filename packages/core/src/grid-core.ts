@@ -35,6 +35,10 @@ interface SlotPoolState {
 // =============================================================================
 
 export class GridCore<TData extends Row = Row> {
+  // Maximum safe CSS height to avoid browser rendering issues with extreme values
+  // Using 1M as a safer limit (some browsers have issues even at 10M)
+  private static readonly MAX_SAFE_HEIGHT = 1_000_000; // 1M pixels
+
   // Configuration
   private columns: ColumnDefinition[];
   private dataSource: DataSource<TData>;
@@ -221,10 +225,15 @@ export class GridCore<TData extends Row = Row> {
    * This implements the slot recycling strategy.
    */
   private syncSlots(): void {
-    const visibleStartRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight) - this.overscan);
+    // Use virtual scroll position for row calculations
+    const virtualScrollTop = this.getVirtualScrollTop();
+
+    // Calculate visible rows based on virtual scroll position
+    // Viewport height stays the same (we don't compress the viewport)
+    const visibleStartRow = Math.max(0, Math.floor(virtualScrollTop / this.rowHeight) - this.overscan);
     const visibleEndRow = Math.min(
       this.totalRows - 1,
-      Math.ceil((this.scrollTop + this.viewportHeight) / this.rowHeight) + this.overscan
+      Math.ceil((virtualScrollTop + this.viewportHeight) / this.rowHeight) + this.overscan
     );
 
     if (this.totalRows === 0 || visibleEndRow < visibleStartRow) {
@@ -343,8 +352,79 @@ export class GridCore<TData extends Row = Row> {
     this.emitBatch(instructions);
   }
 
+  /**
+   * Get the virtual (unscaled) height of the entire grid content.
+   */
+  private getVirtualHeight(): number {
+    return this.totalRows * this.rowHeight + this.headerHeight;
+  }
+
+  /**
+   * Get the display height (capped) for the content sizer.
+   * This is the height that will be used in CSS for the scrollable area.
+   */
+  private getDisplayHeight(): number {
+    return Math.min(this.getVirtualHeight(), GridCore.MAX_SAFE_HEIGHT);
+  }
+
+  /**
+   * Check if scaling is needed (virtual height exceeds safe limit).
+   */
+  private needsScaling(): boolean {
+    return this.getVirtualHeight() > GridCore.MAX_SAFE_HEIGHT;
+  }
+
+  /**
+   * Get the scroll progress as a value from 0 to 1.
+   * 0 = scrolled to top, 1 = scrolled to bottom.
+   */
+  private getScrollProgress(): number {
+    const displayHeight = this.getDisplayHeight();
+    const maxScroll = displayHeight - this.viewportHeight;
+    if (maxScroll <= 0) return 0;
+    return Math.min(1, Math.max(0, this.scrollTop / maxScroll));
+  }
+
+  /**
+   * Convert display scroll position to virtual scroll position.
+   * Uses proportional mapping when content exceeds safe limits.
+   */
+  private getVirtualScrollTop(): number {
+    if (!this.needsScaling()) {
+      return this.scrollTop;
+    }
+    const virtualHeight = this.getVirtualHeight();
+    const maxVirtualScroll = virtualHeight - this.viewportHeight;
+    return this.getScrollProgress() * maxVirtualScroll;
+  }
+
+  /**
+   * Get the translateY for a row that keeps values within safe CSS limits.
+   * Uses proportional positioning when content exceeds safe limits.
+   */
   private getRowTranslateY(rowIndex: number): number {
-    return rowIndex * this.rowHeight + this.headerHeight;
+    const virtualY = rowIndex * this.rowHeight + this.headerHeight;
+
+    if (!this.needsScaling()) {
+      return virtualY;
+    }
+
+    // When scaling is needed, we use a formula that:
+    // 1. Keeps all translateY values within displayHeight bounds
+    // 2. Preserves visual row spacing (no compression)
+    // 3. Maps scroll position proportionally
+    //
+    // Formula: translateY = virtualY + scrollProgress * (displayHeight - virtualHeight)
+    // This shifts all positions by an offset that depends on scroll progress.
+    const displayHeight = this.getDisplayHeight();
+    const virtualHeight = this.getVirtualHeight();
+    const scrollProgress = this.getScrollProgress();
+
+    const translateY = virtualY + scrollProgress * (displayHeight - virtualHeight);
+
+    // Clamp to safe bounds - overscan rows might slightly exceed
+    // Negative values are fine (rows above viewport), but cap the maximum
+    return Math.min(translateY, displayHeight);
   }
 
   // ===========================================================================
@@ -640,7 +720,8 @@ export class GridCore<TData extends Row = Row> {
 
   private emitContentSize(): void {
     const width = this.columnPositions[this.columnPositions.length - 1] ?? 0;
-    const height = this.totalRows * this.rowHeight + this.headerHeight;
+    // Use scaled display height to keep CSS values within safe browser limits
+    const height = this.getDisplayHeight();
     this.emit({ type: "SET_CONTENT_SIZE", width, height });
   }
 

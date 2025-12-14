@@ -86,7 +86,9 @@ const cellRenderers = {
   tags: (params: CellRendererParams) => {
     const tags = (params.value as string[]) || [];
     if (tags.length === 0) {
-      return <span style={{ color: "#6b7280", fontStyle: "italic" }}>No tags</span>;
+      return (
+        <span style={{ color: "#6b7280", fontStyle: "italic" }}>No tags</span>
+      );
     }
     return (
       <div
@@ -127,10 +129,12 @@ function MultiSelectEditor({ params }: { params: EditRendererParams }) {
   const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
 
   const selectedOptions = tagOptions.filter((opt) =>
-    selectedTags.includes(opt.value)
+    selectedTags.includes(opt.value),
   );
 
-  const handleChange = (newValue: readonly { value: string; label: string }[]) => {
+  const handleChange = (
+    newValue: readonly { value: string; label: string }[],
+  ) => {
     const newTags = newValue.map((opt) => opt.value);
     setSelectedTags(newTags);
     params.onValueChange(newTags);
@@ -231,7 +235,9 @@ function MultiSelectEditor({ params }: { params: EditRendererParams }) {
 
 // Define edit renderers
 const editRenderers = {
-  multiSelect: (params: EditRendererParams) => <MultiSelectEditor params={params} />,
+  multiSelect: (params: EditRendererParams) => (
+    <MultiSelectEditor params={params} />
+  ),
 };
 
 const columns: ColumnDefinition[] = [
@@ -300,24 +306,23 @@ function App() {
 
   // Keep reference to raw data so we can access it later
   const rowData = useMemo(() => generateRowData(), []);
-  
+
   // Create data source from the row data
-  const dataSource = useMemo(
-    () => createClientDataSource(rowData),
-    [rowData]
-  );
+  const dataSource = useMemo(() => createClientDataSource(rowData), [rowData]);
 
   // Handler to demonstrate reading all grid data
   const handleGetAllData = () => {
     console.log("=== All Grid Data ===");
     console.log(`Total rows: ${rowData.length}`);
-    
+
     // Show first 10 rows with their tags
     console.log("First 10 rows with tags:");
     rowData.slice(0, 10).forEach((row) => {
-      console.log(`  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`);
+      console.log(
+        `  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`,
+      );
     });
-    
+
     // Count rows by tag
     const tagCounts: Record<string, number> = {};
     rowData.forEach((row) => {
@@ -326,7 +331,7 @@ function App() {
       });
     });
     console.log("Tag distribution:", tagCounts);
-    
+
     alert("Data logged to console. Open DevTools to see the output.");
   };
 
@@ -353,14 +358,17 @@ function App() {
           editRenderers={editRenderers}
         />
       </div>
-      <div className="card" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+      <div
+        className="card"
+        style={{ display: "flex", gap: "12px", alignItems: "center" }}
+      >
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
         </button>
-        <button 
+        <button
           onClick={handleGetAllData}
-          style={{ 
-            backgroundColor: "#3b82f6", 
+          style={{
+            backgroundColor: "#3b82f6",
             color: "white",
             padding: "8px 16px",
             borderRadius: "6px",
