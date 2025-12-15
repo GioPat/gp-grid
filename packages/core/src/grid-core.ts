@@ -782,6 +782,87 @@ export class GridCore<TData extends Row = Row> {
     return this.cachedRows.get(rowIndex);
   }
 
+  /**
+   * Get the display Y position for a row (accounting for scaling).
+   * Used by UI adapters for scroll-into-view functionality.
+   */
+  getDisplayYForRow(rowIndex: number): number {
+    return this.getRowTranslateY(rowIndex);
+  }
+
+  /**
+   * Check if scaling is currently active.
+   */
+  isScalingActive(): boolean {
+    return this.needsScaling();
+  }
+
+  /**
+   * Convert a display Y position to a row index.
+   * Used by UI adapters for mouse coordinate conversion during drag operations.
+   * @param displayY The Y position in display coordinates (relative to content area, after header)
+   * @param scrollTop The current scroll position
+   */
+  getRowIndexAtDisplayY(displayY: number, scrollTop: number): number {
+    if (!this.needsScaling()) {
+      return Math.floor(displayY / this.rowHeight);
+    }
+
+    // With scaling, we need to invert the proportional mapping
+    // displayY was calculated based on slots positioned at:
+    //   translateY = virtualY + scrollProgress * (displayHeight - virtualHeight)
+    //
+    // So to get virtualY from a display position, we invert:
+    //   virtualY = displayY - scrollProgress * (displayHeight - virtualHeight)
+    const displayHeight = this.getDisplayHeight();
+    const virtualHeight = this.getVirtualHeight();
+    const maxScroll = displayHeight - this.viewportHeight;
+    const scrollProgress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0;
+
+    const virtualY = displayY - scrollProgress * (displayHeight - virtualHeight);
+    return Math.floor(virtualY / this.rowHeight);
+  }
+
+  /**
+   * Calculate the scroll position needed to make a row visible.
+   * For scaling mode: uses proportional mapping (rowIndex/totalRows ≈ scrollTop/maxScroll)
+   * Used by UI adapters for scroll-into-view functionality.
+   */
+  getScrollTopForRow(rowIndex: number): number {
+    if (!this.needsScaling()) {
+      // Without scaling, simple linear mapping
+      return Math.max(0, rowIndex * this.rowHeight);
+    }
+
+    // With scaling: use proportional mapping
+    // rowIndex / totalRows ≈ scrollTop / maxScroll
+    const displayHeight = this.getDisplayHeight();
+    const maxScroll = Math.max(0, displayHeight - this.viewportHeight);
+    const progress = this.totalRows > 0 ? rowIndex / this.totalRows : 0;
+
+    return Math.min(maxScroll, Math.max(0, progress * maxScroll));
+  }
+
+  /**
+   * Get the currently visible row range (excluding overscan).
+   * Returns { start, end } row indices that are fully visible in the viewport.
+   * Used by UI adapters for scroll-into-view functionality.
+   */
+  getVisibleRowRange(): { start: number; end: number } {
+    const virtualScrollTop = this.getVirtualScrollTop();
+    // The header takes up space in the viewport, so subtract it from available data area
+    const dataAreaHeight = Math.max(0, this.viewportHeight - this.headerHeight);
+
+    // First fully visible row
+    const start = Math.max(0, Math.ceil(virtualScrollTop / this.rowHeight));
+    // Last fully visible row
+    const end = Math.min(
+      this.totalRows - 1,
+      Math.floor((virtualScrollTop + dataAreaHeight) / this.rowHeight) - 1
+    );
+    return { start: Math.min(start, end), end };
+  }
+
   // ===========================================================================
   // Data Updates
   // ===========================================================================

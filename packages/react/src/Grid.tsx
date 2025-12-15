@@ -359,6 +359,22 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
     );
   }, []);
 
+  // Handle wheel with reduced sensitivity for large datasets
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const container = containerRef.current;
+    const core = coreRef.current;
+    if (!container || !core) return;
+
+    // Only apply dampening when scaling is active (large datasets)
+    if (!core.isScalingActive()) return;
+
+    // Prevent default scroll and apply dampened scroll
+    e.preventDefault();
+    const dampening = 0.3; // Reduce scroll speed to 30%
+    container.scrollTop += e.deltaY * dampening;
+    container.scrollLeft += e.deltaX * dampening;
+  }, []);
+
   // Initial measurement
   useEffect(() => {
     const container = containerRef.current;
@@ -505,33 +521,38 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
     const { row, col } = state.activeCell;
     const container = containerRef.current;
+    const core = coreRef.current;
+    if (!core) return;
 
-    // Calculate cell position
-    const cellTop = row * rowHeight + totalHeaderHeight;
-    const cellBottom = cellTop + rowHeight;
+    // Get actually visible rows (not including overscan)
+    const { start: visibleStart, end: visibleEnd } = core.getVisibleRowRange();
+
+    // Only scroll if row is outside visible range
+    if (row < visibleStart) {
+      // Row is above viewport - scroll to put it at TOP
+      container.scrollTop = core.getScrollTopForRow(row);
+    } else if (row > visibleEnd) {
+      // Row is below viewport - scroll to put it at BOTTOM
+      // We want the row to be the last visible row
+      // visibleEnd - visibleStart = number of fully visible rows
+      const visibleRows = Math.max(1, visibleEnd - visibleStart);
+      // The first row that makes 'row' the last visible is (row - visibleRows)
+      const targetFirstRow = Math.max(0, row - visibleRows);
+      container.scrollTop = core.getScrollTopForRow(targetFirstRow);
+    }
+
+    // Horizontal scrolling (unchanged - no scaling on X axis)
     const cellLeft = columnPositions[col] ?? 0;
     const cellRight = cellLeft + (columns[col]?.width ?? 0);
-
-    // Get visible area
-    const visibleTop = container.scrollTop + totalHeaderHeight;
-    const visibleBottom = container.scrollTop + container.clientHeight;
     const visibleLeft = container.scrollLeft;
     const visibleRight = container.scrollLeft + container.clientWidth;
 
-    // Scroll vertically if needed
-    if (cellTop < visibleTop) {
-      container.scrollTop = cellTop - totalHeaderHeight;
-    } else if (cellBottom > visibleBottom) {
-      container.scrollTop = cellBottom - container.clientHeight;
-    }
-
-    // Scroll horizontally if needed
     if (cellLeft < visibleLeft) {
       container.scrollLeft = cellLeft;
     } else if (cellRight > visibleRight) {
       container.scrollLeft = cellRight - container.clientWidth;
     }
-  }, [state.activeCell, state.editingCell, rowHeight, totalHeaderHeight, columnPositions, columns]);
+  }, [state.activeCell, state.editingCell, columnPositions, columns]);
 
   // Cell mouse down handler (starts selection and drag)
   const handleCellMouseDown = useCallback(
@@ -664,9 +685,9 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       const mouseX = e.clientX - rect.left + scrollLeft;
       const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
 
-      // Find the row and column under the mouse
-      const targetRow = Math.max(0, Math.floor(mouseY / rowHeight));
-      
+      // Find the row under the mouse (use core method to handle scaling)
+      const targetRow = Math.max(0, core.getRowIndexAtDisplayY(mouseY, scrollTop));
+
       // Find column by checking column positions
       let targetCol = 0;
       for (let i = 0; i < columnPositions.length - 1; i++) {
@@ -775,9 +796,9 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       const mouseX = e.clientX - rect.left + scrollLeft;
       const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
 
-      // Find the row and column under the mouse
-      const targetRow = Math.max(0, Math.min(Math.floor(mouseY / rowHeight), core.getRowCount() - 1));
-      
+      // Find the row under the mouse (use core method to handle scaling)
+      const targetRow = Math.max(0, Math.min(core.getRowIndexAtDisplayY(mouseY, scrollTop), core.getRowCount() - 1));
+
       // Find column by checking column positions
       let targetCol = 0;
       for (let i = 0; i < columnPositions.length - 1; i++) {
@@ -856,7 +877,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDraggingSelection, totalHeaderHeight, rowHeight, columnPositions, columns.length]);
+  }, [isDraggingSelection, totalHeaderHeight, columnPositions, columns.length]);
 
   // Render helpers
   const isSelected = useCallback(
@@ -1105,13 +1126,13 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
   // Calculate fill handle position (only show for editable columns)
   const fillHandlePosition = useMemo(() => {
-    const { activeCell, selectionRange } = state;
+    const { activeCell, selectionRange, slots } = state;
     if (!activeCell && !selectionRange) return null;
 
     // Get the bottom-right corner and column range of selection or active cell
     let row: number, col: number;
     let minCol: number, maxCol: number;
-    
+
     if (selectionRange) {
       row = Math.max(selectionRange.startRow, selectionRange.endRow);
       col = Math.max(selectionRange.startCol, selectionRange.endCol);
@@ -1134,7 +1155,19 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       }
     }
 
-    const cellTop = row * rowHeight + totalHeaderHeight;
+    // Find the slot for this row and use its actual translateY
+    // This ensures the fill handle stays in sync with the rendered slot
+    let cellTop: number | null = null;
+    for (const slot of slots.values()) {
+      if (slot.rowIndex === row) {
+        cellTop = slot.translateY;
+        break;
+      }
+    }
+
+    // If row isn't in a visible slot, don't show the fill handle
+    if (cellTop === null) return null;
+
     const cellLeft = columnPositions[col] ?? 0;
     const cellWidth = columns[col]?.width ?? 0;
 
@@ -1142,7 +1175,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       top: cellTop + rowHeight - 5,
       left: cellLeft + cellWidth - 20, // Move significantly left to avoid scrollbar overlap
     };
-  }, [state.activeCell, state.selectionRange, rowHeight, totalHeaderHeight, columnPositions, columns]);
+  }, [state.activeCell, state.selectionRange, state.slots, rowHeight, columnPositions, columns]);
 
   return (
     <div
@@ -1155,6 +1188,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         position: "relative",
       }}
       onScroll={handleScroll}
+      onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >

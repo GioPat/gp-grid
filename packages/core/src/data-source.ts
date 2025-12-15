@@ -9,6 +9,14 @@ import type {
   FilterModel,
   CellValue,
 } from "./types";
+import { SortWorkerManager } from "./worker-manager";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+/** Threshold for using Web Worker (rows). Below this, sync sort is used. */
+const WORKER_THRESHOLD = 10000;
 
 // =============================================================================
 // Client Data Source (In-Memory)
@@ -17,28 +25,77 @@ import type {
 /**
  * Creates a client-side data source that holds all data in memory.
  * Sorting and filtering are performed client-side.
+ * For large datasets (10k+ rows), sorting is automatically offloaded to a Web Worker.
  */
 export function createClientDataSource<TData extends Row = Row>(
   data: TData[],
   options: {
     /** Custom field accessor for nested properties */
     getFieldValue?: (row: TData, field: string) => CellValue;
+    /** Use Web Worker for sorting large datasets (default: true) */
+    useWorker?: boolean;
   } = {}
 ): DataSource<TData> {
-  const { getFieldValue = defaultGetFieldValue } = options;
+  const { getFieldValue = defaultGetFieldValue, useWorker = true } = options;
+
+  // Create worker manager only if useWorker is enabled
+  const workerManager = useWorker ? new SortWorkerManager() : null;
 
   return {
     async fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>> {
       let processedData = [...data];
 
-      // Apply filters
+      // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
         processedData = applyFilters(processedData, request.filter, getFieldValue);
       }
 
-      // Apply sorting
+      // Apply sorting (async with worker for large datasets)
       if (request.sort && request.sort.length > 0) {
-        processedData = applySort(processedData, request.sort, getFieldValue);
+        const sortCol = request.sort[0]!;
+
+        // Check if sorting a string column by sampling first non-null value
+        const sampleRow = processedData.find(row => getFieldValue(row, sortCol.colId) != null);
+        const sampleValue = sampleRow ? getFieldValue(sampleRow, sortCol.colId) : null;
+        const isStringSort = typeof sampleValue === "string";
+
+        // Use index-based sorting only for:
+        // 1. Large datasets (>= WORKER_THRESHOLD)
+        // 2. Worker is available
+        // 3. Single column sort (multi-column sync sort blocks main thread)
+        // 4. Numeric columns (string comparison needs full objects)
+        const canUseIndexSort = workerManager &&
+          workerManager.isAvailable() &&
+          processedData.length >= WORKER_THRESHOLD &&
+          request.sort.length === 1 &&
+          !isStringSort;
+
+        if (canUseIndexSort) {
+          // Use index-based sorting with Web Worker for large numeric datasets
+          // This avoids the serialization bottleneck by transferring only numbers
+          const values = processedData.map(row => {
+            const val = getFieldValue(row, sortCol.colId);
+            if (typeof val === "number") return val;
+            if (val == null) return Number.MAX_VALUE; // nulls sort last
+            return Number(val) || 0;
+          });
+
+          const sortedIndices = await workerManager.sortIndices(values, sortCol.direction);
+
+          // Reorder data using sorted indices
+          const reordered = new Array<TData>(processedData.length);
+          for (let i = 0; i < sortedIndices.length; i++) {
+            reordered[i] = processedData[sortedIndices[i]!]!;
+          }
+          processedData = reordered;
+        } else {
+          // Use sync sorting for:
+          // - Small datasets
+          // - String columns (needs localeCompare for correct ordering)
+          // - Multi-column sorting
+          // - When worker is unavailable
+          processedData = applySort(processedData, request.sort, getFieldValue);
+        }
       }
 
       const totalRows = processedData.length;

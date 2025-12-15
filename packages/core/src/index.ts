@@ -18,6 +18,13 @@ export {
   createDataSourceFromArray,
 } from "./data-source";
 
+/** Web Worker utilities for sorting */
+export {
+  SortWorkerManager,
+  getSharedSortWorker,
+  terminateSharedSortWorker,
+} from "./worker-manager";
+
 /** Types */
 export type {
   CellDataType,
