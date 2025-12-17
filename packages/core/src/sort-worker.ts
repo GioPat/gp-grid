@@ -21,6 +21,15 @@ export interface SortIndicesRequest {
   direction: "asc" | "desc";
 }
 
+export interface SortMultiColumnRequest {
+  type: "sortMultiColumn";
+  id: number;
+  /** Array of column values, each as Float64Array */
+  columns: Float64Array[];
+  /** Direction for each column: 1 for asc, -1 for desc */
+  directions: Int8Array;
+}
+
 export interface SortWorkerResponse {
   type: "sorted";
   id: number;
@@ -31,6 +40,28 @@ export interface SortIndicesResponse {
   type: "sortedIndices";
   id: number;
   indices: Uint32Array;
+}
+
+export interface SortMultiColumnResponse {
+  type: "sortedMultiColumn";
+  id: number;
+  indices: Uint32Array;
+}
+
+export interface SortStringHashesRequest {
+  type: "sortStringHashes";
+  id: number;
+  /** Array of hash chunks: [chunk0Values, chunk1Values, chunk2Values] */
+  hashChunks: Float64Array[];
+  direction: "asc" | "desc";
+}
+
+export interface SortStringHashesResponse {
+  type: "sortedStringHashes";
+  id: number;
+  indices: Uint32Array;
+  /** Pairs of indices that had hash collisions (all chunks equal) */
+  collisionPairs: Uint32Array;
 }
 
 // =============================================================================
@@ -165,6 +196,52 @@ function sortIndices(values, direction) {
   return indices;
 }
 
+// Multi-column sorting - compares columns in priority order
+function sortMultiColumn(columns, directions) {
+  const len = columns[0].length;
+  const numCols = columns.length;
+  const indices = new Uint32Array(len);
+  for (let i = 0; i < len; i++) indices[i] = i;
+
+  indices.sort((a, b) => {
+    for (let c = 0; c < numCols; c++) {
+      const va = columns[c][a];
+      const vb = columns[c][b];
+      if (va < vb) return -1 * directions[c];
+      if (va > vb) return 1 * directions[c];
+      // Equal - continue to next column
+    }
+    return 0;
+  });
+
+  return indices;
+}
+
+// String hash sorting with collision detection
+function sortStringHashes(hashChunks, direction) {
+  const len = hashChunks[0].length;
+  const numChunks = hashChunks.length;
+  const indices = new Uint32Array(len);
+  for (let i = 0; i < len; i++) indices[i] = i;
+
+  const mult = direction === "asc" ? 1 : -1;
+  const collisions = []; // Track collision pairs
+
+  indices.sort((a, b) => {
+    for (let c = 0; c < numChunks; c++) {
+      const va = hashChunks[c][a];
+      const vb = hashChunks[c][b];
+      if (va < vb) return -1 * mult;
+      if (va > vb) return 1 * mult;
+    }
+    // All chunks equal = collision, record for fallback
+    collisions.push(a, b);
+    return 0; // Stable sort preserves original order
+  });
+
+  return { indices, collisionPairs: new Uint32Array(collisions) };
+}
+
 self.onmessage = function(e) {
   const { type, id } = e.data;
 
@@ -182,6 +259,25 @@ self.onmessage = function(e) {
       const indices = sortIndices(values, direction);
       // Transfer the indices buffer back (zero-copy)
       self.postMessage({ type: "sortedIndices", id, indices }, [indices.buffer]);
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: String(error) });
+    }
+  } else if (type === "sortMultiColumn") {
+    try {
+      const { columns, directions } = e.data;
+      const indices = sortMultiColumn(columns, directions);
+      self.postMessage({ type: "sortedMultiColumn", id, indices }, [indices.buffer]);
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: String(error) });
+    }
+  } else if (type === "sortStringHashes") {
+    try {
+      const { hashChunks, direction } = e.data;
+      const result = sortStringHashes(hashChunks, direction);
+      self.postMessage(
+        { type: "sortedStringHashes", id, indices: result.indices, collisionPairs: result.collisionPairs },
+        [result.indices.buffer, result.collisionPairs.buffer]
+      );
     } catch (error) {
       self.postMessage({ type: "error", id, error: String(error) });
     }

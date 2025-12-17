@@ -1,9 +1,18 @@
 // gp-grid-core/src/worker-manager.ts
 // Manages Web Worker lifecycle for sorting operations
 
-import type { SortModel, SortDirection } from "./types";
+import type { SortDirection } from "./types";
 import { SORT_WORKER_CODE } from "./sort-worker";
-import type { SortWorkerRequest, SortWorkerResponse, SortIndicesRequest, SortIndicesResponse } from "./sort-worker";
+import type {
+  SortWorkerRequest,
+  SortWorkerResponse,
+  SortIndicesRequest,
+  SortIndicesResponse,
+  SortMultiColumnRequest,
+  SortMultiColumnResponse,
+  SortStringHashesRequest,
+  SortStringHashesResponse,
+} from "./sort-worker";
 
 // =============================================================================
 // SortWorkerManager
@@ -98,6 +107,164 @@ export class SortWorkerManager {
   }
 
   /**
+   * Sort by multiple columns using a Web Worker with Transferable typed arrays.
+   * Each column's values are passed as a Float64Array, enabling fast multi-column sorting.
+   * @param columns Array of column values (each as number[])
+   * @param directions Array of directions for each column ("asc" or "desc")
+   */
+  async sortMultiColumn(
+    columns: number[][],
+    directions: SortDirection[]
+  ): Promise<Uint32Array> {
+    if (this.isTerminated) {
+      throw new Error("SortWorkerManager has been terminated");
+    }
+
+    // Lazy initialization
+    if (!this.worker) {
+      this.initializeWorker();
+    }
+
+    const id = this.nextRequestId++;
+
+    // Convert to typed arrays for efficient transfer
+    const columnArrays = columns.map(col => new Float64Array(col));
+    const directionArray = new Int8Array(directions.map(d => d === "asc" ? 1 : -1));
+
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, {
+        resolve: resolve as (data: unknown) => void,
+        reject,
+      });
+
+      const request: SortMultiColumnRequest = {
+        type: "sortMultiColumn",
+        id,
+        columns: columnArrays,
+        directions: directionArray,
+      };
+
+      // Transfer all column buffers (zero-copy)
+      const transferables = columnArrays.map(arr => arr.buffer);
+      transferables.push(directionArray.buffer);
+      this.worker!.postMessage(request, transferables);
+    });
+  }
+
+  /**
+   * Sort string values using multiple hash chunks with collision detection.
+   * Returns sorted indices and handles hash collisions using localeCompare fallback.
+   * @param hashChunks Array of hash chunk arrays (one per chunk, each chunk as Float64Array)
+   * @param direction Sort direction ("asc" or "desc")
+   * @param originalStrings Original string values for collision fallback
+   */
+  async sortStringHashes(
+    hashChunks: Float64Array[],
+    direction: SortDirection,
+    originalStrings: string[]
+  ): Promise<Uint32Array> {
+    if (this.isTerminated) {
+      throw new Error("SortWorkerManager has been terminated");
+    }
+
+    // Lazy initialization
+    if (!this.worker) {
+      this.initializeWorker();
+    }
+
+    const id = this.nextRequestId++;
+
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, {
+        resolve: (data: unknown) => {
+          const response = data as { indices: Uint32Array; collisionPairs: Uint32Array };
+          const { indices, collisionPairs } = response;
+
+          // Handle collisions using localeCompare on original strings
+          if (collisionPairs.length > 0) {
+            this.resolveCollisions(indices, collisionPairs, originalStrings, direction);
+          }
+
+          resolve(indices);
+        },
+        reject,
+      });
+
+      const request: SortStringHashesRequest = {
+        type: "sortStringHashes",
+        id,
+        hashChunks,
+        direction,
+      };
+
+      // Transfer all hash chunk buffers (zero-copy)
+      const transferables = hashChunks.map(arr => arr.buffer);
+      this.worker!.postMessage(request, transferables);
+    });
+  }
+
+  /**
+   * Resolve hash collisions by re-sorting collision groups using localeCompare.
+   */
+  private resolveCollisions(
+    indices: Uint32Array,
+    collisionPairs: Uint32Array,
+    originalStrings: string[],
+    direction: SortDirection
+  ): void {
+    // Build collision groups from pairs
+    // collisionPairs contains pairs: [a1, b1, a2, b2, ...]
+    // We need to find consecutive runs of equal-hash elements in the sorted indices
+
+    // Create a set of indices that are involved in collisions
+    const collisionIndices = new Set<number>();
+    for (let i = 0; i < collisionPairs.length; i++) {
+      collisionIndices.add(collisionPairs[i]!);
+    }
+
+    if (collisionIndices.size === 0) return;
+
+    // Find collision groups in the sorted indices array
+    const groups: { start: number; end: number }[] = [];
+    let groupStart = -1;
+
+    for (let i = 0; i < indices.length; i++) {
+      const idx = indices[i]!;
+      if (collisionIndices.has(idx)) {
+        if (groupStart === -1) {
+          groupStart = i;
+        }
+      } else {
+        if (groupStart !== -1) {
+          groups.push({ start: groupStart, end: i });
+          groupStart = -1;
+        }
+      }
+    }
+    // Handle group at the end
+    if (groupStart !== -1) {
+      groups.push({ start: groupStart, end: indices.length });
+    }
+
+    // Sort each collision group using localeCompare
+    const mult = direction === "asc" ? 1 : -1;
+    for (const group of groups) {
+      // Extract the slice of indices for this group
+      const slice = Array.from(indices.slice(group.start, group.end));
+
+      // Sort by original strings
+      slice.sort((a, b) => {
+        return mult * originalStrings[a]!.localeCompare(originalStrings[b]!);
+      });
+
+      // Write back
+      for (let i = 0; i < slice.length; i++) {
+        indices[group.start + i] = slice[i]!;
+      }
+    }
+  }
+
+  /**
    * Initialize the worker using an inline Blob URL.
    * This works without bundler-specific configuration.
    */
@@ -113,7 +280,7 @@ export class SortWorkerManager {
     this.worker = new Worker(this.workerUrl);
 
     // Handle messages from worker
-    this.worker.onmessage = (e: MessageEvent<SortWorkerResponse | SortIndicesResponse | { type: "error"; id: number; error: string }>) => {
+    this.worker.onmessage = (e: MessageEvent<SortWorkerResponse | SortIndicesResponse | SortMultiColumnResponse | SortStringHashesResponse | { type: "error"; id: number; error: string }>) => {
       const { id } = e.data;
       const pending = this.pendingRequests.get(id);
 
@@ -127,6 +294,10 @@ export class SortWorkerManager {
         pending.resolve(e.data.data);
       } else if (e.data.type === "sortedIndices") {
         pending.resolve(e.data.indices);
+      } else if (e.data.type === "sortedMultiColumn") {
+        pending.resolve(e.data.indices);
+      } else if (e.data.type === "sortedStringHashes") {
+        pending.resolve({ indices: e.data.indices, collisionPairs: e.data.collisionPairs });
       } else if (e.data.type === "error") {
         pending.reject(new Error((e.data as { error: string }).error));
       }

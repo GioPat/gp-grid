@@ -59,6 +59,8 @@ export interface GridProps<TData extends Row = Row> {
   filterDebounce?: number;
   /** Enable dark mode styling: Default to false */
   darkMode?: boolean;
+  /** Wheel scroll dampening factor when virtual scrolling is active (0-1): Default 0.1 */
+  wheelDampening?: number;
 
   /** Renderer registries */
   cellRenderers?: Record<string, ReactCellRenderer>;
@@ -271,6 +273,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
     showFilters = false,
     filterDebounce = 300,
     darkMode = false,
+    wheelDampening = 0.1,
     cellRenderers = {},
     editRenderers = {},
     headerRenderers = {},
@@ -370,10 +373,9 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
     // Prevent default scroll and apply dampened scroll
     e.preventDefault();
-    const dampening = 0.3; // Reduce scroll speed to 30%
-    container.scrollTop += e.deltaY * dampening;
-    container.scrollLeft += e.deltaX * dampening;
-  }, []);
+    container.scrollTop += e.deltaY * wheelDampening;
+    container.scrollLeft += e.deltaX * wheelDampening;
+  }, [wheelDampening]);
 
   // Initial measurement
   useEffect(() => {

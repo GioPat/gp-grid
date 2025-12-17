@@ -16,7 +16,10 @@ import { SortWorkerManager } from "./worker-manager";
 // =============================================================================
 
 /** Threshold for using Web Worker (rows). Below this, sync sort is used. */
-const WORKER_THRESHOLD = 10000;
+const WORKER_THRESHOLD = 200000;
+
+/** Number of 10-character chunks for string hashing (30 chars total) */
+const HASH_CHUNK_COUNT = 3;
 
 // =============================================================================
 // Client Data Source (In-Memory)
@@ -52,35 +55,75 @@ export function createClientDataSource<TData extends Row = Row>(
 
       // Apply sorting (async with worker for large datasets)
       if (request.sort && request.sort.length > 0) {
-        const sortCol = request.sort[0]!;
-
-        // Check if sorting a string column by sampling first non-null value
-        const sampleRow = processedData.find(row => getFieldValue(row, sortCol.colId) != null);
-        const sampleValue = sampleRow ? getFieldValue(sampleRow, sortCol.colId) : null;
-        const isStringSort = typeof sampleValue === "string";
-
-        // Use index-based sorting only for:
-        // 1. Large datasets (>= WORKER_THRESHOLD)
-        // 2. Worker is available
-        // 3. Single column sort (multi-column sync sort blocks main thread)
-        // 4. Numeric columns (string comparison needs full objects)
-        const canUseIndexSort = workerManager &&
+        // Use worker-based index sorting for large datasets (all column types)
+        const canUseWorkerSort = workerManager &&
           workerManager.isAvailable() &&
-          processedData.length >= WORKER_THRESHOLD &&
-          request.sort.length === 1 &&
-          !isStringSort;
+          processedData.length >= WORKER_THRESHOLD;
 
-        if (canUseIndexSort) {
-          // Use index-based sorting with Web Worker for large numeric datasets
-          // This avoids the serialization bottleneck by transferring only numbers
-          const values = processedData.map(row => {
-            const val = getFieldValue(row, sortCol.colId);
-            if (typeof val === "number") return val;
-            if (val == null) return Number.MAX_VALUE; // nulls sort last
-            return Number(val) || 0;
-          });
+        if (canUseWorkerSort) {
+          let sortedIndices: Uint32Array;
 
-          const sortedIndices = await workerManager.sortIndices(values, sortCol.direction);
+          // For single-column string sorting, use multi-hash approach with collision fallback
+          if (request.sort.length === 1) {
+            const { colId, direction } = request.sort[0]!;
+
+            // Detect column type by sampling first non-null value
+            let isStringColumn = false;
+            for (const row of processedData) {
+              const val = getFieldValue(row, colId);
+              if (val != null) {
+                isStringColumn = typeof val === "string";
+                break;
+              }
+            }
+
+            if (isStringColumn) {
+              // Use multi-hash sorting for strings
+              const originalStrings: string[] = [];
+              const hashChunks: number[][] = Array.from({ length: HASH_CHUNK_COUNT }, () => []);
+
+              for (const row of processedData) {
+                const val = getFieldValue(row, colId);
+                const str = val == null ? "" : String(val);
+                originalStrings.push(str);
+                const hashes = stringToSortableHashes(str);
+                for (let c = 0; c < HASH_CHUNK_COUNT; c++) {
+                  hashChunks[c]!.push(hashes[c]!);
+                }
+              }
+
+              // Convert to Float64Arrays for transfer to worker
+              const hashChunkArrays = hashChunks.map(chunk => new Float64Array(chunk));
+
+              sortedIndices = await workerManager.sortStringHashes(
+                hashChunkArrays,
+                direction,
+                originalStrings
+              );
+            } else {
+              // Use single-value sorting for numeric columns
+              const values = processedData.map(row => {
+                const val = getFieldValue(row, colId);
+                return toSortableNumber(val);
+              });
+              sortedIndices = await workerManager.sortIndices(values, direction);
+            }
+          } else {
+            // Multi-column sorting: use single hash per value (existing approach)
+            const columnValues: number[][] = [];
+            const directions: Array<"asc" | "desc"> = [];
+
+            for (const { colId, direction } of request.sort) {
+              const values = processedData.map(row => {
+                const val = getFieldValue(row, colId);
+                return toSortableNumber(val);
+              });
+              columnValues.push(values);
+              directions.push(direction);
+            }
+
+            sortedIndices = await workerManager.sortMultiColumn(columnValues, directions);
+          }
 
           // Reorder data using sorted indices
           const reordered = new Array<TData>(processedData.length);
@@ -89,11 +132,7 @@ export function createClientDataSource<TData extends Row = Row>(
           }
           processedData = reordered;
         } else {
-          // Use sync sorting for:
-          // - Small datasets
-          // - String columns (needs localeCompare for correct ordering)
-          // - Multi-column sorting
-          // - When worker is unavailable
+          // Use sync sorting for small datasets or when worker is unavailable
           processedData = applySort(processedData, request.sort, getFieldValue);
         }
       }
@@ -135,6 +174,102 @@ export function createServerDataSource<TData extends Row = Row>(
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Convert any cell value to a sortable number.
+ * Strings are converted using a lexicographic hash of the first 8 characters.
+ * This preserves sort order for strings that differ within the first 8 chars.
+ */
+function toSortableNumber(val: CellValue): number {
+  if (val == null) return Number.MAX_VALUE; // nulls sort last
+
+  // Numbers pass through directly
+  if (typeof val === "number") return val;
+
+  // Dates convert to timestamp
+  if (val instanceof Date) return val.getTime();
+
+  // Strings: convert to lexicographic hash
+  if (typeof val === "string") {
+    return stringToSortableNumber(val);
+  }
+
+  // Fallback: try to convert to number
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Convert a string to a sortable number using first 10 characters.
+ * Uses base 36 (alphanumeric) to fit more characters within float64 safe precision.
+ * (36^10 ≈ 3.6×10¹⁵, within MAX_SAFE_INTEGER ~9×10¹⁵)
+ * This allows sorting strings that share long prefixes (e.g., "Person Giuseppe" vs "Person Giovanni").
+ */
+function stringToSortableNumber(str: string): number {
+  const s = str.toLowerCase();
+  const len = Math.min(s.length, 10);
+  let hash = 0;
+
+  // Pack characters into a number using base 36 encoding
+  // Maps a-z to 0-25, 0-9 to 26-35, space/other to 0
+  for (let i = 0; i < len; i++) {
+    const code = s.charCodeAt(i);
+    let mapped: number;
+    if (code >= 97 && code <= 122) {
+      // a-z -> 0-25
+      mapped = code - 97;
+    } else if (code >= 48 && code <= 57) {
+      // 0-9 -> 26-35
+      mapped = code - 48 + 26;
+    } else {
+      // space and other chars -> 0 (sorts first)
+      mapped = 0;
+    }
+    hash = hash * 36 + mapped;
+  }
+
+  // Pad shorter strings to ensure "a" < "ab"
+  for (let i = len; i < 10; i++) {
+    hash = hash * 36;
+  }
+
+  return hash;
+}
+
+/**
+ * Convert a string to multiple sortable hash values (one per 10-char chunk).
+ * This allows correct sorting of strings longer than 10 characters.
+ * Returns HASH_CHUNK_COUNT hashes, each covering 10 characters.
+ */
+function stringToSortableHashes(str: string): number[] {
+  const s = str.toLowerCase();
+  const hashes: number[] = [];
+
+  for (let chunk = 0; chunk < HASH_CHUNK_COUNT; chunk++) {
+    const start = chunk * 10;
+    let hash = 0;
+
+    for (let i = 0; i < 10; i++) {
+      const charIndex = start + i;
+      const code = charIndex < s.length ? s.charCodeAt(charIndex) : 0;
+      let mapped: number;
+      if (code >= 97 && code <= 122) {
+        // a-z -> 0-25
+        mapped = code - 97;
+      } else if (code >= 48 && code <= 57) {
+        // 0-9 -> 26-35
+        mapped = code - 48 + 26;
+      } else {
+        // space and other chars -> 0 (sorts first)
+        mapped = 0;
+      }
+      hash = hash * 36 + mapped;
+    }
+    hashes.push(hash);
+  }
+
+  return hashes;
+}
 
 function defaultGetFieldValue<TData>(row: TData, field: string): CellValue {
   const parts = field.split(".");

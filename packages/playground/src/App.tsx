@@ -291,7 +291,7 @@ const getRandomTags = (): string[] => {
 
 // Generate sample data
 const generateRowData = (): Person[] =>
-  Array.from({ length: 150000 }, (_, i) => ({
+  Array.from({ length: 1500000 }, (_, i) => ({
     id: i + 1,
     name: `Person ${names[getRandomInt(0, 2)]}`,
     age: getRandomInt(18, 90),
