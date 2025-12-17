@@ -1,6 +1,6 @@
 # gp-grid-core
 
-A framework-agnostic TypeScript library for building high-performance data grids with virtual scrolling, supporting 150,000+ rows with ease.
+A framework-agnostic TypeScript library for building high-performance data grids with high (millions) number of rows with ease.
 
 ## Available implementations
 

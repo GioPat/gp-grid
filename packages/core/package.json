@@ -7,6 +7,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": "Giovanni Patruno (giovanni.patruno@outlook.com)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GioPat/gp-grid.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/GioPat/gp-grid/issues"
+  },
+  "homepage": "https://github.com/GioPat/gp-grid/tree/master/packages/core#readme",
   "type": "module",
   "keywords": [
     "grid",

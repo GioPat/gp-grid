@@ -1,0 +1,40 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter=gp-grid-core build
+      - run: pnpm --filter=gp-grid-react build
+      - run: pnpm --filter=gp-grid-core publish --no-git-checks --access public --provenance
+      - run: pnpm --filter=gp-grid-react publish --no-git-checks --access public --provenance
+
+  publish-jsr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx jsr publish --allow-dirty
+        working-directory: packages/core
+      - run: npx jsr publish --allow-dirty
+        working-directory: packages/react

@@ -1,6 +1,6 @@
 # gp-grid-react
 
-A high-performance React data grid component built on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
+A high-performance, feature lean React data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
 ## Features
 

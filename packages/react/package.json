@@ -6,6 +6,18 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GioPat/gp-grid.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/GioPat/gp-grid/issues"
+  },
+  "homepage": "https://github.com/GioPat/gp-grid/tree/master/packages/react#readme",
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "react",
     "grid",
