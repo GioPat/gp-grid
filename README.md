@@ -102,6 +102,24 @@ Keeping this library requires effort and passion, I'm a full time engineer emplo
 
 If you think this project helped you achieve your goals, it's hopefully worth a beer! 🍻
 
-| Paypal | Bitcoin | Lightning Network |
-| :----: | :-----: | :---------------  |
-| [![Paypal QR Code](./public/images/donazione_paypal.png "Paypal QR Code donation")](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)<br />[https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY) | [![Bitcoin QR Donation](./public/images/bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m.png "Bitcoin QR Donation")](bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m)<br />bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m | [![Lightning Network QR Donation](./public/images/lightning.png "Lightning Network QR Donation")](lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7)<br />lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7 |
+<div align="center">
+
+### Paypal
+
+[![Paypal QR Code](./public/images/donazione_paypal.png "Paypal QR Code donation")](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)
+
+[https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)
+
+### Bitcoin
+
+[![Bitcoin QR Donation](./public/images/bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m.png "Bitcoin QR Donation")](bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m)
+
+bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m
+
+### Lightning Network
+
+[![Lightning Network QR Donation](./public/images/lightning.png "Lightning Network QR Donation")](lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7)
+
+lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7
+
+</div>
