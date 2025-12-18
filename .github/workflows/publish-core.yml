@@ -1,5 +1,9 @@
 name: Publish Core Package
 
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     tags:
@@ -8,15 +12,12 @@ on:
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
@@ -26,9 +27,6 @@ jobs:
 
   publish-jsr:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - run: npx jsr publish --allow-dirty
