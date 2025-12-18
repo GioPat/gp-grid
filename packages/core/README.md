@@ -1,6 +1,17 @@
-# gp-grid-core
+# gp-grid-core 🏁 🏎️
 
 A framework-agnostic TypeScript library for building high-performance data grids with high (millions) number of rows with ease.
+
+## Table of Contents
+
+- [Philosophy](#philosophy)
+- [Installation](#installation)
+- [Architecture Overview](#architecture-overview)
+- [Data Sources](#data-sources)
+- [Types Reference](#types-reference)
+- [Creating a Framework Adapter](#creating-a-framework-adapter)
+- [API Reference](#api-reference)
+- [Donations](#donations)
 
 ## Available implementations
 
@@ -382,3 +393,16 @@ class MyGridAdapter {
 | ----------- | ------------------------- |
 | `selection` | SelectionManager instance |
 | `fill`      | FillManager instance      |
+
+## Donations
+
+Keeping this library requires effort and passion, I'm a full time engineer employed on other project and I'm trying my best to keep this work free! For all the features. 
+
+If you think this project helped you achieve your goals, it's hopefully worth a beer! 🍻
+
+<div align="center">
+
+| Paypal | Bitcoin | Lightning Network |
+| :----: | :-----: | :---------------: |
+| [![Paypal QR Code](../../public/images/donazione_paypal.png "Paypal QR Code donation")](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)<br />[https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY) | [![Bitcoin QR Donation](../../public/images/bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m.png "Bitcoin QR Donation")](bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m)<br />bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m | [![Lightning Network QR Donation](../../public/images/lightning.png "Lightning Network QR Donation")](lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7)<br />lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7 |
+</div>

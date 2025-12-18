@@ -1,9 +1,9 @@
-name: Publish Packages
+name: Publish React Package
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'react@*'
 
 jobs:
   publish-npm:
@@ -24,8 +24,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter=gp-grid-core build
       - run: pnpm --filter=gp-grid-react build
-      - run: pnpm --filter=gp-grid-core publish --no-git-checks --access public --provenance
       - run: pnpm --filter=gp-grid-react publish --no-git-checks --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-jsr:
     runs-on: ubuntu-latest
@@ -34,7 +35,5 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - run: npx jsr publish --allow-dirty
-        working-directory: packages/core
       - run: npx jsr publish --allow-dirty
         working-directory: packages/react
