@@ -29,5 +29,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npx jsr publish --allow-dirty --no-check
+      - run: npx jsr publish --allow-dirty
         working-directory: packages/react
