@@ -22,8 +22,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter=gp-grid-core build
       - run: pnpm --filter=gp-grid-react build
+      - name: Check if version exists on npm
+        id: check-npm
+        working-directory: packages/react
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null; then
+            echo "Version ${PACKAGE_VERSION} already exists on npm"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version ${PACKAGE_VERSION} not found on npm"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
       - run: npm publish --access public --provenance
         working-directory: packages/react
+        if: steps.check-npm.outputs.exists == 'false'
 
   publish-jsr:
     runs-on: ubuntu-latest

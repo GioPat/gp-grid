@@ -1,7 +1,7 @@
 // gp-grid-core/src/worker-manager.ts
 // Manages Web Worker lifecycle for sorting operations
 
-import type { SortDirection } from "./types";
+import type { SortDirection, SortModel } from "./types";
 import { SORT_WORKER_CODE } from "./sort-worker";
 import type {
   SortWorkerRequest,
@@ -73,7 +73,10 @@ export class SortWorkerManager {
    * This is much faster than sortInWorker for large datasets because
    * it avoids the serialization overhead of transferring full objects.
    */
-  async sortIndices(values: number[], direction: SortDirection): Promise<Uint32Array> {
+  async sortIndices(
+    values: number[],
+    direction: SortDirection,
+  ): Promise<Uint32Array> {
     if (this.isTerminated) {
       throw new Error("SortWorkerManager has been terminated");
     }
@@ -114,7 +117,7 @@ export class SortWorkerManager {
    */
   async sortMultiColumn(
     columns: number[][],
-    directions: SortDirection[]
+    directions: SortDirection[],
   ): Promise<Uint32Array> {
     if (this.isTerminated) {
       throw new Error("SortWorkerManager has been terminated");
@@ -128,8 +131,10 @@ export class SortWorkerManager {
     const id = this.nextRequestId++;
 
     // Convert to typed arrays for efficient transfer
-    const columnArrays = columns.map(col => new Float64Array(col));
-    const directionArray = new Int8Array(directions.map(d => d === "asc" ? 1 : -1));
+    const columnArrays = columns.map((col) => new Float64Array(col));
+    const directionArray = new Int8Array(
+      directions.map((d) => (d === "asc" ? 1 : -1)),
+    );
 
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(id, {
@@ -145,7 +150,7 @@ export class SortWorkerManager {
       };
 
       // Transfer all column buffers (zero-copy)
-      const transferables = columnArrays.map(arr => arr.buffer);
+      const transferables = columnArrays.map((arr) => arr.buffer);
       transferables.push(directionArray.buffer);
       this.worker!.postMessage(request, transferables);
     });
@@ -161,7 +166,7 @@ export class SortWorkerManager {
   async sortStringHashes(
     hashChunks: Float64Array[],
     direction: SortDirection,
-    originalStrings: string[]
+    originalStrings: string[],
   ): Promise<Uint32Array> {
     if (this.isTerminated) {
       throw new Error("SortWorkerManager has been terminated");
@@ -177,12 +182,20 @@ export class SortWorkerManager {
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(id, {
         resolve: (data: unknown) => {
-          const response = data as { indices: Uint32Array; collisionPairs: Uint32Array };
+          const response = data as {
+            indices: Uint32Array;
+            collisionPairs: Uint32Array;
+          };
           const { indices, collisionPairs } = response;
 
           // Handle collisions using localeCompare on original strings
           if (collisionPairs.length > 0) {
-            this.resolveCollisions(indices, collisionPairs, originalStrings, direction);
+            this.resolveCollisions(
+              indices,
+              collisionPairs,
+              originalStrings,
+              direction,
+            );
           }
 
           resolve(indices);
@@ -198,7 +211,7 @@ export class SortWorkerManager {
       };
 
       // Transfer all hash chunk buffers (zero-copy)
-      const transferables = hashChunks.map(arr => arr.buffer);
+      const transferables = hashChunks.map((arr) => arr.buffer);
       this.worker!.postMessage(request, transferables);
     });
   }
@@ -210,7 +223,7 @@ export class SortWorkerManager {
     indices: Uint32Array,
     collisionPairs: Uint32Array,
     originalStrings: string[],
-    direction: SortDirection
+    direction: SortDirection,
   ): void {
     // Build collision groups from pairs
     // collisionPairs contains pairs: [a1, b1, a2, b2, ...]
@@ -275,12 +288,22 @@ export class SortWorkerManager {
     }
 
     // Create Blob URL from inline worker code
-    const blob = new Blob([SORT_WORKER_CODE], { type: "application/javascript" });
+    const blob = new Blob([SORT_WORKER_CODE], {
+      type: "application/javascript",
+    });
     this.workerUrl = URL.createObjectURL(blob);
     this.worker = new Worker(this.workerUrl);
 
     // Handle messages from worker
-    this.worker.onmessage = (e: MessageEvent<SortWorkerResponse | SortIndicesResponse | SortMultiColumnResponse | SortStringHashesResponse | { type: "error"; id: number; error: string }>) => {
+    this.worker.onmessage = (
+      e: MessageEvent<
+        | SortWorkerResponse
+        | SortIndicesResponse
+        | SortMultiColumnResponse
+        | SortStringHashesResponse
+        | { type: "error"; id: number; error: string }
+      >,
+    ) => {
       const { id } = e.data;
       const pending = this.pendingRequests.get(id);
 
@@ -297,7 +320,10 @@ export class SortWorkerManager {
       } else if (e.data.type === "sortedMultiColumn") {
         pending.resolve(e.data.indices);
       } else if (e.data.type === "sortedStringHashes") {
-        pending.resolve({ indices: e.data.indices, collisionPairs: e.data.collisionPairs });
+        pending.resolve({
+          indices: e.data.indices,
+          collisionPairs: e.data.collisionPairs,
+        });
       } else if (e.data.type === "error") {
         pending.reject(new Error((e.data as { error: string }).error));
       }

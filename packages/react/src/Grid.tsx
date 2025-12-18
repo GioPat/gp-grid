@@ -37,7 +37,9 @@ export type ReactCellRenderer = (params: CellRendererParams) => React.ReactNode;
 /** React edit renderer: A function that renders the cell while in edit mode */
 export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
 /** React header renderer: A function that renders a header cell */
-export type ReactHeaderRenderer = (params: HeaderRendererParams) => React.ReactNode;
+export type ReactHeaderRenderer = (
+  params: HeaderRendererParams,
+) => React.ReactNode;
 
 /** Grid component props */
 export interface GridProps<TData extends Row = Row> {
@@ -95,7 +97,14 @@ interface GridState {
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
   contentWidth: number;
   contentHeight: number;
-  headers: Map<number, { column: ColumnDefinition; sortDirection?: SortDirection; sortIndex?: number }>;
+  headers: Map<
+    number,
+    {
+      column: ColumnDefinition;
+      sortDirection?: SortDirection;
+      sortIndex?: number;
+    }
+  >;
   isLoading: boolean;
   error: string | null;
   totalRows: number;
@@ -116,7 +125,14 @@ type GridAction =
 function applyInstruction(
   instruction: GridInstruction,
   slots: Map<string, SlotData>,
-  headers: Map<number, { column: ColumnDefinition; sortDirection?: SortDirection; sortIndex?: number }>
+  headers: Map<
+    number,
+    {
+      column: ColumnDefinition;
+      sortDirection?: SortDirection;
+      sortIndex?: number;
+    }
+  >,
 ): Partial<GridState> | null {
   switch (instruction.type) {
     case "CREATE_SLOT":
@@ -259,7 +275,9 @@ function createInitialState(): GridState {
  * @param props - Grid component props
  * @returns Grid React component
  */
-export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.ReactNode {
+export function Grid<TData extends Row = Row>(
+  props: GridProps<TData>,
+): React.ReactNode {
   // Inject styles on first render (safe to call multiple times)
   injectStyles();
 
@@ -286,11 +304,23 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
   const coreRef = useRef<GridCore<TData> | null>(null);
   const [state, dispatch] = useReducer(gridReducer, null, createInitialState);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const filterTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const filterTimeoutRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({});
   const [isDraggingFill, setIsDraggingFill] = useState(false);
-  const [fillTarget, setFillTarget] = useState<{ row: number; col: number } | null>(null);
-  const [fillSourceRange, setFillSourceRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
-  const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [fillTarget, setFillTarget] = useState<{
+    row: number;
+    col: number;
+  } | null>(null);
+  const [fillSourceRange, setFillSourceRange] = useState<{
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+  } | null>(null);
+  const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   // Computed heights
@@ -358,24 +388,27 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       container.scrollTop,
       container.scrollLeft,
       container.clientWidth,
-      container.clientHeight
+      container.clientHeight,
     );
   }, []);
 
   // Handle wheel with reduced sensitivity for large datasets
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    const container = containerRef.current;
-    const core = coreRef.current;
-    if (!container || !core) return;
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      const container = containerRef.current;
+      const core = coreRef.current;
+      if (!container || !core) return;
 
-    // Only apply dampening when scaling is active (large datasets)
-    if (!core.isScalingActive()) return;
+      // Only apply dampening when scaling is active (large datasets)
+      if (!core.isScalingActive()) return;
 
-    // Prevent default scroll and apply dampened scroll
-    e.preventDefault();
-    container.scrollTop += e.deltaY * wheelDampening;
-    container.scrollLeft += e.deltaX * wheelDampening;
-  }, [wheelDampening]);
+      // Prevent default scroll and apply dampened scroll
+      e.preventDefault();
+      container.scrollTop += e.deltaY * wheelDampening;
+      container.scrollLeft += e.deltaX * wheelDampening;
+    },
+    [wheelDampening],
+  );
 
   // Initial measurement
   useEffect(() => {
@@ -388,7 +421,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         container.scrollTop,
         container.scrollLeft,
         container.clientWidth,
-        container.clientHeight
+        container.clientHeight,
       );
     });
 
@@ -416,7 +449,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         }
       }, filterDebounce);
     },
-    [filterDebounce]
+    [filterDebounce],
   );
 
   // Keyboard navigation
@@ -426,7 +459,12 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       if (!core) return;
 
       // Don't handle keyboard events when editing
-      if (state.editingCell && e.key !== "Enter" && e.key !== "Escape" && e.key !== "Tab") {
+      if (
+        state.editingCell &&
+        e.key !== "Enter" &&
+        e.key !== "Escape" &&
+        e.key !== "Tab"
+      ) {
         return;
       }
 
@@ -513,7 +551,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
           break;
       }
     },
-    [state.activeCell, state.editingCell]
+    [state.activeCell, state.editingCell],
   );
 
   // Scroll active cell into view when navigating with keyboard
@@ -574,7 +612,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
       core.selection.startSelection(
         { row: rowIndex, col: colIndex },
-        { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }
+        { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey },
       );
 
       // Start drag selection (unless shift is held - that's a one-time extend)
@@ -582,7 +620,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         setIsDraggingSelection(true);
       }
     },
-    []
+    [],
   );
 
   // Cell double-click handler
@@ -593,7 +631,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
       core.startEdit(rowIndex, colIndex);
     },
-    []
+    [],
   );
 
   // Header click handler (sort)
@@ -629,7 +667,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       // console.log("[GP-Grid] Setting sort:", { colId, newDirection });
       core.setSort(colId, newDirection, e.shiftKey);
     },
-    [columns, state.headers]
+    [columns, state.headers],
   );
 
   // Fill handle drag handlers
@@ -656,13 +694,13 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       // console.log("[GP-Grid] Starting fill drag with source range:", sourceRange);
       core.fill.startFillDrag(sourceRange);
       setFillSourceRange(sourceRange);
-      setFillTarget({ 
+      setFillTarget({
         row: Math.max(sourceRange.startRow, sourceRange.endRow),
-        col: Math.max(sourceRange.startCol, sourceRange.endCol)
+        col: Math.max(sourceRange.startCol, sourceRange.endCol),
       });
       setIsDraggingFill(true);
     },
-    [state.activeCell, state.selectionRange]
+    [state.activeCell, state.selectionRange],
   );
 
   // Handle mouse move during fill drag
@@ -688,7 +726,10 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
 
       // Find the row under the mouse (use core method to handle scaling)
-      const targetRow = Math.max(0, core.getRowIndexAtDisplayY(mouseY, scrollTop));
+      const targetRow = Math.max(
+        0,
+        core.getRowIndexAtDisplayY(mouseY, scrollTop),
+      );
 
       // Find column by checking column positions
       let targetCol = 0;
@@ -799,7 +840,13 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
 
       // Find the row under the mouse (use core method to handle scaling)
-      const targetRow = Math.max(0, Math.min(core.getRowIndexAtDisplayY(mouseY, scrollTop), core.getRowCount() - 1));
+      const targetRow = Math.max(
+        0,
+        Math.min(
+          core.getRowIndexAtDisplayY(mouseY, scrollTop),
+          core.getRowCount() - 1,
+        ),
+      );
 
       // Find column by checking column positions
       let targetCol = 0;
@@ -817,7 +864,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       // Extend selection to target cell (like shift+click)
       core.selection.startSelection(
         { row: targetRow, col: targetCol },
-        { shift: true }
+        { shift: true },
       );
 
       // Auto-scroll logic
@@ -894,21 +941,21 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
       return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
     },
-    [state.selectionRange]
+    [state.selectionRange],
   );
 
   const isActiveCell = useCallback(
     (row: number, col: number): boolean => {
       return state.activeCell?.row === row && state.activeCell?.col === col;
     },
-    [state.activeCell]
+    [state.activeCell],
   );
 
   const isEditingCell = useCallback(
     (row: number, col: number): boolean => {
       return state.editingCell?.row === row && state.editingCell?.col === col;
     },
-    [state.editingCell]
+    [state.editingCell],
   );
 
   // Check if cell is in fill preview range
@@ -916,10 +963,22 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
     (row: number, col: number): boolean => {
       if (!isDraggingFill || !fillSourceRange || !fillTarget) return false;
 
-      const srcMinRow = Math.min(fillSourceRange.startRow, fillSourceRange.endRow);
-      const srcMaxRow = Math.max(fillSourceRange.startRow, fillSourceRange.endRow);
-      const srcMinCol = Math.min(fillSourceRange.startCol, fillSourceRange.endCol);
-      const srcMaxCol = Math.max(fillSourceRange.startCol, fillSourceRange.endCol);
+      const srcMinRow = Math.min(
+        fillSourceRange.startRow,
+        fillSourceRange.endRow,
+      );
+      const srcMaxRow = Math.max(
+        fillSourceRange.startRow,
+        fillSourceRange.endRow,
+      );
+      const srcMinCol = Math.min(
+        fillSourceRange.startCol,
+        fillSourceRange.endCol,
+      );
+      const srcMaxCol = Math.max(
+        fillSourceRange.startCol,
+        fillSourceRange.endCol,
+      );
 
       // Determine fill direction and range
       const fillDown = fillTarget.row > srcMaxRow;
@@ -929,21 +988,41 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
 
       // Check if cell is in the fill preview area (not the source area)
       if (fillDown) {
-        return row > srcMaxRow && row <= fillTarget.row && col >= srcMinCol && col <= srcMaxCol;
+        return (
+          row > srcMaxRow &&
+          row <= fillTarget.row &&
+          col >= srcMinCol &&
+          col <= srcMaxCol
+        );
       }
       if (fillUp) {
-        return row < srcMinRow && row >= fillTarget.row && col >= srcMinCol && col <= srcMaxCol;
+        return (
+          row < srcMinRow &&
+          row >= fillTarget.row &&
+          col >= srcMinCol &&
+          col <= srcMaxCol
+        );
       }
       if (fillRight) {
-        return col > srcMaxCol && col <= fillTarget.col && row >= srcMinRow && row <= srcMaxRow;
+        return (
+          col > srcMaxCol &&
+          col <= fillTarget.col &&
+          row >= srcMinRow &&
+          row <= srcMaxRow
+        );
       }
       if (fillLeft) {
-        return col < srcMinCol && col >= fillTarget.col && row >= srcMinRow && row <= srcMaxRow;
+        return (
+          col < srcMinCol &&
+          col >= fillTarget.col &&
+          row >= srcMinRow &&
+          row <= srcMaxRow
+        );
       }
 
       return false;
     },
-    [isDraggingFill, fillSourceRange, fillTarget]
+    [isDraggingFill, fillSourceRange, fillTarget],
   );
 
   // Get cell value from row data
@@ -967,7 +1046,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       column: ColumnDefinition,
       rowData: Row,
       rowIndex: number,
-      colIndex: number
+      colIndex: number,
     ): React.ReactNode => {
       const value = getCellValue(rowData, column.field);
       const params: CellRendererParams = {
@@ -997,7 +1076,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       // Default text rendering
       return value == null ? "" : String(value);
     },
-    [getCellValue, isActiveCell, isSelected, isEditingCell, cellRenderers, cellRenderer]
+    [
+      getCellValue,
+      isActiveCell,
+      isSelected,
+      isEditingCell,
+      cellRenderers,
+      cellRenderer,
+    ],
   );
 
   // Render edit cell
@@ -1007,7 +1093,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       rowData: Row,
       rowIndex: number,
       colIndex: number,
-      initialValue: CellValue
+      initialValue: CellValue,
     ): React.ReactNode => {
       const core = coreRef.current;
       if (!core) return null;
@@ -1066,7 +1152,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         />
       );
     },
-    [getCellValue, editRenderers, editRenderer]
+    [getCellValue, editRenderers, editRenderer],
   );
 
   // Render header
@@ -1075,7 +1161,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       column: ColumnDefinition,
       colIndex: number,
       sortDirection?: SortDirection,
-      sortIndex?: number
+      sortIndex?: number,
     ): React.ReactNode => {
       const core = coreRef.current;
       const params: HeaderRendererParams = {
@@ -1085,7 +1171,11 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         sortIndex,
         onSort: (direction, addToExisting) => {
           if (core) {
-            core.setSort(column.colId ?? column.field, direction, addToExisting);
+            core.setSort(
+              column.colId ?? column.field,
+              direction,
+              addToExisting,
+            );
           }
         },
       };
@@ -1120,11 +1210,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
         </>
       );
     },
-    [headerRenderers, headerRenderer]
+    [headerRenderers, headerRenderer],
   );
 
   // Convert slots map to array for rendering
-  const slotsArray = useMemo(() => Array.from(state.slots.values()), [state.slots]);
+  const slotsArray = useMemo(
+    () => Array.from(state.slots.values()),
+    [state.slots],
+  );
 
   // Calculate fill handle position (only show for editable columns)
   const fillHandlePosition = useMemo(() => {
@@ -1177,7 +1270,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
       top: cellTop + rowHeight - 5,
       left: cellLeft + cellWidth - 20, // Move significantly left to avoid scrollbar overlap
     };
-  }, [state.activeCell, state.selectionRange, state.slots, rowHeight, columnPositions, columns]);
+  }, [
+    state.activeCell,
+    state.selectionRange,
+    state.slots,
+    rowHeight,
+    columnPositions,
+    columns,
+  ]);
 
   return (
     <div
@@ -1236,7 +1336,7 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
                   column,
                   colIndex,
                   headerInfo?.sortDirection,
-                  headerInfo?.sortIndex
+                  headerInfo?.sortIndex,
                 )}
               </div>
             );
@@ -1331,8 +1431,12 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
                       width: `${column.width}px`,
                       height: `${rowHeight}px`,
                     }}
-                    onMouseDown={(e) => handleCellMouseDown(slot.rowIndex, colIndex, e)}
-                    onDoubleClick={() => handleCellDoubleClick(slot.rowIndex, colIndex)}
+                    onMouseDown={(e) =>
+                      handleCellMouseDown(slot.rowIndex, colIndex, e)
+                    }
+                    onDoubleClick={() =>
+                      handleCellDoubleClick(slot.rowIndex, colIndex)
+                    }
                   >
                     {isEditing && state.editingCell
                       ? renderEditCell(
@@ -1340,9 +1444,14 @@ export function Grid<TData extends Row = Row>(props: GridProps<TData>): React.Re
                           slot.rowData,
                           slot.rowIndex,
                           colIndex,
-                          state.editingCell.initialValue
+                          state.editingCell.initialValue,
                         )
-                      : renderCell(column, slot.rowData, slot.rowIndex, colIndex)}
+                      : renderCell(
+                          column,
+                          slot.rowData,
+                          slot.rowIndex,
+                          colIndex,
+                        )}
                   </div>
                 );
               })}

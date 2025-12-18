@@ -290,7 +290,11 @@ self.onmessage = function(e) {
 // =============================================================================
 
 // This handles incoming messages when running as a module worker
-declare const self: DedicatedWorkerGlobalScope;
+interface WorkerGlobalScopeMinimal {
+  onmessage: ((e: MessageEvent) => void) | null;
+  postMessage(message: unknown): void;
+}
+declare const self: WorkerGlobalScopeMinimal;
 
 if (typeof self !== "undefined" && typeof self.onmessage !== "undefined") {
   self.onmessage = (e: MessageEvent<SortWorkerRequest>) => {
