@@ -1,5 +1,6 @@
 {
   "name": "gp-grid",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GioPat/gp-grid.git"
