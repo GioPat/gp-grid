@@ -5,6 +5,7 @@
   "exports": "./src/index.ts",
   "license": "Apache-2.0",
   "imports": {
-    "gp-grid-core": "jsr:@gp-grid/core@^0.1.3"
+    "gp-grid-core": "jsr:@gp-grid/core@^0.1.3",
+    "react": "npm:react@^19.0.0"
   }
 }
