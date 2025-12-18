@@ -22,9 +22,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter=gp-grid-core build
       - run: pnpm --filter=gp-grid-react build
-      - run: pnpm --filter=gp-grid-react publish --no-git-checks --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public --provenance
+        working-directory: packages/react
 
   publish-jsr:
     runs-on: ubuntu-latest

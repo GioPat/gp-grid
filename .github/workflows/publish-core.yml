@@ -21,9 +21,8 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter=gp-grid-core build
-      - run: pnpm --filter=gp-grid-core publish --no-git-checks --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public --provenance
+        working-directory: packages/core
 
   publish-jsr:
     runs-on: ubuntu-latest
