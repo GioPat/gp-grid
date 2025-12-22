@@ -980,11 +980,9 @@ export function Grid<TData extends Row = Row>(
         fillSourceRange.endCol,
       );
 
-      // Determine fill direction and range
+      // Determine fill direction (vertical only)
       const fillDown = fillTarget.row > srcMaxRow;
       const fillUp = fillTarget.row < srcMinRow;
-      const fillRight = fillTarget.col > srcMaxCol;
-      const fillLeft = fillTarget.col < srcMinCol;
 
       // Check if cell is in the fill preview area (not the source area)
       if (fillDown) {
@@ -1001,22 +999,6 @@ export function Grid<TData extends Row = Row>(
           row >= fillTarget.row &&
           col >= srcMinCol &&
           col <= srcMaxCol
-        );
-      }
-      if (fillRight) {
-        return (
-          col > srcMaxCol &&
-          col <= fillTarget.col &&
-          row >= srcMinRow &&
-          row <= srcMaxRow
-        );
-      }
-      if (fillLeft) {
-        return (
-          col < srcMinCol &&
-          col >= fillTarget.col &&
-          row >= srcMinRow &&
-          row <= srcMaxRow
         );
       }
 

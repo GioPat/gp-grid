@@ -370,54 +370,6 @@ describe("FillManager", () => {
     });
   });
 
-  describe("commitFillDrag - horizontal fill", () => {
-    it("should fill right with constant value", () => {
-      const data: CellValue[][] = [
-        ["A", null, null],
-      ];
-      options = createMockOptions(1, 3, data);
-      manager = new FillManager(options);
-
-      manager.startFillDrag({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
-      manager.updateFillDrag(0, 2);
-      manager.commitFillDrag();
-
-      expect(options.getData()[0][1]).toBe("A");
-      expect(options.getData()[0][2]).toBe("A");
-    });
-
-    it("should fill right with arithmetic sequence", () => {
-      const data: CellValue[][] = [
-        [1, 2, null, null, null],
-      ];
-      options = createMockOptions(1, 5, data);
-      manager = new FillManager(options);
-
-      manager.startFillDrag({ startRow: 0, startCol: 0, endRow: 0, endCol: 1 });
-      manager.updateFillDrag(0, 4);
-      manager.commitFillDrag();
-
-      expect(options.getData()[0][2]).toBe(3);
-      expect(options.getData()[0][3]).toBe(4);
-      expect(options.getData()[0][4]).toBe(5);
-    });
-
-    it("should fill left with constant value", () => {
-      const data: CellValue[][] = [
-        [null, null, "A"],
-      ];
-      options = createMockOptions(1, 3, data);
-      manager = new FillManager(options);
-
-      manager.startFillDrag({ startRow: 0, startCol: 2, endRow: 0, endCol: 2 });
-      manager.updateFillDrag(0, 0);
-      manager.commitFillDrag();
-
-      expect(options.getData()[0][0]).toBe("A");
-      expect(options.getData()[0][1]).toBe("A");
-    });
-  });
-
   describe("commitFillDrag - multi-column fill", () => {
     it("should fill multiple columns with their respective patterns", () => {
       const data: CellValue[][] = [

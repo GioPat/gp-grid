@@ -142,13 +142,11 @@ export class FillManager {
     const srcMinCol = Math.min(sourceRange.startCol, sourceRange.endCol);
     const srcMaxCol = Math.max(sourceRange.startCol, sourceRange.endCol);
 
-    // Determine fill direction
+    // Determine fill direction (vertical only)
     const fillDown = targetRow > srcMaxRow;
     const fillUp = targetRow < srcMinRow;
-    const fillRight = targetCol > srcMaxCol;
-    const fillLeft = targetCol < srcMinCol;
 
-    // For now, we only support vertical fills (most common use case)
+    // Only vertical fills are supported
     if (fillDown || fillUp) {
       for (let col = srcMinCol; col <= srcMaxCol; col++) {
         const sourceValues = this.getSourceColumnValues(srcMinRow, srcMaxRow, col);
@@ -170,42 +168,12 @@ export class FillManager {
       }
     }
 
-    // Horizontal fill
-    if (fillRight || fillLeft) {
-      for (let row = srcMinRow; row <= srcMaxRow; row++) {
-        const sourceValues = this.getSourceRowValues(srcMinCol, srcMaxCol, row);
-        const pattern = this.detectPattern(sourceValues);
-
-        if (fillRight) {
-          for (let col = srcMaxCol + 1; col <= targetCol; col++) {
-            const fillIndex = col - srcMaxCol - 1;
-            const value = this.applyPattern(pattern, sourceValues, fillIndex);
-            result.push({ row, col, value });
-          }
-        } else if (fillLeft) {
-          for (let col = srcMinCol - 1; col >= targetCol; col--) {
-            const fillIndex = srcMinCol - col - 1;
-            const value = this.applyPattern(pattern, sourceValues, fillIndex, true);
-            result.push({ row, col, value });
-          }
-        }
-      }
-    }
-
     return result;
   }
 
   private getSourceColumnValues(minRow: number, maxRow: number, col: number): CellValue[] {
     const values: CellValue[] = [];
     for (let row = minRow; row <= maxRow; row++) {
-      values.push(this.options.getCellValue(row, col));
-    }
-    return values;
-  }
-
-  private getSourceRowValues(minCol: number, maxCol: number, row: number): CellValue[] {
-    const values: CellValue[] = [];
-    for (let col = minCol; col <= maxCol; col++) {
       values.push(this.options.getCellValue(row, col));
     }
     return values;
