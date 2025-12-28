@@ -20,6 +20,15 @@ import { SelectionManager } from "./selection";
 import { FillManager } from "./fill";
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+// Maximum safe scroll height across browsers (conservative value)
+// Chrome/Edge: ~33.5M, Firefox: ~17.9M, Safari: ~33.5M
+// We use 10M to be safe and leave room for other content
+const MAX_SCROLL_HEIGHT = 10_000_000;
+
+// =============================================================================
 // Slot Pool Manager
 // =============================================================================
 
@@ -35,10 +44,6 @@ interface SlotPoolState {
 // =============================================================================
 
 export class GridCore<TData extends Row = Row> {
-  // Maximum safe CSS height to avoid browser rendering issues with extreme values
-  // Using 1M as a safer limit (some browsers have issues even at 10M)
-  private static readonly MAX_SAFE_HEIGHT = 1_000_000; // 1M pixels
-
   // Configuration
   private columns: ColumnDefinition[];
   private dataSource: DataSource<TData>;
@@ -83,6 +88,11 @@ export class GridCore<TData extends Row = Row> {
   // Instruction listeners
   private listeners: InstructionListener[] = [];
   private batchListeners: BatchInstructionListener[] = [];
+
+  // Scroll virtualization state
+  private naturalContentHeight: number = 0;
+  private virtualContentHeight: number = 0;
+  private scrollRatio: number = 1;
 
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
@@ -193,6 +203,7 @@ export class GridCore<TData extends Row = Row> {
 
   /**
    * Update viewport measurements and sync slots.
+   * When scroll virtualization is active, maps the DOM scroll position to the actual row position.
    */
   setViewport(
     scrollTop: number,
@@ -200,15 +211,22 @@ export class GridCore<TData extends Row = Row> {
     width: number,
     height: number
   ): void {
+    // When scroll ratio < 1, map the visual scroll position to actual content position
+    // scrollTop is the browser's reported scroll position within the virtual container
+    // We need to convert this to determine which row should be at the top of the viewport
+    const effectiveScrollTop = this.scrollRatio < 1
+      ? scrollTop / this.scrollRatio
+      : scrollTop;
+
     const changed =
-      this.scrollTop !== scrollTop ||
+      this.scrollTop !== effectiveScrollTop ||
       this.scrollLeft !== scrollLeft ||
       this.viewportWidth !== width ||
       this.viewportHeight !== height;
 
     if (!changed) return;
 
-    this.scrollTop = scrollTop;
+    this.scrollTop = effectiveScrollTop;
     this.scrollLeft = scrollLeft;
     this.viewportWidth = width;
     this.viewportHeight = height;
@@ -225,15 +243,10 @@ export class GridCore<TData extends Row = Row> {
    * This implements the slot recycling strategy.
    */
   private syncSlots(): void {
-    // Use virtual scroll position for row calculations
-    const virtualScrollTop = this.getVirtualScrollTop();
-
-    // Calculate visible rows based on virtual scroll position
-    // Viewport height stays the same (we don't compress the viewport)
-    const visibleStartRow = Math.max(0, Math.floor(virtualScrollTop / this.rowHeight) - this.overscan);
+    const visibleStartRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight) - this.overscan);
     const visibleEndRow = Math.min(
       this.totalRows - 1,
-      Math.ceil((virtualScrollTop + this.viewportHeight) / this.rowHeight) + this.overscan
+      Math.ceil((this.scrollTop + this.viewportHeight) / this.rowHeight) + this.overscan
     );
 
     if (this.totalRows === 0 || visibleEndRow < visibleStartRow) {
@@ -352,79 +365,27 @@ export class GridCore<TData extends Row = Row> {
     this.emitBatch(instructions);
   }
 
-  /**
-   * Get the virtual (unscaled) height of the entire grid content.
-   */
-  private getVirtualHeight(): number {
-    return this.totalRows * this.rowHeight + this.headerHeight;
-  }
-
-  /**
-   * Get the display height (capped) for the content sizer.
-   * This is the height that will be used in CSS for the scrollable area.
-   */
-  private getDisplayHeight(): number {
-    return Math.min(this.getVirtualHeight(), GridCore.MAX_SAFE_HEIGHT);
-  }
-
-  /**
-   * Check if scaling is needed (virtual height exceeds safe limit).
-   */
-  private needsScaling(): boolean {
-    return this.getVirtualHeight() > GridCore.MAX_SAFE_HEIGHT;
-  }
-
-  /**
-   * Get the scroll progress as a value from 0 to 1.
-   * 0 = scrolled to top, 1 = scrolled to bottom.
-   */
-  private getScrollProgress(): number {
-    const displayHeight = this.getDisplayHeight();
-    const maxScroll = displayHeight - this.viewportHeight;
-    if (maxScroll <= 0) return 0;
-    return Math.min(1, Math.max(0, this.scrollTop / maxScroll));
-  }
-
-  /**
-   * Convert display scroll position to virtual scroll position.
-   * Uses proportional mapping when content exceeds safe limits.
-   */
-  private getVirtualScrollTop(): number {
-    if (!this.needsScaling()) {
-      return this.scrollTop;
-    }
-    const virtualHeight = this.getVirtualHeight();
-    const maxVirtualScroll = virtualHeight - this.viewportHeight;
-    return this.getScrollProgress() * maxVirtualScroll;
-  }
-
-  /**
-   * Get the translateY for a row that keeps values within safe CSS limits.
-   * Uses proportional positioning when content exceeds safe limits.
-   */
   private getRowTranslateY(rowIndex: number): number {
-    const virtualY = rowIndex * this.rowHeight + this.headerHeight;
-
-    if (!this.needsScaling()) {
-      return virtualY;
+    // Calculate the natural position for this row
+    const naturalY = rowIndex * this.rowHeight + this.headerHeight;
+    
+    if (this.scrollRatio >= 1) {
+      return naturalY;
     }
-
-    // When scaling is needed, we use a formula that:
-    // 1. Keeps all translateY values within displayHeight bounds
-    // 2. Preserves visual row spacing (no compression)
-    // 3. Maps scroll position proportionally
+    
+    // With scroll virtualization, we need to position rows relative to the viewport
+    // so they appear at the correct location within the capped container height.
     //
-    // Formula: translateY = virtualY + scrollProgress * (displayHeight - virtualHeight)
-    // This shifts all positions by an offset that depends on scroll progress.
-    const displayHeight = this.getDisplayHeight();
-    const virtualHeight = this.getVirtualHeight();
-    const scrollProgress = this.getScrollProgress();
-
-    const translateY = virtualY + scrollProgress * (displayHeight - virtualHeight);
-
-    // Clamp to safe bounds - overscan rows might slightly exceed
-    // Negative values are fine (rows above viewport), but cap the maximum
-    return Math.min(translateY, displayHeight);
+    // naturalScrollTop is where we are in "real" content space (already mapped from virtual)
+    // virtualScrollTop is where the browser thinks we are in the DOM
+    // offset = the difference we need to subtract to keep rows within bounds
+    const naturalScrollTop = this.scrollTop;
+    const virtualScrollTop = naturalScrollTop * this.scrollRatio;
+    const offset = naturalScrollTop - virtualScrollTop;
+    
+    // Position row at its natural Y minus the offset
+    // This keeps rows properly spaced and within virtual container bounds
+    return naturalY - offset;
   }
 
   // ===========================================================================
@@ -720,9 +681,20 @@ export class GridCore<TData extends Row = Row> {
 
   private emitContentSize(): void {
     const width = this.columnPositions[this.columnPositions.length - 1] ?? 0;
-    // Use scaled display height to keep CSS values within safe browser limits
-    const height = this.getDisplayHeight();
-    this.emit({ type: "SET_CONTENT_SIZE", width, height });
+    
+    // Calculate natural (real) content height
+    this.naturalContentHeight = this.totalRows * this.rowHeight + this.headerHeight;
+    
+    // Apply scroll virtualization if content exceeds browser limits
+    if (this.naturalContentHeight > MAX_SCROLL_HEIGHT) {
+      this.virtualContentHeight = MAX_SCROLL_HEIGHT;
+      this.scrollRatio = MAX_SCROLL_HEIGHT / this.naturalContentHeight;
+    } else {
+      this.virtualContentHeight = this.naturalContentHeight;
+      this.scrollRatio = 1;
+    }
+    
+    this.emit({ type: "SET_CONTENT_SIZE", width, height: this.virtualContentHeight });
   }
 
   private emitHeaders(): void {
@@ -775,92 +747,78 @@ export class GridCore<TData extends Row = Row> {
   }
 
   getTotalHeight(): number {
-    return this.totalRows * this.rowHeight + this.headerHeight;
+    // Return the virtual (capped) height for external use
+    return this.virtualContentHeight || (this.totalRows * this.rowHeight + this.headerHeight);
+  }
+
+  /**
+   * Check if scroll scaling is active (large datasets exceeding browser scroll limits).
+   * When scaling is active, scrollRatio < 1 and scroll positions are compressed.
+   */
+  isScalingActive(): boolean {
+    return this.scrollRatio < 1;
+  }
+
+  /**
+   * Get the natural (uncapped) content height.
+   * Useful for debugging or displaying actual content size.
+   */
+  getNaturalHeight(): number {
+    return this.naturalContentHeight || (this.totalRows * this.rowHeight + this.headerHeight);
+  }
+
+  /**
+   * Get the scroll ratio used for scroll virtualization.
+   * Returns 1 when no virtualization is needed, < 1 when content exceeds browser limits.
+   */
+  getScrollRatio(): number {
+    return this.scrollRatio;
+  }
+
+  /**
+   * Get the visible row range (excluding overscan).
+   * Returns the first and last row indices that are actually visible in the viewport.
+   */
+  getVisibleRowRange(): { start: number; end: number } {
+    // viewportHeight includes header, so subtract it to get content area
+    const contentHeight = this.viewportHeight - this.headerHeight;
+    const firstVisibleRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight));
+    const lastVisibleRow = Math.min(
+      this.totalRows - 1,
+      Math.floor((this.scrollTop + contentHeight) / this.rowHeight) - 1
+    );
+    return { start: firstVisibleRow, end: Math.max(firstVisibleRow, lastVisibleRow) };
+  }
+
+  /**
+   * Get the scroll position needed to bring a row into view.
+   * Accounts for scroll scaling when active.
+   */
+  getScrollTopForRow(rowIndex: number): number {
+    const naturalScrollTop = rowIndex * this.rowHeight;
+    // Apply scroll ratio to convert natural position to virtual scroll position
+    return naturalScrollTop * this.scrollRatio;
+  }
+
+  /**
+   * Get the row index at a given viewport Y position.
+   * Accounts for scroll scaling when active.
+   * @param viewportY Y position in viewport (physical pixels below header, NOT including scroll)
+   * @param virtualScrollTop Current scroll position from container.scrollTop (virtual/scaled)
+   */
+  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
+    // Convert virtual scroll position to natural position
+    const naturalScrollTop = this.scrollRatio < 1
+      ? virtualScrollTop / this.scrollRatio
+      : virtualScrollTop;
+
+    // Natural Y = viewport offset + natural scroll position
+    const naturalY = viewportY + naturalScrollTop;
+    return Math.floor(naturalY / this.rowHeight);
   }
 
   getRowData(rowIndex: number): TData | undefined {
     return this.cachedRows.get(rowIndex);
-  }
-
-  /**
-   * Get the display Y position for a row (accounting for scaling).
-   * Used by UI adapters for scroll-into-view functionality.
-   */
-  getDisplayYForRow(rowIndex: number): number {
-    return this.getRowTranslateY(rowIndex);
-  }
-
-  /**
-   * Check if scaling is currently active.
-   */
-  isScalingActive(): boolean {
-    return this.needsScaling();
-  }
-
-  /**
-   * Convert a display Y position to a row index.
-   * Used by UI adapters for mouse coordinate conversion during drag operations.
-   * @param displayY The Y position in display coordinates (relative to content area, after header)
-   * @param scrollTop The current scroll position
-   */
-  getRowIndexAtDisplayY(displayY: number, scrollTop: number): number {
-    if (!this.needsScaling()) {
-      return Math.floor(displayY / this.rowHeight);
-    }
-
-    // With scaling, we need to invert the proportional mapping
-    // displayY was calculated based on slots positioned at:
-    //   translateY = virtualY + scrollProgress * (displayHeight - virtualHeight)
-    //
-    // So to get virtualY from a display position, we invert:
-    //   virtualY = displayY - scrollProgress * (displayHeight - virtualHeight)
-    const displayHeight = this.getDisplayHeight();
-    const virtualHeight = this.getVirtualHeight();
-    const maxScroll = displayHeight - this.viewportHeight;
-    const scrollProgress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0;
-
-    const virtualY = displayY - scrollProgress * (displayHeight - virtualHeight);
-    return Math.floor(virtualY / this.rowHeight);
-  }
-
-  /**
-   * Calculate the scroll position needed to make a row visible.
-   * For scaling mode: uses proportional mapping (rowIndex/totalRows ≈ scrollTop/maxScroll)
-   * Used by UI adapters for scroll-into-view functionality.
-   */
-  getScrollTopForRow(rowIndex: number): number {
-    if (!this.needsScaling()) {
-      // Without scaling, simple linear mapping
-      return Math.max(0, rowIndex * this.rowHeight);
-    }
-
-    // With scaling: use proportional mapping
-    // rowIndex / totalRows ≈ scrollTop / maxScroll
-    const displayHeight = this.getDisplayHeight();
-    const maxScroll = Math.max(0, displayHeight - this.viewportHeight);
-    const progress = this.totalRows > 0 ? rowIndex / this.totalRows : 0;
-
-    return Math.min(maxScroll, Math.max(0, progress * maxScroll));
-  }
-
-  /**
-   * Get the currently visible row range (excluding overscan).
-   * Returns { start, end } row indices that are fully visible in the viewport.
-   * Used by UI adapters for scroll-into-view functionality.
-   */
-  getVisibleRowRange(): { start: number; end: number } {
-    const virtualScrollTop = this.getVirtualScrollTop();
-    // The header takes up space in the viewport, so subtract it from available data area
-    const dataAreaHeight = Math.max(0, this.viewportHeight - this.headerHeight);
-
-    // First fully visible row
-    const start = Math.max(0, Math.ceil(virtualScrollTop / this.rowHeight));
-    // Last fully visible row
-    const end = Math.min(
-      this.totalRows - 1,
-      Math.floor((virtualScrollTop + dataAreaHeight) / this.rowHeight) - 1
-    );
-    return { start: Math.min(start, end), end };
   }
 
   // ===========================================================================
@@ -872,7 +830,9 @@ export class GridCore<TData extends Row = Row> {
    */
   async refresh(): Promise<void> {
     await this.fetchData();
-    this.syncSlots();
+    // Use refreshAllSlots instead of syncSlots to ensure all slot data is updated
+    // This is important when data changes (e.g., rows added) but visible indices stay the same
+    this.refreshAllSlots();
     this.emitContentSize();
   }
 

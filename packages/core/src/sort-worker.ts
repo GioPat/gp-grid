@@ -60,8 +60,8 @@ export interface SortStringHashesResponse {
   type: "sortedStringHashes";
   id: number;
   indices: Uint32Array;
-  /** Pairs of indices that had hash collisions (all chunks equal) */
-  collisionPairs: Uint32Array;
+  /** Collision runs: [start1, end1, start2, end2, ...] for runs of identical hashes */
+  collisionRuns: Uint32Array;
 }
 
 // =============================================================================
@@ -225,8 +225,8 @@ function sortStringHashes(hashChunks, direction) {
   for (let i = 0; i < len; i++) indices[i] = i;
 
   const mult = direction === "asc" ? 1 : -1;
-  const collisions = []; // Track collision pairs
 
+  // Sort by hash only (no collision tracking during sort)
   indices.sort((a, b) => {
     for (let c = 0; c < numChunks; c++) {
       const va = hashChunks[c][a];
@@ -234,12 +234,38 @@ function sortStringHashes(hashChunks, direction) {
       if (va < vb) return -1 * mult;
       if (va > vb) return 1 * mult;
     }
-    // All chunks equal = collision, record for fallback
-    collisions.push(a, b);
     return 0; // Stable sort preserves original order
   });
 
-  return { indices, collisionPairs: new Uint32Array(collisions) };
+  // Detect collision runs AFTER sorting (much more efficient)
+  // Find runs of consecutive indices with identical hashes
+  const collisionRuns = []; // [start1, end1, start2, end2, ...]
+  let runStart = 0;
+
+  for (let i = 1; i <= len; i++) {
+    // Check if current element has different hash than previous
+    let isDifferent = i === len; // End of array is always "different"
+    if (!isDifferent) {
+      const prevIdx = indices[i - 1];
+      const currIdx = indices[i];
+      for (let c = 0; c < numChunks; c++) {
+        if (hashChunks[c][prevIdx] !== hashChunks[c][currIdx]) {
+          isDifferent = true;
+          break;
+        }
+      }
+    }
+
+    if (isDifferent) {
+      // End of a run - only record if run has more than 1 element
+      if (i - runStart > 1) {
+        collisionRuns.push(runStart, i);
+      }
+      runStart = i;
+    }
+  }
+
+  return { indices, collisionRuns: new Uint32Array(collisionRuns) };
 }
 
 self.onmessage = function(e) {
@@ -275,8 +301,8 @@ self.onmessage = function(e) {
       const { hashChunks, direction } = e.data;
       const result = sortStringHashes(hashChunks, direction);
       self.postMessage(
-        { type: "sortedStringHashes", id, indices: result.indices, collisionPairs: result.collisionPairs },
-        [result.indices.buffer, result.collisionPairs.buffer]
+        { type: "sortedStringHashes", id, indices: result.indices, collisionRuns: result.collisionRuns },
+        [result.indices.buffer, result.collisionRuns.buffer]
       );
     } catch (error) {
       self.postMessage({ type: "error", id, error: String(error) });

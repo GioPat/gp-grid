@@ -21,6 +21,9 @@ export type CellValue = string | number | boolean | Date | object | null;
 /** Row type */
 export type Row = unknown;
 
+/** Row ID type for transaction operations */
+export type RowId = string | number;
+
 
 /** Sort direction type */
 export type SortDirection = "asc" | "desc";
@@ -278,6 +281,38 @@ export interface DataErrorInstruction {
   error: string;
 }
 
+// =============================================================================
+// Transaction Instructions
+// =============================================================================
+
+/** Rows added instruction */
+export interface RowsAddedInstruction {
+  type: "ROWS_ADDED";
+  count: number;
+  totalRows: number;
+}
+
+/** Rows removed instruction */
+export interface RowsRemovedInstruction {
+  type: "ROWS_REMOVED";
+  count: number;
+  totalRows: number;
+}
+
+/** Rows updated instruction */
+export interface RowsUpdatedInstruction {
+  type: "ROWS_UPDATED";
+  count: number;
+}
+
+/** Transaction processed instruction */
+export interface TransactionProcessedInstruction {
+  type: "TRANSACTION_PROCESSED";
+  added: number;
+  removed: number;
+  updated: number;
+}
+
 /** Union type of all instructions */
 export type GridInstruction =
   /** Slot lifecycle */
@@ -303,7 +338,12 @@ export type GridInstruction =
   /** Data */
   | DataLoadingInstruction
   | DataLoadedInstruction
-  | DataErrorInstruction;
+  | DataErrorInstruction
+  /** Transactions */
+  | RowsAddedInstruction
+  | RowsRemovedInstruction
+  | RowsUpdatedInstruction
+  | TransactionProcessedInstruction;
 
 // =============================================================================
 // Grid Options
@@ -321,6 +361,10 @@ export interface GridCoreOptions<TData = Row> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
+  /** Debounce time for transactions in ms. Default 50. Set to 0 for sync. */
+  transactionDebounceMs?: number;
+  /** Function to extract unique ID from row. Required for mutations. */
+  getRowId?: (row: TData) => RowId;
 }
 
 // =============================================================================

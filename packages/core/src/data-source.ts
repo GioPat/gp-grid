@@ -5,11 +5,17 @@ import type {
   DataSourceRequest,
   DataSourceResponse,
   Row,
+  RowId,
   SortModel,
   FilterModel,
   CellValue,
 } from "./types";
 import { SortWorkerManager } from "./worker-manager";
+import { IndexedDataStore } from "./indexed-data-store";
+import {
+  TransactionManager,
+  type TransactionResult,
+} from "./transaction-manager";
 
 // =============================================================================
 // Configuration
@@ -28,7 +34,7 @@ const HASH_CHUNK_COUNT = 3;
 /**
  * Creates a client-side data source that holds all data in memory.
  * Sorting and filtering are performed client-side.
- * For large datasets (10k+ rows), sorting is automatically offloaded to a Web Worker.
+ * For large datasets, sorting is automatically offloaded to a Web Worker.
  */
 export function createClientDataSource<TData extends Row = Row>(
   data: TData[],
@@ -37,7 +43,7 @@ export function createClientDataSource<TData extends Row = Row>(
     getFieldValue?: (row: TData, field: string) => CellValue;
     /** Use Web Worker for sorting large datasets (default: true) */
     useWorker?: boolean;
-  } = {}
+  } = {},
 ): DataSource<TData> {
   const { getFieldValue = defaultGetFieldValue, useWorker = true } = options;
 
@@ -45,18 +51,25 @@ export function createClientDataSource<TData extends Row = Row>(
   const workerManager = useWorker ? new SortWorkerManager() : null;
 
   return {
-    async fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>> {
+    async fetch(
+      request: DataSourceRequest,
+    ): Promise<DataSourceResponse<TData>> {
       let processedData = [...data];
 
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
-        processedData = applyFilters(processedData, request.filter, getFieldValue);
+        processedData = applyFilters(
+          processedData,
+          request.filter,
+          getFieldValue,
+        );
       }
 
       // Apply sorting (async with worker for large datasets)
       if (request.sort && request.sort.length > 0) {
         // Use worker-based index sorting for large datasets (all column types)
-        const canUseWorkerSort = workerManager &&
+        const canUseWorkerSort =
+          workerManager &&
           workerManager.isAvailable() &&
           processedData.length >= WORKER_THRESHOLD;
 
@@ -80,7 +93,10 @@ export function createClientDataSource<TData extends Row = Row>(
             if (isStringColumn) {
               // Use multi-hash sorting for strings
               const originalStrings: string[] = [];
-              const hashChunks: number[][] = Array.from({ length: HASH_CHUNK_COUNT }, () => []);
+              const hashChunks: number[][] = Array.from(
+                { length: HASH_CHUNK_COUNT },
+                () => [],
+              );
 
               for (const row of processedData) {
                 const val = getFieldValue(row, colId);
@@ -93,20 +109,25 @@ export function createClientDataSource<TData extends Row = Row>(
               }
 
               // Convert to Float64Arrays for transfer to worker
-              const hashChunkArrays = hashChunks.map(chunk => new Float64Array(chunk));
+              const hashChunkArrays = hashChunks.map(
+                (chunk) => new Float64Array(chunk),
+              );
 
               sortedIndices = await workerManager.sortStringHashes(
                 hashChunkArrays,
                 direction,
-                originalStrings
+                originalStrings,
               );
             } else {
               // Use single-value sorting for numeric columns
-              const values = processedData.map(row => {
+              const values = processedData.map((row) => {
                 const val = getFieldValue(row, colId);
                 return toSortableNumber(val);
               });
-              sortedIndices = await workerManager.sortIndices(values, direction);
+              sortedIndices = await workerManager.sortIndices(
+                values,
+                direction,
+              );
             }
           } else {
             // Multi-column sorting: use single hash per value (existing approach)
@@ -114,7 +135,7 @@ export function createClientDataSource<TData extends Row = Row>(
             const directions: Array<"asc" | "desc"> = [];
 
             for (const { colId, direction } of request.sort) {
-              const values = processedData.map(row => {
+              const values = processedData.map((row) => {
                 const val = getFieldValue(row, colId);
                 return toSortableNumber(val);
               });
@@ -122,7 +143,10 @@ export function createClientDataSource<TData extends Row = Row>(
               directions.push(direction);
             }
 
-            sortedIndices = await workerManager.sortMultiColumn(columnValues, directions);
+            sortedIndices = await workerManager.sortMultiColumn(
+              columnValues,
+              directions,
+            );
           }
 
           // Reorder data using sorted indices
@@ -154,7 +178,7 @@ export function createClientDataSource<TData extends Row = Row>(
 // =============================================================================
 
 export type ServerFetchFunction<TData> = (
-  request: DataSourceRequest
+  request: DataSourceRequest,
 ) => Promise<DataSourceResponse<TData>>;
 
 /**
@@ -162,10 +186,12 @@ export type ServerFetchFunction<TData> = (
  * The fetch function receives sort/filter/pagination params to pass to the API.
  */
 export function createServerDataSource<TData extends Row = Row>(
-  fetchFn: ServerFetchFunction<TData>
+  fetchFn: ServerFetchFunction<TData>,
 ): DataSource<TData> {
   return {
-    async fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>> {
+    async fetch(
+      request: DataSourceRequest,
+    ): Promise<DataSourceResponse<TData>> {
       return fetchFn(request);
     },
   };
@@ -288,9 +314,11 @@ function defaultGetFieldValue<TData>(row: TData, field: string): CellValue {
 function applyFilters<TData>(
   data: TData[],
   filterModel: FilterModel,
-  getFieldValue: (row: TData, field: string) => CellValue
+  getFieldValue: (row: TData, field: string) => CellValue,
 ): TData[] {
-  const filterEntries = Object.entries(filterModel).filter(([, value]) => value !== "");
+  const filterEntries = Object.entries(filterModel).filter(
+    ([, value]) => value !== "",
+  );
 
   if (filterEntries.length === 0) {
     return data;
@@ -313,7 +341,7 @@ function applyFilters<TData>(
 function applySort<TData>(
   data: TData[],
   sortModel: SortModel[],
-  getFieldValue: (row: TData, field: string) => CellValue
+  getFieldValue: (row: TData, field: string) => CellValue,
 ): TData[] {
   return [...data].sort((a, b) => {
     for (const { colId, direction } of sortModel) {
@@ -360,8 +388,147 @@ function compareValues(a: CellValue, b: CellValue): number {
  * This provides backwards compatibility with the old `rowData` prop.
  */
 export function createDataSourceFromArray<TData extends Row = Row>(
-  data: TData[]
+  data: TData[],
 ): DataSource<TData> {
   return createClientDataSource(data);
 }
 
+// =============================================================================
+// Mutable Client Data Source
+// =============================================================================
+
+/** Callback for data change notifications */
+export type DataChangeListener = (result: TransactionResult) => void;
+
+/**
+ * Data source with mutation capabilities.
+ * Extends DataSource with add, remove, and update operations.
+ */
+export interface MutableDataSource<TData = Row> extends DataSource<TData> {
+  /** Add rows to the data source. Queued and processed after debounce. */
+  addRows(rows: TData[]): void;
+  /** Remove rows by ID. Queued and processed after debounce. */
+  removeRows(ids: RowId[]): void;
+  /** Update a cell value. Queued and processed after debounce. */
+  updateCell(id: RowId, field: string, value: CellValue): void;
+  /** Update multiple fields on a row. Queued and processed after debounce. */
+  updateRow(id: RowId, data: Partial<TData>): void;
+  /** Force immediate processing of queued transactions. */
+  flushTransactions(): Promise<void>;
+  /** Check if there are pending transactions. */
+  hasPendingTransactions(): boolean;
+  /** Get distinct values for a field (for filter UI). */
+  getDistinctValues(field: string): CellValue[];
+  /** Get a row by ID. */
+  getRowById(id: RowId): TData | undefined;
+  /** Get total row count. */
+  getTotalRowCount(): number;
+  /** Subscribe to data change notifications. Returns unsubscribe function. */
+  subscribe(listener: DataChangeListener): () => void;
+}
+
+export interface MutableClientDataSourceOptions<TData> {
+  /** Function to extract unique ID from row. Required. */
+  getRowId: (row: TData) => RowId;
+  /** Custom field accessor for nested properties. */
+  getFieldValue?: (row: TData, field: string) => CellValue;
+  /** Debounce time for transactions in ms. Default 50. Set to 0 for sync. */
+  debounceMs?: number;
+  /** Callback when transactions are processed. */
+  onTransactionProcessed?: (result: TransactionResult) => void;
+}
+
+/**
+ * Creates a mutable client-side data source with transaction support.
+ * Uses IndexedDataStore for efficient incremental operations.
+ */
+export function createMutableClientDataSource<TData extends Row = Row>(
+  data: TData[],
+  options: MutableClientDataSourceOptions<TData>,
+): MutableDataSource<TData> {
+  const {
+    getRowId,
+    getFieldValue,
+    debounceMs = 50,
+    onTransactionProcessed,
+  } = options;
+
+  // Create the indexed data store
+  const store = new IndexedDataStore(data, {
+    getRowId,
+    getFieldValue,
+  });
+
+  // Subscribers for data change notifications
+  const subscribers = new Set<DataChangeListener>();
+
+  // Create the transaction manager
+  const transactionManager = new TransactionManager<TData>({
+    debounceMs,
+    store,
+    onProcessed: (result) => {
+      // Notify external callback
+      onTransactionProcessed?.(result);
+      // Notify all subscribers
+      for (const listener of subscribers) {
+        listener(result);
+      }
+    },
+  });
+
+  return {
+    async fetch(
+      request: DataSourceRequest,
+    ): Promise<DataSourceResponse<TData>> {
+      // Flush any pending transactions before fetching
+      if (transactionManager.hasPending()) {
+        await transactionManager.flush();
+      }
+
+      return store.query(request);
+    },
+
+    addRows(rows: TData[]): void {
+      transactionManager.add(rows);
+    },
+
+    removeRows(ids: RowId[]): void {
+      transactionManager.remove(ids);
+    },
+
+    updateCell(id: RowId, field: string, value: CellValue): void {
+      transactionManager.updateCell(id, field, value);
+    },
+
+    updateRow(id: RowId, data: Partial<TData>): void {
+      transactionManager.updateRow(id, data);
+    },
+
+    async flushTransactions(): Promise<void> {
+      await transactionManager.flush();
+    },
+
+    hasPendingTransactions(): boolean {
+      return transactionManager.hasPending();
+    },
+
+    getDistinctValues(field: string): CellValue[] {
+      return store.getDistinctValues(field);
+    },
+
+    getRowById(id: RowId): TData | undefined {
+      return store.getRowById(id);
+    },
+
+    getTotalRowCount(): number {
+      return store.getTotalRowCount();
+    },
+
+    subscribe(listener: DataChangeListener): () => void {
+      subscribers.add(listener);
+      return () => {
+        subscribers.delete(listener);
+      };
+    },
+  };
+}

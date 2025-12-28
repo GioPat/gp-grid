@@ -16,7 +16,17 @@ export {
   createClientDataSource,
   createServerDataSource,
   createDataSourceFromArray,
+  createMutableClientDataSource,
 } from "./data-source";
+
+/** Transaction system */
+export { IndexedDataStore } from "./indexed-data-store";
+export { TransactionManager } from "./transaction-manager";
+
+/** Data source types */
+export type { MutableDataSource, MutableClientDataSourceOptions, DataChangeListener } from "./data-source";
+export type { IndexedDataStoreOptions } from "./indexed-data-store";
+export type { Transaction, TransactionResult, TransactionManagerOptions } from "./transaction-manager";
 
 /** Web Worker utilities for sorting */
 export {
@@ -30,6 +40,7 @@ export type {
   CellDataType,
   CellValue,
   Row,
+  RowId,
   SortDirection,
   SortModel,
   FilterModel,
@@ -74,7 +85,11 @@ export type {
   DataLoadingInstruction,
   DataLoadedInstruction,
   DataErrorInstruction,
-  
+  RowsAddedInstruction,
+  RowsRemovedInstruction,
+  RowsUpdatedInstruction,
+  TransactionProcessedInstruction,
+
   /** Options */
   GridCoreOptions,
   

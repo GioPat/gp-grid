@@ -10,6 +10,9 @@ import {
   type EditRendererParams,
 } from "gp-grid-react";
 import Select from "react-select";
+import { LiveInsertDemo } from "./LiveInsertDemo";
+
+type DemoPage = "main" | "live-insert";
 
 interface Person {
   id: number;
@@ -301,7 +304,7 @@ const generateRowData = (): Person[] =>
     tags: getRandomTags(),
   }));
 
-function App() {
+function MainDemo() {
   const [count, setCount] = useState(0);
 
   // Keep reference to raw data so we can access it later
@@ -337,15 +340,9 @@ function App() {
 
   return (
     <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>GP Grid Demo</h1>
+      <h2 style={{ marginBottom: "16px", color: "#f3f4f6" }}>
+        Large Dataset Demo (1.5M rows)
+      </h2>
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
           columns={columns}
@@ -383,6 +380,62 @@ function App() {
           Double-click on Tags column to edit with multi-select
         </p>
       </div>
+    </>
+  );
+}
+
+function App() {
+  const [currentPage, setCurrentPage] = useState<DemoPage>("main");
+
+  const tabStyle = (isActive: boolean) => ({
+    padding: "10px 20px",
+    border: "none",
+    borderBottom: isActive ? "3px solid #3b82f6" : "3px solid transparent",
+    backgroundColor: "transparent",
+    color: isActive ? "#3b82f6" : "#9ca3af",
+    cursor: "pointer",
+    fontWeight: isActive ? "600" : "400",
+    fontSize: "14px",
+    transition: "all 0.2s",
+  });
+
+  return (
+    <>
+      <div>
+        <a href="https://vite.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>GP Grid Demo</h1>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "4px",
+          marginBottom: "24px",
+          borderBottom: "1px solid #374151",
+        }}
+      >
+        <button
+          onClick={() => setCurrentPage("main")}
+          style={tabStyle(currentPage === "main")}
+        >
+          Large Dataset
+        </button>
+        <button
+          onClick={() => setCurrentPage("live-insert")}
+          style={tabStyle(currentPage === "live-insert")}
+        >
+          Live Insert
+        </button>
+      </div>
+
+      {currentPage === "main" && <MainDemo />}
+      {currentPage === "live-insert" && <LiveInsertDemo />}
+
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>

@@ -184,15 +184,15 @@ export class SortWorkerManager {
         resolve: (data: unknown) => {
           const response = data as {
             indices: Uint32Array;
-            collisionPairs: Uint32Array;
+            collisionRuns: Uint32Array;
           };
-          const { indices, collisionPairs } = response;
+          const { indices, collisionRuns } = response;
 
           // Handle collisions using localeCompare on original strings
-          if (collisionPairs.length > 0) {
+          if (collisionRuns.length > 0) {
             this.resolveCollisions(
               indices,
-              collisionPairs,
+              collisionRuns,
               originalStrings,
               direction,
             );
@@ -217,62 +217,51 @@ export class SortWorkerManager {
   }
 
   /**
-   * Resolve hash collisions by re-sorting collision groups using localeCompare.
+   * Resolve hash collisions by re-sorting collision runs using localeCompare.
+   * collisionRuns format: [start1, end1, start2, end2, ...] where each pair
+   * defines a run of indices in the sorted array with identical hashes.
    */
   private resolveCollisions(
     indices: Uint32Array,
-    collisionPairs: Uint32Array,
+    collisionRuns: Uint32Array,
     originalStrings: string[],
     direction: SortDirection,
   ): void {
-    // Build collision groups from pairs
-    // collisionPairs contains pairs: [a1, b1, a2, b2, ...]
-    // We need to find consecutive runs of equal-hash elements in the sorted indices
+    const mult = direction === "asc" ? 1 : -1;
 
-    // Create a set of indices that are involved in collisions
-    const collisionIndices = new Set<number>();
-    for (let i = 0; i < collisionPairs.length; i++) {
-      collisionIndices.add(collisionPairs[i]!);
-    }
+    // Process each collision run
+    for (let r = 0; r < collisionRuns.length; r += 2) {
+      const start = collisionRuns[r]!;
+      const end = collisionRuns[r + 1]!;
 
-    if (collisionIndices.size === 0) return;
+      // Extract the slice of indices for this run
+      const slice = Array.from(indices.slice(start, end));
 
-    // Find collision groups in the sorted indices array
-    const groups: { start: number; end: number }[] = [];
-    let groupStart = -1;
-
-    for (let i = 0; i < indices.length; i++) {
-      const idx = indices[i]!;
-      if (collisionIndices.has(idx)) {
-        if (groupStart === -1) {
-          groupStart = i;
-        }
-      } else {
-        if (groupStart !== -1) {
-          groups.push({ start: groupStart, end: i });
-          groupStart = -1;
+      // Optimization: Check if all strings in this run are identical
+      // This is common for low-cardinality columns (e.g., status, category)
+      // If all strings are the same, skip sorting - order doesn't matter
+      const firstString = originalStrings[slice[0]!]!;
+      let allIdentical = true;
+      for (let i = 1; i < slice.length; i++) {
+        if (originalStrings[slice[i]!]! !== firstString) {
+          allIdentical = false;
+          break;
         }
       }
-    }
-    // Handle group at the end
-    if (groupStart !== -1) {
-      groups.push({ start: groupStart, end: indices.length });
-    }
 
-    // Sort each collision group using localeCompare
-    const mult = direction === "asc" ? 1 : -1;
-    for (const group of groups) {
-      // Extract the slice of indices for this group
-      const slice = Array.from(indices.slice(group.start, group.end));
+      if (allIdentical) {
+        // Skip sorting - all strings are identical, any order is correct
+        continue;
+      }
 
-      // Sort by original strings
+      // Sort by original strings using localeCompare
       slice.sort((a, b) => {
         return mult * originalStrings[a]!.localeCompare(originalStrings[b]!);
       });
 
-      // Write back
+      // Write back to indices array
       for (let i = 0; i < slice.length; i++) {
-        indices[group.start + i] = slice[i]!;
+        indices[start + i] = slice[i]!;
       }
     }
   }
@@ -322,7 +311,7 @@ export class SortWorkerManager {
       } else if (e.data.type === "sortedStringHashes") {
         pending.resolve({
           indices: e.data.indices,
-          collisionPairs: e.data.collisionPairs,
+          collisionRuns: e.data.collisionRuns,
         });
       } else if (e.data.type === "error") {
         pending.reject(new Error((e.data as { error: string }).error));

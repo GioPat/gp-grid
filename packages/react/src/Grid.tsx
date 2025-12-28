@@ -212,6 +212,16 @@ function applyInstruction(
     case "DATA_ERROR":
       return { isLoading: false, error: instruction.error };
 
+    // Transaction instructions
+    case "ROWS_ADDED":
+    case "ROWS_REMOVED":
+      return { totalRows: instruction.totalRows };
+
+    case "ROWS_UPDATED":
+    case "TRANSACTION_PROCESSED":
+      // These don't change state directly - slot updates come via ASSIGN_SLOT
+      return null;
+
     default:
       return null;
   }
@@ -377,6 +387,18 @@ export function Grid<TData extends Row = Row>(
       coreRef.current = null;
     };
   }, [columns, dataSource, rowHeight, totalHeaderHeight, overscan]);
+
+  // Subscribe to data source changes (for MutableDataSource)
+  useEffect(() => {
+    // Check if dataSource has a subscribe method (MutableDataSource)
+    const mutableDataSource = dataSource as { subscribe?: (listener: () => void) => () => void };
+    if (mutableDataSource.subscribe) {
+      const unsubscribe = mutableDataSource.subscribe(() => {
+        coreRef.current?.refresh();
+      });
+      return unsubscribe;
+    }
+  }, [dataSource]);
 
   // Handle scroll
   const handleScroll = useCallback(() => {
@@ -574,10 +596,10 @@ export function Grid<TData extends Row = Row>(
     } else if (row > visibleEnd) {
       // Row is below viewport - scroll to put it at BOTTOM
       // We want the row to be the last visible row
-      // visibleEnd - visibleStart = number of fully visible rows
-      const visibleRows = Math.max(1, visibleEnd - visibleStart);
-      // The first row that makes 'row' the last visible is (row - visibleRows)
-      const targetFirstRow = Math.max(0, row - visibleRows);
+      // visibleEnd - visibleStart + 1 = number of fully visible rows (inclusive range)
+      const visibleRows = Math.max(1, visibleEnd - visibleStart + 1);
+      // To have row N as the last visible, first row should be N - visibleRows + 1
+      const targetFirstRow = Math.max(0, row - visibleRows + 1);
       container.scrollTop = core.getScrollTopForRow(targetFirstRow);
     }
 
@@ -723,12 +745,13 @@ export function Grid<TData extends Row = Row>(
 
       // Calculate mouse position relative to grid content
       const mouseX = e.clientX - rect.left + scrollLeft;
-      const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
+      // Viewport-relative Y (physical pixels below header, NOT including scroll)
+      const viewportY = e.clientY - rect.top - totalHeaderHeight;
 
-      // Find the row under the mouse (use core method to handle scaling)
+      // Find the row under the mouse (core method handles scroll and scaling)
       const targetRow = Math.max(
         0,
-        core.getRowIndexAtDisplayY(mouseY, scrollTop),
+        core.getRowIndexAtDisplayY(viewportY, scrollTop),
       );
 
       // Find column by checking column positions
@@ -837,13 +860,14 @@ export function Grid<TData extends Row = Row>(
 
       // Calculate mouse position relative to grid content
       const mouseX = e.clientX - rect.left + scrollLeft;
-      const mouseY = e.clientY - rect.top + scrollTop - totalHeaderHeight;
+      // Viewport-relative Y (physical pixels below header, NOT including scroll)
+      const viewportY = e.clientY - rect.top - totalHeaderHeight;
 
-      // Find the row under the mouse (use core method to handle scaling)
+      // Find the row under the mouse (core method handles scroll and scaling)
       const targetRow = Math.max(
         0,
         Math.min(
-          core.getRowIndexAtDisplayY(mouseY, scrollTop),
+          core.getRowIndexAtDisplayY(viewportY, scrollTop),
           core.getRowCount() - 1,
         ),
       );

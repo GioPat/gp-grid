@@ -44,4 +44,8 @@ export {
   createClientDataSource,
   createServerDataSource,
   createDataSourceFromArray,
+  createMutableClientDataSource,
 } from "gp-grid-core";
+
+// Re-export MutableDataSource type
+export type { MutableDataSource } from "gp-grid-core";
