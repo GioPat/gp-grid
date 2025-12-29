@@ -25,8 +25,11 @@ import type {
   CellRange,
   CellValue,
   SortDirection,
+  ColumnFilterModel,
+  OpenFilterPopupInstruction,
 } from "gp-grid-core";
 import { injectStyles } from "./styles";
+import { FilterPopup } from "./components";
 
 // =============================================================================
 // Types
@@ -55,10 +58,8 @@ export interface GridProps<TData extends Row = Row> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
-  /** Show filter row below headers: Default to false */
-  showFilters?: boolean;
-  /** Debounce time for filter input (ms): Default to 300 */
-  filterDebounce?: number;
+  /** Enable/disable sorting globally. Default: true */
+  sortingEnabled?: boolean;
   /** Enable dark mode styling: Default to false */
   darkMode?: boolean;
   /** Wheel scroll dampening factor when virtual scrolling is active (0-1): Default 0.1 */
@@ -90,6 +91,24 @@ interface SlotData {
   translateY: number;
 }
 
+interface HeaderData {
+  column: ColumnDefinition;
+  sortDirection?: SortDirection;
+  sortIndex?: number;
+  sortable: boolean;
+  filterable: boolean;
+  hasFilter: boolean;
+}
+
+interface FilterPopupState {
+  isOpen: boolean;
+  colIndex: number;
+  column: ColumnDefinition | null;
+  anchorRect: { top: number; left: number; width: number; height: number } | null;
+  distinctValues: CellValue[];
+  currentFilter?: ColumnFilterModel;
+}
+
 interface GridState {
   slots: Map<string, SlotData>;
   activeCell: CellPosition | null;
@@ -97,14 +116,8 @@ interface GridState {
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
   contentWidth: number;
   contentHeight: number;
-  headers: Map<
-    number,
-    {
-      column: ColumnDefinition;
-      sortDirection?: SortDirection;
-      sortIndex?: number;
-    }
-  >;
+  headers: Map<number, HeaderData>;
+  filterPopup: FilterPopupState | null;
   isLoading: boolean;
   error: string | null;
   totalRows: number;
@@ -125,14 +138,7 @@ type GridAction =
 function applyInstruction(
   instruction: GridInstruction,
   slots: Map<string, SlotData>,
-  headers: Map<
-    number,
-    {
-      column: ColumnDefinition;
-      sortDirection?: SortDirection;
-      sortIndex?: number;
-    }
-  >,
+  headers: Map<number, HeaderData>,
 ): Partial<GridState> | null {
   switch (instruction.type) {
     case "CREATE_SLOT":
@@ -200,8 +206,26 @@ function applyInstruction(
         column: instruction.column,
         sortDirection: instruction.sortDirection,
         sortIndex: instruction.sortIndex,
+        sortable: instruction.sortable,
+        filterable: instruction.filterable,
+        hasFilter: instruction.hasFilter,
       });
       return null;
+
+    case "OPEN_FILTER_POPUP":
+      return {
+        filterPopup: {
+          isOpen: true,
+          colIndex: instruction.colIndex,
+          column: instruction.column,
+          anchorRect: instruction.anchorRect,
+          distinctValues: instruction.distinctValues,
+          currentFilter: instruction.currentFilter,
+        },
+      };
+
+    case "CLOSE_FILTER_POPUP":
+      return { filterPopup: null };
 
     case "DATA_LOADING":
       return { isLoading: true, error: null };
@@ -270,6 +294,7 @@ function createInitialState(): GridState {
     contentWidth: 0,
     contentHeight: 0,
     headers: new Map(),
+    filterPopup: null,
     isLoading: false,
     error: null,
     totalRows: 0,
@@ -298,8 +323,7 @@ export function Grid<TData extends Row = Row>(
     rowHeight,
     headerHeight = rowHeight,
     overscan = 3,
-    showFilters = false,
-    filterDebounce = 300,
+    sortingEnabled = true,
     darkMode = false,
     wheelDampening = 0.1,
     cellRenderers = {},
@@ -313,10 +337,6 @@ export function Grid<TData extends Row = Row>(
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
   const [state, dispatch] = useReducer(gridReducer, null, createInitialState);
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const filterTimeoutRef = useRef<
-    Record<string, ReturnType<typeof setTimeout>>
-  >({});
   const [isDraggingFill, setIsDraggingFill] = useState(false);
   const [fillTarget, setFillTarget] = useState<{
     row: number;
@@ -334,8 +354,7 @@ export function Grid<TData extends Row = Row>(
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   // Computed heights
-  const filterRowHeight = showFilters ? 40 : 0;
-  const totalHeaderHeight = headerHeight + filterRowHeight;
+  const totalHeaderHeight = headerHeight;
 
   // Create data source from rowData if not provided
   const dataSource = useMemo(() => {
@@ -370,6 +389,7 @@ export function Grid<TData extends Row = Row>(
       rowHeight,
       headerHeight: totalHeaderHeight,
       overscan,
+      sortingEnabled,
     });
 
     coreRef.current = core;
@@ -453,32 +473,35 @@ export function Grid<TData extends Row = Row>(
     return () => resizeObserver.disconnect();
   }, [handleScroll]);
 
-  // Handle filter change with debounce
-  const handleFilterChange = useCallback(
-    (colId: string, value: string) => {
-      setFilterValues((prev) => ({ ...prev, [colId]: value }));
-
-      // Clear existing timeout
-      if (filterTimeoutRef.current[colId]) {
-        clearTimeout(filterTimeoutRef.current[colId]);
+  // Handle filter apply (from popup)
+  const handleFilterApply = useCallback(
+    (colId: string, filter: ColumnFilterModel | null) => {
+      const core = coreRef.current;
+      if (core) {
+        core.setFilter(colId, filter);
       }
-
-      // Debounce the actual filter application
-      filterTimeoutRef.current[colId] = setTimeout(() => {
-        const core = coreRef.current;
-        if (core) {
-          core.setFilter(colId, value);
-        }
-      }, filterDebounce);
     },
-    [filterDebounce],
+    [],
   );
+
+  // Handle filter popup close
+  const handleFilterPopupClose = useCallback(() => {
+    const core = coreRef.current;
+    if (core) {
+      core.closeFilterPopup();
+    }
+  }, []);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const core = coreRef.current;
       if (!core) return;
+
+      // Don't handle keyboard events when filter popup is open
+      if (state.filterPopup?.isOpen) {
+        return;
+      }
 
       // Don't handle keyboard events when editing
       if (
@@ -573,7 +596,7 @@ export function Grid<TData extends Row = Row>(
           break;
       }
     },
-    [state.activeCell, state.editingCell],
+    [state.activeCell, state.editingCell, state.filterPopup],
   );
 
   // Scroll active cell into view when navigating with keyboard
@@ -1168,6 +1191,9 @@ export function Grid<TData extends Row = Row>(
       colIndex: number,
       sortDirection?: SortDirection,
       sortIndex?: number,
+      sortable: boolean = true,
+      filterable: boolean = true,
+      hasFilter: boolean = false,
     ): React.ReactNode => {
       const core = coreRef.current;
       const params: HeaderRendererParams = {
@@ -1175,13 +1201,32 @@ export function Grid<TData extends Row = Row>(
         colIndex,
         sortDirection,
         sortIndex,
+        sortable,
+        filterable,
+        hasFilter,
         onSort: (direction, addToExisting) => {
-          if (core) {
+          if (core && sortable) {
             core.setSort(
               column.colId ?? column.field,
               direction,
               addToExisting,
             );
+          }
+        },
+        onFilterClick: () => {
+          if (core && filterable) {
+            const headerCell = containerRef.current?.querySelector(
+              `[data-col-index="${colIndex}"]`,
+            ) as HTMLElement | null;
+            if (headerCell) {
+              const rect = headerCell.getBoundingClientRect();
+              core.openFilterPopup(colIndex, {
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height,
+              });
+            }
           }
         },
       };
@@ -1199,20 +1244,54 @@ export function Grid<TData extends Row = Row>(
         return headerRenderer(params);
       }
 
-      // Default header
+      // Default header with stacked sort arrows and filter icon
       return (
         <>
           <span className="gp-grid-header-text">
             {column.headerName ?? column.field}
           </span>
-          {sortDirection && (
-            <span className="gp-grid-sort-indicator">
-              {sortDirection === "asc" ? "▲" : "▼"}
-              {sortIndex !== undefined && sortIndex > 0 && (
-                <span className="gp-grid-sort-index">{sortIndex}</span>
-              )}
-            </span>
-          )}
+          <span className="gp-grid-header-icons">
+            {/* Stacked sort arrows - always show when sortable */}
+            {sortable && (
+              <span className="gp-grid-sort-arrows">
+                <span className="gp-grid-sort-arrows-stack">
+                  <svg
+                    className={`gp-grid-sort-arrow-up${sortDirection === "asc" ? " active" : ""}`}
+                    width="8"
+                    height="6"
+                    viewBox="0 0 8 6"
+                  >
+                    <path d="M4 0L8 6H0L4 0Z" fill="currentColor" />
+                  </svg>
+                  <svg
+                    className={`gp-grid-sort-arrow-down${sortDirection === "desc" ? " active" : ""}`}
+                    width="8"
+                    height="6"
+                    viewBox="0 0 8 6"
+                  >
+                    <path d="M4 6L0 0H8L4 6Z" fill="currentColor" />
+                  </svg>
+                </span>
+                {sortIndex !== undefined && sortIndex > 0 && (
+                  <span className="gp-grid-sort-index">{sortIndex}</span>
+                )}
+              </span>
+            )}
+            {/* Filter icon - MUI FilterList style */}
+            {filterable && (
+              <span
+                className={`gp-grid-filter-icon${hasFilter ? " active" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  params.onFilterClick();
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
+                </svg>
+              </span>
+            )}
+          </span>
         </>
       );
     },
@@ -1328,6 +1407,7 @@ export function Grid<TData extends Row = Row>(
               <div
                 key={column.colId ?? column.field}
                 className="gp-grid-header-cell"
+                data-col-index={colIndex}
                 style={{
                   position: "absolute",
                   left: `${columnPositions[colIndex]}px`,
@@ -1343,53 +1423,14 @@ export function Grid<TData extends Row = Row>(
                   colIndex,
                   headerInfo?.sortDirection,
                   headerInfo?.sortIndex,
+                  headerInfo?.sortable ?? true,
+                  headerInfo?.filterable ?? true,
+                  headerInfo?.hasFilter ?? false,
                 )}
               </div>
             );
           })}
         </div>
-
-        {/* Filter Row */}
-        {showFilters && (
-          <div
-            className="gp-grid-filter-row"
-            style={{
-              position: "sticky",
-              top: headerHeight,
-              left: 0,
-              height: filterRowHeight,
-              width: Math.max(state.contentWidth, totalWidth),
-              minWidth: "100%",
-              zIndex: 99,
-            }}
-          >
-            {columns.map((column, colIndex) => {
-              const colId = column.colId ?? column.field;
-              return (
-                <div
-                  key={`filter-${colId}`}
-                  className="gp-grid-filter-cell"
-                  style={{
-                    position: "absolute",
-                    left: `${columnPositions[colIndex]}px`,
-                    top: 0,
-                    width: `${column.width}px`,
-                    height: `${filterRowHeight}px`,
-                  }}
-                >
-                  <input
-                    className="gp-grid-filter-input"
-                    type="text"
-                    placeholder={`Filter ${column.headerName ?? column.field}...`}
-                    value={filterValues[colId] ?? ""}
-                    onChange={(e) => handleFilterChange(colId, e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* Row slots */}
         {slotsArray.map((slot) => {
@@ -1497,6 +1538,19 @@ export function Grid<TData extends Row = Row>(
           <div className="gp-grid-empty">No data to display</div>
         )}
       </div>
+
+      {/* Filter Popup */}
+      {state.filterPopup?.isOpen && state.filterPopup.column && state.filterPopup.anchorRect && (
+        <FilterPopup
+          column={state.filterPopup.column}
+          colIndex={state.filterPopup.colIndex}
+          anchorRect={state.filterPopup.anchorRect}
+          distinctValues={state.filterPopup.distinctValues}
+          currentFilter={state.filterPopup.currentFilter}
+          onApply={handleFilterApply}
+          onClose={handleFilterPopupClose}
+        />
+      )}
     </div>
   );
 }

@@ -31,8 +31,89 @@ export type SortDirection = "asc" | "desc";
 /** Sort model type */
 export type SortModel = { colId: string; direction: SortDirection };
 
-/** Filter model type */
-export type FilterModel = Record<string, string>;
+// =============================================================================
+// Filter Types
+// =============================================================================
+
+/** Text filter operators */
+export type TextFilterOperator =
+  | "contains"
+  | "notContains"
+  | "equals"
+  | "notEquals"
+  | "startsWith"
+  | "endsWith"
+  | "blank"
+  | "notBlank";
+
+/** Number filter operators (symbols for display) */
+export type NumberFilterOperator =
+  | "="
+  | "!="
+  | ">"
+  | "<"
+  | ">="
+  | "<="
+  | "between"
+  | "blank"
+  | "notBlank";
+
+/** Date filter operators */
+export type DateFilterOperator =
+  | "="
+  | "!="
+  | ">"
+  | "<"
+  | "between"
+  | "blank"
+  | "notBlank";
+
+/** Filter combination mode */
+export type FilterCombination = "and" | "or";
+
+/** Text filter condition */
+export interface TextFilterCondition {
+  type: "text";
+  operator: TextFilterOperator;
+  value?: string;
+  /** Selected distinct values for checkbox-style filtering */
+  selectedValues?: Set<string>;
+  /** Include blank values */
+  includeBlank?: boolean;
+}
+
+/** Number filter condition */
+export interface NumberFilterCondition {
+  type: "number";
+  operator: NumberFilterOperator;
+  value?: number;
+  /** Second value for "between" operator */
+  valueTo?: number;
+}
+
+/** Date filter condition */
+export interface DateFilterCondition {
+  type: "date";
+  operator: DateFilterOperator;
+  value?: Date | string;
+  /** Second value for "between" operator */
+  valueTo?: Date | string;
+}
+
+/** Union of filter condition types */
+export type FilterCondition =
+  | TextFilterCondition
+  | NumberFilterCondition
+  | DateFilterCondition;
+
+/** Column filter model with multiple conditions */
+export interface ColumnFilterModel {
+  conditions: FilterCondition[];
+  combination: FilterCombination;
+}
+
+/** Filter model type - maps column ID to filter */
+export type FilterModel = Record<string, ColumnFilterModel>;
 
 // =============================================================================
 // Column Definition
@@ -45,6 +126,10 @@ export interface ColumnDefinition {
   width: number;
   headerName?: string;
   editable?: boolean;
+  /** Whether column is sortable. Default: true when sortingEnabled */
+  sortable?: boolean;
+  /** Whether column is filterable. Default: true */
+  filterable?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string;
   editRenderer?: string;
@@ -238,6 +323,27 @@ export interface UpdateHeaderInstruction {
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
+  /** Whether column is sortable */
+  sortable: boolean;
+  /** Whether column is filterable */
+  filterable: boolean;
+  /** Whether column has an active filter */
+  hasFilter: boolean;
+}
+
+/** Open filter popup instruction */
+export interface OpenFilterPopupInstruction {
+  type: "OPEN_FILTER_POPUP";
+  colIndex: number;
+  column: ColumnDefinition;
+  anchorRect: { top: number; left: number; width: number; height: number };
+  distinctValues: CellValue[];
+  currentFilter?: ColumnFilterModel;
+}
+
+/** Close filter popup instruction */
+export interface CloseFilterPopupInstruction {
+  type: "CLOSE_FILTER_POPUP";
 }
 
 /** Fill handle instructions */
@@ -330,6 +436,9 @@ export type GridInstruction =
   /** Layout */
   | SetContentSizeInstruction
   | UpdateHeaderInstruction
+  /** Filter popup */
+  | OpenFilterPopupInstruction
+  | CloseFilterPopupInstruction
   /** Fill handle */
   | StartFillInstruction
   | UpdateFillInstruction
@@ -361,6 +470,8 @@ export interface GridCoreOptions<TData = Row> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
+  /** Enable/disable sorting globally. Default: true */
+  sortingEnabled?: boolean;
   /** Debounce time for transactions in ms. Default 50. Set to 0 for sync. */
   transactionDebounceMs?: number;
   /** Function to extract unique ID from row. Required for mutations. */
@@ -413,8 +524,16 @@ export interface HeaderRendererParams {
   sortDirection?: SortDirection;
   /** Sort index */
   sortIndex?: number;
+  /** Whether column is sortable */
+  sortable: boolean;
+  /** Whether column is filterable */
+  filterable: boolean;
+  /** Whether column has an active filter */
+  hasFilter: boolean;
   /** On sort */
   onSort: (direction: SortDirection | null, addToExisting: boolean) => void;
+  /** On filter click */
+  onFilterClick: () => void;
 }
 
 // =============================================================================

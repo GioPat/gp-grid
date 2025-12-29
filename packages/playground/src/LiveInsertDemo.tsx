@@ -14,7 +14,16 @@ interface StockTick {
   timestamp: string;
 }
 
-const symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "META", "TSLA", "NVDA", "AMD"];
+const symbols = [
+  "AAPL",
+  "GOOGL",
+  "MSFT",
+  "AMZN",
+  "META",
+  "TSLA",
+  "NVDA",
+  "AMD",
+];
 
 function getRandomPrice(): number {
   return Math.round((Math.random() * 500 + 50) * 100) / 100;
@@ -62,13 +71,16 @@ export function LiveInsertDemo() {
   const streamingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const dataSource = useMemo(() => {
-    const ds = createMutableClientDataSource<StockTick>(generateInitialData(10), {
-      getRowId: (row) => row.id,
-      debounceMs: 50,
-      onTransactionProcessed: (result) => {
-        setRowCount((prev) => prev + result.added - result.removed);
+    const ds = createMutableClientDataSource<StockTick>(
+      generateInitialData(10),
+      {
+        getRowId: (row) => row.id,
+        debounceMs: 50,
+        onTransactionProcessed: (result) => {
+          setRowCount((prev) => prev + result.added - result.removed);
+        },
       },
-    });
+    );
     return ds;
   }, []);
 
@@ -118,11 +130,19 @@ export function LiveInsertDemo() {
         Live Data Insert Demo
       </h2>
       <p style={{ color: "#9ca3af", marginBottom: "20px" }}>
-        Demonstrates real-time data mutations using <code>createMutableClientDataSource</code>.
-        Transactions are debounced (50ms) and processed efficiently.
+        Demonstrates real-time data mutations using{" "}
+        <code>createMutableClientDataSource</code>.
       </p>
 
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          marginBottom: "16px",
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <button
           onClick={handleAddRow}
           style={{
@@ -156,7 +176,9 @@ export function LiveInsertDemo() {
           <input
             type="number"
             value={batchSize}
-            onChange={(e) => setBatchSize(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) =>
+              setBatchSize(Math.max(1, parseInt(e.target.value) || 1))
+            }
             style={{
               width: "60px",
               padding: "6px",
@@ -187,7 +209,9 @@ export function LiveInsertDemo() {
           <input
             type="number"
             value={streamInterval}
-            onChange={(e) => setStreamInterval(Math.max(10, parseInt(e.target.value) || 100))}
+            onChange={(e) =>
+              setStreamInterval(Math.max(10, parseInt(e.target.value) || 100))
+            }
             disabled={isStreaming}
             style={{
               width: "70px",
@@ -245,7 +269,9 @@ export function LiveInsertDemo() {
       >
         <div>
           <span style={{ color: "#9ca3af" }}>Total Rows: </span>
-          <span style={{ color: "#10b981", fontWeight: "bold", fontSize: "18px" }}>
+          <span
+            style={{ color: "#10b981", fontWeight: "bold", fontSize: "18px" }}
+          >
             {rowCount.toLocaleString()}
           </span>
         </div>

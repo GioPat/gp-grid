@@ -6,6 +6,7 @@ import type {
   RowId,
   SortModel,
   FilterModel,
+  ColumnFilterModel,
   DataSourceRequest,
   DataSourceResponse,
 } from "./types";
@@ -607,7 +608,7 @@ export class IndexedDataStore<TData extends Row = Row> {
     this.filteredIndices.clear();
 
     const filterEntries = Object.entries(this.filterModel).filter(
-      ([, value]) => value !== ""
+      ([, value]) => value != null
     );
 
     if (filterEntries.length === 0) {
@@ -627,19 +628,16 @@ export class IndexedDataStore<TData extends Row = Row> {
    */
   private rowPassesFilter(row: TData): boolean {
     const filterEntries = Object.entries(this.filterModel).filter(
-      ([, value]) => value !== ""
+      ([, value]) => value != null
     );
 
     if (filterEntries.length === 0) {
       return true;
     }
 
-    for (const [field, filterValue] of filterEntries) {
+    for (const [field, columnFilter] of filterEntries) {
       const cellValue = this.options.getFieldValue(row, field);
-      const cellStr = String(cellValue ?? "").toLowerCase();
-      const filterStr = filterValue.toLowerCase();
-
-      if (!cellStr.includes(filterStr)) {
+      if (!this.evaluateColumnFilter(cellValue, columnFilter)) {
         return false;
       }
     }
@@ -648,11 +646,167 @@ export class IndexedDataStore<TData extends Row = Row> {
   }
 
   /**
+   * Evaluate a column filter against a cell value.
+   */
+  private evaluateColumnFilter(cellValue: CellValue, filter: ColumnFilterModel): boolean {
+    if (!filter.conditions.length) return true;
+
+    const results = filter.conditions.map((condition) => {
+      switch (condition.type) {
+        case "text":
+          return this.evaluateTextCondition(cellValue, condition);
+        case "number":
+          return this.evaluateNumberCondition(cellValue, condition);
+        case "date":
+          return this.evaluateDateCondition(cellValue, condition);
+        default:
+          return true;
+      }
+    });
+
+    if (filter.combination === "or") {
+      return results.some((r) => r);
+    }
+    return results.every((r) => r);
+  }
+
+  /**
+   * Evaluate text condition.
+   */
+  private evaluateTextCondition(
+    cellValue: CellValue,
+    condition: { operator: string; value?: string; selectedValues?: Set<string>; includeBlank?: boolean }
+  ): boolean {
+    const isBlank = cellValue == null || cellValue === "";
+
+    if (condition.selectedValues && condition.selectedValues.size > 0) {
+      const cellStr = String(cellValue ?? "");
+      const includesBlank = condition.includeBlank === true && isBlank;
+      return condition.selectedValues.has(cellStr) || includesBlank;
+    }
+
+    const strValue = String(cellValue ?? "").toLowerCase();
+    const filterValue = String(condition.value ?? "").toLowerCase();
+
+    switch (condition.operator) {
+      case "contains":
+        return strValue.includes(filterValue);
+      case "notContains":
+        return !strValue.includes(filterValue);
+      case "equals":
+        return strValue === filterValue;
+      case "notEquals":
+        return strValue !== filterValue;
+      case "startsWith":
+        return strValue.startsWith(filterValue);
+      case "endsWith":
+        return strValue.endsWith(filterValue);
+      case "blank":
+        return isBlank;
+      case "notBlank":
+        return !isBlank;
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Evaluate number condition.
+   */
+  private evaluateNumberCondition(
+    cellValue: CellValue,
+    condition: { operator: string; value?: number; valueTo?: number }
+  ): boolean {
+    const isBlank = cellValue == null || cellValue === "";
+    if (condition.operator === "blank") return isBlank;
+    if (condition.operator === "notBlank") return !isBlank;
+    if (isBlank) return false;
+
+    const numValue = typeof cellValue === "number" ? cellValue : parseFloat(String(cellValue));
+    if (isNaN(numValue)) return false;
+
+    const filterValue = condition.value ?? 0;
+    const filterTo = condition.valueTo ?? 0;
+
+    switch (condition.operator) {
+      case "=":
+        return numValue === filterValue;
+      case "!=":
+        return numValue !== filterValue;
+      case ">":
+        return numValue > filterValue;
+      case "<":
+        return numValue < filterValue;
+      case ">=":
+        return numValue >= filterValue;
+      case "<=":
+        return numValue <= filterValue;
+      case "between":
+        return numValue >= filterValue && numValue <= filterTo;
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Evaluate date condition.
+   */
+  private evaluateDateCondition(
+    cellValue: CellValue,
+    condition: { operator: string; value?: Date | string; valueTo?: Date | string }
+  ): boolean {
+    const isBlank = cellValue == null || cellValue === "";
+    if (condition.operator === "blank") return isBlank;
+    if (condition.operator === "notBlank") return !isBlank;
+    if (isBlank) return false;
+
+    const cellDate = cellValue instanceof Date ? cellValue : new Date(String(cellValue));
+    if (isNaN(cellDate.getTime())) return false;
+
+    const filterDate = condition.value
+      ? condition.value instanceof Date
+        ? condition.value
+        : new Date(condition.value)
+      : new Date();
+    const filterDateTo = condition.valueTo
+      ? condition.valueTo instanceof Date
+        ? condition.valueTo
+        : new Date(condition.valueTo)
+      : new Date();
+
+    switch (condition.operator) {
+      case "=":
+        return this.isSameDay(cellDate, filterDate);
+      case "!=":
+        return !this.isSameDay(cellDate, filterDate);
+      case ">":
+        return cellDate > filterDate;
+      case "<":
+        return cellDate < filterDate;
+      case "between":
+        return cellDate >= filterDate && cellDate <= filterDateTo;
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Check if two dates are on the same day.
+   */
+  private isSameDay(a: Date, b: Date): boolean {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
+  }
+
+  /**
    * Get visible indices (filtered + sorted).
    */
   private getVisibleIndices(): number[] {
     const hasFilters =
-      Object.entries(this.filterModel).filter(([, v]) => v !== "").length > 0;
+      Object.entries(this.filterModel).filter(([, v]) => v != null).length > 0;
 
     if (!hasFilters) {
       return this.sortedIndices;

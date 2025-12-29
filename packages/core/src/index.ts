@@ -43,8 +43,19 @@ export type {
   RowId,
   SortDirection,
   SortModel,
+
+  /** Filter types */
   FilterModel,
-  
+  ColumnFilterModel,
+  FilterCondition,
+  TextFilterCondition,
+  NumberFilterCondition,
+  DateFilterCondition,
+  TextFilterOperator,
+  NumberFilterOperator,
+  DateFilterOperator,
+  FilterCombination,
+
   /** Column definition */
   ColumnDefinition,
 
@@ -82,6 +93,8 @@ export type {
   UpdateFillInstruction,
   CommitFillInstruction,
   CancelFillInstruction,
+  OpenFilterPopupInstruction,
+  CloseFilterPopupInstruction,
   DataLoadingInstruction,
   DataLoadedInstruction,
   DataErrorInstruction,

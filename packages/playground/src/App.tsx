@@ -252,7 +252,7 @@ const columns: ColumnDefinition[] = [
     cellRenderer: "bold", // Reference renderer by key
   },
   { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
-  { field: "age", cellDataType: "number", width: 80, headerName: "Age" },
+  { field: "age", cellDataType: "number", width: 110, headerName: "Age" },
   {
     field: "email",
     cellDataType: "text",

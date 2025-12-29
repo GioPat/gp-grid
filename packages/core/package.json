@@ -39,7 +39,8 @@
   ],
   "scripts": {
     "dev": "tsdown --watch",
-    "build": "tsdown",
+    "build": "tsdown --clean --sourcemap",
+    "build:production": "tsdown --clean --minify --treeshake --dts --tsconfig tsconfig.build.json",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "bench": "vitest bench"

@@ -13,6 +13,7 @@ import type {
   SortModel,
   SortDirection,
   FilterModel,
+  ColumnFilterModel,
   SlotState,
   EditState,
 } from "./types";
@@ -50,6 +51,7 @@ export class GridCore<TData extends Row = Row> {
   private rowHeight: number;
   private headerHeight: number;
   private overscan: number;
+  private sortingEnabled: boolean;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -100,6 +102,7 @@ export class GridCore<TData extends Row = Row> {
     this.rowHeight = options.rowHeight;
     this.headerHeight = options.headerHeight ?? options.rowHeight;
     this.overscan = options.overscan ?? 3;
+    this.sortingEnabled = options.sortingEnabled ?? true;
 
     this.computeColumnPositions();
 
@@ -461,7 +464,12 @@ export class GridCore<TData extends Row = Row> {
     direction: SortDirection | null,
     addToExisting: boolean = false
   ): Promise<void> {
-    // console.log("[GP-Grid Core] setSort:", { colId, direction, addToExisting });
+    // Check if sorting is enabled globally and for this column
+    if (!this.sortingEnabled) return;
+
+    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
+    if (column?.sortable === false) return;
+
     const existingIndex = this.sortModel.findIndex((s) => s.colId === colId);
 
     if (!addToExisting) {
@@ -486,17 +494,89 @@ export class GridCore<TData extends Row = Row> {
     // console.log("[GP-Grid Core] setSort - complete");
   }
 
-  async setFilter(colId: string, value: string): Promise<void> {
-    if (value === "") {
+  async setFilter(colId: string, filter: ColumnFilterModel | null): Promise<void> {
+    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
+    if (column?.filterable === false) return;
+
+    if (filter === null || filter.conditions.length === 0) {
       delete this.filterModel[colId];
     } else {
-      this.filterModel[colId] = value;
+      this.filterModel[colId] = filter;
     }
 
     await this.fetchData();
     // Force refresh all slots since filtered data changed
     this.refreshAllSlots();
     this.emitContentSize();
+    this.emitHeaders();
+  }
+
+  /**
+   * Check if a column has an active filter
+   */
+  hasActiveFilter(colId: string): boolean {
+    const filter = this.filterModel[colId];
+    if (!filter) return false;
+    return filter.conditions.length > 0;
+  }
+
+  /**
+   * Check if a column is sortable
+   */
+  isColumnSortable(colIndex: number): boolean {
+    if (!this.sortingEnabled) return false;
+    const column = this.columns[colIndex];
+    return column?.sortable !== false;
+  }
+
+  /**
+   * Check if a column is filterable
+   */
+  isColumnFilterable(colIndex: number): boolean {
+    const column = this.columns[colIndex];
+    return column?.filterable !== false;
+  }
+
+  /**
+   * Get distinct values for a column (for filter dropdowns)
+   */
+  getDistinctValuesForColumn(colId: string): CellValue[] {
+    const values = new Set<CellValue>();
+    for (const row of this.cachedRows.values()) {
+      const column = this.columns.find(c => (c.colId ?? c.field) === colId);
+      if (column) {
+        const value = this.getFieldValue(row, column.field);
+        values.add(value);
+      }
+    }
+    return Array.from(values);
+  }
+
+  /**
+   * Open filter popup for a column
+   */
+  openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+    const column = this.columns[colIndex];
+    if (!column || !this.isColumnFilterable(colIndex)) return;
+
+    const colId = column.colId ?? column.field;
+    const distinctValues = this.getDistinctValuesForColumn(colId);
+
+    this.emit({
+      type: "OPEN_FILTER_POPUP",
+      colIndex,
+      column,
+      anchorRect,
+      distinctValues,
+      currentFilter: this.filterModel[colId],
+    });
+  }
+
+  /**
+   * Close filter popup
+   */
+  closeFilterPopup(): void {
+    this.emit({ type: "CLOSE_FILTER_POPUP" });
   }
 
   /**
@@ -714,6 +794,9 @@ export class GridCore<TData extends Row = Row> {
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
+        sortable: this.isColumnSortable(i),
+        filterable: this.isColumnFilterable(i),
+        hasFilter: this.hasActiveFilter(colId),
       });
     }
   }

@@ -8,6 +8,11 @@ import type {
   RowId,
   SortModel,
   FilterModel,
+  ColumnFilterModel,
+  TextFilterCondition,
+  NumberFilterCondition,
+  DateFilterCondition,
+  FilterCondition,
   CellValue,
 } from "./types";
 import { SortWorkerManager } from "./worker-manager";
@@ -317,7 +322,7 @@ function applyFilters<TData>(
   getFieldValue: (row: TData, field: string) => CellValue,
 ): TData[] {
   const filterEntries = Object.entries(filterModel).filter(
-    ([, value]) => value !== "",
+    ([, filter]) => filter.conditions.length > 0,
   );
 
   if (filterEntries.length === 0) {
@@ -325,17 +330,189 @@ function applyFilters<TData>(
   }
 
   return data.filter((row) => {
-    for (const [field, filterValue] of filterEntries) {
+    // All column filters must pass (AND between columns)
+    for (const [field, columnFilter] of filterEntries) {
       const cellValue = getFieldValue(row, field);
-      const cellStr = String(cellValue ?? "").toLowerCase();
-      const filterStr = filterValue.toLowerCase();
-
-      if (!cellStr.includes(filterStr)) {
+      if (!evaluateColumnFilter(cellValue, columnFilter)) {
         return false;
       }
     }
     return true;
   });
+}
+
+/**
+ * Evaluate a column filter against a cell value
+ */
+function evaluateColumnFilter(
+  cellValue: CellValue,
+  filter: ColumnFilterModel,
+): boolean {
+  if (filter.conditions.length === 0) return true;
+
+  const results = filter.conditions.map((condition) =>
+    evaluateCondition(cellValue, condition),
+  );
+
+  if (filter.combination === "and") {
+    return results.every((r) => r);
+  } else {
+    return results.some((r) => r);
+  }
+}
+
+/**
+ * Evaluate a single filter condition
+ */
+function evaluateCondition(
+  cellValue: CellValue,
+  condition: FilterCondition,
+): boolean {
+  switch (condition.type) {
+    case "text":
+      return evaluateTextCondition(cellValue, condition);
+    case "number":
+      return evaluateNumberCondition(cellValue, condition);
+    case "date":
+      return evaluateDateCondition(cellValue, condition);
+    default:
+      return true;
+  }
+}
+
+/**
+ * Evaluate a text filter condition
+ */
+function evaluateTextCondition(
+  cellValue: CellValue,
+  condition: TextFilterCondition,
+): boolean {
+  const isBlank = cellValue == null || cellValue === "";
+
+  // Handle selectedValues (checkbox-style filtering)
+  if (condition.selectedValues && condition.selectedValues.size > 0) {
+    const cellStr = String(cellValue ?? "");
+    const includesBlank = condition.includeBlank === true && isBlank;
+    return condition.selectedValues.has(cellStr) || includesBlank;
+  }
+
+  const strValue = String(cellValue ?? "").toLowerCase();
+  const filterValue = String(condition.value ?? "").toLowerCase();
+
+  switch (condition.operator) {
+    case "contains":
+      return strValue.includes(filterValue);
+    case "notContains":
+      return !strValue.includes(filterValue);
+    case "equals":
+      return strValue === filterValue;
+    case "notEquals":
+      return strValue !== filterValue;
+    case "startsWith":
+      return strValue.startsWith(filterValue);
+    case "endsWith":
+      return strValue.endsWith(filterValue);
+    case "blank":
+      return isBlank;
+    case "notBlank":
+      return !isBlank;
+    default:
+      return true;
+  }
+}
+
+/**
+ * Evaluate a number filter condition
+ */
+function evaluateNumberCondition(
+  cellValue: CellValue,
+  condition: NumberFilterCondition,
+): boolean {
+  const isBlank = cellValue == null || cellValue === "";
+
+  if (condition.operator === "blank") return isBlank;
+  if (condition.operator === "notBlank") return !isBlank;
+
+  if (isBlank) return false;
+
+  const numValue = Number(cellValue);
+  if (isNaN(numValue)) return false;
+
+  const filterValue = condition.value ?? 0;
+  const filterValueTo = condition.valueTo ?? 0;
+
+  switch (condition.operator) {
+    case "=":
+      return numValue === filterValue;
+    case "!=":
+      return numValue !== filterValue;
+    case ">":
+      return numValue > filterValue;
+    case "<":
+      return numValue < filterValue;
+    case ">=":
+      return numValue >= filterValue;
+    case "<=":
+      return numValue <= filterValue;
+    case "between":
+      return numValue >= filterValue && numValue <= filterValueTo;
+    default:
+      return true;
+  }
+}
+
+/**
+ * Evaluate a date filter condition
+ */
+function evaluateDateCondition(
+  cellValue: CellValue,
+  condition: DateFilterCondition,
+): boolean {
+  const isBlank = cellValue == null || cellValue === "";
+
+  if (condition.operator === "blank") return isBlank;
+  if (condition.operator === "notBlank") return !isBlank;
+
+  if (isBlank) return false;
+
+  const dateValue =
+    cellValue instanceof Date ? cellValue : new Date(String(cellValue));
+  if (isNaN(dateValue.getTime())) return false;
+
+  const filterDate =
+    condition.value instanceof Date
+      ? condition.value
+      : new Date(String(condition.value ?? ""));
+  const filterDateTo =
+    condition.valueTo instanceof Date
+      ? condition.valueTo
+      : new Date(String(condition.valueTo ?? ""));
+
+  const dateTime = dateValue.getTime();
+  const filterTime = filterDate.getTime();
+  const filterTimeTo = filterDateTo.getTime();
+
+  switch (condition.operator) {
+    case "=":
+      return isSameDay(dateValue, filterDate);
+    case "!=":
+      return !isSameDay(dateValue, filterDate);
+    case ">":
+      return dateTime > filterTime;
+    case "<":
+      return dateTime < filterTime;
+    case "between":
+      return dateTime >= filterTime && dateTime <= filterTimeTo;
+    default:
+      return true;
+  }
+}
+
+/**
+ * Check if two dates are on the same day
+ */
+function isSameDay(date1: Date, date2: Date): boolean {
+  return date1.toDateString() === date2.toDateString();
 }
 
 function applySort<TData>(

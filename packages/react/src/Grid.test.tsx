@@ -54,7 +54,6 @@ class MockResizeObserver {
 
 describe("Grid", () => {
   beforeEach(() => {
-    // @ts-expect-error - Mock ResizeObserver
     global.ResizeObserver = MockResizeObserver;
   });
 
