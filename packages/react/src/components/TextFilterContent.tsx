@@ -36,13 +36,32 @@ export function TextFilterContent({
   onApply,
   onClose,
 }: TextFilterContentProps): React.ReactNode {
+  // Helper to convert value to display string
+  const valueToString = useCallback((v: CellValue): string => {
+    if (Array.isArray(v)) {
+      return v.join(', ');
+    }
+    return String(v ?? '');
+  }, []);
+
   // Determine if we should use values mode or condition mode
+  // distinctValues are already sorted by grid-core for array-type columns
   const uniqueValues = useMemo(() => {
     const values = distinctValues
-      .filter((v) => v != null && v !== "")
-      .map((v) => String(v));
-    return Array.from(new Set(values)).sort();
-  }, [distinctValues]);
+      .filter((v) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
+      .map((v) => valueToString(v));
+    // Use Set to deduplicate string representations
+    return Array.from(new Set(values)).sort((a, b) => {
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      // If both are valid numbers, sort numerically
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Otherwise, use locale-aware string comparison
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }, [distinctValues, valueToString]);
 
   const hasTooManyValues = uniqueValues.length > MAX_VALUES_FOR_LIST;
 

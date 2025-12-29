@@ -494,12 +494,23 @@ export class GridCore<TData extends Row = Row> {
     // console.log("[GP-Grid Core] setSort - complete");
   }
 
-  async setFilter(colId: string, filter: ColumnFilterModel | null): Promise<void> {
+  async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
     const column = this.columns.find(c => (c.colId ?? c.field) === colId);
     if (column?.filterable === false) return;
 
-    if (filter === null || filter.conditions.length === 0) {
+    // Handle null, empty string, or empty conditions
+    const isEmpty = filter === null ||
+      (typeof filter === "string" && filter.trim() === "") ||
+      (typeof filter === "object" && filter.conditions && filter.conditions.length === 0);
+
+    if (isEmpty) {
       delete this.filterModel[colId];
+    } else if (typeof filter === "string") {
+      // Convert old string format to new ColumnFilterModel format
+      this.filterModel[colId] = {
+        conditions: [{ type: "text", operator: "contains", value: filter }],
+        combination: "and",
+      };
     } else {
       this.filterModel[colId] = filter;
     }
@@ -539,17 +550,45 @@ export class GridCore<TData extends Row = Row> {
 
   /**
    * Get distinct values for a column (for filter dropdowns)
+   * For array-type columns (like tags), each unique array combination is returned.
+   * Arrays are sorted internally for consistent comparison.
    */
   getDistinctValuesForColumn(colId: string): CellValue[] {
-    const values = new Set<CellValue>();
+    // Use Map with stringified keys to handle deduplication of arrays
+    const valuesMap = new Map<string, CellValue>();
+
     for (const row of this.cachedRows.values()) {
       const column = this.columns.find(c => (c.colId ?? c.field) === colId);
       if (column) {
         const value = this.getFieldValue(row, column.field);
-        values.add(value);
+
+        if (Array.isArray(value)) {
+          // Sort array items internally for consistent comparison (["vip", "new"] == ["new", "vip"])
+          const sortedArray = [...value].sort((a, b) =>
+            String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+          );
+          const key = JSON.stringify(sortedArray);
+          if (!valuesMap.has(key)) {
+            valuesMap.set(key, sortedArray);
+          }
+        } else {
+          const key = JSON.stringify(value);
+          if (!valuesMap.has(key)) {
+            valuesMap.set(key, value);
+          }
+        }
       }
     }
-    return Array.from(values);
+
+    // Sort the results: arrays first (by string representation), then primitives
+    const results = Array.from(valuesMap.values());
+    results.sort((a, b) => {
+      const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
+      const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
+      return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    return results;
   }
 
   /**

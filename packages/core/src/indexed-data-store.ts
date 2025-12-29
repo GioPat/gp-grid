@@ -635,9 +635,20 @@ export class IndexedDataStore<TData extends Row = Row> {
       return true;
     }
 
-    for (const [field, columnFilter] of filterEntries) {
+    for (const [field, filter] of filterEntries) {
       const cellValue = this.options.getFieldValue(row, field);
-      if (!this.evaluateColumnFilter(cellValue, columnFilter)) {
+
+      // Handle old string format (backwards compatibility)
+      if (typeof filter === "string") {
+        const strValue = String(cellValue ?? "").toLowerCase();
+        if (!strValue.includes(filter.toLowerCase())) {
+          return false;
+        }
+        continue;
+      }
+
+      // Handle new ColumnFilterModel format
+      if (!this.evaluateColumnFilter(cellValue, filter)) {
         return false;
       }
     }
@@ -649,7 +660,7 @@ export class IndexedDataStore<TData extends Row = Row> {
    * Evaluate a column filter against a cell value.
    */
   private evaluateColumnFilter(cellValue: CellValue, filter: ColumnFilterModel): boolean {
-    if (!filter.conditions.length) return true;
+    if (!filter.conditions || !filter.conditions.length) return true;
 
     const results = filter.conditions.map((condition) => {
       switch (condition.type) {
@@ -677,11 +688,21 @@ export class IndexedDataStore<TData extends Row = Row> {
     cellValue: CellValue,
     condition: { operator: string; value?: string; selectedValues?: Set<string>; includeBlank?: boolean }
   ): boolean {
-    const isBlank = cellValue == null || cellValue === "";
+    const isBlank = cellValue == null || cellValue === "" || (Array.isArray(cellValue) && cellValue.length === 0);
 
     if (condition.selectedValues && condition.selectedValues.size > 0) {
-      const cellStr = String(cellValue ?? "");
       const includesBlank = condition.includeBlank === true && isBlank;
+
+      // Handle array values (e.g., tags column) - convert to sorted string for comparison
+      if (Array.isArray(cellValue)) {
+        const sortedArray = [...cellValue].sort((a, b) =>
+          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+        );
+        const arrayStr = sortedArray.join(', ');
+        return condition.selectedValues.has(arrayStr) || includesBlank;
+      }
+
+      const cellStr = String(cellValue ?? "");
       return condition.selectedValues.has(cellStr) || includesBlank;
     }
 
@@ -851,7 +872,16 @@ export class IndexedDataStore<TData extends Row = Row> {
           values = new Set();
           this.distinctValues.set(field, values);
         }
-        values.add(value as CellValue);
+        // Handle arrays by adding individual elements (e.g., tags column)
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (item != null) {
+              values.add(item as CellValue);
+            }
+          }
+        } else {
+          values.add(value as CellValue);
+        }
       }
       // Note: For "remove", we'd need reference counting to know if value is still used
       // For simplicity, we don't remove from distinct values on row removal
@@ -873,7 +903,16 @@ export class IndexedDataStore<TData extends Row = Row> {
         values = new Set();
         this.distinctValues.set(field, values);
       }
-      values.add(newValue);
+      // Handle arrays by adding individual elements (e.g., tags column)
+      if (Array.isArray(newValue)) {
+        for (const item of newValue) {
+          if (item != null) {
+            values.add(item as CellValue);
+          }
+        }
+      } else {
+        values.add(newValue);
+      }
     }
   }
 }
@@ -955,9 +994,20 @@ function stringToSortableNumber(str: string): number {
  * Compare two cell values.
  */
 function compareValues(a: CellValue, b: CellValue): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
+  // Handle nulls and empty arrays
+  const aIsEmpty = a == null || (Array.isArray(a) && a.length === 0);
+  const bIsEmpty = b == null || (Array.isArray(b) && b.length === 0);
+
+  if (aIsEmpty && bIsEmpty) return 0;
+  if (aIsEmpty) return 1;
+  if (bIsEmpty) return -1;
+
+  // Handle arrays - join as comma-separated string (no internal sorting for performance)
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
+    const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
+    return strA.localeCompare(strB);
+  }
 
   const aNum = Number(a);
   const bNum = Number(b);

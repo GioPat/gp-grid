@@ -282,6 +282,7 @@ const columns: ColumnDefinition[] = [
     cellRenderer: "tags",
     editRenderer: "multiSelect",
     editable: true,
+    sortable: true,
   },
 ];
 
@@ -350,7 +351,6 @@ function MainDemo() {
           rowHeight={36}
           darkMode={true}
           headerHeight={40}
-          showFilters={true}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
         />

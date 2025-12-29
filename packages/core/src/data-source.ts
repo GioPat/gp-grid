@@ -86,11 +86,12 @@ export function createClientDataSource<TData extends Row = Row>(
             const { colId, direction } = request.sort[0]!;
 
             // Detect column type by sampling first non-null value
+            // Treat arrays as string columns (they'll be converted to sorted comma-separated strings)
             let isStringColumn = false;
             for (const row of processedData) {
               const val = getFieldValue(row, colId);
               if (val != null) {
-                isStringColumn = typeof val === "string";
+                isStringColumn = typeof val === "string" || Array.isArray(val);
                 break;
               }
             }
@@ -105,7 +106,8 @@ export function createClientDataSource<TData extends Row = Row>(
 
               for (const row of processedData) {
                 const val = getFieldValue(row, colId);
-                const str = val == null ? "" : String(val);
+                // Convert arrays to comma-separated strings (no internal sorting for performance)
+                const str = val == null ? "" : Array.isArray(val) ? val.join(', ') : String(val);
                 originalStrings.push(str);
                 const hashes = stringToSortableHashes(str);
                 for (let c = 0; c < HASH_CHUNK_COUNT; c++) {
@@ -214,6 +216,12 @@ export function createServerDataSource<TData extends Row = Row>(
 function toSortableNumber(val: CellValue): number {
   if (val == null) return Number.MAX_VALUE; // nulls sort last
 
+  // Arrays: join and hash as string (no internal sorting for performance)
+  if (Array.isArray(val)) {
+    if (val.length === 0) return Number.MAX_VALUE;
+    return stringToSortableNumber(val.join(', '));
+  }
+
   // Numbers pass through directly
   if (typeof val === "number") return val;
 
@@ -318,11 +326,17 @@ function defaultGetFieldValue<TData>(row: TData, field: string): CellValue {
 
 function applyFilters<TData>(
   data: TData[],
-  filterModel: FilterModel,
+  filterModel: FilterModel | Record<string, string>,
   getFieldValue: (row: TData, field: string) => CellValue,
 ): TData[] {
   const filterEntries = Object.entries(filterModel).filter(
-    ([, filter]) => filter.conditions.length > 0,
+    ([, filter]) => {
+      // Handle both old string format and new ColumnFilterModel format
+      if (typeof filter === "string") {
+        return filter.trim() !== "";
+      }
+      return filter.conditions && filter.conditions.length > 0;
+    },
   );
 
   if (filterEntries.length === 0) {
@@ -331,9 +345,20 @@ function applyFilters<TData>(
 
   return data.filter((row) => {
     // All column filters must pass (AND between columns)
-    for (const [field, columnFilter] of filterEntries) {
+    for (const [field, filter] of filterEntries) {
       const cellValue = getFieldValue(row, field);
-      if (!evaluateColumnFilter(cellValue, columnFilter)) {
+
+      // Handle old string format (backwards compatibility)
+      if (typeof filter === "string") {
+        const strValue = String(cellValue ?? "").toLowerCase();
+        if (!strValue.includes(filter.toLowerCase())) {
+          return false;
+        }
+        continue;
+      }
+
+      // Handle new ColumnFilterModel format
+      if (!evaluateColumnFilter(cellValue, filter)) {
         return false;
       }
     }
@@ -387,12 +412,22 @@ function evaluateTextCondition(
   cellValue: CellValue,
   condition: TextFilterCondition,
 ): boolean {
-  const isBlank = cellValue == null || cellValue === "";
+  const isBlank = cellValue == null || cellValue === "" || (Array.isArray(cellValue) && cellValue.length === 0);
 
   // Handle selectedValues (checkbox-style filtering)
   if (condition.selectedValues && condition.selectedValues.size > 0) {
-    const cellStr = String(cellValue ?? "");
     const includesBlank = condition.includeBlank === true && isBlank;
+
+    // Handle array values (e.g., tags column) - convert to sorted string for comparison
+    if (Array.isArray(cellValue)) {
+      const sortedArray = [...cellValue].sort((a, b) =>
+        String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+      );
+      const arrayStr = sortedArray.join(', ');
+      return condition.selectedValues.has(arrayStr) || includesBlank;
+    }
+
+    const cellStr = String(cellValue ?? "");
     return condition.selectedValues.has(cellStr) || includesBlank;
   }
 
@@ -535,10 +570,20 @@ function applySort<TData>(
 }
 
 function compareValues(a: CellValue, b: CellValue): number {
-  // Null handling
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
+  // Handle nulls and empty arrays
+  const aIsEmpty = a == null || (Array.isArray(a) && a.length === 0);
+  const bIsEmpty = b == null || (Array.isArray(b) && b.length === 0);
+
+  if (aIsEmpty && bIsEmpty) return 0;
+  if (aIsEmpty) return 1;
+  if (bIsEmpty) return -1;
+
+  // Handle arrays - join as comma-separated string (no internal sorting for performance)
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
+    const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
+    return strA.localeCompare(strB);
+  }
 
   // Numeric comparison
   const aNum = Number(a);
