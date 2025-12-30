@@ -20,6 +20,7 @@ import { SelectionManager } from "./selection";
 import { FillManager } from "./fill";
 import { SlotPoolManager } from "./slot-pool";
 import { EditManager } from "./edit-manager";
+import { InputHandler } from "./input-handler";
 
 // =============================================================================
 // Constants
@@ -64,6 +65,7 @@ export class GridCore<TData extends Row = Row> {
   // Managers
   public readonly selection: SelectionManager;
   public readonly fill: FillManager;
+  public readonly input: InputHandler<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
 
@@ -142,6 +144,14 @@ export class GridCore<TData extends Row = Row> {
 
     // Forward edit manager instructions
     this.editManager.onInstruction((instruction) => this.emit(instruction));
+
+    // Initialize input handler
+    this.input = new InputHandler(this, {
+      getHeaderHeight: () => this.headerHeight,
+      getRowHeight: () => this.rowHeight,
+      getColumnPositions: () => this.columnPositions,
+      getColumnCount: () => this.columns.length,
+    });
   }
 
   // ===========================================================================
@@ -248,6 +258,14 @@ export class GridCore<TData extends Row = Row> {
     this.viewportHeight = height;
 
     this.slotPool.syncSlots();
+
+    // Emit visible range update so React (or other frameworks) can track it
+    const visibleRange = this.getVisibleRowRange();
+    this.emit({
+      type: "UPDATE_VISIBLE_RANGE",
+      start: visibleRange.start,
+      end: visibleRange.end,
+    });
   }
 
   // ===========================================================================
@@ -750,6 +768,14 @@ export class GridCore<TData extends Row = Row> {
     // This is important when data changes (e.g., rows added) but visible indices stay the same
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
+
+    // Emit visible range since totalRows may have changed
+    const visibleRange = this.getVisibleRowRange();
+    this.emit({
+      type: "UPDATE_VISIBLE_RANGE",
+      start: visibleRange.start,
+      end: visibleRange.end,
+    });
   }
 
   /**

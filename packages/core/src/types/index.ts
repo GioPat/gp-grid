@@ -82,3 +82,15 @@ export type {
 
 // Options types
 export type { GridCoreOptions } from "./options";
+
+// Input types
+export type {
+  PointerEventData,
+  KeyEventData,
+  ContainerBounds,
+  InputResult,
+  KeyboardResult,
+  DragMoveResult,
+  InputHandlerDeps,
+  DragState,
+} from "./input";

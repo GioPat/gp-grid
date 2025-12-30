@@ -12,7 +12,7 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
 } from "gp-grid-core";
-import type { Row, SortDirection, ColumnFilterModel } from "gp-grid-core";
+import type { Row, ColumnFilterModel } from "gp-grid-core";
 import { injectStyles } from "./styles";
 import { FilterPopup } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
@@ -24,9 +24,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
 } from "./utils/classNames";
-import { useFillDrag } from "./hooks/useFillDrag";
-import { useSelectionDrag } from "./hooks/useSelectionDrag";
-import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { useInputHandler } from "./hooks/useInputHandler";
 import { renderCell } from "./renderers/cellRenderer";
 import { renderEditCell } from "./renderers/editRenderer";
 import { renderHeader } from "./renderers/headerRenderer";
@@ -99,37 +97,23 @@ export function Grid<TData extends Row = Row>(
   );
   const totalWidth = getTotalWidth(columnPositions);
 
-  // Custom hooks for drag functionality
+  // Unified input handling (replaces useFillDrag, useSelectionDrag, useKeyboardNavigation)
   const {
-    isDraggingFill,
-    fillTarget,
-    fillSourceRange,
+    handleCellMouseDown,
+    handleCellDoubleClick,
     handleFillHandleMouseDown,
-  } = useFillDrag(
-    coreRef,
-    containerRef,
-    state.activeCell,
-    state.selectionRange,
-    totalHeaderHeight,
-    columnPositions,
-  );
-
-  const { startSelectionDrag } = useSelectionDrag(
-    coreRef,
-    containerRef,
-    totalHeaderHeight,
-    columnPositions,
-    columns.length,
-  );
-
-  // Keyboard navigation
-  const handleKeyDown = useKeyboardNavigation(coreRef, {
+    handleHeaderClick,
+    handleKeyDown,
+    handleWheel,
+    dragState,
+  } = useInputHandler(coreRef, containerRef, columns, {
     activeCell: state.activeCell,
+    selectionRange: state.selectionRange,
     editingCell: state.editingCell,
     filterPopupOpen: state.filterPopup?.isOpen ?? false,
-    containerRef,
     rowHeight,
     headerHeight: totalHeaderHeight,
+    columnPositions,
     slots: state.slots,
   });
 
@@ -180,7 +164,7 @@ export function Grid<TData extends Row = Row>(
     }
   }, [dataSource]);
 
-  // Handle scroll
+  // Handle scroll - just pass DOM values to core, which emits UPDATE_VISIBLE_RANGE instruction
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     const core = coreRef.current;
@@ -192,29 +176,7 @@ export function Grid<TData extends Row = Row>(
       container.clientWidth,
       container.clientHeight,
     );
-
-    // Update visible row range in state (used to prevent selection showing in overscan)
-    const visibleRange = core.getVisibleRowRange();
-    dispatch({ type: "UPDATE_VISIBLE_RANGE", start: visibleRange.start, end: visibleRange.end });
   }, []);
-
-  // Handle wheel with reduced sensitivity for large datasets
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      const container = containerRef.current;
-      const core = coreRef.current;
-      if (!container || !core) return;
-
-      // Only apply dampening when scaling is active (large datasets)
-      if (!core.isScalingActive()) return;
-
-      // Prevent default scroll and apply dampened scroll
-      e.preventDefault();
-      container.scrollTop += e.deltaY * wheelDampening;
-      container.scrollLeft += e.deltaX * wheelDampening;
-    },
-    [wheelDampening],
-  );
 
   // Initial measurement and resize handling
   useEffect(() => {
@@ -237,15 +199,6 @@ export function Grid<TData extends Row = Row>(
     return () => resizeObserver.disconnect();
   }, [handleScroll]);
 
-  // Update visible range when data loads (totalRows changes)
-  useEffect(() => {
-    const core = coreRef.current;
-    if (core && state.totalRows > 0) {
-      const visibleRange = core.getVisibleRowRange();
-      dispatch({ type: "UPDATE_VISIBLE_RANGE", start: visibleRange.start, end: visibleRange.end });
-    }
-  }, [state.totalRows]);
-
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(
     (colId: string, filter: ColumnFilterModel | null) => {
@@ -264,72 +217,6 @@ export function Grid<TData extends Row = Row>(
       core.closeFilterPopup();
     }
   }, []);
-
-  // Note: Scroll-into-view for keyboard navigation is handled in useKeyboardNavigation hook
-  // We don't scroll on mouse clicks to avoid unexpected viewport jumps when clicking overscan cells
-
-  // Cell mouse down handler (starts selection and drag)
-  const handleCellMouseDown = useCallback(
-    (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
-      const core = coreRef.current;
-      if (!core || core.getEditState() !== null) return;
-
-      // Only handle left mouse button
-      if (e.button !== 0) return;
-
-      // Focus the container to enable keyboard navigation
-      containerRef.current?.focus();
-
-      core.selection.startSelection(
-        { row: rowIndex, col: colIndex },
-        { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey },
-      );
-
-      // Start drag selection (unless shift is held - that's a one-time extend)
-      if (!e.shiftKey) {
-        startSelectionDrag();
-      }
-    },
-    [startSelectionDrag],
-  );
-
-  // Cell double-click handler
-  const handleCellDoubleClick = useCallback(
-    (rowIndex: number, colIndex: number) => {
-      const core = coreRef.current;
-      if (!core) return;
-      core.startEdit(rowIndex, colIndex);
-    },
-    [],
-  );
-
-  // Header click handler (sort)
-  const handleHeaderClick = useCallback(
-    (colIndex: number, e: React.MouseEvent) => {
-      const core = coreRef.current;
-      if (!core) return;
-
-      const column = columns[colIndex];
-      if (!column) return;
-
-      const colId = column.colId ?? column.field;
-      const headerInfo = state.headers.get(colIndex);
-      const currentDirection = headerInfo?.sortDirection;
-
-      // Cycle: none -> asc -> desc -> none
-      let newDirection: SortDirection | null;
-      if (!currentDirection) {
-        newDirection = "asc";
-      } else if (currentDirection === "asc") {
-        newDirection = "desc";
-      } else {
-        newDirection = null;
-      }
-
-      core.setSort(colId, newDirection, e.shiftKey);
-    },
-    [columns, state.headers],
-  );
 
   // Convert slots map to array for rendering
   const slotsArray = useMemo(
@@ -405,7 +292,7 @@ export function Grid<TData extends Row = Row>(
         position: "relative",
       }}
       onScroll={handleScroll}
-      onWheel={handleWheel}
+      onWheel={(e) => handleWheel(e, wheelDampening)}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
@@ -504,9 +391,9 @@ export function Grid<TData extends Row = Row>(
                 const inFillPreview = isCellInFillPreview(
                   slot.rowIndex,
                   colIndex,
-                  isDraggingFill,
-                  fillSourceRange,
-                  fillTarget,
+                  dragState.dragType === "fill",
+                  dragState.fillSourceRange,
+                  dragState.fillTarget,
                 );
 
                 const cellClasses = buildCellClasses(

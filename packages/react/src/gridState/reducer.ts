@@ -160,13 +160,6 @@ export function gridReducer(state: GridState, action: GridAction): GridState {
     return createInitialState();
   }
 
-  if (action.type === "UPDATE_VISIBLE_RANGE") {
-    return {
-      ...state,
-      visibleRowRange: { start: action.start, end: action.end },
-    };
-  }
-
   // Process batch of instructions in one state update
   const { instructions } = action;
   if (instructions.length === 0) {

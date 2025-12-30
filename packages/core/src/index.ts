@@ -12,6 +12,7 @@ export { SelectionManager } from "./selection";
 export { FillManager } from "./fill";
 export { SlotPoolManager } from "./slot-pool";
 export { EditManager } from "./edit-manager";
+export { InputHandler } from "./input-handler";
 
 /** Manager types */
 export type { SlotPoolManagerOptions, BatchInstructionListener as SlotPoolBatchListener } from "./slot-pool";
@@ -144,3 +145,15 @@ export type {
 
 /** Direction type from selection */
 export type { Direction } from "./selection";
+
+/** Input handler types */
+export type {
+  PointerEventData,
+  KeyEventData,
+  ContainerBounds,
+  InputResult,
+  KeyboardResult,
+  DragMoveResult,
+  InputHandlerDeps,
+  DragState,
+} from "./types/input";

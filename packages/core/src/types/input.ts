@@ -1,0 +1,118 @@
+// packages/core/src/types/input.ts
+// Framework-agnostic input types for InputHandler
+
+import type { CellPosition, CellRange } from "./basic";
+
+// =============================================================================
+// Event Data Types (framework-agnostic)
+// =============================================================================
+
+/** Framework-agnostic pointer/mouse event data */
+export interface PointerEventData {
+  /** X coordinate relative to viewport */
+  clientX: number;
+  /** Y coordinate relative to viewport */
+  clientY: number;
+  /** Mouse button (0 = left, 1 = middle, 2 = right) */
+  button: number;
+  /** Whether Shift key is pressed */
+  shiftKey: boolean;
+  /** Whether Ctrl key is pressed */
+  ctrlKey: boolean;
+  /** Whether Meta/Command key is pressed */
+  metaKey: boolean;
+}
+
+/** Framework-agnostic keyboard event data */
+export interface KeyEventData {
+  /** Key value (e.g., 'Enter', 'ArrowUp', 'a') */
+  key: string;
+  /** Whether Shift key is pressed */
+  shiftKey: boolean;
+  /** Whether Ctrl key is pressed */
+  ctrlKey: boolean;
+  /** Whether Meta/Command key is pressed */
+  metaKey: boolean;
+}
+
+/** Container bounds and scroll position */
+export interface ContainerBounds {
+  /** Top position relative to viewport */
+  top: number;
+  /** Left position relative to viewport */
+  left: number;
+  /** Container width */
+  width: number;
+  /** Container height */
+  height: number;
+  /** Current scroll top position */
+  scrollTop: number;
+  /** Current scroll left position */
+  scrollLeft: number;
+}
+
+// =============================================================================
+// Result Types (what framework should do)
+// =============================================================================
+
+/** Result from mouse/pointer input handlers */
+export interface InputResult {
+  /** Whether to call preventDefault() on the event */
+  preventDefault: boolean;
+  /** Whether to call stopPropagation() on the event */
+  stopPropagation: boolean;
+  /** Whether framework should focus the container element */
+  focusContainer?: boolean;
+  /** Type of drag operation to start (framework manages global listeners) */
+  startDrag?: "selection" | "fill";
+}
+
+/** Result from keyboard input handler */
+export interface KeyboardResult {
+  /** Whether to call preventDefault() on the event */
+  preventDefault: boolean;
+  /** Cell to scroll into view (if navigation occurred) */
+  scrollToCell?: CellPosition;
+}
+
+/** Result from drag move handler */
+export interface DragMoveResult {
+  /** Target row index */
+  targetRow: number;
+  /** Target column index */
+  targetCol: number;
+  /** Auto-scroll deltas (null if no auto-scroll needed) */
+  autoScroll: { dx: number; dy: number } | null;
+}
+
+// =============================================================================
+// InputHandler Options
+// =============================================================================
+
+/** Options for InputHandler constructor */
+export interface InputHandlerDeps {
+  /** Get header height */
+  getHeaderHeight: () => number;
+  /** Get row height */
+  getRowHeight: () => number;
+  /** Get column positions array */
+  getColumnPositions: () => number[];
+  /** Get column count */
+  getColumnCount: () => number;
+}
+
+// =============================================================================
+// Drag State (exposed for UI rendering)
+// =============================================================================
+
+/** Current drag state for UI rendering */
+export interface DragState {
+  /** Whether any drag operation is active */
+  isDragging: boolean;
+  /** Type of active drag operation */
+  dragType: "selection" | "fill" | null;
+  /** Source range for fill operations */
+  fillSourceRange: CellRange | null;
+  /** Current fill target position */
+  fillTarget: { row: number; col: number } | null;
+}

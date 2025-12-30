@@ -66,5 +66,4 @@ export interface GridState {
 
 export type GridAction =
   | { type: "BATCH_INSTRUCTIONS"; instructions: GridInstruction[] }
-  | { type: "RESET" }
-  | { type: "UPDATE_VISIBLE_RANGE"; start: number; end: number };
+  | { type: "RESET" };

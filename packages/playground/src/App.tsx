@@ -39,7 +39,7 @@ function getRandomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-const names = ["Giuseppe", "Giovanni", "Mario"];
+const names = ["Ennio", "Giovanni", "Mario", "Giuseppe"];
 const statuses: Person["status"][] = ["active", "inactive", "pending"];
 
 // Define reusable React renderers (AG-Grid style registry pattern)
