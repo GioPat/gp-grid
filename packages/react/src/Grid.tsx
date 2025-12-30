@@ -130,6 +130,7 @@ export function Grid<TData extends Row = Row>(
     containerRef,
     rowHeight,
     headerHeight: totalHeaderHeight,
+    slots: state.slots,
   });
 
   // Initialize GridCore

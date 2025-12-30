@@ -8,6 +8,7 @@ import type {
   CellValue,
   Direction,
 } from "gp-grid-core";
+import type { SlotData } from "../gridState/types";
 
 export interface KeyboardNavigationDeps {
   activeCell: CellPosition | null;
@@ -16,11 +17,24 @@ export interface KeyboardNavigationDeps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   rowHeight: number;
   headerHeight: number;
+  slots: Map<string, SlotData>;
+}
+
+/**
+ * Find the slot for a given row index
+ */
+function findSlotForRow(slots: Map<string, SlotData>, rowIndex: number): SlotData | null {
+  for (const slot of slots.values()) {
+    if (slot.rowIndex === rowIndex) {
+      return slot;
+    }
+  }
+  return null;
 }
 
 /**
  * Scroll a cell into view if needed.
- * Uses the core's visible range to determine if scrolling is necessary.
+ * Uses the actual slot translateY to determine if the cell is visible.
  */
 function scrollCellIntoView<TData extends Row>(
   core: GridCore<TData>,
@@ -28,22 +42,34 @@ function scrollCellIntoView<TData extends Row>(
   row: number,
   rowHeight: number,
   headerHeight: number,
+  slots: Map<string, SlotData>,
 ): void {
-  // Get the visible row range from core (excludes overscan)
-  const { start, end } = core.getVisibleRowRange();
+  // Find the slot for this row to get its actual translateY
+  const slot = findSlotForRow(slots, row);
 
-  if (row < start) {
-    // Row is above visible range - scroll up to bring it to the top
+  // If no slot found, the row isn't rendered yet - use calculated position as fallback
+  const cellTranslateY = slot ? slot.translateY : (headerHeight + row * rowHeight);
+
+  // Cell's viewport position = translateY - scrollTop
+  const cellViewportTop = cellTranslateY - container.scrollTop;
+  const cellViewportBottom = cellViewportTop + rowHeight;
+
+  // Visible data area in viewport coordinates (below sticky header)
+  const visibleTop = headerHeight;
+  const visibleBottom = container.clientHeight;
+
+  // Check if cell is fully visible in viewport
+  if (cellViewportTop < visibleTop) {
+    // Cell top is behind the sticky header - scroll up
     container.scrollTop = core.getScrollTopForRow(row);
-  } else if (row > end) {
-    // Row is below visible range - scroll down to bring it to the bottom
-    const rowsInView = Math.floor(
-      (container.clientHeight - headerHeight) / rowHeight,
-    );
+  } else if (cellViewportBottom > visibleBottom) {
+    // Cell bottom is below visible area - scroll down
+    const visibleDataHeight = container.clientHeight - headerHeight;
+    const rowsInView = Math.floor(visibleDataHeight / rowHeight);
     const targetRow = Math.max(0, row - rowsInView + 1);
     container.scrollTop = core.getScrollTopForRow(targetRow);
   }
-  // Row is already in visible range - no scroll needed
+  // Otherwise cell is fully visible - no scroll needed
 }
 
 /**
@@ -60,6 +86,7 @@ export function useKeyboardNavigation<TData extends Row>(
     containerRef,
     rowHeight,
     headerHeight,
+    slots,
   } = deps;
 
   const handleKeyDown = useCallback(
@@ -101,6 +128,7 @@ export function useKeyboardNavigation<TData extends Row>(
             newActiveCell.row,
             rowHeight,
             headerHeight,
+            slots,
           );
         }
       };
@@ -183,6 +211,7 @@ export function useKeyboardNavigation<TData extends Row>(
       filterPopupOpen,
       rowHeight,
       headerHeight,
+      slots,
     ],
   );
 
