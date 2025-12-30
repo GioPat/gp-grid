@@ -1,4 +1,4 @@
-// packages/react/src/styles/filters.ts
+// packages/core/src/styles/filters.ts
 // Filter popup and filter-related styles
 
 export const filtersStyles = `

@@ -1,0 +1,53 @@
+{
+  "name": "gp-grid-vue",
+  "description": "A high-performance Vue 3 data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
+  "version": "0.1.6",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "vue",
+    "vue3",
+    "grid",
+    "data-grid",
+    "datagrid",
+    "vue-grid",
+    "vue-table",
+    "table",
+    "data-table",
+    "datatable",
+    "virtual-scroll",
+    "virtualization",
+    "typescript",
+    "high-performance",
+    "spreadsheet",
+    "excel",
+    "lightweight",
+    "cell-selection",
+    "sorting",
+    "filtering",
+    "editable",
+    "nuxt",
+    "nuxt3"
+  ],
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "tsdown --clean --sourcemap",
+    "build:production": "tsdown --clean --minify --treeshake --dts"
+  },
+  "dependencies": {
+    "gp-grid-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "tsdown": "^0.15.9",
+    "typescript": "^5.9.3",
+    "vue": "^3.5.13"
+  }
+}

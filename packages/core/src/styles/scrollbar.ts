@@ -1,4 +1,4 @@
-// packages/react/src/styles/scrollbar.ts
+// packages/core/src/styles/scrollbar.ts
 // Custom scrollbar styles
 
 export const scrollbarStyles = `

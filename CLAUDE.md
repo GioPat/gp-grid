@@ -1,4 +1,4 @@
 - Avoid using `any`
 - The library `core` package must be library/framework agnostic
 - When you need to run the playground, use `pnpm --filter=playground dev`
-
+- Check LSP type errors

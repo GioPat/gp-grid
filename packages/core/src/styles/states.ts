@@ -1,4 +1,4 @@
-// packages/react/src/styles/states.ts
+// packages/core/src/styles/states.ts
 // Loading, error, and empty state styles
 
 export const statesStyles = `

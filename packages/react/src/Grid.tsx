@@ -11,19 +11,18 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-} from "gp-grid-core";
-import type { Row, ColumnFilterModel } from "gp-grid-core";
-import { injectStyles } from "./styles";
-import { FilterPopup } from "./components";
-import { gridReducer, createInitialState } from "./gridState";
-import { calculateColumnPositions, getTotalWidth } from "./utils/positioning";
-import {
+  injectStyles,
+  calculateColumnPositions,
+  getTotalWidth,
   isCellSelected,
   isCellActive,
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-} from "./utils/classNames";
+} from "gp-grid-core";
+import type { Row, ColumnFilterModel } from "gp-grid-core";
+import { FilterPopup } from "./components";
+import { gridReducer, createInitialState } from "./gridState";
 import { useInputHandler } from "./hooks/useInputHandler";
 import { renderCell } from "./renderers/cellRenderer";
 import { renderEditCell } from "./renderers/editRenderer";

@@ -157,3 +157,44 @@ export type {
   InputHandlerDeps,
   DragState,
 } from "./types/input";
+
+// =============================================================================
+// Shared UI Utilities (for framework wrappers)
+// =============================================================================
+
+/** Styles */
+export { injectStyles, gridStyles } from "./styles";
+export {
+  variablesStyles,
+  containerStyles,
+  headerStyles,
+  cellStyles,
+  statesStyles,
+  scrollbarStyles,
+  filtersStyles,
+} from "./styles";
+
+/** Positioning utilities */
+export {
+  calculateColumnPositions,
+  getTotalWidth,
+  findColumnAtX,
+} from "./utils/positioning";
+
+/** Class name utilities */
+export {
+  isCellSelected,
+  isCellActive,
+  isRowVisible,
+  isCellEditing,
+  isCellInFillPreview,
+  buildCellClasses,
+} from "./utils/classNames";
+
+/** UI State types (shared between framework wrappers) */
+export type {
+  SlotData,
+  HeaderData,
+  FilterPopupState,
+  GridState,
+} from "./types/ui-state";

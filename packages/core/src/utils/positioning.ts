@@ -1,6 +1,6 @@
-// packages/react/src/utils/positioning.ts
+// packages/core/src/utils/positioning.ts
 
-import type { ColumnDefinition } from "gp-grid-core";
+import type { ColumnDefinition } from "../types";
 
 /**
  * Calculate cumulative column positions (prefix sums)

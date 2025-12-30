@@ -1,6 +1,6 @@
-// packages/react/src/utils/classNames.ts
+// packages/core/src/utils/classNames.ts
 
-import type { CellPosition, CellRange } from "gp-grid-core";
+import type { CellPosition, CellRange } from "../types";
 
 /**
  * Check if a cell is within the selection range

@@ -1,4 +1,4 @@
-// packages/react/src/styles/variables.ts
+// packages/core/src/styles/variables.ts
 // CSS Variables for theming (light and dark modes)
 
 export const variablesStyles = `

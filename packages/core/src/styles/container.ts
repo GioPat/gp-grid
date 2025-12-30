@@ -1,4 +1,4 @@
-// packages/react/src/styles/container.ts
+// packages/core/src/styles/container.ts
 // Grid container base styles
 
 export const containerStyles = `

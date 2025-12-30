@@ -1,4 +1,4 @@
-// packages/react/src/styles/index.ts
+// packages/core/src/styles/index.ts
 // Combines all style modules and exports injectStyles
 
 import { variablesStyles } from "./variables";
