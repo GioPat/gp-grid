@@ -1,8 +1,8 @@
-// packages/core/src/transaction-manager.test.ts
+// packages/core/tests/transaction-manager.test.ts
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { TransactionManager, type TransactionResult } from "./transaction-manager";
-import { IndexedDataStore } from "./indexed-data-store";
+import { TransactionManager, type TransactionResult } from "../src/transaction-manager";
+import { IndexedDataStore } from "../src/indexed-data-store";
 
 interface TestRow {
   id: number;

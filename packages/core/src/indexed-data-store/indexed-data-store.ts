@@ -1,4 +1,4 @@
-// gp-grid-core/src/indexed-data-store.ts
+// packages/core/src/indexed-data-store/indexed-data-store.ts
 
 import type {
   CellValue,
@@ -6,20 +6,21 @@ import type {
   RowId,
   SortModel,
   FilterModel,
-  ColumnFilterModel,
   DataSourceRequest,
   DataSourceResponse,
-} from "./types";
+} from "../types";
+import { getFieldValue, setFieldValue } from "./field-helpers";
+import {
+  computeValueHash,
+  computeRowSortHashes,
+  compareRowsByHashes,
+  compareRowsDirect,
+  compareValues,
+} from "./sorting";
+import { rowPassesFilter } from "./filtering";
 
 // Re-export RowId for convenience
 export type { RowId };
-
-// =============================================================================
-// Configuration
-// =============================================================================
-
-/** Number of 10-character chunks for string hashing (30 chars total) */
-const HASH_CHUNK_COUNT = 3;
 
 // =============================================================================
 // Types
@@ -33,7 +34,7 @@ export interface IndexedDataStoreOptions<TData> {
 }
 
 /** Hash cache for a single row */
-interface RowSortCache {
+export interface RowSortCache {
   /** Map: sortModelHash -> computed hashes for that sort configuration */
   hashes: Map<string, number[]>;
 }
@@ -77,7 +78,7 @@ export class IndexedDataStore<TData extends Row = Row> {
   ) {
     this.options = {
       getRowId: options.getRowId,
-      getFieldValue: options.getFieldValue ?? defaultGetFieldValue,
+      getFieldValue: options.getFieldValue ?? getFieldValue,
     };
 
     // Initialize with data
@@ -497,13 +498,11 @@ export class IndexedDataStore<TData extends Row = Row> {
   private computeRowHashes(rowIndex: number, row: TData): void {
     if (this.sortModel.length === 0) return;
 
-    const hashes: number[] = [];
-
-    for (const sort of this.sortModel) {
-      const value = this.options.getFieldValue(row, sort.colId);
-      const hash = this.computeHash(value);
-      hashes.push(hash);
-    }
+    const hashes = computeRowSortHashes(row, {
+      sortModel: this.sortModel,
+      sortModelHash: this.sortModelHash,
+      getFieldValue: this.options.getFieldValue,
+    });
 
     let cache = this.rowSortCache.get(rowIndex);
     if (!cache) {
@@ -511,24 +510,6 @@ export class IndexedDataStore<TData extends Row = Row> {
       this.rowSortCache.set(rowIndex, cache);
     }
     cache.hashes.set(this.sortModelHash, hashes);
-  }
-
-  /**
-   * Compute a sortable hash for a value.
-   */
-  private computeHash(value: CellValue): number {
-    if (value == null) return Number.MAX_VALUE; // nulls sort last
-
-    if (typeof value === "number") return value;
-
-    if (value instanceof Date) return value.getTime();
-
-    if (typeof value === "string") {
-      return stringToSortableNumber(value);
-    }
-
-    const num = Number(value);
-    return isNaN(num) ? 0 : num;
   }
 
   /**
@@ -541,39 +522,18 @@ export class IndexedDataStore<TData extends Row = Row> {
     const hashesA = cacheA?.hashes.get(this.sortModelHash);
     const hashesB = cacheB?.hashes.get(this.sortModelHash);
 
-    if (!hashesA || !hashesB) {
-      // Fallback to direct comparison
-      return this.compareRowsDirect(indexA, indexB);
+    const hashResult = compareRowsByHashes(hashesA, hashesB, this.sortModel);
+    if (hashResult !== null) {
+      return hashResult;
     }
 
-    for (let i = 0; i < this.sortModel.length; i++) {
-      const diff = hashesA[i]! - hashesB[i]!;
-      if (diff !== 0) {
-        return this.sortModel[i]!.direction === "asc" ? diff : -diff;
-      }
-    }
-
-    return 0;
-  }
-
-  /**
-   * Direct comparison without hash cache.
-   */
-  private compareRowsDirect(indexA: number, indexB: number): number {
-    const rowA = this.rows[indexA]!;
-    const rowB = this.rows[indexB]!;
-
-    for (const { colId, direction } of this.sortModel) {
-      const valA = this.options.getFieldValue(rowA, colId);
-      const valB = this.options.getFieldValue(rowB, colId);
-      const comparison = compareValues(valA, valB);
-
-      if (comparison !== 0) {
-        return direction === "asc" ? comparison : -comparison;
-      }
-    }
-
-    return 0;
+    // Fallback to direct comparison
+    return compareRowsDirect(
+      this.rows[indexA]!,
+      this.rows[indexB]!,
+      this.sortModel,
+      this.options.getFieldValue
+    );
   }
 
   /**
@@ -627,199 +587,7 @@ export class IndexedDataStore<TData extends Row = Row> {
    * Check if a row passes the current filter.
    */
   private rowPassesFilter(row: TData): boolean {
-    const filterEntries = Object.entries(this.filterModel).filter(
-      ([, value]) => value != null
-    );
-
-    if (filterEntries.length === 0) {
-      return true;
-    }
-
-    for (const [field, filter] of filterEntries) {
-      const cellValue = this.options.getFieldValue(row, field);
-
-      // Handle old string format (backwards compatibility)
-      if (typeof filter === "string") {
-        const strValue = String(cellValue ?? "").toLowerCase();
-        if (!strValue.includes(filter.toLowerCase())) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle new ColumnFilterModel format
-      if (!this.evaluateColumnFilter(cellValue, filter)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Evaluate a column filter against a cell value.
-   */
-  private evaluateColumnFilter(cellValue: CellValue, filter: ColumnFilterModel): boolean {
-    if (!filter.conditions || !filter.conditions.length) return true;
-
-    const results = filter.conditions.map((condition) => {
-      switch (condition.type) {
-        case "text":
-          return this.evaluateTextCondition(cellValue, condition);
-        case "number":
-          return this.evaluateNumberCondition(cellValue, condition);
-        case "date":
-          return this.evaluateDateCondition(cellValue, condition);
-        default:
-          return true;
-      }
-    });
-
-    if (filter.combination === "or") {
-      return results.some((r) => r);
-    }
-    return results.every((r) => r);
-  }
-
-  /**
-   * Evaluate text condition.
-   */
-  private evaluateTextCondition(
-    cellValue: CellValue,
-    condition: { operator: string; value?: string; selectedValues?: Set<string>; includeBlank?: boolean }
-  ): boolean {
-    const isBlank = cellValue == null || cellValue === "" || (Array.isArray(cellValue) && cellValue.length === 0);
-
-    if (condition.selectedValues && condition.selectedValues.size > 0) {
-      const includesBlank = condition.includeBlank === true && isBlank;
-
-      // Handle array values (e.g., tags column) - convert to sorted string for comparison
-      if (Array.isArray(cellValue)) {
-        const sortedArray = [...cellValue].sort((a, b) =>
-          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
-        );
-        const arrayStr = sortedArray.join(', ');
-        return condition.selectedValues.has(arrayStr) || includesBlank;
-      }
-
-      const cellStr = String(cellValue ?? "");
-      return condition.selectedValues.has(cellStr) || includesBlank;
-    }
-
-    const strValue = String(cellValue ?? "").toLowerCase();
-    const filterValue = String(condition.value ?? "").toLowerCase();
-
-    switch (condition.operator) {
-      case "contains":
-        return strValue.includes(filterValue);
-      case "notContains":
-        return !strValue.includes(filterValue);
-      case "equals":
-        return strValue === filterValue;
-      case "notEquals":
-        return strValue !== filterValue;
-      case "startsWith":
-        return strValue.startsWith(filterValue);
-      case "endsWith":
-        return strValue.endsWith(filterValue);
-      case "blank":
-        return isBlank;
-      case "notBlank":
-        return !isBlank;
-      default:
-        return true;
-    }
-  }
-
-  /**
-   * Evaluate number condition.
-   */
-  private evaluateNumberCondition(
-    cellValue: CellValue,
-    condition: { operator: string; value?: number; valueTo?: number }
-  ): boolean {
-    const isBlank = cellValue == null || cellValue === "";
-    if (condition.operator === "blank") return isBlank;
-    if (condition.operator === "notBlank") return !isBlank;
-    if (isBlank) return false;
-
-    const numValue = typeof cellValue === "number" ? cellValue : parseFloat(String(cellValue));
-    if (isNaN(numValue)) return false;
-
-    const filterValue = condition.value ?? 0;
-    const filterTo = condition.valueTo ?? 0;
-
-    switch (condition.operator) {
-      case "=":
-        return numValue === filterValue;
-      case "!=":
-        return numValue !== filterValue;
-      case ">":
-        return numValue > filterValue;
-      case "<":
-        return numValue < filterValue;
-      case ">=":
-        return numValue >= filterValue;
-      case "<=":
-        return numValue <= filterValue;
-      case "between":
-        return numValue >= filterValue && numValue <= filterTo;
-      default:
-        return true;
-    }
-  }
-
-  /**
-   * Evaluate date condition.
-   */
-  private evaluateDateCondition(
-    cellValue: CellValue,
-    condition: { operator: string; value?: Date | string; valueTo?: Date | string }
-  ): boolean {
-    const isBlank = cellValue == null || cellValue === "";
-    if (condition.operator === "blank") return isBlank;
-    if (condition.operator === "notBlank") return !isBlank;
-    if (isBlank) return false;
-
-    const cellDate = cellValue instanceof Date ? cellValue : new Date(String(cellValue));
-    if (isNaN(cellDate.getTime())) return false;
-
-    const filterDate = condition.value
-      ? condition.value instanceof Date
-        ? condition.value
-        : new Date(condition.value)
-      : new Date();
-    const filterDateTo = condition.valueTo
-      ? condition.valueTo instanceof Date
-        ? condition.valueTo
-        : new Date(condition.valueTo)
-      : new Date();
-
-    switch (condition.operator) {
-      case "=":
-        return this.isSameDay(cellDate, filterDate);
-      case "!=":
-        return !this.isSameDay(cellDate, filterDate);
-      case ">":
-        return cellDate > filterDate;
-      case "<":
-        return cellDate < filterDate;
-      case "between":
-        return cellDate >= filterDate && cellDate <= filterDateTo;
-      default:
-        return true;
-    }
-  }
-
-  /**
-   * Check if two dates are on the same day.
-   */
-  private isSameDay(a: Date, b: Date): boolean {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
+    return rowPassesFilter(row, this.filterModel, this.options.getFieldValue);
   }
 
   /**
@@ -915,109 +683,4 @@ export class IndexedDataStore<TData extends Row = Row> {
       }
     }
   }
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Default field value accessor supporting dot notation.
- */
-function defaultGetFieldValue<TData>(row: TData, field: string): CellValue {
-  const parts = field.split(".");
-  let value: unknown = row;
-
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") {
-      return null;
-    }
-    value = (value as Record<string, unknown>)[part];
-  }
-
-  return (value ?? null) as CellValue;
-}
-
-/**
- * Set field value supporting dot notation.
- */
-function setFieldValue<TData>(
-  row: TData,
-  field: string,
-  value: CellValue
-): void {
-  const parts = field.split(".");
-  let current: unknown = row;
-
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i]!;
-    if (current == null || typeof current !== "object") {
-      return;
-    }
-    current = (current as Record<string, unknown>)[part];
-  }
-
-  if (current != null && typeof current === "object") {
-    (current as Record<string, unknown>)[parts[parts.length - 1]!] = value;
-  }
-}
-
-/**
- * Convert a string to a sortable number using first 10 characters.
- */
-function stringToSortableNumber(str: string): number {
-  const s = str.toLowerCase();
-  const len = Math.min(s.length, 10);
-  let hash = 0;
-
-  for (let i = 0; i < len; i++) {
-    const code = s.charCodeAt(i);
-    let mapped: number;
-    if (code >= 97 && code <= 122) {
-      mapped = code - 97;
-    } else if (code >= 48 && code <= 57) {
-      mapped = code - 48 + 26;
-    } else {
-      mapped = 0;
-    }
-    hash = hash * 36 + mapped;
-  }
-
-  for (let i = len; i < 10; i++) {
-    hash = hash * 36;
-  }
-
-  return hash;
-}
-
-/**
- * Compare two cell values.
- */
-function compareValues(a: CellValue, b: CellValue): number {
-  // Handle nulls and empty arrays
-  const aIsEmpty = a == null || (Array.isArray(a) && a.length === 0);
-  const bIsEmpty = b == null || (Array.isArray(b) && b.length === 0);
-
-  if (aIsEmpty && bIsEmpty) return 0;
-  if (aIsEmpty) return 1;
-  if (bIsEmpty) return -1;
-
-  // Handle arrays - join as comma-separated string (no internal sorting for performance)
-  if (Array.isArray(a) || Array.isArray(b)) {
-    const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
-    const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
-    return strA.localeCompare(strB);
-  }
-
-  const aNum = Number(a);
-  const bNum = Number(b);
-  if (!isNaN(aNum) && !isNaN(bNum)) {
-    return aNum - bNum;
-  }
-
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() - b.getTime();
-  }
-
-  return String(a).localeCompare(String(b));
 }

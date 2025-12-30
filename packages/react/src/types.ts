@@ -1,0 +1,65 @@
+// packages/react/src/types.ts
+
+import type {
+  Row,
+  ColumnDefinition,
+  DataSource,
+  CellRendererParams,
+  EditRendererParams,
+  HeaderRendererParams,
+} from "gp-grid-core";
+
+// =============================================================================
+// Renderer Types
+// =============================================================================
+
+/** React cell renderer: A function that renders a cell */
+export type ReactCellRenderer = (params: CellRendererParams) => React.ReactNode;
+
+/** React edit renderer: A function that renders the cell while in edit mode */
+export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
+
+/** React header renderer: A function that renders a header cell */
+export type ReactHeaderRenderer = (
+  params: HeaderRendererParams,
+) => React.ReactNode;
+
+// =============================================================================
+// Grid Props
+// =============================================================================
+
+/** Grid component props */
+export interface GridProps<TData extends Row = Row> {
+  /** Column definitions */
+  columns: ColumnDefinition[];
+  /** Data source for the grid */
+  dataSource?: DataSource<TData>;
+  /** Legacy: Raw row data (will be wrapped in a client data source) */
+  rowData?: TData[];
+  /** Row height in pixels */
+  rowHeight: number;
+  /** Header height in pixels: Default to row height */
+  headerHeight?: number;
+  /** Overscan: How many rows to render outside the viewport */
+  overscan?: number;
+  /** Enable/disable sorting globally. Default: true */
+  sortingEnabled?: boolean;
+  /** Enable dark mode styling: Default to false */
+  darkMode?: boolean;
+  /** Wheel scroll dampening factor when virtual scrolling is active (0-1): Default 0.1 */
+  wheelDampening?: number;
+
+  /** Renderer registries */
+  cellRenderers?: Record<string, ReactCellRenderer>;
+  /** Edit renderer registries */
+  editRenderers?: Record<string, ReactEditRenderer>;
+  /** Header renderer registries */
+  headerRenderers?: Record<string, ReactHeaderRenderer>;
+
+  /** Global cell renderer */
+  cellRenderer?: ReactCellRenderer;
+  /** Global edit renderer */
+  editRenderer?: ReactEditRenderer;
+  /** Global header renderer */
+  headerRenderer?: ReactHeaderRenderer;
+}

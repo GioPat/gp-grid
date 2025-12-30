@@ -30,7 +30,12 @@ export function FilterPopup({
   // Close on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement;
+      // Ignore clicks on filter icons - let them handle their own toggle logic
+      if (target.closest(".gp-grid-filter-icon")) {
+        return;
+      }
+      if (popupRef.current && !popupRef.current.contains(target)) {
         onClose();
       }
     };

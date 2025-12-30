@@ -6,300 +6,39 @@ import React, {
   useReducer,
   useCallback,
   useMemo,
-  useState,
 } from "react";
 import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
 } from "gp-grid-core";
-import type {
-  GridInstruction,
-  ColumnDefinition,
-  DataSource,
-  Row,
-  CellRendererParams,
-  EditRendererParams,
-  HeaderRendererParams,
-  CellPosition,
-  CellRange,
-  CellValue,
-  SortDirection,
-  ColumnFilterModel,
-  OpenFilterPopupInstruction,
-} from "gp-grid-core";
+import type { Row, SortDirection, ColumnFilterModel } from "gp-grid-core";
 import { injectStyles } from "./styles";
 import { FilterPopup } from "./components";
+import { gridReducer, createInitialState } from "./gridState";
+import { calculateColumnPositions, getTotalWidth } from "./utils/positioning";
+import {
+  isCellSelected,
+  isCellActive,
+  isCellEditing,
+  isCellInFillPreview,
+  buildCellClasses,
+} from "./utils/classNames";
+import { useFillDrag } from "./hooks/useFillDrag";
+import { useSelectionDrag } from "./hooks/useSelectionDrag";
+import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { renderCell } from "./renderers/cellRenderer";
+import { renderEditCell } from "./renderers/editRenderer";
+import { renderHeader } from "./renderers/headerRenderer";
+import type { GridProps } from "./types";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-/** React cell renderer: A function that renders a cell */
-export type ReactCellRenderer = (params: CellRendererParams) => React.ReactNode;
-/** React edit renderer: A function that renders the cell while in edit mode */
-export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
-/** React header renderer: A function that renders a header cell */
-export type ReactHeaderRenderer = (
-  params: HeaderRendererParams,
-) => React.ReactNode;
-
-/** Grid component props */
-export interface GridProps<TData extends Row = Row> {
-  /** Column definitions */
-  columns: ColumnDefinition[];
-  /** Data source for the grid */
-  dataSource?: DataSource<TData>;
-  /** Legacy: Raw row data (will be wrapped in a client data source) */
-  rowData?: TData[];
-  /** Row height in pixels */
-  rowHeight: number;
-  /** Header height in pixels: Default to row height */
-  headerHeight?: number;
-  /** Overscan: How many rows to render outside the viewport */
-  overscan?: number;
-  /** Enable/disable sorting globally. Default: true */
-  sortingEnabled?: boolean;
-  /** Enable dark mode styling: Default to false */
-  darkMode?: boolean;
-  /** Wheel scroll dampening factor when virtual scrolling is active (0-1): Default 0.1 */
-  wheelDampening?: number;
-
-  /** Renderer registries */
-  cellRenderers?: Record<string, ReactCellRenderer>;
-  /** Edit renderer registries */
-  editRenderers?: Record<string, ReactEditRenderer>;
-  /** Header renderer registries */
-  headerRenderers?: Record<string, ReactHeaderRenderer>;
-
-  /** Global cell renderer */
-  cellRenderer?: ReactCellRenderer;
-  /** Global edit renderer */
-  editRenderer?: ReactEditRenderer;
-  /** Global header renderer */
-  headerRenderer?: ReactHeaderRenderer;
-}
-
-// =============================================================================
-// State Types
-// =============================================================================
-
-interface SlotData {
-  slotId: string;
-  rowIndex: number;
-  rowData: Row;
-  translateY: number;
-}
-
-interface HeaderData {
-  column: ColumnDefinition;
-  sortDirection?: SortDirection;
-  sortIndex?: number;
-  sortable: boolean;
-  filterable: boolean;
-  hasFilter: boolean;
-}
-
-interface FilterPopupState {
-  isOpen: boolean;
-  colIndex: number;
-  column: ColumnDefinition | null;
-  anchorRect: { top: number; left: number; width: number; height: number } | null;
-  distinctValues: CellValue[];
-  currentFilter?: ColumnFilterModel;
-}
-
-interface GridState {
-  slots: Map<string, SlotData>;
-  activeCell: CellPosition | null;
-  selectionRange: CellRange | null;
-  editingCell: { row: number; col: number; initialValue: CellValue } | null;
-  contentWidth: number;
-  contentHeight: number;
-  headers: Map<number, HeaderData>;
-  filterPopup: FilterPopupState | null;
-  isLoading: boolean;
-  error: string | null;
-  totalRows: number;
-}
-
-type GridAction =
-  | { type: "BATCH_INSTRUCTIONS"; instructions: GridInstruction[] }
-  | { type: "RESET" };
-
-// =============================================================================
-// Reducer
-// =============================================================================
-
-/**
- * Apply a single instruction to mutable slot maps and return other state changes.
- * This allows batching multiple slot operations efficiently.
- */
-function applyInstruction(
-  instruction: GridInstruction,
-  slots: Map<string, SlotData>,
-  headers: Map<number, HeaderData>,
-): Partial<GridState> | null {
-  switch (instruction.type) {
-    case "CREATE_SLOT":
-      slots.set(instruction.slotId, {
-        slotId: instruction.slotId,
-        rowIndex: -1,
-        rowData: {},
-        translateY: 0,
-      });
-      return null; // Slots map is mutated
-
-    case "DESTROY_SLOT":
-      slots.delete(instruction.slotId);
-      return null;
-
-    case "ASSIGN_SLOT": {
-      const existing = slots.get(instruction.slotId);
-      if (existing) {
-        slots.set(instruction.slotId, {
-          ...existing,
-          rowIndex: instruction.rowIndex,
-          rowData: instruction.rowData,
-        });
-      }
-      return null;
-    }
-
-    case "MOVE_SLOT": {
-      const existing = slots.get(instruction.slotId);
-      if (existing) {
-        slots.set(instruction.slotId, {
-          ...existing,
-          translateY: instruction.translateY,
-        });
-      }
-      return null;
-    }
-
-    case "SET_ACTIVE_CELL":
-      return { activeCell: instruction.position };
-
-    case "SET_SELECTION_RANGE":
-      return { selectionRange: instruction.range };
-
-    case "START_EDIT":
-      return {
-        editingCell: {
-          row: instruction.row,
-          col: instruction.col,
-          initialValue: instruction.initialValue,
-        },
-      };
-
-    case "STOP_EDIT":
-      return { editingCell: null };
-
-    case "SET_CONTENT_SIZE":
-      return {
-        contentWidth: instruction.width,
-        contentHeight: instruction.height,
-      };
-
-    case "UPDATE_HEADER":
-      headers.set(instruction.colIndex, {
-        column: instruction.column,
-        sortDirection: instruction.sortDirection,
-        sortIndex: instruction.sortIndex,
-        sortable: instruction.sortable,
-        filterable: instruction.filterable,
-        hasFilter: instruction.hasFilter,
-      });
-      return null;
-
-    case "OPEN_FILTER_POPUP":
-      return {
-        filterPopup: {
-          isOpen: true,
-          colIndex: instruction.colIndex,
-          column: instruction.column,
-          anchorRect: instruction.anchorRect,
-          distinctValues: instruction.distinctValues,
-          currentFilter: instruction.currentFilter,
-        },
-      };
-
-    case "CLOSE_FILTER_POPUP":
-      return { filterPopup: null };
-
-    case "DATA_LOADING":
-      return { isLoading: true, error: null };
-
-    case "DATA_LOADED":
-      return { isLoading: false, totalRows: instruction.totalRows };
-
-    case "DATA_ERROR":
-      return { isLoading: false, error: instruction.error };
-
-    // Transaction instructions
-    case "ROWS_ADDED":
-    case "ROWS_REMOVED":
-      return { totalRows: instruction.totalRows };
-
-    case "ROWS_UPDATED":
-    case "TRANSACTION_PROCESSED":
-      // These don't change state directly - slot updates come via ASSIGN_SLOT
-      return null;
-
-    default:
-      return null;
-  }
-}
-
-function gridReducer(state: GridState, action: GridAction): GridState {
-  if (action.type === "RESET") {
-    return createInitialState();
-  }
-
-  // Process batch of instructions in one state update
-  const { instructions } = action;
-  // console.log("[GP-Grid Reducer] Processing batch:", instructions.map(i => i.type));
-  if (instructions.length === 0) {
-    return state;
-  }
-
-  // Create mutable copies of Maps to batch updates
-  const newSlots = new Map(state.slots);
-  const newHeaders = new Map(state.headers);
-  let stateChanges: Partial<GridState> = {};
-
-  // Apply all instructions
-  for (const instruction of instructions) {
-    const changes = applyInstruction(instruction, newSlots, newHeaders);
-    if (changes) {
-      stateChanges = { ...stateChanges, ...changes };
-    }
-  }
-
-  // Return new state with all changes applied
-  return {
-    ...state,
-    ...stateChanges,
-    slots: newSlots,
-    headers: newHeaders,
-  };
-}
-
-function createInitialState(): GridState {
-  return {
-    slots: new Map(),
-    activeCell: null,
-    selectionRange: null,
-    editingCell: null,
-    contentWidth: 0,
-    contentHeight: 0,
-    headers: new Map(),
-    filterPopup: null,
-    isLoading: false,
-    error: null,
-    totalRows: 0,
-  };
-}
+// Re-export types for backwards compatibility
+export type {
+  ReactCellRenderer,
+  ReactEditRenderer,
+  ReactHeaderRenderer,
+  GridProps,
+} from "./types";
 
 // =============================================================================
 // Grid Component
@@ -337,21 +76,6 @@ export function Grid<TData extends Row = Row>(
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
   const [state, dispatch] = useReducer(gridReducer, null, createInitialState);
-  const [isDraggingFill, setIsDraggingFill] = useState(false);
-  const [fillTarget, setFillTarget] = useState<{
-    row: number;
-    col: number;
-  } | null>(null);
-  const [fillSourceRange, setFillSourceRange] = useState<{
-    startRow: number;
-    startCol: number;
-    endRow: number;
-    endCol: number;
-  } | null>(null);
-  const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
-  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   // Computed heights
   const totalHeaderHeight = headerHeight;
@@ -369,17 +93,44 @@ export function Grid<TData extends Row = Row>(
   }, [providedDataSource, rowData]);
 
   // Compute column positions
-  const columnPositions = useMemo(() => {
-    const positions = [0];
-    let pos = 0;
-    for (const col of columns) {
-      pos += col.width;
-      positions.push(pos);
-    }
-    return positions;
-  }, [columns]);
+  const columnPositions = useMemo(
+    () => calculateColumnPositions(columns),
+    [columns],
+  );
+  const totalWidth = getTotalWidth(columnPositions);
 
-  const totalWidth = columnPositions[columnPositions.length - 1] ?? 0;
+  // Custom hooks for drag functionality
+  const {
+    isDraggingFill,
+    fillTarget,
+    fillSourceRange,
+    handleFillHandleMouseDown,
+  } = useFillDrag(
+    coreRef,
+    containerRef,
+    state.activeCell,
+    state.selectionRange,
+    totalHeaderHeight,
+    columnPositions,
+  );
+
+  const { startSelectionDrag } = useSelectionDrag(
+    coreRef,
+    containerRef,
+    totalHeaderHeight,
+    columnPositions,
+    columns.length,
+  );
+
+  // Keyboard navigation
+  const handleKeyDown = useKeyboardNavigation(coreRef, {
+    activeCell: state.activeCell,
+    editingCell: state.editingCell,
+    filterPopupOpen: state.filterPopup?.isOpen ?? false,
+    containerRef,
+    rowHeight,
+    headerHeight: totalHeaderHeight,
+  });
 
   // Initialize GridCore
   useEffect(() => {
@@ -406,12 +157,20 @@ export function Grid<TData extends Row = Row>(
       unsubscribe();
       coreRef.current = null;
     };
-  }, [columns, dataSource, rowHeight, totalHeaderHeight, overscan]);
+  }, [
+    columns,
+    dataSource,
+    rowHeight,
+    totalHeaderHeight,
+    overscan,
+    sortingEnabled,
+  ]);
 
   // Subscribe to data source changes (for MutableDataSource)
   useEffect(() => {
-    // Check if dataSource has a subscribe method (MutableDataSource)
-    const mutableDataSource = dataSource as { subscribe?: (listener: () => void) => () => void };
+    const mutableDataSource = dataSource as {
+      subscribe?: (listener: () => void) => () => void;
+    };
     if (mutableDataSource.subscribe) {
       const unsubscribe = mutableDataSource.subscribe(() => {
         coreRef.current?.refresh();
@@ -432,6 +191,10 @@ export function Grid<TData extends Row = Row>(
       container.clientWidth,
       container.clientHeight,
     );
+
+    // Update visible row range in state (used to prevent selection showing in overscan)
+    const visibleRange = core.getVisibleRowRange();
+    dispatch({ type: "UPDATE_VISIBLE_RANGE", start: visibleRange.start, end: visibleRange.end });
   }, []);
 
   // Handle wheel with reduced sensitivity for large datasets
@@ -452,7 +215,7 @@ export function Grid<TData extends Row = Row>(
     [wheelDampening],
   );
 
-  // Initial measurement
+  // Initial measurement and resize handling
   useEffect(() => {
     const container = containerRef.current;
     const core = coreRef.current;
@@ -473,6 +236,15 @@ export function Grid<TData extends Row = Row>(
     return () => resizeObserver.disconnect();
   }, [handleScroll]);
 
+  // Update visible range when data loads (totalRows changes)
+  useEffect(() => {
+    const core = coreRef.current;
+    if (core && state.totalRows > 0) {
+      const visibleRange = core.getVisibleRowRange();
+      dispatch({ type: "UPDATE_VISIBLE_RANGE", start: visibleRange.start, end: visibleRange.end });
+    }
+  }, [state.totalRows]);
+
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(
     (colId: string, filter: ColumnFilterModel | null) => {
@@ -492,162 +264,14 @@ export function Grid<TData extends Row = Row>(
     }
   }, []);
 
-  // Keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      const core = coreRef.current;
-      if (!core) return;
-
-      // Don't handle keyboard events when filter popup is open
-      if (state.filterPopup?.isOpen) {
-        return;
-      }
-
-      // Don't handle keyboard events when editing
-      if (
-        state.editingCell &&
-        e.key !== "Enter" &&
-        e.key !== "Escape" &&
-        e.key !== "Tab"
-      ) {
-        return;
-      }
-
-      const { selection } = core;
-      const isShift = e.shiftKey;
-      const isCtrl = e.ctrlKey || e.metaKey;
-
-      switch (e.key) {
-        case "ArrowUp":
-          e.preventDefault();
-          selection.moveFocus("up", isShift);
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          selection.moveFocus("down", isShift);
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          selection.moveFocus("left", isShift);
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          selection.moveFocus("right", isShift);
-          break;
-        case "Enter":
-          e.preventDefault();
-          if (state.editingCell) {
-            core.commitEdit();
-          } else if (state.activeCell) {
-            core.startEdit(state.activeCell.row, state.activeCell.col);
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          if (state.editingCell) {
-            core.cancelEdit();
-          } else {
-            selection.clearSelection();
-          }
-          break;
-        case "Tab":
-          e.preventDefault();
-          if (state.editingCell) {
-            core.commitEdit();
-          }
-          selection.moveFocus(isShift ? "left" : "right", false);
-          break;
-        case "a":
-          if (isCtrl) {
-            e.preventDefault();
-            selection.selectAll();
-          }
-          break;
-        case "c":
-          if (isCtrl) {
-            e.preventDefault();
-            selection.copySelectionToClipboard();
-          }
-          break;
-        case "F2":
-          e.preventDefault();
-          if (state.activeCell && !state.editingCell) {
-            core.startEdit(state.activeCell.row, state.activeCell.col);
-          }
-          break;
-        case "Delete":
-        case "Backspace":
-          // Start editing with empty value on delete/backspace
-          if (state.activeCell && !state.editingCell) {
-            e.preventDefault();
-            core.startEdit(state.activeCell.row, state.activeCell.col);
-          }
-          break;
-        default:
-          // Start editing on any printable character
-          if (
-            state.activeCell &&
-            !state.editingCell &&
-            !isCtrl &&
-            e.key.length === 1
-          ) {
-            core.startEdit(state.activeCell.row, state.activeCell.col);
-          }
-          break;
-      }
-    },
-    [state.activeCell, state.editingCell, state.filterPopup],
-  );
-
-  // Scroll active cell into view when navigating with keyboard
-  useEffect(() => {
-    // Skip scrolling when editing - the user just clicked on the cell so it's already visible
-    if (!state.activeCell || !containerRef.current || state.editingCell) return;
-
-    const { row, col } = state.activeCell;
-    const container = containerRef.current;
-    const core = coreRef.current;
-    if (!core) return;
-
-    // Get actually visible rows (not including overscan)
-    const { start: visibleStart, end: visibleEnd } = core.getVisibleRowRange();
-
-    // Only scroll if row is outside visible range
-    if (row < visibleStart) {
-      // Row is above viewport - scroll to put it at TOP
-      container.scrollTop = core.getScrollTopForRow(row);
-    } else if (row > visibleEnd) {
-      // Row is below viewport - scroll to put it at BOTTOM
-      // We want the row to be the last visible row
-      // visibleEnd - visibleStart + 1 = number of fully visible rows (inclusive range)
-      const visibleRows = Math.max(1, visibleEnd - visibleStart + 1);
-      // To have row N as the last visible, first row should be N - visibleRows + 1
-      const targetFirstRow = Math.max(0, row - visibleRows + 1);
-      container.scrollTop = core.getScrollTopForRow(targetFirstRow);
-    }
-
-    // Horizontal scrolling (unchanged - no scaling on X axis)
-    const cellLeft = columnPositions[col] ?? 0;
-    const cellRight = cellLeft + (columns[col]?.width ?? 0);
-    const visibleLeft = container.scrollLeft;
-    const visibleRight = container.scrollLeft + container.clientWidth;
-
-    if (cellLeft < visibleLeft) {
-      container.scrollLeft = cellLeft;
-    } else if (cellRight > visibleRight) {
-      container.scrollLeft = cellRight - container.clientWidth;
-    }
-  }, [state.activeCell, state.editingCell, columnPositions, columns]);
+  // Note: Scroll-into-view for keyboard navigation is handled in useKeyboardNavigation hook
+  // We don't scroll on mouse clicks to avoid unexpected viewport jumps when clicking overscan cells
 
   // Cell mouse down handler (starts selection and drag)
   const handleCellMouseDown = useCallback(
     (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
-      // console.log("[GP-Grid] Cell mousedown:", { rowIndex, colIndex, coreExists: !!coreRef.current });
       const core = coreRef.current;
-      if (!core || core.getEditState() !== null) {
-        // console.warn("[GP-Grid] Core not initialized on cell mousedown");
-        return;
-      }
+      if (!core || core.getEditState() !== null) return;
 
       // Only handle left mouse button
       if (e.button !== 0) return;
@@ -662,10 +286,10 @@ export function Grid<TData extends Row = Row>(
 
       // Start drag selection (unless shift is held - that's a one-time extend)
       if (!e.shiftKey) {
-        setIsDraggingSelection(true);
+        startSelectionDrag();
       }
     },
-    [],
+    [startSelectionDrag],
   );
 
   // Cell double-click handler
@@ -673,7 +297,6 @@ export function Grid<TData extends Row = Row>(
     (rowIndex: number, colIndex: number) => {
       const core = coreRef.current;
       if (!core) return;
-
       core.startEdit(rowIndex, colIndex);
     },
     [],
@@ -682,18 +305,11 @@ export function Grid<TData extends Row = Row>(
   // Header click handler (sort)
   const handleHeaderClick = useCallback(
     (colIndex: number, e: React.MouseEvent) => {
-      // console.log("[GP-Grid] Header click:", { colIndex, coreExists: !!coreRef.current });
       const core = coreRef.current;
-      if (!core) {
-        // console.warn("[GP-Grid] Core not initialized on header click");
-        return;
-      }
+      if (!core) return;
 
       const column = columns[colIndex];
-      if (!column) {
-        // console.warn("[GP-Grid] Column not found for index:", colIndex);
-        return;
-      }
+      if (!column) return;
 
       const colId = column.colId ?? column.field;
       const headerInfo = state.headers.get(colIndex);
@@ -709,593 +325,9 @@ export function Grid<TData extends Row = Row>(
         newDirection = null;
       }
 
-      // console.log("[GP-Grid] Setting sort:", { colId, newDirection });
       core.setSort(colId, newDirection, e.shiftKey);
     },
     [columns, state.headers],
-  );
-
-  // Fill handle drag handlers
-  const handleFillHandleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      // console.log("[GP-Grid] Fill handle mousedown triggered");
-      e.preventDefault();
-      e.stopPropagation();
-
-      const core = coreRef.current;
-      if (!core) return;
-
-      const { activeCell, selectionRange } = state;
-      if (!activeCell && !selectionRange) return;
-
-      // Create source range from selection or active cell
-      const sourceRange = selectionRange ?? {
-        startRow: activeCell!.row,
-        startCol: activeCell!.col,
-        endRow: activeCell!.row,
-        endCol: activeCell!.col,
-      };
-
-      // console.log("[GP-Grid] Starting fill drag with source range:", sourceRange);
-      core.fill.startFillDrag(sourceRange);
-      setFillSourceRange(sourceRange);
-      setFillTarget({
-        row: Math.max(sourceRange.startRow, sourceRange.endRow),
-        col: Math.max(sourceRange.startCol, sourceRange.endCol),
-      });
-      setIsDraggingFill(true);
-    },
-    [state.activeCell, state.selectionRange],
-  );
-
-  // Handle mouse move during fill drag
-  useEffect(() => {
-    if (!isDraggingFill) return;
-
-    // Auto-scroll configuration
-    const SCROLL_THRESHOLD = 40; // pixels from edge to trigger scroll
-    const SCROLL_SPEED = 10; // pixels per frame
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const core = coreRef.current;
-      const container = containerRef.current;
-      if (!core || !container) return;
-
-      // Get container bounds
-      const rect = container.getBoundingClientRect();
-      const scrollLeft = container.scrollLeft;
-      const scrollTop = container.scrollTop;
-
-      // Calculate mouse position relative to grid content
-      const mouseX = e.clientX - rect.left + scrollLeft;
-      // Viewport-relative Y (physical pixels below header, NOT including scroll)
-      const viewportY = e.clientY - rect.top - totalHeaderHeight;
-
-      // Find the row under the mouse (core method handles scroll and scaling)
-      const targetRow = Math.max(
-        0,
-        core.getRowIndexAtDisplayY(viewportY, scrollTop),
-      );
-
-      // Find column by checking column positions
-      let targetCol = 0;
-      for (let i = 0; i < columnPositions.length - 1; i++) {
-        if (mouseX >= columnPositions[i]! && mouseX < columnPositions[i + 1]!) {
-          targetCol = i;
-          break;
-        }
-        if (mouseX >= columnPositions[columnPositions.length - 1]!) {
-          targetCol = columnPositions.length - 2;
-        }
-      }
-
-      core.fill.updateFillDrag(targetRow, targetCol);
-      setFillTarget({ row: targetRow, col: targetCol });
-
-      // Auto-scroll logic
-      const mouseYInContainer = e.clientY - rect.top;
-      const mouseXInContainer = e.clientX - rect.left;
-
-      // Clear any existing auto-scroll
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-
-      // Check if we need to auto-scroll
-      let scrollDeltaX = 0;
-      let scrollDeltaY = 0;
-
-      // Vertical scrolling
-      if (mouseYInContainer < SCROLL_THRESHOLD + totalHeaderHeight) {
-        scrollDeltaY = -SCROLL_SPEED;
-      } else if (mouseYInContainer > rect.height - SCROLL_THRESHOLD) {
-        scrollDeltaY = SCROLL_SPEED;
-      }
-
-      // Horizontal scrolling
-      if (mouseXInContainer < SCROLL_THRESHOLD) {
-        scrollDeltaX = -SCROLL_SPEED;
-      } else if (mouseXInContainer > rect.width - SCROLL_THRESHOLD) {
-        scrollDeltaX = SCROLL_SPEED;
-      }
-
-      // Start auto-scroll if needed
-      if (scrollDeltaX !== 0 || scrollDeltaY !== 0) {
-        autoScrollIntervalRef.current = setInterval(() => {
-          if (containerRef.current) {
-            containerRef.current.scrollTop += scrollDeltaY;
-            containerRef.current.scrollLeft += scrollDeltaX;
-          }
-        }, 16); // ~60fps
-      }
-    };
-
-    const handleMouseUp = () => {
-      // Clear auto-scroll
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-
-      const core = coreRef.current;
-      if (core) {
-        core.fill.commitFillDrag();
-        // Refresh slots to show updated values
-        core.refreshSlotData();
-      }
-      setIsDraggingFill(false);
-      setFillTarget(null);
-      setFillSourceRange(null);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      // Clear auto-scroll on cleanup
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDraggingFill, totalHeaderHeight, rowHeight, columnPositions]);
-
-  // Handle mouse move/up during selection drag
-  useEffect(() => {
-    if (!isDraggingSelection) return;
-
-    // Auto-scroll configuration
-    const SCROLL_THRESHOLD = 40;
-    const SCROLL_SPEED = 10;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const core = coreRef.current;
-      const container = containerRef.current;
-      if (!core || !container) return;
-
-      // Get container bounds
-      const rect = container.getBoundingClientRect();
-      const scrollLeft = container.scrollLeft;
-      const scrollTop = container.scrollTop;
-
-      // Calculate mouse position relative to grid content
-      const mouseX = e.clientX - rect.left + scrollLeft;
-      // Viewport-relative Y (physical pixels below header, NOT including scroll)
-      const viewportY = e.clientY - rect.top - totalHeaderHeight;
-
-      // Find the row under the mouse (core method handles scroll and scaling)
-      const targetRow = Math.max(
-        0,
-        Math.min(
-          core.getRowIndexAtDisplayY(viewportY, scrollTop),
-          core.getRowCount() - 1,
-        ),
-      );
-
-      // Find column by checking column positions
-      let targetCol = 0;
-      for (let i = 0; i < columnPositions.length - 1; i++) {
-        if (mouseX >= columnPositions[i]! && mouseX < columnPositions[i + 1]!) {
-          targetCol = i;
-          break;
-        }
-        if (mouseX >= columnPositions[columnPositions.length - 1]!) {
-          targetCol = columnPositions.length - 2;
-        }
-      }
-      targetCol = Math.max(0, Math.min(targetCol, columns.length - 1));
-
-      // Extend selection to target cell (like shift+click)
-      core.selection.startSelection(
-        { row: targetRow, col: targetCol },
-        { shift: true },
-      );
-
-      // Auto-scroll logic
-      const mouseYInContainer = e.clientY - rect.top;
-      const mouseXInContainer = e.clientX - rect.left;
-
-      // Clear any existing auto-scroll
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-
-      // Check if we need to auto-scroll
-      let scrollDeltaX = 0;
-      let scrollDeltaY = 0;
-
-      // Vertical scrolling
-      if (mouseYInContainer < SCROLL_THRESHOLD + totalHeaderHeight) {
-        scrollDeltaY = -SCROLL_SPEED;
-      } else if (mouseYInContainer > rect.height - SCROLL_THRESHOLD) {
-        scrollDeltaY = SCROLL_SPEED;
-      }
-
-      // Horizontal scrolling
-      if (mouseXInContainer < SCROLL_THRESHOLD) {
-        scrollDeltaX = -SCROLL_SPEED;
-      } else if (mouseXInContainer > rect.width - SCROLL_THRESHOLD) {
-        scrollDeltaX = SCROLL_SPEED;
-      }
-
-      // Start auto-scroll if needed
-      if (scrollDeltaX !== 0 || scrollDeltaY !== 0) {
-        autoScrollIntervalRef.current = setInterval(() => {
-          if (containerRef.current) {
-            containerRef.current.scrollTop += scrollDeltaY;
-            containerRef.current.scrollLeft += scrollDeltaX;
-          }
-        }, 16); // ~60fps
-      }
-    };
-
-    const handleMouseUp = () => {
-      // Clear auto-scroll
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-      setIsDraggingSelection(false);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      if (autoScrollIntervalRef.current) {
-        clearInterval(autoScrollIntervalRef.current);
-        autoScrollIntervalRef.current = null;
-      }
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDraggingSelection, totalHeaderHeight, columnPositions, columns.length]);
-
-  // Render helpers
-  const isSelected = useCallback(
-    (row: number, col: number): boolean => {
-      const { selectionRange } = state;
-      if (!selectionRange) return false;
-
-      const minRow = Math.min(selectionRange.startRow, selectionRange.endRow);
-      const maxRow = Math.max(selectionRange.startRow, selectionRange.endRow);
-      const minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
-      const maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
-
-      return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
-    },
-    [state.selectionRange],
-  );
-
-  const isActiveCell = useCallback(
-    (row: number, col: number): boolean => {
-      return state.activeCell?.row === row && state.activeCell?.col === col;
-    },
-    [state.activeCell],
-  );
-
-  const isEditingCell = useCallback(
-    (row: number, col: number): boolean => {
-      return state.editingCell?.row === row && state.editingCell?.col === col;
-    },
-    [state.editingCell],
-  );
-
-  // Check if cell is in fill preview range
-  const isInFillPreview = useCallback(
-    (row: number, col: number): boolean => {
-      if (!isDraggingFill || !fillSourceRange || !fillTarget) return false;
-
-      const srcMinRow = Math.min(
-        fillSourceRange.startRow,
-        fillSourceRange.endRow,
-      );
-      const srcMaxRow = Math.max(
-        fillSourceRange.startRow,
-        fillSourceRange.endRow,
-      );
-      const srcMinCol = Math.min(
-        fillSourceRange.startCol,
-        fillSourceRange.endCol,
-      );
-      const srcMaxCol = Math.max(
-        fillSourceRange.startCol,
-        fillSourceRange.endCol,
-      );
-
-      // Determine fill direction (vertical only)
-      const fillDown = fillTarget.row > srcMaxRow;
-      const fillUp = fillTarget.row < srcMinRow;
-
-      // Check if cell is in the fill preview area (not the source area)
-      if (fillDown) {
-        return (
-          row > srcMaxRow &&
-          row <= fillTarget.row &&
-          col >= srcMinCol &&
-          col <= srcMaxCol
-        );
-      }
-      if (fillUp) {
-        return (
-          row < srcMinRow &&
-          row >= fillTarget.row &&
-          col >= srcMinCol &&
-          col <= srcMaxCol
-        );
-      }
-
-      return false;
-    },
-    [isDraggingFill, fillSourceRange, fillTarget],
-  );
-
-  // Get cell value from row data
-  const getCellValue = useCallback((rowData: Row, field: string): CellValue => {
-    const parts = field.split(".");
-    let value: unknown = rowData;
-
-    for (const part of parts) {
-      if (value == null || typeof value !== "object") {
-        return null;
-      }
-      value = (value as Record<string, unknown>)[part];
-    }
-
-    return (value ?? null) as CellValue;
-  }, []);
-
-  // Render cell content
-  const renderCell = useCallback(
-    (
-      column: ColumnDefinition,
-      rowData: Row,
-      rowIndex: number,
-      colIndex: number,
-    ): React.ReactNode => {
-      const value = getCellValue(rowData, column.field);
-      const params: CellRendererParams = {
-        value,
-        rowData,
-        column,
-        rowIndex,
-        colIndex,
-        isActive: isActiveCell(rowIndex, colIndex),
-        isSelected: isSelected(rowIndex, colIndex),
-        isEditing: isEditingCell(rowIndex, colIndex),
-      };
-
-      // Check for column-specific renderer
-      if (column.cellRenderer && typeof column.cellRenderer === "string") {
-        const renderer = cellRenderers[column.cellRenderer];
-        if (renderer) {
-          return renderer(params);
-        }
-      }
-
-      // Fall back to global renderer
-      if (cellRenderer) {
-        return cellRenderer(params);
-      }
-
-      // Default text rendering
-      return value == null ? "" : String(value);
-    },
-    [
-      getCellValue,
-      isActiveCell,
-      isSelected,
-      isEditingCell,
-      cellRenderers,
-      cellRenderer,
-    ],
-  );
-
-  // Render edit cell
-  const renderEditCell = useCallback(
-    (
-      column: ColumnDefinition,
-      rowData: Row,
-      rowIndex: number,
-      colIndex: number,
-      initialValue: CellValue,
-    ): React.ReactNode => {
-      const core = coreRef.current;
-      if (!core) return null;
-
-      const value = getCellValue(rowData, column.field);
-      const params: EditRendererParams = {
-        value,
-        rowData,
-        column,
-        rowIndex,
-        colIndex,
-        isActive: true,
-        isSelected: true,
-        isEditing: true,
-        initialValue,
-        onValueChange: (newValue) => core.updateEditValue(newValue),
-        onCommit: () => core.commitEdit(),
-        onCancel: () => core.cancelEdit(),
-      };
-
-      // Check for column-specific renderer
-      if (column.editRenderer && typeof column.editRenderer === "string") {
-        const renderer = editRenderers[column.editRenderer];
-        if (renderer) {
-          return renderer(params);
-        }
-      }
-
-      // Fall back to global renderer
-      if (editRenderer) {
-        return editRenderer(params);
-      }
-
-      // Default input
-      return (
-        <input
-          className="gp-grid-edit-input"
-          type="text"
-          defaultValue={initialValue == null ? "" : String(initialValue)}
-          autoFocus
-          onFocus={(e) => e.target.select()}
-          onChange={(e) => core.updateEditValue(e.target.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") {
-              core.commitEdit();
-            } else if (e.key === "Escape") {
-              core.cancelEdit();
-            } else if (e.key === "Tab") {
-              e.preventDefault();
-              core.commitEdit();
-              core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
-            }
-          }}
-          onBlur={() => core.commitEdit()}
-        />
-      );
-    },
-    [getCellValue, editRenderers, editRenderer],
-  );
-
-  // Render header
-  const renderHeader = useCallback(
-    (
-      column: ColumnDefinition,
-      colIndex: number,
-      sortDirection?: SortDirection,
-      sortIndex?: number,
-      sortable: boolean = true,
-      filterable: boolean = true,
-      hasFilter: boolean = false,
-    ): React.ReactNode => {
-      const core = coreRef.current;
-      const params: HeaderRendererParams = {
-        column,
-        colIndex,
-        sortDirection,
-        sortIndex,
-        sortable,
-        filterable,
-        hasFilter,
-        onSort: (direction, addToExisting) => {
-          if (core && sortable) {
-            core.setSort(
-              column.colId ?? column.field,
-              direction,
-              addToExisting,
-            );
-          }
-        },
-        onFilterClick: () => {
-          if (core && filterable) {
-            const headerCell = containerRef.current?.querySelector(
-              `[data-col-index="${colIndex}"]`,
-            ) as HTMLElement | null;
-            if (headerCell) {
-              const rect = headerCell.getBoundingClientRect();
-              core.openFilterPopup(colIndex, {
-                top: rect.top,
-                left: rect.left,
-                width: rect.width,
-                height: rect.height,
-              });
-            }
-          }
-        },
-      };
-
-      // Check for column-specific renderer
-      if (column.headerRenderer && typeof column.headerRenderer === "string") {
-        const renderer = headerRenderers[column.headerRenderer];
-        if (renderer) {
-          return renderer(params);
-        }
-      }
-
-      // Fall back to global renderer
-      if (headerRenderer) {
-        return headerRenderer(params);
-      }
-
-      // Default header with stacked sort arrows and filter icon
-      return (
-        <>
-          <span className="gp-grid-header-text">
-            {column.headerName ?? column.field}
-          </span>
-          <span className="gp-grid-header-icons">
-            {/* Stacked sort arrows - always show when sortable */}
-            {sortable && (
-              <span className="gp-grid-sort-arrows">
-                <span className="gp-grid-sort-arrows-stack">
-                  <svg
-                    className={`gp-grid-sort-arrow-up${sortDirection === "asc" ? " active" : ""}`}
-                    width="8"
-                    height="6"
-                    viewBox="0 0 8 6"
-                  >
-                    <path d="M4 0L8 6H0L4 0Z" fill="currentColor" />
-                  </svg>
-                  <svg
-                    className={`gp-grid-sort-arrow-down${sortDirection === "desc" ? " active" : ""}`}
-                    width="8"
-                    height="6"
-                    viewBox="0 0 8 6"
-                  >
-                    <path d="M4 6L0 0H8L4 6Z" fill="currentColor" />
-                  </svg>
-                </span>
-                {sortIndex !== undefined && sortIndex > 0 && (
-                  <span className="gp-grid-sort-index">{sortIndex}</span>
-                )}
-              </span>
-            )}
-            {/* Filter icon - MUI FilterList style */}
-            {filterable && (
-              <span
-                className={`gp-grid-filter-icon${hasFilter ? " active" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  params.onFilterClick();
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
-                </svg>
-              </span>
-            )}
-          </span>
-        </>
-      );
-    },
-    [headerRenderers, headerRenderer],
   );
 
   // Convert slots map to array for rendering
@@ -1309,7 +341,6 @@ export function Grid<TData extends Row = Row>(
     const { activeCell, selectionRange, slots } = state;
     if (!activeCell && !selectionRange) return null;
 
-    // Get the bottom-right corner and column range of selection or active cell
     let row: number, col: number;
     let minCol: number, maxCol: number;
 
@@ -1331,12 +362,11 @@ export function Grid<TData extends Row = Row>(
     for (let c = minCol; c <= maxCol; c++) {
       const column = columns[c];
       if (!column || column.editable !== true) {
-        return null; // Don't show fill handle if any column is not editable
+        return null;
       }
     }
 
     // Find the slot for this row and use its actual translateY
-    // This ensures the fill handle stays in sync with the rendered slot
     let cellTop: number | null = null;
     for (const slot of slots.values()) {
       if (slot.rowIndex === row) {
@@ -1345,7 +375,6 @@ export function Grid<TData extends Row = Row>(
       }
     }
 
-    // If row isn't in a visible slot, don't show the fill handle
     if (cellTop === null) return null;
 
     const cellLeft = columnPositions[col] ?? 0;
@@ -1353,7 +382,7 @@ export function Grid<TData extends Row = Row>(
 
     return {
       top: cellTop + rowHeight - 5,
-      left: cellLeft + cellWidth - 20, // Move significantly left to avoid scrollbar overlap
+      left: cellLeft + cellWidth - 20,
     };
   }, [
     state.activeCell,
@@ -1418,15 +447,19 @@ export function Grid<TData extends Row = Row>(
                 }}
                 onClick={(e) => handleHeaderClick(colIndex, e)}
               >
-                {renderHeader(
+                {renderHeader({
                   column,
                   colIndex,
-                  headerInfo?.sortDirection,
-                  headerInfo?.sortIndex,
-                  headerInfo?.sortable ?? true,
-                  headerInfo?.filterable ?? true,
-                  headerInfo?.hasFilter ?? false,
-                )}
+                  sortDirection: headerInfo?.sortDirection,
+                  sortIndex: headerInfo?.sortIndex,
+                  sortable: headerInfo?.sortable ?? true,
+                  filterable: headerInfo?.filterable ?? true,
+                  hasFilter: headerInfo?.hasFilter ?? false,
+                  coreRef,
+                  containerRef,
+                  headerRenderers,
+                  globalHeaderRenderer: headerRenderer,
+                })}
               </div>
             );
           })}
@@ -1452,20 +485,35 @@ export function Grid<TData extends Row = Row>(
               }}
             >
               {columns.map((column, colIndex) => {
-                const isEditing = isEditingCell(slot.rowIndex, colIndex);
-                const active = isActiveCell(slot.rowIndex, colIndex);
-                const selected = isSelected(slot.rowIndex, colIndex);
-                const inFillPreview = isInFillPreview(slot.rowIndex, colIndex);
+                const isEditing = isCellEditing(
+                  slot.rowIndex,
+                  colIndex,
+                  state.editingCell,
+                );
+                const active = isCellActive(
+                  slot.rowIndex,
+                  colIndex,
+                  state.activeCell,
+                );
+                const selected = isCellSelected(
+                  slot.rowIndex,
+                  colIndex,
+                  state.selectionRange,
+                );
+                const inFillPreview = isCellInFillPreview(
+                  slot.rowIndex,
+                  colIndex,
+                  isDraggingFill,
+                  fillSourceRange,
+                  fillTarget,
+                );
 
-                const cellClasses = [
-                  "gp-grid-cell",
-                  active && "gp-grid-cell--active",
-                  selected && !active && "gp-grid-cell--selected",
-                  isEditing && "gp-grid-cell--editing",
-                  inFillPreview && "gp-grid-cell--fill-preview",
-                ]
-                  .filter(Boolean)
-                  .join(" ");
+                const cellClasses = buildCellClasses(
+                  active,
+                  selected,
+                  isEditing,
+                  inFillPreview,
+                );
 
                 return (
                   <div
@@ -1486,19 +534,27 @@ export function Grid<TData extends Row = Row>(
                     }
                   >
                     {isEditing && state.editingCell
-                      ? renderEditCell(
+                      ? renderEditCell({
                           column,
-                          slot.rowData,
-                          slot.rowIndex,
+                          rowData: slot.rowData,
+                          rowIndex: slot.rowIndex,
                           colIndex,
-                          state.editingCell.initialValue,
-                        )
-                      : renderCell(
+                          initialValue: state.editingCell.initialValue,
+                          coreRef,
+                          editRenderers,
+                          globalEditRenderer: editRenderer,
+                        })
+                      : renderCell({
                           column,
-                          slot.rowData,
-                          slot.rowIndex,
+                          rowData: slot.rowData,
+                          rowIndex: slot.rowIndex,
                           colIndex,
-                        )}
+                          isActive: active,
+                          isSelected: selected,
+                          isEditing,
+                          cellRenderers,
+                          globalCellRenderer: cellRenderer,
+                        })}
                   </div>
                 );
               })}
@@ -1540,17 +596,19 @@ export function Grid<TData extends Row = Row>(
       </div>
 
       {/* Filter Popup */}
-      {state.filterPopup?.isOpen && state.filterPopup.column && state.filterPopup.anchorRect && (
-        <FilterPopup
-          column={state.filterPopup.column}
-          colIndex={state.filterPopup.colIndex}
-          anchorRect={state.filterPopup.anchorRect}
-          distinctValues={state.filterPopup.distinctValues}
-          currentFilter={state.filterPopup.currentFilter}
-          onApply={handleFilterApply}
-          onClose={handleFilterPopupClose}
-        />
-      )}
+      {state.filterPopup?.isOpen &&
+        state.filterPopup.column &&
+        state.filterPopup.anchorRect && (
+          <FilterPopup
+            column={state.filterPopup.column}
+            colIndex={state.filterPopup.colIndex}
+            anchorRect={state.filterPopup.anchorRect}
+            distinctValues={state.filterPopup.distinctValues}
+            currentFilter={state.filterPopup.currentFilter}
+            onApply={handleFilterApply}
+            onClose={handleFilterPopupClose}
+          />
+        )}
     </div>
   );
 }

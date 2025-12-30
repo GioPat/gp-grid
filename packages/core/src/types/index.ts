@@ -1,8 +1,8 @@
-// packages/core/src/types.ts
-// Re-export all types from modular structure for backwards compatibility
+// packages/core/src/types/index.ts
+// Re-export all types from domain modules
 
+// Basic types
 export type {
-  // Basic types
   CellDataType,
   CellValue,
   Row,
@@ -15,9 +15,13 @@ export type {
   EditState,
   FillHandleState,
   SlotState,
-  // Column types
-  ColumnDefinition,
-  // Filter types
+} from "./basic";
+
+// Column types
+export type { ColumnDefinition } from "./columns";
+
+// Filter types
+export type {
   TextFilterOperator,
   NumberFilterOperator,
   DateFilterOperator,
@@ -28,17 +32,24 @@ export type {
   FilterCondition,
   ColumnFilterModel,
   FilterModel,
-  // Data source types
+} from "./filters";
+
+// Data source types
+export type {
   DataSourceRequest,
   DataSourceResponse,
   DataSource,
-  // Instruction types
+} from "./data-source";
+
+// Instruction types
+export type {
   CreateSlotInstruction,
   DestroySlotInstruction,
   AssignSlotInstruction,
   MoveSlotInstruction,
   SetActiveCellInstruction,
   SetSelectionRangeInstruction,
+  UpdateVisibleRangeInstruction,
   StartEditInstruction,
   StopEditInstruction,
   CommitEditInstruction,
@@ -60,10 +71,14 @@ export type {
   GridInstruction,
   InstructionListener,
   BatchInstructionListener,
-  // Renderer types
+} from "./instructions";
+
+// Renderer types
+export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
-  // Options types
-  GridCoreOptions,
-} from "./types/index";
+} from "./renderers";
+
+// Options types
+export type { GridCoreOptions } from "./options";

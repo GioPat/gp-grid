@@ -1,12 +1,12 @@
-// packages/core/src/data-source.test.ts
+// packages/core/tests/data-source.test.ts
 
 import { describe, it, expect, vi } from "vitest";
 import {
   createClientDataSource,
   createServerDataSource,
   createDataSourceFromArray,
-} from "./data-source";
-import type { DataSourceRequest } from "./types";
+} from "../src/data-source";
+import type { DataSourceRequest } from "../src/types";
 
 // Sample test data
 interface TestRow {

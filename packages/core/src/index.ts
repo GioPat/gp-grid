@@ -7,9 +7,15 @@
 /** Grid Core orchestrator */
 export { GridCore } from "./grid-core";
 
-/** Selection Manager */
+/** Managers */
 export { SelectionManager } from "./selection";
 export { FillManager } from "./fill";
+export { SlotPoolManager } from "./slot-pool";
+export { EditManager } from "./edit-manager";
+
+/** Manager types */
+export type { SlotPoolManagerOptions, BatchInstructionListener as SlotPoolBatchListener } from "./slot-pool";
+export type { EditManagerOptions } from "./edit-manager";
 
 /** Data sources */
 export {
@@ -20,12 +26,32 @@ export {
 } from "./data-source";
 
 /** Transaction system */
-export { IndexedDataStore } from "./indexed-data-store";
+export { IndexedDataStore } from "./indexed-data-store/index";
 export { TransactionManager } from "./transaction-manager";
 
 /** Data source types */
 export type { MutableDataSource, MutableClientDataSourceOptions, DataChangeListener } from "./data-source";
-export type { IndexedDataStoreOptions } from "./indexed-data-store";
+export type { IndexedDataStoreOptions, RowSortCache } from "./indexed-data-store/index";
+
+/** Sorting utilities (from indexed-data-store) */
+export {
+  stringToSortableNumber,
+  compareValues,
+  computeValueHash,
+} from "./indexed-data-store/index";
+
+/** Filtering utilities (from indexed-data-store) */
+export {
+  evaluateTextCondition,
+  evaluateNumberCondition,
+  evaluateDateCondition,
+  evaluateColumnFilter,
+  rowPassesFilter,
+  isSameDay,
+} from "./indexed-data-store/index";
+
+/** Field helpers (from indexed-data-store) */
+export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
 export type { Transaction, TransactionResult, TransactionManagerOptions } from "./transaction-manager";
 
 /** Web Worker utilities for sorting */

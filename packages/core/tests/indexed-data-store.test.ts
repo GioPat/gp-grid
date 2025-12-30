@@ -1,7 +1,7 @@
-// packages/core/src/indexed-data-store.test.ts
+// packages/core/tests/indexed-data-store.test.ts
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { IndexedDataStore } from "./indexed-data-store";
+import { IndexedDataStore } from "../src/indexed-data-store";
 
 interface TestRow {
   id: number;

@@ -6,11 +6,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom',
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.tsx', 'src/**/*.ts'],
-      exclude: ['src/**/*.test.tsx', 'src/**/*.test.ts', 'src/**/*.bench.ts'],
+      exclude: ['src/**/*.bench.ts'],
     },
   },
 });

@@ -1,8 +1,8 @@
-// packages/core/src/fill.test.ts
+// packages/core/tests/fill.test.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { FillManager, type FillManagerOptions } from "./fill";
-import type { GridInstruction, CellValue } from "./types";
+import { FillManager, type FillManagerOptions } from "../src/fill";
+import type { GridInstruction, CellValue } from "../src/types";
 
 function createMockOptions(
   rowCount = 10,

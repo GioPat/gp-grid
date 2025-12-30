@@ -1,14 +1,14 @@
-// packages/core/src/grid-core.test.ts
+// packages/core/tests/grid-core.test.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GridCore } from "./grid-core";
-import { createClientDataSource } from "./data-source";
+import { GridCore } from "../src/grid-core";
+import { createClientDataSource } from "../src/data-source";
 import type {
   GridInstruction,
   ColumnDefinition,
   DataSource,
   Row,
-} from "./types";
+} from "../src/types";
 
 // Sample test data
 interface TestRow {

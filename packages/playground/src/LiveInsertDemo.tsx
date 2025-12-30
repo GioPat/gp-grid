@@ -294,7 +294,6 @@ export function LiveInsertDemo() {
           rowHeight={36}
           darkMode={true}
           headerHeight={40}
-          showFilters={true}
         />
       </div>
     </div>

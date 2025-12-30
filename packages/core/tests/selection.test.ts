@@ -1,8 +1,8 @@
-// packages/core/src/selection.test.ts
+// packages/core/tests/selection.test.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SelectionManager, type SelectionManagerOptions } from "./selection";
-import type { GridInstruction } from "./types";
+import { SelectionManager, type SelectionManagerOptions } from "../src/selection";
+import type { GridInstruction } from "../src/types";
 
 function createMockOptions(
   rowCount = 10,

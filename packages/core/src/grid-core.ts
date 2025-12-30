@@ -14,11 +14,12 @@ import type {
   SortDirection,
   FilterModel,
   ColumnFilterModel,
-  SlotState,
   EditState,
 } from "./types";
 import { SelectionManager } from "./selection";
 import { FillManager } from "./fill";
+import { SlotPoolManager } from "./slot-pool";
+import { EditManager } from "./edit-manager";
 
 // =============================================================================
 // Constants
@@ -28,17 +29,6 @@ import { FillManager } from "./fill";
 // Chrome/Edge: ~33.5M, Firefox: ~17.9M, Safari: ~33.5M
 // We use 10M to be safe and leave room for other content
 const MAX_SCROLL_HEIGHT = 10_000_000;
-
-// =============================================================================
-// Slot Pool Manager
-// =============================================================================
-
-interface SlotPoolState {
-  slots: Map<string, SlotState>;
-  /** Maps rowIndex to slotId for quick lookup */
-  rowToSlot: Map<number, string>;
-  nextSlotId: number;
-}
 
 // =============================================================================
 // GridCore
@@ -69,20 +59,13 @@ export class GridCore<TData extends Row = Row> {
   // Sort & Filter
   private sortModel: SortModel[] = [];
   private filterModel: FilterModel = {};
-
-  // Slot pool
-  private slotPool: SlotPoolState = {
-    slots: new Map(),
-    rowToSlot: new Map(),
-    nextSlotId: 0,
-  };
+  private openFilterColIndex: number | null = null;
 
   // Managers
   public readonly selection: SelectionManager;
   public readonly fill: FillManager;
-
-  // Edit state
-  private editState: EditState | null = null;
+  private readonly slotPool: SlotPoolManager;
+  private readonly editManager: EditManager;
 
   // Column positions (computed)
   private columnPositions: number[] = [];
@@ -129,6 +112,36 @@ export class GridCore<TData extends Row = Row> {
 
     // Forward fill instructions
     this.fill.onInstruction((instruction) => this.emit(instruction));
+
+    // Initialize slot pool manager
+    this.slotPool = new SlotPoolManager({
+      getRowHeight: () => this.rowHeight,
+      getHeaderHeight: () => this.headerHeight,
+      getOverscan: () => this.overscan,
+      getScrollTop: () => this.scrollTop,
+      getViewportHeight: () => this.viewportHeight,
+      getTotalRows: () => this.totalRows,
+      getScrollRatio: () => this.scrollRatio,
+      getVirtualContentHeight: () => this.virtualContentHeight,
+      getRowData: (rowIndex) => this.cachedRows.get(rowIndex),
+    });
+
+    // Forward slot pool instructions (use batch listener for performance)
+    this.slotPool.onBatchInstruction((instructions) => this.emitBatch(instructions));
+
+    // Initialize edit manager
+    this.editManager = new EditManager({
+      getColumn: (col) => this.columns[col],
+      getCellValue: (row, col) => this.getCellValue(row, col),
+      setCellValue: (row, col, value) => this.setCellValue(row, col, value),
+      onCommit: (row) => {
+        // Update the slot displaying this row after edit commit
+        this.slotPool.updateSlot(row);
+      },
+    });
+
+    // Forward edit manager instructions
+    this.editManager.onInstruction((instruction) => this.emit(instruction));
   }
 
   // ===========================================================================
@@ -195,7 +208,7 @@ export class GridCore<TData extends Row = Row> {
    */
   async initialize(): Promise<void> {
     await this.fetchData();
-    this.syncSlots();
+    this.slotPool.syncSlots();
     this.emitContentSize();
     this.emitHeaders();
   }
@@ -234,161 +247,7 @@ export class GridCore<TData extends Row = Row> {
     this.viewportWidth = width;
     this.viewportHeight = height;
 
-    this.syncSlots();
-  }
-
-  // ===========================================================================
-  // Slot Pool Management (Virtual Scroll)
-  // ===========================================================================
-
-  /**
-   * Synchronize slots with current viewport position.
-   * This implements the slot recycling strategy.
-   */
-  private syncSlots(): void {
-    const visibleStartRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight) - this.overscan);
-    const visibleEndRow = Math.min(
-      this.totalRows - 1,
-      Math.ceil((this.scrollTop + this.viewportHeight) / this.rowHeight) + this.overscan
-    );
-
-    if (this.totalRows === 0 || visibleEndRow < visibleStartRow) {
-      // No rows to display - destroy all slots
-      this.destroyAllSlots();
-      return;
-    }
-
-    const requiredRows = new Set<number>();
-    for (let row = visibleStartRow; row <= visibleEndRow; row++) {
-      requiredRows.add(row);
-    }
-
-    const instructions: GridInstruction[] = [];
-
-    // Find slots that are no longer needed
-    const slotsToRecycle: string[] = [];
-    for (const [slotId, slot] of this.slotPool.slots) {
-      if (!requiredRows.has(slot.rowIndex)) {
-        slotsToRecycle.push(slotId);
-        this.slotPool.rowToSlot.delete(slot.rowIndex);
-      } else {
-        requiredRows.delete(slot.rowIndex);
-      }
-    }
-
-    // Assign recycled slots to new rows
-    const rowsNeedingSlots = Array.from(requiredRows);
-    for (let i = 0; i < rowsNeedingSlots.length; i++) {
-      const rowIndex = rowsNeedingSlots[i]!;
-      const rowData = this.cachedRows.get(rowIndex);
-
-      if (i < slotsToRecycle.length) {
-        // Recycle existing slot
-        const slotId = slotsToRecycle[i]!;
-        const slot = this.slotPool.slots.get(slotId)!;
-        const translateY = this.getRowTranslateY(rowIndex);
-
-        slot.rowIndex = rowIndex;
-        slot.rowData = rowData ?? {};
-        slot.translateY = translateY;
-
-        this.slotPool.rowToSlot.set(rowIndex, slotId);
-
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData: rowData ?? {},
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
-      } else {
-        // Create new slot
-        const slotId = `slot-${this.slotPool.nextSlotId++}`;
-        const translateY = this.getRowTranslateY(rowIndex);
-
-        const newSlot: SlotState = {
-          slotId,
-          rowIndex,
-          rowData: rowData ?? {},
-          translateY,
-        };
-
-        this.slotPool.slots.set(slotId, newSlot);
-        this.slotPool.rowToSlot.set(rowIndex, slotId);
-
-        instructions.push({ type: "CREATE_SLOT", slotId });
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData: rowData ?? {},
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
-      }
-    }
-
-    // Destroy excess slots
-    for (let i = rowsNeedingSlots.length; i < slotsToRecycle.length; i++) {
-      const slotId = slotsToRecycle[i]!;
-      this.slotPool.slots.delete(slotId);
-      instructions.push({ type: "DESTROY_SLOT", slotId });
-    }
-
-    // Update positions of existing slots that haven't moved
-    for (const [slotId, slot] of this.slotPool.slots) {
-      const expectedY = this.getRowTranslateY(slot.rowIndex);
-      if (slot.translateY !== expectedY) {
-        slot.translateY = expectedY;
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY: expectedY,
-        });
-      }
-    }
-
-    this.emitBatch(instructions);
-  }
-
-  private destroyAllSlots(): void {
-    const instructions: GridInstruction[] = [];
-    for (const slotId of this.slotPool.slots.keys()) {
-      instructions.push({ type: "DESTROY_SLOT", slotId });
-    }
-    this.slotPool.slots.clear();
-    this.slotPool.rowToSlot.clear();
-    this.emitBatch(instructions);
-  }
-
-  private getRowTranslateY(rowIndex: number): number {
-    // Calculate the natural position for this row
-    const naturalY = rowIndex * this.rowHeight + this.headerHeight;
-    
-    if (this.scrollRatio >= 1) {
-      return naturalY;
-    }
-    
-    // With scroll virtualization, we need to position rows relative to the viewport
-    // so they appear at the correct location within the capped container height.
-    //
-    // naturalScrollTop is where we are in "real" content space (already mapped from virtual)
-    // virtualScrollTop is where the browser thinks we are in the DOM
-    // offset = the difference we need to subtract to keep rows within bounds
-    const naturalScrollTop = this.scrollTop;
-    const virtualScrollTop = naturalScrollTop * this.scrollRatio;
-    const offset = naturalScrollTop - virtualScrollTop;
-    
-    // Position row at its natural Y minus the offset
-    // This keeps rows properly spaced and within virtual container bounds
-    return naturalY - offset;
+    this.slotPool.syncSlots();
   }
 
   // ===========================================================================
@@ -489,7 +348,7 @@ export class GridCore<TData extends Row = Row> {
     // console.log("[GP-Grid Core] setSort - fetching sorted data...");
     await this.fetchData();
     // Refresh all slots with newly sorted data
-    this.refreshAllSlots();
+    this.slotPool.refreshAllSlots();
     this.emitHeaders();
     // console.log("[GP-Grid Core] setSort - complete");
   }
@@ -517,7 +376,7 @@ export class GridCore<TData extends Row = Row> {
 
     await this.fetchData();
     // Force refresh all slots since filtered data changed
-    this.refreshAllSlots();
+    this.slotPool.refreshAllSlots();
     this.emitContentSize();
     this.emitHeaders();
   }
@@ -552,30 +411,36 @@ export class GridCore<TData extends Row = Row> {
    * Get distinct values for a column (for filter dropdowns)
    * For array-type columns (like tags), each unique array combination is returned.
    * Arrays are sorted internally for consistent comparison.
+   * Limited to MAX_DISTINCT_VALUES to avoid performance issues with large datasets.
    */
-  getDistinctValuesForColumn(colId: string): CellValue[] {
+  getDistinctValuesForColumn(colId: string, maxValues: number = 500): CellValue[] {
+    // Find column once outside the loop
+    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
+    if (!column) return [];
+
     // Use Map with stringified keys to handle deduplication of arrays
     const valuesMap = new Map<string, CellValue>();
 
     for (const row of this.cachedRows.values()) {
-      const column = this.columns.find(c => (c.colId ?? c.field) === colId);
-      if (column) {
-        const value = this.getFieldValue(row, column.field);
+      const value = this.getFieldValue(row, column.field);
 
-        if (Array.isArray(value)) {
-          // Sort array items internally for consistent comparison (["vip", "new"] == ["new", "vip"])
-          const sortedArray = [...value].sort((a, b) =>
-            String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
-          );
-          const key = JSON.stringify(sortedArray);
-          if (!valuesMap.has(key)) {
-            valuesMap.set(key, sortedArray);
-          }
-        } else {
-          const key = JSON.stringify(value);
-          if (!valuesMap.has(key)) {
-            valuesMap.set(key, value);
-          }
+      if (Array.isArray(value)) {
+        // Sort array items internally for consistent comparison (["vip", "new"] == ["new", "vip"])
+        const sortedArray = [...value].sort((a, b) =>
+          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+        );
+        const key = JSON.stringify(sortedArray);
+        if (!valuesMap.has(key)) {
+          valuesMap.set(key, sortedArray);
+          // Stop early if we have too many distinct values
+          if (valuesMap.size >= maxValues) break;
+        }
+      } else {
+        const key = JSON.stringify(value);
+        if (!valuesMap.has(key)) {
+          valuesMap.set(key, value);
+          // Stop early if we have too many distinct values
+          if (valuesMap.size >= maxValues) break;
         }
       }
     }
@@ -592,15 +457,22 @@ export class GridCore<TData extends Row = Row> {
   }
 
   /**
-   * Open filter popup for a column
+   * Open filter popup for a column (toggles if already open for same column)
    */
   openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+    // If clicking on the same column's filter icon, close the popup
+    if (this.openFilterColIndex === colIndex) {
+      this.closeFilterPopup();
+      return;
+    }
+
     const column = this.columns[colIndex];
     if (!column || !this.isColumnFilterable(colIndex)) return;
 
     const colId = column.colId ?? column.field;
     const distinctValues = this.getDistinctValuesForColumn(colId);
 
+    this.openFilterColIndex = colIndex;
     this.emit({
       type: "OPEN_FILTER_POPUP",
       colIndex,
@@ -615,42 +487,8 @@ export class GridCore<TData extends Row = Row> {
    * Close filter popup
    */
   closeFilterPopup(): void {
+    this.openFilterColIndex = null;
     this.emit({ type: "CLOSE_FILTER_POPUP" });
-  }
-
-  /**
-   * Force refresh all slot data (used after filtering/sorting when data changes)
-   */
-  private refreshAllSlots(): void {
-    const instructions: GridInstruction[] = [];
-
-    for (const [slotId, slot] of this.slotPool.slots) {
-      // Check if row index is still valid
-      if (slot.rowIndex >= 0 && slot.rowIndex < this.totalRows) {
-        const rowData = this.cachedRows.get(slot.rowIndex);
-        const translateY = this.getRowTranslateY(slot.rowIndex);
-
-        slot.rowData = rowData ?? {};
-        slot.translateY = translateY;
-
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex: slot.rowIndex,
-          rowData: rowData ?? {},
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
-      }
-    }
-
-    this.emitBatch(instructions);
-
-    // Also sync slots to handle any rows that went out of bounds
-    this.syncSlots();
   }
 
   getSortModel(): SortModel[] {
@@ -666,69 +504,23 @@ export class GridCore<TData extends Row = Row> {
   // ===========================================================================
 
   startEdit(row: number, col: number): void {
-    const column = this.columns[col];
-    if (!column || column.editable !== true) return;
-
-    const initialValue = this.getCellValue(row, col);
-    this.editState = {
-      row,
-      col,
-      initialValue,
-      currentValue: initialValue,
-    };
-
-    this.emit({
-      type: "START_EDIT",
-      row,
-      col,
-      initialValue,
-    });
+    this.editManager.startEdit(row, col);
   }
 
   updateEditValue(value: CellValue): void {
-    if (this.editState) {
-      this.editState.currentValue = value;
-    }
+    this.editManager.updateValue(value);
   }
 
   commitEdit(): void {
-    if (!this.editState) return;
-
-    const { row, col, currentValue } = this.editState;
-    this.setCellValue(row, col, currentValue);
-
-    this.emit({
-      type: "COMMIT_EDIT",
-      row,
-      col,
-      value: currentValue,
-    });
-
-    this.editState = null;
-    this.emit({ type: "STOP_EDIT" });
-
-    // Update the slot displaying this row
-    const slotId = this.slotPool.rowToSlot.get(row);
-    if (slotId) {
-      const rowData = this.cachedRows.get(row);
-      if (rowData) {
-        this.emit({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex: row,
-          rowData,
-        });
-      }
-    }
+    this.editManager.commit();
   }
 
   cancelEdit(): void {
-    this.editState = null;
-    this.emit({ type: "STOP_EDIT" });
+    this.editManager.cancel();
   }
 
   getEditState(): EditState | null {
-    return this.editState ? { ...this.editState } : null;
+    return this.editManager.getState();
   }
 
   // ===========================================================================
@@ -900,14 +692,16 @@ export class GridCore<TData extends Row = Row> {
   /**
    * Get the visible row range (excluding overscan).
    * Returns the first and last row indices that are actually visible in the viewport.
+   * Includes partially visible rows to avoid false positives when clicking on edge rows.
    */
   getVisibleRowRange(): { start: number; end: number } {
     // viewportHeight includes header, so subtract it to get content area
     const contentHeight = this.viewportHeight - this.headerHeight;
     const firstVisibleRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight));
+    // Use ceil and subtract 1 to include any partially visible row at the bottom
     const lastVisibleRow = Math.min(
       this.totalRows - 1,
-      Math.floor((this.scrollTop + contentHeight) / this.rowHeight) - 1
+      Math.ceil((this.scrollTop + contentHeight) / this.rowHeight) - 1
     );
     return { start: firstVisibleRow, end: Math.max(firstVisibleRow, lastVisibleRow) };
   }
@@ -954,7 +748,7 @@ export class GridCore<TData extends Row = Row> {
     await this.fetchData();
     // Use refreshAllSlots instead of syncSlots to ensure all slot data is updated
     // This is important when data changes (e.g., rows added) but visible indices stay the same
-    this.refreshAllSlots();
+    this.slotPool.refreshAllSlots();
     this.emitContentSize();
   }
 
@@ -963,7 +757,7 @@ export class GridCore<TData extends Row = Row> {
    * Useful after in-place data modifications like fill operations.
    */
   refreshSlotData(): void {
-    this.refreshAllSlots();
+    this.slotPool.refreshAllSlots();
   }
 
   /**
@@ -982,7 +776,7 @@ export class GridCore<TData extends Row = Row> {
     this.computeColumnPositions();
     this.emitContentSize();
     this.emitHeaders();
-    this.syncSlots();
+    this.slotPool.syncSlots();
   }
 }
 
