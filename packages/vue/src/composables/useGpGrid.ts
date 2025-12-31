@@ -24,6 +24,7 @@ import type {
 } from "gp-grid-core";
 import { useGridState } from "../gridState";
 import { useInputHandler } from "./useInputHandler";
+import { useFillHandle } from "./useFillHandle";
 import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "../types";
 
 // =============================================================================
@@ -246,54 +247,14 @@ export function useGpGrid<TData extends Row = Row>(
     { immediate: true },
   );
 
-  // Calculate fill handle position
-  const fillHandlePosition = computed(() => {
-    const { activeCell, selectionRange, slots } = state;
-    if (!activeCell && !selectionRange) return null;
-
-    let row: number, col: number;
-    let minCol: number, maxCol: number;
-
-    if (selectionRange) {
-      row = Math.max(selectionRange.startRow, selectionRange.endRow);
-      col = Math.max(selectionRange.startCol, selectionRange.endCol);
-      minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
-      maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
-    } else if (activeCell) {
-      row = activeCell.row;
-      col = activeCell.col;
-      minCol = col;
-      maxCol = col;
-    } else {
-      return null;
-    }
-
-    // Check if ALL columns in the selection are editable
-    for (let c = minCol; c <= maxCol; c++) {
-      const column = options.columns[c];
-      if (!column || column.editable !== true) {
-        return null;
-      }
-    }
-
-    // Find the slot for this row and use its actual translateY
-    let cellTop: number | null = null;
-    for (const slot of slots.values()) {
-      if (slot.rowIndex === row) {
-        cellTop = slot.translateY;
-        break;
-      }
-    }
-
-    if (cellTop === null) return null;
-
-    const cellLeft = columnPositions.value[col] ?? 0;
-    const cellWidth = options.columns[col]?.width ?? 0;
-
-    return {
-      top: cellTop + options.rowHeight - 5,
-      left: cellLeft + cellWidth - 20,
-    };
+  // Calculate fill handle position using composable
+  const { fillHandlePosition } = useFillHandle({
+    activeCell: computed(() => state.activeCell),
+    selectionRange: computed(() => state.selectionRange),
+    slots: computed(() => state.slots),
+    columns: computed(() => options.columns),
+    columnPositions,
+    rowHeight: options.rowHeight,
   });
 
   return {

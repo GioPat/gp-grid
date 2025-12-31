@@ -4,7 +4,7 @@
 // Main Component
 // =============================================================================
 
-export { GpGrid, default } from "./GpGrid";
+export { default as GpGrid, default } from "./GpGrid.vue";
 
 // =============================================================================
 // Composables
@@ -17,6 +17,15 @@ export { useInputHandler } from "./composables/useInputHandler";
 export type { UseInputHandlerOptions, UseInputHandlerResult } from "./composables/useInputHandler";
 
 export { useAutoScroll } from "./composables/useAutoScroll";
+
+export { useFillHandle } from "./composables/useFillHandle";
+export type { UseFillHandleOptions, UseFillHandleResult } from "./composables/useFillHandle";
+
+export { useFilterPopup } from "./composables/useFilterPopup";
+export type { UseFilterPopupOptions } from "./composables/useFilterPopup";
+
+export { useFilterConditions } from "./composables/useFilterConditions";
+export type { FilterCondition, UseFilterConditionsResult } from "./composables/useFilterConditions";
 
 export { useGridState, createInitialState } from "./gridState";
 

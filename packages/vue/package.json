@@ -37,7 +37,7 @@
   "scripts": {
     "dev": "tsdown --watch",
     "build": "tsdown --clean --sourcemap",
-    "build:production": "tsdown --clean --minify --treeshake --dts"
+    "build:production": "tsdown --clean --minify --treeshake"
   },
   "dependencies": {
     "gp-grid-core": "workspace:*"
@@ -48,6 +48,8 @@
   "devDependencies": {
     "tsdown": "^0.15.9",
     "typescript": "^5.9.3",
-    "vue": "^3.5.13"
+    "unplugin-vue": "^7.1.0",
+    "vue": "^3.5.13",
+    "vue-tsc": "~3.1.0"
   }
 }
