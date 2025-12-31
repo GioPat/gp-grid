@@ -23,6 +23,7 @@ interface Condition {
   operator: DateFilterOperator;
   value: string;
   valueTo: string;
+  nextOperator: "and" | "or";
 }
 
 // Convert Date to YYYY-MM-DD string for input
@@ -40,22 +41,21 @@ export function DateFilterContent({
 }: DateFilterContentProps): React.ReactNode {
   const initialConditions = useMemo((): Condition[] => {
     if (!currentFilter?.conditions.length) {
-      return [{ operator: "=", value: "", valueTo: "" }];
+      return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
     }
+    const defaultCombination = currentFilter.combination ?? "and";
     return currentFilter.conditions.map((c) => {
       const cond = c as DateFilterCondition;
       return {
         operator: cond.operator,
         value: formatDateForInput(cond.value),
         valueTo: formatDateForInput(cond.valueTo),
+        nextOperator: cond.nextOperator ?? defaultCombination,
       };
     });
   }, [currentFilter]);
 
-  const initialCombination = currentFilter?.combination ?? "and";
-
   const [conditions, setConditions] = useState<Condition[]>(initialConditions);
-  const [combination, setCombination] = useState<"and" | "or">(initialCombination);
 
   const updateCondition = useCallback((index: number, updates: Partial<Condition>) => {
     setConditions((prev) => {
@@ -66,7 +66,7 @@ export function DateFilterContent({
   }, []);
 
   const addCondition = useCallback(() => {
-    setConditions((prev) => [...prev, { operator: "=", value: "", valueTo: "" }]);
+    setConditions((prev) => [...prev, { operator: "=", value: "", valueTo: "", nextOperator: "and" }]);
   }, []);
 
   const removeCondition = useCallback((index: number) => {
@@ -93,11 +93,12 @@ export function DateFilterContent({
         operator: c.operator,
         value: c.value || undefined,
         valueTo: c.valueTo || undefined,
+        nextOperator: c.nextOperator,
       })),
-      combination,
+      combination: "and", // Default combination for backwards compatibility
     };
     onApply(filter);
-  }, [conditions, combination, onApply]);
+  }, [conditions, onApply]);
 
   const handleClear = useCallback(() => {
     onApply(null);
@@ -111,15 +112,15 @@ export function DateFilterContent({
             <div className="gp-grid-filter-combination">
               <button
                 type="button"
-                className={combination === "and" ? "active" : ""}
-                onClick={() => setCombination("and")}
+                className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
+                onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
               >
                 AND
               </button>
               <button
                 type="button"
-                className={combination === "or" ? "active" : ""}
-                onClick={() => setCombination("or")}
+                className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
+                onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
               >
                 OR
               </button>

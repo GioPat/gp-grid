@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "gp-grid-core";
-import { useFilterConditions, type FilterCondition } from "../composables/useFilterConditions";
+import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const OPERATORS: { value: NumberFilterOperator; label: string }[] = [
   { value: "=", label: "=" },
@@ -25,16 +25,18 @@ const emit = defineEmits<{
 }>();
 
 // Parse initial conditions from current filter
-const initialConditions = computed((): FilterCondition<NumberFilterOperator>[] => {
+const initialConditions = computed((): LocalFilterCondition<NumberFilterOperator>[] => {
   if (!props.currentFilter?.conditions.length) {
-    return [{ operator: "=", value: "", valueTo: "" }];
+    return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
   }
+  const defaultCombination = props.currentFilter.combination ?? "and";
   return props.currentFilter.conditions.map((c) => {
     const cond = c as NumberFilterCondition;
     return {
       operator: cond.operator,
       value: cond.value != null ? String(cond.value) : "",
       valueTo: cond.valueTo != null ? String(cond.valueTo) : "",
+      nextOperator: cond.nextOperator ?? defaultCombination,
     };
   });
 });
@@ -65,8 +67,9 @@ function handleApply(): void {
       operator: c.operator,
       value: c.value ? parseFloat(c.value) : undefined,
       valueTo: c.valueTo ? parseFloat(c.valueTo) : undefined,
+      nextOperator: c.nextOperator,
     })),
-    combination: combination.value,
+    combination: "and", // Default combination for backwards compatibility
   };
   emit("apply", filter);
 }
@@ -87,15 +90,15 @@ function handleClear(): void {
       <div v-if="index > 0" class="gp-grid-filter-combination">
         <button
           type="button"
-          :class="{ active: combination === 'and' }"
-          @click="combination = 'and'"
+          :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
+          @click="updateCondition(index - 1, { nextOperator: 'and' })"
         >
           AND
         </button>
         <button
           type="button"
-          :class="{ active: combination === 'or' }"
-          @click="combination = 'or'"
+          :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
+          @click="updateCondition(index - 1, { nextOperator: 'or' })"
         >
           OR
         </button>

@@ -46,6 +46,8 @@ export interface TextFilterCondition {
   selectedValues?: Set<string>;
   /** Include blank values */
   includeBlank?: boolean;
+  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
+  nextOperator?: FilterCombination;
 }
 
 /** Number filter condition */
@@ -55,6 +57,8 @@ export interface NumberFilterCondition {
   value?: number;
   /** Second value for "between" operator */
   valueTo?: number;
+  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
+  nextOperator?: FilterCombination;
 }
 
 /** Date filter condition */
@@ -64,6 +68,8 @@ export interface DateFilterCondition {
   value?: Date | string;
   /** Second value for "between" operator */
   valueTo?: Date | string;
+  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
+  nextOperator?: FilterCombination;
 }
 
 /** Union of filter condition types */

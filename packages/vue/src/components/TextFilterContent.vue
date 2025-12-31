@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "gp-grid-core";
-import { useFilterConditions, type FilterCondition } from "../composables/useFilterConditions";
+import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const MAX_VALUES_FOR_LIST = 100;
 
@@ -85,20 +85,22 @@ const selectedValues = ref<Set<string>>(new Set(initialSelected.value));
 const includeBlanks = ref(initialIncludeBlanks.value);
 
 // ============= CONDITION MODE STATE =============
-const initialConditions = computed((): FilterCondition<TextFilterOperator>[] => {
+const initialConditions = computed((): LocalFilterCondition<TextFilterOperator>[] => {
   if (!props.currentFilter?.conditions.length) {
-    return [{ operator: "contains", value: "", valueTo: "" }];
+    return [{ operator: "contains", value: "", valueTo: "", nextOperator: "and" }];
   }
   const cond = props.currentFilter.conditions[0] as TextFilterCondition;
   if (cond.selectedValues && cond.selectedValues.size > 0) {
-    return [{ operator: "contains", value: "", valueTo: "" }];
+    return [{ operator: "contains", value: "", valueTo: "", nextOperator: "and" }];
   }
+  const defaultCombination = props.currentFilter.combination ?? "and";
   return props.currentFilter.conditions.map((c) => {
     const tc = c as TextFilterCondition;
     return {
       operator: tc.operator,
       value: tc.value ?? "",
       valueTo: "",
+      nextOperator: tc.nextOperator ?? defaultCombination,
     };
   });
 });
@@ -184,8 +186,9 @@ function handleApply(): void {
         type: "text" as const,
         operator: c.operator,
         value: c.value,
+        nextOperator: c.nextOperator,
       })),
-      combination: combination.value,
+      combination: "and", // Default combination for backwards compatibility
     };
     emit("apply", filter);
   }
@@ -281,15 +284,15 @@ function handleClear(): void {
         <div v-if="index > 0" class="gp-grid-filter-combination">
           <button
             type="button"
-            :class="{ active: combination === 'and' }"
-            @click="combination = 'and'"
+            :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
+            @click="updateCondition(index - 1, { nextOperator: 'and' })"
           >
             AND
           </button>
           <button
             type="button"
-            :class="{ active: combination === 'or' }"
-            @click="combination = 'or'"
+            :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
+            @click="updateCondition(index - 1, { nextOperator: 'or' })"
           >
             OR
           </button>

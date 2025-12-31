@@ -26,6 +26,7 @@ const OPERATORS: { value: TextFilterOperator; label: string }[] = [
 interface Condition {
   operator: TextFilterOperator;
   value: string;
+  nextOperator: "and" | "or";
 }
 
 type FilterMode = "values" | "condition";
@@ -100,26 +101,25 @@ export function TextFilterContent({
   // ============= CONDITION MODE STATE =============
   const initialConditions = useMemo((): Condition[] => {
     if (!currentFilter?.conditions.length) {
-      return [{ operator: "contains", value: "" }];
+      return [{ operator: "contains", value: "", nextOperator: "and" }];
     }
     // Check if it's condition mode (not selectedValues)
     const cond = currentFilter.conditions[0] as TextFilterCondition;
     if (cond.selectedValues && cond.selectedValues.size > 0) {
-      return [{ operator: "contains", value: "" }];
+      return [{ operator: "contains", value: "", nextOperator: "and" }];
     }
+    const defaultCombination = currentFilter.combination ?? "and";
     return currentFilter.conditions.map((c) => {
       const tc = c as TextFilterCondition;
       return {
         operator: tc.operator,
         value: tc.value ?? "",
+        nextOperator: tc.nextOperator ?? defaultCombination,
       };
     });
   }, [currentFilter]);
 
-  const initialCombination = currentFilter?.combination ?? "and";
-
   const [conditions, setConditions] = useState<Condition[]>(initialConditions);
-  const [combination, setCombination] = useState<"and" | "or">(initialCombination);
 
   // ============= VALUES MODE LOGIC =============
   const displayValues = useMemo(() => {
@@ -169,7 +169,7 @@ export function TextFilterContent({
   }, []);
 
   const addCondition = useCallback(() => {
-    setConditions((prev) => [...prev, { operator: "contains", value: "" }]);
+    setConditions((prev) => [...prev, { operator: "contains", value: "", nextOperator: "and" }]);
   }, []);
 
   const removeCondition = useCallback((index: number) => {
@@ -217,12 +217,13 @@ export function TextFilterContent({
           type: "text" as const,
           operator: c.operator,
           value: c.value,
+          nextOperator: c.nextOperator,
         })),
-        combination,
+        combination: "and", // Default combination for backwards compatibility
       };
       onApply(filter);
     }
-  }, [mode, uniqueValues, selectedValues, includeBlanks, hasBlanks, conditions, combination, onApply]);
+  }, [mode, uniqueValues, selectedValues, includeBlanks, hasBlanks, conditions, onApply]);
 
   const handleClear = useCallback(() => {
     onApply(null);
@@ -318,15 +319,15 @@ export function TextFilterContent({
                 <div className="gp-grid-filter-combination">
                   <button
                     type="button"
-                    className={combination === "and" ? "active" : ""}
-                    onClick={() => setCombination("and")}
+                    className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
+                    onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
                   >
                     AND
                   </button>
                   <button
                     type="button"
-                    className={combination === "or" ? "active" : ""}
-                    onClick={() => setCombination("or")}
+                    className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
+                    onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
                   >
                     OR
                   </button>

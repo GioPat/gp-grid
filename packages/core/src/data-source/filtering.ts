@@ -65,6 +65,7 @@ export function applyFilters<TData>(
 
 /**
  * Evaluate a column filter against a cell value
+ * Uses left-to-right evaluation with per-condition operators
  */
 export function evaluateColumnFilter(
   cellValue: CellValue,
@@ -72,15 +73,28 @@ export function evaluateColumnFilter(
 ): boolean {
   if (filter.conditions.length === 0) return true;
 
-  const results = filter.conditions.map((condition) =>
-    evaluateCondition(cellValue, condition),
-  );
+  const firstCondition = filter.conditions[0];
+  if (!firstCondition) return true;
 
-  if (filter.combination === "and") {
-    return results.every((r) => r);
-  } else {
-    return results.some((r) => r);
+  // Evaluate first condition
+  let result = evaluateCondition(cellValue, firstCondition);
+
+  // Iterate through remaining conditions with per-condition operators
+  for (let i = 1; i < filter.conditions.length; i++) {
+    const prevCondition = filter.conditions[i - 1]!;
+    const currentCondition = filter.conditions[i]!;
+    // Use nextOperator from previous condition, fallback to global combination
+    const operator = prevCondition.nextOperator ?? filter.combination;
+    const conditionResult = evaluateCondition(cellValue, currentCondition);
+
+    if (operator === "and") {
+      result = result && conditionResult;
+    } else {
+      result = result || conditionResult;
+    }
   }
+
+  return result;
 }
 
 /**

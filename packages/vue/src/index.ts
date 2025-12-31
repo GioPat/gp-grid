@@ -25,7 +25,7 @@ export { useFilterPopup } from "./composables/useFilterPopup";
 export type { UseFilterPopupOptions } from "./composables/useFilterPopup";
 
 export { useFilterConditions } from "./composables/useFilterConditions";
-export type { FilterCondition, UseFilterConditionsResult } from "./composables/useFilterConditions";
+export type { LocalFilterCondition, UseFilterConditionsResult } from "./composables/useFilterConditions";
 
 export { useGridState, createInitialState } from "./gridState";
 

@@ -2,16 +2,17 @@
 
 import { ref, type Ref } from "vue";
 
-export interface FilterCondition<TOperator extends string> {
+export interface LocalFilterCondition<TOperator extends string> {
   operator: TOperator;
   value: string;
   valueTo: string;
+  nextOperator: "and" | "or";
 }
 
 export interface UseFilterConditionsResult<TOperator extends string> {
-  conditions: Ref<FilterCondition<TOperator>[]>;
+  conditions: Ref<LocalFilterCondition<TOperator>[]>;
   combination: Ref<"and" | "or">;
-  updateCondition: (index: number, updates: Partial<FilterCondition<TOperator>>) => void;
+  updateCondition: (index: number, updates: Partial<LocalFilterCondition<TOperator>>) => void;
   addCondition: (defaultOperator: TOperator) => void;
   removeCondition: (index: number) => void;
 }
@@ -21,22 +22,22 @@ export interface UseFilterConditionsResult<TOperator extends string> {
  * Used by NumberFilterContent, DateFilterContent, and TextFilterContent (condition mode).
  */
 export function useFilterConditions<TOperator extends string>(
-  initialConditions: FilterCondition<TOperator>[],
+  initialConditions: LocalFilterCondition<TOperator>[],
   initialCombination: "and" | "or" = "and",
 ): UseFilterConditionsResult<TOperator> {
-  const conditions = ref<FilterCondition<TOperator>[]>([...initialConditions]) as Ref<
-    FilterCondition<TOperator>[]
+  const conditions = ref<LocalFilterCondition<TOperator>[]>([...initialConditions]) as Ref<
+    LocalFilterCondition<TOperator>[]
   >;
   const combination = ref<"and" | "or">(initialCombination);
 
-  const updateCondition = (index: number, updates: Partial<FilterCondition<TOperator>>): void => {
+  const updateCondition = (index: number, updates: Partial<LocalFilterCondition<TOperator>>): void => {
     const next = [...conditions.value];
     next[index] = { ...next[index]!, ...updates };
     conditions.value = next;
   };
 
   const addCondition = (defaultOperator: TOperator): void => {
-    conditions.value = [...conditions.value, { operator: defaultOperator, value: "", valueTo: "" }];
+    conditions.value = [...conditions.value, { operator: defaultOperator, value: "", valueTo: "", nextOperator: "and" }];
   };
 
   const removeCondition = (index: number): void => {
