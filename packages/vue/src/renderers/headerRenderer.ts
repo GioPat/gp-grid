@@ -1,8 +1,21 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
-import { h, type VNode } from "vue";
+import { h, Fragment, createTextVNode, type VNode } from "vue";
 import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "gp-grid-core";
 import type { VueHeaderRenderer } from "../types";
+
+/**
+ * Ensure we always return a VNode, never a plain string
+ */
+function toVNode(value: VNode | string | null | undefined): VNode {
+  if (value == null || value === "") {
+    return createTextVNode("");
+  }
+  if (typeof value === "string") {
+    return createTextVNode(value);
+  }
+  return value;
+}
 
 export interface RenderHeaderOptions {
   column: ColumnDefinition;
@@ -23,7 +36,7 @@ export interface RenderHeaderOptions {
  */
 export function renderHeader(
   options: RenderHeaderOptions,
-): VNode | string {
+): VNode {
   const {
     column,
     colIndex,
@@ -72,13 +85,13 @@ export function renderHeader(
   if (column.headerRenderer && typeof column.headerRenderer === "string") {
     const renderer = headerRenderers[column.headerRenderer];
     if (renderer) {
-      return renderer(params) ?? "";
+      return toVNode(renderer(params));
     }
   }
 
   // Fall back to global renderer
   if (globalHeaderRenderer) {
-    return globalHeaderRenderer(params) ?? "";
+    return toVNode(globalHeaderRenderer(params));
   }
 
   // Default header with stacked sort arrows and filter icon
@@ -153,5 +166,5 @@ export function renderHeader(
     children.push(h("span", { class: "gp-grid-header-icons" }, iconsChildren));
   }
 
-  return h("template", children);
+  return h(Fragment, children);
 }

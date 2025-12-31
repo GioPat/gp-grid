@@ -1,9 +1,22 @@
 // packages/vue/src/renderers/editRenderer.ts
 
-import { h, type VNode } from "vue";
+import { h, createTextVNode, type VNode } from "vue";
 import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "gp-grid-core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
+
+/**
+ * Ensure we always return a VNode, never a plain string
+ */
+function toVNode(value: VNode | string | null | undefined): VNode {
+  if (value == null || value === "") {
+    return createTextVNode("");
+  }
+  if (typeof value === "string") {
+    return createTextVNode(value);
+  }
+  return value;
+}
 
 export interface RenderEditCellOptions {
   column: ColumnDefinition;
@@ -21,7 +34,7 @@ export interface RenderEditCellOptions {
  */
 export function renderEditCell(
   options: RenderEditCellOptions,
-): VNode | null {
+): VNode {
   const {
     column,
     rowData,
@@ -33,7 +46,7 @@ export function renderEditCell(
     globalEditRenderer,
   } = options;
 
-  if (!core) return null;
+  if (!core) return createTextVNode("");
 
   const value = getCellValue(rowData, column.field);
   const params: EditRendererParams = {
@@ -55,13 +68,13 @@ export function renderEditCell(
   if (column.editRenderer && typeof column.editRenderer === "string") {
     const renderer = editRenderers[column.editRenderer];
     if (renderer) {
-      return renderer(params);
+      return toVNode(renderer(params));
     }
   }
 
   // Fall back to global renderer
   if (globalEditRenderer) {
-    return globalEditRenderer(params);
+    return toVNode(globalEditRenderer(params));
   }
 
   // Default input

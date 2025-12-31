@@ -329,7 +329,7 @@ watch(
                 core: coreRef,
                 editRenderers: editRenderers ?? {},
                 globalEditRenderer: editRenderer,
-              }) ?? ''"
+              })"
             />
           </template>
           <!-- View mode -->

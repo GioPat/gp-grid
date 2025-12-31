@@ -1,8 +1,21 @@
 // packages/vue/src/renderers/cellRenderer.ts
 
-import { h, type VNode } from "vue";
+import { h, createTextVNode, type VNode } from "vue";
 import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "gp-grid-core";
 import type { VueCellRenderer } from "../types";
+
+/**
+ * Ensure we always return a VNode, never a plain string
+ */
+function toVNode(value: VNode | string | null | undefined): VNode {
+  if (value == null || value === "") {
+    return createTextVNode("");
+  }
+  if (typeof value === "string") {
+    return createTextVNode(value);
+  }
+  return value;
+}
 
 /**
  * Get cell value from row data, supporting dot-notation for nested fields
@@ -36,7 +49,7 @@ export interface RenderCellOptions {
 /**
  * Render cell content based on column configuration and renderer registries
  */
-export function renderCell(options: RenderCellOptions): VNode | string {
+export function renderCell(options: RenderCellOptions): VNode {
   const {
     column,
     rowData,
@@ -65,15 +78,15 @@ export function renderCell(options: RenderCellOptions): VNode | string {
   if (column.cellRenderer && typeof column.cellRenderer === "string") {
     const renderer = cellRenderers[column.cellRenderer];
     if (renderer) {
-      return renderer(params) ?? "";
+      return toVNode(renderer(params));
     }
   }
 
   // Fall back to global renderer
   if (globalCellRenderer) {
-    return globalCellRenderer(params) ?? "";
+    return toVNode(globalCellRenderer(params));
   }
 
   // Default text rendering
-  return value == null ? "" : String(value);
+  return createTextVNode(value == null ? "" : String(value));
 }
