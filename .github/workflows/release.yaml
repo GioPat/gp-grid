@@ -62,7 +62,7 @@ jobs:
           fi
       - name: Publish to NPM
         if: steps.check-npm.outputs.exists == 'false'
-        run: npm publish --access public --provenance
+        run: pnpm publish --access public --provenance --no-git-checks
         working-directory: packages/${{ matrix.package }}
 
       - name: Publish to JSR
