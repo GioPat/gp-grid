@@ -46,7 +46,7 @@ jobs:
       - run: pnpm --filter=gp-grid-core build:production
       
       - name: Build ${{ matrix.package }}
-        if: matrix.package != core
+        if: matrix.package != 'core'
         run: pnpm --filter=gp-grid-${{ matrix.package }} build:production
 
       - name: Check if version exists on npm
