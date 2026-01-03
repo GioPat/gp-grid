@@ -50,6 +50,8 @@ export interface GridState {
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
   contentWidth: number;
   contentHeight: number;
+  /** Viewport width (container's visible width) for column scaling */
+  viewportWidth: number;
   headers: Map<number, HeaderData>;
   filterPopup: FilterPopupState | null;
   isLoading: boolean;

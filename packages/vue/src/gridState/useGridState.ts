@@ -20,6 +20,7 @@ function createInitialState(): GridState {
     editingCell: null,
     contentWidth: 0,
     contentHeight: 0,
+    viewportWidth: 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,
@@ -104,6 +105,7 @@ function applyInstruction(
     case "SET_CONTENT_SIZE":
       state.contentWidth = instruction.width;
       state.contentHeight = instruction.height;
+      state.viewportWidth = instruction.viewportWidth;
       break;
 
     case "UPDATE_HEADER":
@@ -190,6 +192,7 @@ export function useGridState() {
     state.editingCell = initial.editingCell;
     state.contentWidth = initial.contentWidth;
     state.contentHeight = initial.contentHeight;
+    state.viewportWidth = initial.viewportWidth;
     state.headers = initial.headers;
     state.filterPopup = initial.filterPopup;
     state.isLoading = initial.isLoading;

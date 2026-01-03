@@ -244,11 +244,14 @@ export class GridCore<TData extends Row = Row> {
       ? scrollTop / this.scrollRatio
       : scrollTop;
 
+    const viewportSizeChanged =
+      this.viewportWidth !== width ||
+      this.viewportHeight !== height;
+
     const changed =
       this.scrollTop !== effectiveScrollTop ||
       this.scrollLeft !== scrollLeft ||
-      this.viewportWidth !== width ||
-      this.viewportHeight !== height;
+      viewportSizeChanged;
 
     if (!changed) return;
 
@@ -266,6 +269,11 @@ export class GridCore<TData extends Row = Row> {
       start: visibleRange.start,
       end: visibleRange.end,
     });
+
+    // Emit content size when viewport size changes (for column scaling)
+    if (viewportSizeChanged) {
+      this.emitContentSize();
+    }
   }
 
   // ===========================================================================
@@ -623,7 +631,12 @@ export class GridCore<TData extends Row = Row> {
       this.scrollRatio = 1;
     }
     
-    this.emit({ type: "SET_CONTENT_SIZE", width, height: this.virtualContentHeight });
+    this.emit({
+      type: "SET_CONTENT_SIZE",
+      width,
+      height: this.virtualContentHeight,
+      viewportWidth: this.viewportWidth,
+    });
   }
 
   private emitHeaders(): void {

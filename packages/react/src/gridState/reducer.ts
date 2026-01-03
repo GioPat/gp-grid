@@ -15,6 +15,7 @@ export function createInitialState(): GridState {
     editingCell: null,
     contentWidth: 0,
     contentHeight: 0,
+    viewportWidth: 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,
@@ -99,6 +100,7 @@ export function applyInstruction(
       return {
         contentWidth: instruction.width,
         contentHeight: instruction.height,
+        viewportWidth: instruction.viewportWidth,
       };
 
     case "UPDATE_HEADER":

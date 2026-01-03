@@ -93,6 +93,7 @@ export interface SetContentSizeInstruction {
   type: "SET_CONTENT_SIZE";
   width: number;
   height: number;
+  viewportWidth: number;
 }
 
 /** Update header instruction */

@@ -25,6 +25,46 @@ export function getTotalWidth(columnPositions: number[]): number {
 }
 
 /**
+ * Calculate scaled column positions when container is wider than total column widths.
+ * Columns expand proportionally based on their original width ratios.
+ *
+ * @param columns - Column definitions with original widths
+ * @param containerWidth - Available container width
+ * @returns Object with positions array and widths array
+ */
+export function calculateScaledColumnPositions(
+  columns: ColumnDefinition[],
+  containerWidth: number,
+): { positions: number[]; widths: number[] } {
+  const originalPositions = calculateColumnPositions(columns);
+  const totalOriginalWidth = getTotalWidth(originalPositions);
+
+  // If container is not wider than content, return original values
+  if (containerWidth <= totalOriginalWidth || totalOriginalWidth === 0) {
+    return {
+      positions: originalPositions,
+      widths: columns.map((col) => col.width),
+    };
+  }
+
+  // Calculate scale factor
+  const scaleFactor = containerWidth / totalOriginalWidth;
+
+  // Scale each column proportionally
+  const scaledWidths = columns.map((col) => col.width * scaleFactor);
+
+  // Calculate new positions
+  const scaledPositions = [0];
+  let pos = 0;
+  for (const width of scaledWidths) {
+    pos += width;
+    scaledPositions.push(pos);
+  }
+
+  return { positions: scaledPositions, widths: scaledWidths };
+}
+
+/**
  * Find column index at a given X coordinate
  */
 export function findColumnAtX(

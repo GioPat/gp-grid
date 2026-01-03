@@ -6,7 +6,7 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
   injectStyles,
-  calculateColumnPositions,
+  calculateScaledColumnPositions,
   getTotalWidth,
   isCellSelected,
   isCellActive,
@@ -61,6 +61,7 @@ export interface UseGpGridResult<TData extends Row = Row> {
   // Computed
   totalHeaderHeight: ComputedRef<number>;
   columnPositions: ComputedRef<number[]>;
+  columnWidths: ComputedRef<number[]>;
   totalWidth: ComputedRef<number>;
   fillHandlePosition: ComputedRef<{ top: number; left: number } | null>;
 
@@ -114,7 +115,11 @@ export function useGpGrid<TData extends Row = Row>(
 
   // Computed values
   const totalHeaderHeight = computed(() => options.headerHeight ?? options.rowHeight);
-  const columnPositions = computed(() => calculateColumnPositions(options.columns));
+  const scaledColumns = computed(() =>
+    calculateScaledColumnPositions(options.columns, state.viewportWidth),
+  );
+  const columnPositions = computed(() => scaledColumns.value.positions);
+  const columnWidths = computed(() => scaledColumns.value.widths);
   const totalWidth = computed(() => getTotalWidth(columnPositions.value));
   const slotsArray = computed(() => Array.from(state.slots.values()));
 
@@ -254,6 +259,7 @@ export function useGpGrid<TData extends Row = Row>(
     slots: computed(() => state.slots),
     columns: computed(() => options.columns),
     columnPositions,
+    columnWidths,
     rowHeight: options.rowHeight,
   });
 
@@ -269,6 +275,7 @@ export function useGpGrid<TData extends Row = Row>(
     // Computed
     totalHeaderHeight,
     columnPositions,
+    columnWidths,
     totalWidth,
     fillHandlePosition,
 

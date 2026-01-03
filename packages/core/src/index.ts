@@ -177,6 +177,7 @@ export {
 /** Positioning utilities */
 export {
   calculateColumnPositions,
+  calculateScaledColumnPositions,
   getTotalWidth,
   findColumnAtX,
 } from "./utils/positioning";
