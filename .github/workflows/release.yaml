@@ -66,5 +66,6 @@ jobs:
         working-directory: packages/${{ matrix.package }}
 
       - name: Publish to JSR
+        if: matrix.package == 'core'
         run: npx jsr publish --allow-dirty
         working-directory: packages/${{ matrix.package }}
