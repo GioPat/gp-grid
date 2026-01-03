@@ -1,7 +1,7 @@
 // packages/core/src/styles/states.ts
-// Loading, error, and empty state styles
 
-export const statesStyles = `
+// Loading, error, and empty state styles
+export const statesStyles: string = `
 /* =============================================================================
    Loading & Error States
    ============================================================================= */

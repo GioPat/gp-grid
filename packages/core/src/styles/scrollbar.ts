@@ -1,7 +1,7 @@
 // packages/core/src/styles/scrollbar.ts
-// Custom scrollbar styles
 
-export const scrollbarStyles = `
+// Custom scrollbar styles
+export const scrollbarStyles: string = `
 /* =============================================================================
    Scrollbar Styling
    ============================================================================= */

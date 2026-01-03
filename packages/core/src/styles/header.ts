@@ -1,7 +1,7 @@
 // packages/core/src/styles/header.ts
-// Header row, cell, sort arrows, and filter icon styles
 
-export const headerStyles = `
+// Header row, cell, sort arrows, and filter icon styles
+export const headerStyles: string = `
 /* =============================================================================
    Header
    ============================================================================= */
