@@ -13,8 +13,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "pnpm --parallel run dev",
-    "build": "pnpm -r build",
+    "dev": "pnpm --filter=./packages/* -r build && pnpm --filter=./playgrounds/vite-react dev",
+    "build:packages": "pnpm --filter=./packages/* -r build",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
