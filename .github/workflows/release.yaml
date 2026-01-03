@@ -41,7 +41,7 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install:packages
 
       - run: pnpm --filter=gp-grid-core build:production
       
