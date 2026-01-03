@@ -16,6 +16,7 @@ A framework-agnostic TypeScript library for building high-performance data grids
 ## Available implementations
 
 - [**gp-grid-react**](https://www.npmjs.com/package/gp-grid-react) | Official
+- [**gp-grid-vue**](https://www.npmjs.com/package/gp-grid-vue) | Official
 
 ## Philosophy
 
@@ -396,7 +397,7 @@ class MyGridAdapter {
 
 ## Donations
 
-Keeping this library requires effort and passion, I'm a full time engineer employed on other project and I'm trying my best to keep this work free! For all the features. 
+Keeping this library requires effort and passion, I'm a full time engineer employed on other project and I'm trying my best to keep this work free! For all the features.
 
 If you think this project helped you achieve your goals, it's hopefully worth a beer! 🍻
 
@@ -421,3 +422,4 @@ bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m
 lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7
 
 </div>
+

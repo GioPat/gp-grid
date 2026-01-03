@@ -1,6 +1,13 @@
 // packages/vue/src/composables/useInputHandler.ts
 
-import { ref, watch, onUnmounted, type Ref, type ShallowRef, type ComputedRef } from "vue";
+import {
+  ref,
+  watch,
+  onUnmounted,
+  type Ref,
+  type ShallowRef,
+  type ComputedRef,
+} from "vue";
 import type {
   GridCore,
   Row,
@@ -30,7 +37,11 @@ export interface UseInputHandlerOptions {
 }
 
 export interface UseInputHandlerResult {
-  handleCellMouseDown: (rowIndex: number, colIndex: number, e: MouseEvent) => void;
+  handleCellMouseDown: (
+    rowIndex: number,
+    colIndex: number,
+    e: MouseEvent,
+  ) => void;
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   handleFillHandleMouseDown: (e: MouseEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
@@ -46,7 +57,10 @@ export interface UseInputHandlerResult {
 /**
  * Find the slot for a given row index
  */
-function findSlotForRow(slots: Map<string, SlotData>, rowIndex: number): SlotData | null {
+function findSlotForRow(
+  slots: Map<string, SlotData>,
+  rowIndex: number,
+): SlotData | null {
   for (const slot of slots.values()) {
     if (slot.rowIndex === rowIndex) {
       return slot;
@@ -67,7 +81,9 @@ function scrollCellIntoView(
   slots: Map<string, SlotData>,
 ): void {
   const slot = findSlotForRow(slots, row);
-  const cellTranslateY = slot ? slot.translateY : headerHeight + row * rowHeight;
+  const cellTranslateY = slot
+    ? slot.translateY
+    : headerHeight + row * rowHeight;
   const cellViewportTop = cellTranslateY - container.scrollTop;
   const cellViewportBottom = cellViewportTop + rowHeight;
   const visibleTop = headerHeight;
@@ -90,8 +106,8 @@ function scrollCellIntoView(
 /**
  * Vue composable for handling all input interactions
  */
-export function useInputHandler(
-  coreRef: ShallowRef<GridCore | null>,
+export function useInputHandler<TData extends Row = Row>(
+  coreRef: ShallowRef<GridCore<TData> | null>,
   containerRef: Ref<HTMLDivElement | null>,
   columns: ComputedRef<ColumnDefinition[]>,
   options: UseInputHandlerOptions,
@@ -120,7 +136,12 @@ export function useInputHandler(
 
   // Update InputHandler deps when options change
   watch(
-    [() => headerHeight, () => rowHeight, columnPositions, () => columns.value.length],
+    [
+      () => headerHeight,
+      () => rowHeight,
+      columnPositions,
+      () => columns.value.length,
+    ],
     () => {
       const core = coreRef.value;
       if (core?.input) {
@@ -203,7 +224,11 @@ export function useInputHandler(
   // Event Handlers
   // ===========================================================================
 
-  function handleCellMouseDown(rowIndex: number, colIndex: number, e: MouseEvent): void {
+  function handleCellMouseDown(
+    rowIndex: number,
+    colIndex: number,
+    e: MouseEvent,
+  ): void {
     const core = coreRef.value;
     if (!core?.input) return;
 

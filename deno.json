@@ -1,3 +1,3 @@
 {
-  "workspace": ["./packages/core", "./packages/react"]
+  "workspace": ["./packages/core", "./packages/react", "./packages/vue"]
 }
