@@ -45,7 +45,7 @@
   "scripts": {
     "dev": "tsdown --watch",
     "build": "tsdown --clean --sourcemap",
-    "build:production": "tsdown --clean --minify --treeshake --dts"
+    "build:production": "tsdown --clean --minify --treeshake"
   },
   "dependencies": {
     "gp-grid-core": "workspace:*"
