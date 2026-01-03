@@ -1,4 +1,5 @@
 - Avoid using `any`
 - The library `core` package must be library/framework agnostic
+- The library comes with batteries: There are two wrappers (react and vue) in the `packages` folder and they shall always be kept aligned with each other.
 - When you need to run the playground, use `pnpm --filter=playground dev`
 - Check LSP type errors
