@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.4...gp-grid-v0.2.5) (2026-01-03)
+
+
+### 🐛 Bug Fixes
+
+* install only packages dependencies in CD pipeline ([95e552b](https://github.com/GioPat/gp-grid/commit/95e552b080b4e36dd1337ccbd6bfdb4ce4c00c67))
+
 ## [0.2.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.3...gp-grid-v0.2.4) (2026-01-03)
 
 
