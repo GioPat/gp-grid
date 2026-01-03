@@ -1,7 +1,7 @@
 // packages/core/src/styles/filters.ts
-// Filter popup and filter-related styles
 
-export const filtersStyles = `
+// Filter popup and filter-related styles
+export const filtersStyles: string = `
 /* =============================================================================
    Filter Popup
    ============================================================================= */

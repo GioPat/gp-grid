@@ -14,7 +14,7 @@ const STYLE_ID = "gp-grid-styles";
 /**
  * Combined grid styles from all modules
  */
-export const gridStyles = [
+export const gridStyles: string = [
   variablesStyles,
   containerStyles,
   headerStyles,

@@ -1,7 +1,7 @@
 // packages/core/src/styles/cells.ts
-// Data cell styles including selection, active, editing, and fill handle
 
-export const cellStyles = `
+// Data cell styles including selection, active, editing, and fill handle
+export const cellStyles: string = `
 /* =============================================================================
    Data Cells
    ============================================================================= */

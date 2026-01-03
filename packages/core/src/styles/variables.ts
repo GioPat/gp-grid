@@ -1,7 +1,7 @@
 // packages/core/src/styles/variables.ts
-// CSS Variables for theming (light and dark modes)
 
-export const variablesStyles = `
+// CSS Variables for theming (light and dark modes)
+export const variablesStyles: string = `
 /* =============================================================================
    GP Grid - CSS Variables for Theming
    ============================================================================= */

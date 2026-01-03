@@ -1,7 +1,7 @@
 // packages/core/src/styles/container.ts
-// Grid container base styles
 
-export const containerStyles = `
+// Grid container base styles
+export const containerStyles: string = `
 /* =============================================================================
    GP Grid - Clean Flat Design
    ============================================================================= */
