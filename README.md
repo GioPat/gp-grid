@@ -52,10 +52,11 @@ Data fetching is abstracted through a `DataSource` interface, supporting both:
 
 ## Packages
 
-| Package | Description |
-| ------- | ----------- |
-| [**gp-grid-core**](./packages/core/README.md) | Framework-agnostic core library with virtual scrolling, data sources, and instruction-based architecture |
-| [**gp-grid-react**](./packages/react/README.md) | Official React implementation with full feature support |
+| Package                                         | Description                                                                                              |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [**gp-grid-core**](./packages/core/README.md)   | Framework-agnostic core library with virtual scrolling, data sources, and instruction-based architecture |
+| [**gp-grid-react**](./packages/react/README.md) | Official React implementation with full feature support                                                  |
+| [**gp-grid-vue**](./packages/vue/README.md)     | Official Vue3 implementation with full feature support                                                   |
 
 ## Quick Start
 
