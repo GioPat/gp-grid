@@ -5,11 +5,11 @@ import type { Row, CellValue, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
 
 /** Cell renderer params */
-export interface CellRendererParams {
+export interface CellRendererParams<TData extends Row = Row> {
   /** Cell value */
   value: CellValue;
   /** Row data */
-  rowData: Row;
+  rowData: TData;
   /** Column definition */
   column: ColumnDefinition;
   /** Row index */
@@ -25,7 +25,8 @@ export interface CellRendererParams {
 }
 
 /** Edit renderer params */
-export interface EditRendererParams extends CellRendererParams {
+export interface EditRendererParams<TData extends Row = Row>
+  extends CellRendererParams<TData> {
   /** Initial value */
   initialValue: CellValue;
   /** On value change */

@@ -49,7 +49,7 @@ export function isSameDay(a: Date, b: Date): boolean {
  */
 export function evaluateTextCondition(
   cellValue: CellValue,
-  condition: TextCondition
+  condition: TextCondition,
 ): boolean {
   const isBlank =
     cellValue == null ||
@@ -66,7 +66,7 @@ export function evaluateTextCondition(
         String(a).localeCompare(String(b), undefined, {
           numeric: true,
           sensitivity: "base",
-        })
+        }),
       );
       const arrayStr = sortedArray.join(", ");
       return condition.selectedValues.has(arrayStr) || includesBlank;
@@ -107,7 +107,7 @@ export function evaluateTextCondition(
  */
 export function evaluateNumberCondition(
   cellValue: CellValue,
-  condition: NumberCondition
+  condition: NumberCondition,
 ): boolean {
   const isBlank = cellValue == null || cellValue === "";
   if (condition.operator === "blank") return isBlank;
@@ -146,7 +146,7 @@ export function evaluateNumberCondition(
  */
 export function evaluateDateCondition(
   cellValue: CellValue,
-  condition: DateCondition
+  condition: DateCondition,
 ): boolean {
   const isBlank = cellValue == null || cellValue === "";
   if (condition.operator === "blank") return isBlank;
@@ -189,7 +189,7 @@ export function evaluateDateCondition(
  */
 function evaluateCondition(
   cellValue: CellValue,
-  condition: TextCondition | NumberCondition | DateCondition
+  condition: TextCondition | NumberCondition | DateCondition,
 ): boolean {
   switch (condition.type) {
     case "text":
@@ -209,7 +209,7 @@ function evaluateCondition(
  */
 export function evaluateColumnFilter(
   cellValue: CellValue,
-  filter: ColumnFilterModel
+  filter: ColumnFilterModel,
 ): boolean {
   if (!filter.conditions || !filter.conditions.length) return true;
 
@@ -243,10 +243,10 @@ export function evaluateColumnFilter(
 export function rowPassesFilter<TData extends Row>(
   row: TData,
   filterModel: FilterModel,
-  getFieldValue: (row: TData, field: string) => CellValue
+  getFieldValue: (row: TData, field: string) => CellValue,
 ): boolean {
   const filterEntries = Object.entries(filterModel).filter(
-    ([, value]) => value != null
+    ([, value]) => value != null,
   );
 
   if (filterEntries.length === 0) {
@@ -255,15 +255,6 @@ export function rowPassesFilter<TData extends Row>(
 
   for (const [field, filter] of filterEntries) {
     const cellValue = getFieldValue(row, field);
-
-    // Handle old string format (backwards compatibility)
-    if (typeof filter === "string") {
-      const strValue = String(cellValue ?? "").toLowerCase();
-      if (!strValue.includes(filter.toLowerCase())) {
-        return false;
-      }
-      continue;
-    }
 
     // Handle new ColumnFilterModel format
     if (!evaluateColumnFilter(cellValue, filter)) {

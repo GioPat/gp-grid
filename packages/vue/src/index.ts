@@ -11,21 +11,33 @@ export { default as GpGrid, default } from "./GpGrid.vue";
 // =============================================================================
 
 export { useGpGrid } from "./composables/useGpGrid";
-export type { UseGpGridOptions, UseGpGridResult } from "./composables/useGpGrid";
+export type {
+  UseGpGridOptions,
+  UseGpGridResult,
+} from "./composables/useGpGrid";
 
 export { useInputHandler } from "./composables/useInputHandler";
-export type { UseInputHandlerOptions, UseInputHandlerResult } from "./composables/useInputHandler";
+export type {
+  UseInputHandlerOptions,
+  UseInputHandlerResult,
+} from "./composables/useInputHandler";
 
 export { useAutoScroll } from "./composables/useAutoScroll";
 
 export { useFillHandle } from "./composables/useFillHandle";
-export type { UseFillHandleOptions, UseFillHandleResult } from "./composables/useFillHandle";
+export type {
+  UseFillHandleOptions,
+  UseFillHandleResult,
+} from "./composables/useFillHandle";
 
 export { useFilterPopup } from "./composables/useFilterPopup";
 export type { UseFilterPopupOptions } from "./composables/useFilterPopup";
 
 export { useFilterConditions } from "./composables/useFilterConditions";
-export type { LocalFilterCondition, UseFilterConditionsResult } from "./composables/useFilterConditions";
+export type {
+  LocalFilterCondition,
+  UseFilterConditionsResult,
+} from "./composables/useFilterConditions";
 
 export { useGridState, createInitialState } from "./gridState";
 
