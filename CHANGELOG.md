@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.5...gp-grid-v0.3.0) (2026-01-03)
+
+
+### ✨ Features
+
+* **core,react,vue:** make sure the columns take the full div width proportionally ([b3325e3](https://github.com/GioPat/gp-grid/commit/b3325e3aa0eb2aed36c0f598d5a0771dc37902b3))
+
+
+### 🐛 Bug Fixes
+
+* z-index is now defaulted to 10 and can be changed by overriding CSS class ([bdaa1cb](https://github.com/GioPat/gp-grid/commit/bdaa1cb42c1194c5179c87ad6e7e366e1ba8242f))
+
 ## [0.2.5](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.4...gp-grid-v0.2.5) (2026-01-03)
 
 
