@@ -9,6 +9,7 @@ export interface UseFillHandleOptions {
   slots: ComputedRef<Map<string, SlotData>>;
   columns: ComputedRef<ColumnDefinition[]>;
   columnPositions: ComputedRef<number[]>;
+  columnWidths: ComputedRef<number[]>;
   rowHeight: number;
 }
 
@@ -22,7 +23,7 @@ export interface UseFillHandleResult {
  * when all selected columns are editable.
  */
 export function useFillHandle(options: UseFillHandleOptions): UseFillHandleResult {
-  const { activeCell, selectionRange, slots, columns, columnPositions, rowHeight } = options;
+  const { activeCell, selectionRange, slots, columns, columnPositions, columnWidths, rowHeight } = options;
 
   const fillHandlePosition = computed(() => {
     const active = activeCell.value;
@@ -69,7 +70,7 @@ export function useFillHandle(options: UseFillHandleOptions): UseFillHandleResul
     if (cellTop === null) return null;
 
     const cellLeft = columnPositions.value[col] ?? 0;
-    const cellWidth = cols[col]?.width ?? 0;
+    const cellWidth = columnWidths.value[col] ?? 0;
 
     return {
       top: cellTop + rowHeight - 5,

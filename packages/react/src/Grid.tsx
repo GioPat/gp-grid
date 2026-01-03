@@ -12,7 +12,7 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
   injectStyles,
-  calculateColumnPositions,
+  calculateScaledColumnPositions,
   getTotalWidth,
   isCellSelected,
   isCellActive,
@@ -89,10 +89,10 @@ export function Grid<TData extends Row = Row>(
     return createClientDataSource<TData>([]);
   }, [providedDataSource, rowData]);
 
-  // Compute column positions
-  const columnPositions = useMemo(
-    () => calculateColumnPositions(columns),
-    [columns],
+  // Compute column positions (scaled to fill container when wider)
+  const { positions: columnPositions, widths: columnWidths } = useMemo(
+    () => calculateScaledColumnPositions(columns, state.viewportWidth),
+    [columns, state.viewportWidth],
   );
   const totalWidth = getTotalWidth(columnPositions);
 
@@ -265,7 +265,7 @@ export function Grid<TData extends Row = Row>(
     if (cellTop === null) return null;
 
     const cellLeft = columnPositions[col] ?? 0;
-    const cellWidth = columns[col]?.width ?? 0;
+    const cellWidth = columnWidths[col] ?? 0;
 
     return {
       top: cellTop + rowHeight - 5,
@@ -277,6 +277,7 @@ export function Grid<TData extends Row = Row>(
     state.slots,
     rowHeight,
     columnPositions,
+    columnWidths,
     columns,
   ]);
 
@@ -314,7 +315,6 @@ export function Grid<TData extends Row = Row>(
             height: headerHeight,
             width: Math.max(state.contentWidth, totalWidth),
             minWidth: "100%",
-            zIndex: 100,
           }}
         >
           {columns.map((column, colIndex) => {
@@ -328,7 +328,7 @@ export function Grid<TData extends Row = Row>(
                   position: "absolute",
                   left: `${columnPositions[colIndex]}px`,
                   top: 0,
-                  width: `${column.width}px`,
+                  width: `${columnWidths[colIndex]}px`,
                   height: `${headerHeight}px`,
                   background: "transparent",
                 }}
@@ -410,7 +410,7 @@ export function Grid<TData extends Row = Row>(
                       position: "absolute",
                       left: `${columnPositions[colIndex]}px`,
                       top: 0,
-                      width: `${column.width}px`,
+                      width: `${columnWidths[colIndex]}px`,
                       height: `${rowHeight}px`,
                     }}
                     onMouseDown={(e) =>

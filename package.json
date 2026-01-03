@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "dev": "pnpm --filter=./packages/* -r build && pnpm --filter=./playgrounds/vite-react dev",
+    "dev:vue": "pnpm --filter=./packages/* -r build && pnpm --filter=./playgrounds/vite-vue dev",
     "install:packages": "pnpm --filter=./packages/* install --frozen-lockfile",
     "build:packages": "pnpm --filter=./packages/* -r build",
     "test": "vitest",

@@ -12,7 +12,7 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
   injectStyles,
-  calculateColumnPositions,
+  calculateScaledColumnPositions,
   getTotalWidth,
   isCellSelected,
   isCellActive,
@@ -71,7 +71,11 @@ const { state, applyInstructions } = useGridState();
 
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
-const columnPositions = computed(() => calculateColumnPositions(props.columns));
+const scaledColumns = computed(() =>
+  calculateScaledColumnPositions(props.columns, state.viewportWidth),
+);
+const columnPositions = computed(() => scaledColumns.value.positions);
+const columnWidths = computed(() => scaledColumns.value.widths);
 const totalWidth = computed(() => getTotalWidth(columnPositions.value));
 const slotsArray = computed(() => Array.from(state.slots.values()));
 
@@ -102,6 +106,7 @@ const { fillHandlePosition } = useFillHandle({
   slots: computed(() => state.slots),
   columns: computed(() => props.columns),
   columnPositions,
+  columnWidths,
   rowHeight: props.rowHeight,
 });
 
@@ -253,7 +258,6 @@ watch(
           height: `${totalHeaderHeight}px`,
           width: `${Math.max(state.contentWidth, totalWidth)}px`,
           minWidth: '100%',
-          zIndex: 100,
         }"
       >
         <div
@@ -265,7 +269,7 @@ watch(
             position: 'absolute',
             left: `${columnPositions[colIndex]}px`,
             top: 0,
-            width: `${column.width}px`,
+            width: `${columnWidths[colIndex]}px`,
             height: `${totalHeaderHeight}px`,
             background: 'transparent',
           }"
@@ -311,7 +315,7 @@ watch(
             position: 'absolute',
             left: `${columnPositions[colIndex]}px`,
             top: 0,
-            width: `${column.width}px`,
+            width: `${columnWidths[colIndex]}px`,
             height: `${rowHeight}px`,
           }"
           @mousedown="(e) => handleCellMouseDown(slot.rowIndex, colIndex, e)"
