@@ -10,7 +10,7 @@ export const headerStyles: string = `
   position: sticky;
   top: 0;
   left: 0;
-  z-index: 100;
+  z-index: var(--gp-grid-header-z-index);
   background-color: var(--gp-grid-header-bg);
   border-bottom: 1px solid var(--gp-grid-border);
 }

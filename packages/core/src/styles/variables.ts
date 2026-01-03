@@ -19,6 +19,7 @@ export const variablesStyles: string = `
   /* Header */
   --gp-grid-header-bg: #f1f3f5;
   --gp-grid-header-text: #212529;
+  --gp-grid-header-z-index: 10;
 
   /* Selection */
   --gp-grid-primary: #228be6;
@@ -58,6 +59,7 @@ export const variablesStyles: string = `
   /* Header */
   --gp-grid-header-bg: #25262b;
   --gp-grid-header-text: #c1c2c5;
+  --gp-grid-header-z-index: 10;
 
   /* Selection */
   --gp-grid-primary: #339af0;
