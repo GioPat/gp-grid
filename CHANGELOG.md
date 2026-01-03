@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.3...gp-grid-v0.2.4) (2026-01-03)
+
+
+### 🐛 Bug Fixes
+
+* use pnpm to publish ([71edf8b](https://github.com/GioPat/gp-grid/commit/71edf8bedab3bce79f5c9a1e8ff5c7559d891b7b))
+
 ## [0.2.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.2...gp-grid-v0.2.3) (2026-01-03)
 
 
