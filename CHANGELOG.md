@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.2...gp-grid-v0.2.3) (2026-01-03)
+
+
+### 🐛 Bug Fixes
+
+* **core,vue:** update typing error and add shim for *.vue ([3f656b3](https://github.com/GioPat/gp-grid/commit/3f656b302be55b188a3e964d04402e39d8c31008))
+
+
+### 📝 Documentation
+
+* **core:** Update official package list ([c936b92](https://github.com/GioPat/gp-grid/commit/c936b9248827b7eec54b49449703415001981deb))
+
 ## [0.2.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.1...gp-grid-v0.2.2) (2026-01-03)
 
 
