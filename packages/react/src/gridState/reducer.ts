@@ -7,15 +7,20 @@ import type { SlotData, HeaderData, GridState, GridAction } from "./types";
 // Initial State
 // =============================================================================
 
-export function createInitialState(): GridState {
+export interface InitialStateArgs {
+  initialWidth?: number;
+  initialHeight?: number;
+}
+
+export function createInitialState(args?: InitialStateArgs): GridState {
   return {
     slots: new Map(),
     activeCell: null,
     selectionRange: null,
     editingCell: null,
     contentWidth: 0,
-    contentHeight: 0,
-    viewportWidth: 0,
+    contentHeight: args?.initialHeight ?? 0,
+    viewportWidth: args?.initialWidth ?? 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,

@@ -12,15 +12,20 @@ import type {
 // Initial State
 // =============================================================================
 
-function createInitialState(): GridState {
+export interface InitialStateArgs {
+  initialWidth?: number;
+  initialHeight?: number;
+}
+
+function createInitialState(args?: InitialStateArgs): GridState {
   return {
     slots: new Map(),
     activeCell: null,
     selectionRange: null,
     editingCell: null,
     contentWidth: 0,
-    contentHeight: 0,
-    viewportWidth: 0,
+    contentHeight: args?.initialHeight ?? 0,
+    viewportWidth: args?.initialWidth ?? 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,
@@ -169,8 +174,8 @@ function applyInstruction(
 /**
  * Vue composable for managing grid state
  */
-export function useGridState() {
-  const state = reactive<GridState>(createInitialState());
+export function useGridState(args?: InitialStateArgs) {
+  const state = reactive<GridState>(createInitialState(args));
 
   /**
    * Apply a batch of instructions to the state

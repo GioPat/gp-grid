@@ -50,6 +50,10 @@ const props = withDefaults(
     cellRenderer?: VueCellRenderer;
     editRenderer?: VueEditRenderer;
     headerRenderer?: VueHeaderRenderer;
+    /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
+    initialWidth?: number;
+    /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
+    initialHeight?: number;
   }>(),
   {
     overscan: 3,
@@ -67,7 +71,10 @@ const containerRef = ref<HTMLDivElement | null>(null);
 const coreRef = shallowRef<GridCore | null>(null);
 
 // State
-const { state, applyInstructions } = useGridState();
+const { state, applyInstructions } = useGridState({
+  initialWidth: props.initialWidth,
+  initialHeight: props.initialHeight,
+});
 
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
@@ -190,19 +197,24 @@ onMounted(() => {
       container.clientHeight,
     );
 
-    // Resize observer
-    const resizeObserver = new ResizeObserver(() => {
-      core.setViewport(
-        container.scrollTop,
-        container.scrollLeft,
-        container.clientWidth,
-        container.clientHeight,
-      );
-    });
-    resizeObserver.observe(container);
+    // Guard for SSR - ResizeObserver not available in Node.js
+    if (typeof ResizeObserver !== "undefined") {
+      const resizeObserver = new ResizeObserver(() => {
+        core.setViewport(
+          container.scrollTop,
+          container.scrollLeft,
+          container.clientWidth,
+          container.clientHeight,
+        );
+      });
+      resizeObserver.observe(container);
+
+      onUnmounted(() => {
+        resizeObserver.disconnect();
+      });
+    }
 
     onUnmounted(() => {
-      resizeObserver.disconnect();
       unsubscribe();
       coreRef.value = null;
     });

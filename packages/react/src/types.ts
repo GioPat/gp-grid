@@ -62,4 +62,9 @@ export interface GridProps<TData extends Row = Row> {
   editRenderer?: ReactEditRenderer;
   /** Global header renderer */
   headerRenderer?: ReactHeaderRenderer;
+
+  /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
+  initialWidth?: number;
+  /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
+  initialHeight?: number;
 }
