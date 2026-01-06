@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.3.0...gp-grid-v0.4.0) (2026-01-06)
+
+
+### ✨ Features
+
+* **core,react,vue:** add initialWidth and initialHeight for first rendering and add browser guards for SSR ([e45ff16](https://github.com/GioPat/gp-grid/commit/e45ff16e342bb0a9c23346bc5c51725724109115))
+
 ## [0.3.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.2.5...gp-grid-v0.3.0) (2026-01-03)
 
 
