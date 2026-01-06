@@ -68,11 +68,17 @@ export function Grid<TData extends Row = Row>(
     cellRenderer,
     editRenderer,
     headerRenderer,
+    initialWidth,
+    initialHeight,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
-  const [state, dispatch] = useReducer(gridReducer, null, createInitialState);
+  const [state, dispatch] = useReducer(
+    gridReducer,
+    { initialWidth, initialHeight },
+    createInitialState,
+  );
 
   // Computed heights
   const totalHeaderHeight = headerHeight;
@@ -182,6 +188,12 @@ export function Grid<TData extends Row = Row>(
     const container = containerRef.current;
     const core = coreRef.current;
     if (!container || !core) return;
+
+    // Guard for SSR - ResizeObserver not available in Node.js
+    if (typeof ResizeObserver === "undefined") {
+      handleScroll();
+      return;
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       core.setViewport(

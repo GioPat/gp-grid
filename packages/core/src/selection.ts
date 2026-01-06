@@ -289,6 +289,11 @@ export class SelectionManager {
    * Copy the selected data to the clipboard (Ctrl+C).
    */
   async copySelectionToClipboard(): Promise<void> {
+    // Guard for SSR - clipboard APIs not available in Node.js
+    if (typeof navigator === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
     const data = this.getSelectedData();
     if (data.length === 0) return;
 
