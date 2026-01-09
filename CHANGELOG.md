@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.1...gp-grid-v0.5.2) (2026-01-09)
+
+
+### 📝 Documentation
+
+* **react,vue:** add logo and update links to the documentation ([375efc8](https://github.com/GioPat/gp-grid/commit/375efc88c6005e8b8c9f66b25f6fc957b39f1220))
+
 ## [0.5.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.0...gp-grid-v0.5.1) (2026-01-09)
 
 
