@@ -1,5 +1,19 @@
 # gp-grid-react 🏁 🏎️
 
+<div align="center">
+    <a href="https://gp-grid-docs.vercel.app">
+        <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
+        <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
+        <img width="50%" alt="AG Grid Logo" src="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
+        </picture>
+    </a>
+    <div align="center">
+     Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
+      <h4><a href="https://gp-grid-docs.vercel.app/">🎮 Demo</a> • <a href="https://gp-grid-docs.vercel.app/docs/react">📖 Documentation</a>
+    </div>
+</div>
+
 A high-performance, feature lean React data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
 ## Table of Contents
