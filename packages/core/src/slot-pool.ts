@@ -272,6 +272,17 @@ export class SlotPoolManager {
   }
 
   /**
+   * Clean up resources for garbage collection.
+   */
+  destroy(): void {
+    // Clear slots without emitting (no listeners to notify during cleanup)
+    this.state.slots.clear();
+    this.state.rowToSlot.clear();
+    this.listeners = [];
+    this.batchListeners = [];
+  }
+
+  /**
    * Refresh all slot data without changing which rows are displayed.
    * Used after filtering/sorting when data changes.
    */

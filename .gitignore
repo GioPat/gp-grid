@@ -26,3 +26,7 @@ dist-ssr
 
 # Claude
 .claude
+
+# Benchmarks
+benchmarks/results/*
+benchmarks/test-results

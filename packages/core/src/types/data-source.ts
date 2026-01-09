@@ -30,4 +30,6 @@ export interface DataSourceResponse<TData = Row> {
 /** Data source interface */
 export interface DataSource<TData = Row> {
   fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
+  /** Optional cleanup method to release resources */
+  destroy?: () => void;
 }
