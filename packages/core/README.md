@@ -1,5 +1,22 @@
 # gp-grid-core 🏁 🏎️
 
+<div align="center">
+    <a href="https://gp-grid-docs.vercel.app">
+        <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
+        <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
+        <img width="50%" alt="AG Grid Logo" src="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
+        </picture>
+    </a>
+    <div align="center">
+     Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
+      <h4><a href="https://gp-grid-docs.vercel.app/">🎮 Demo</a> • <a href="https://gp-grid-docs.vercel.app/docs">📖 Documentation</a>
+    </div>
+</div>
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GioPat/gp-grid)
+
+
 A framework-agnostic TypeScript library for building high-performance data grids with high (millions) number of rows with ease.
 
 ## Table of Contents
