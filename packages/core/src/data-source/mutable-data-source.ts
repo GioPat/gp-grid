@@ -46,6 +46,8 @@ export interface MutableDataSource<TData = Row> extends DataSource<TData> {
   getTotalRowCount(): number;
   /** Subscribe to data change notifications. Returns unsubscribe function. */
   subscribe(listener: DataChangeListener): () => void;
+  /** Clear all data from the data source. */
+  clear(): void;
 }
 
 export interface MutableClientDataSourceOptions<TData> {
@@ -154,6 +156,11 @@ export function createMutableClientDataSource<TData extends Row = Row>(
       return () => {
         subscribers.delete(listener);
       };
+    },
+
+    clear(): void {
+      store.clear();
+      subscribers.clear();
     },
   };
 }

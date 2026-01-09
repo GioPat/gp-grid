@@ -66,6 +66,9 @@ export function createClientDataSource<TData extends Row = Row>(
 ): DataSource<TData> {
   const { getFieldValue = defaultGetFieldValue, useWorker = true } = options;
 
+  // Mutable reference so we can clear it on destroy
+  let internalData: TData[] | null = data;
+
   // Create worker manager only if useWorker is enabled
   const workerManager = useWorker ? new SortWorkerManager() : null;
 
@@ -73,7 +76,8 @@ export function createClientDataSource<TData extends Row = Row>(
     async fetch(
       request: DataSourceRequest,
     ): Promise<DataSourceResponse<TData>> {
-      let processedData = [...data];
+      // Use internalData which can be cleared on destroy
+      let processedData = internalData ? [...internalData] : [];
 
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
@@ -187,6 +191,16 @@ export function createClientDataSource<TData extends Row = Row>(
       const rows = processedData.slice(startIndex, startIndex + pageSize);
 
       return { rows, totalRows };
+    },
+
+    destroy(): void {
+      // Clear data reference to allow garbage collection
+      internalData = null;
+
+      // Terminate worker manager to clean up Web Worker
+      if (workerManager) {
+        workerManager.terminate();
+      }
     },
   };
 }

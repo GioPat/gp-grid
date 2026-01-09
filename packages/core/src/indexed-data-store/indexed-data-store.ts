@@ -11,11 +11,9 @@ import type {
 } from "../types";
 import { getFieldValue, setFieldValue } from "./field-helpers";
 import {
-  computeValueHash,
   computeRowSortHashes,
   compareRowsByHashes,
   compareRowsDirect,
-  compareValues,
 } from "./sorting";
 import { rowPassesFilter } from "./filtering";
 
@@ -74,7 +72,7 @@ export class IndexedDataStore<TData extends Row = Row> {
 
   constructor(
     initialData: TData[] = [],
-    options: IndexedDataStoreOptions<TData>
+    options: IndexedDataStoreOptions<TData>,
   ) {
     this.options = {
       getRowId: options.getRowId,
@@ -88,6 +86,22 @@ export class IndexedDataStore<TData extends Row = Row> {
   // ===========================================================================
   // Data Initialization
   // ===========================================================================
+
+  /**
+   * Clear all data and internal caches.
+   * Used for proper memory cleanup when the store is no longer needed.
+   */
+  clear(): void {
+    this.rows = [];
+    this.rowById.clear();
+    this.sortedIndices = [];
+    this.filterModel = {};
+    this.filteredIndices.clear();
+    this.rowSortCache.clear();
+    this.distinctValues.clear();
+    this.sortModel = [];
+    this.sortModelHash = "";
+  }
 
   /**
    * Replace all data (used for initial load or full refresh).

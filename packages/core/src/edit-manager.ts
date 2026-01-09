@@ -162,4 +162,16 @@ export class EditManager {
     this.editState = null;
     this.emit({ type: "STOP_EDIT" });
   }
+
+  // ===========================================================================
+  // Cleanup
+  // ===========================================================================
+
+  /**
+   * Clean up resources for garbage collection.
+   */
+  destroy(): void {
+    this.listeners = [];
+    this.editState = null;
+  }
 }
