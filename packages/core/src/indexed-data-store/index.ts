@@ -27,4 +27,3 @@ export {
   evaluateColumnFilter,
   rowPassesFilter,
 } from "./filtering";
-export type { TextCondition, NumberCondition, DateCondition } from "./filtering";

@@ -138,15 +138,11 @@ export class IndexedDataStore<TData extends Row = Row> {
    * Compatible with DataSource.fetch() interface.
    */
   query(request: DataSourceRequest): DataSourceResponse<TData> {
-    // Update sort model if changed
-    if (request.sort) {
-      this.setSortModel(request.sort);
-    }
+    // Update sort model (clear if undefined)
+    this.setSortModel(request.sort ?? []);
 
-    // Update filter model if changed
-    if (request.filter) {
-      this.setFilterModel(request.filter);
-    }
+    // Update filter model (clear if undefined)
+    this.setFilterModel(request.filter ?? {});
 
     // Get visible rows (filtered + sorted)
     const visibleIndices = this.getVisibleIndices();
@@ -546,7 +542,7 @@ export class IndexedDataStore<TData extends Row = Row> {
       this.rows[indexA]!,
       this.rows[indexB]!,
       this.sortModel,
-      this.options.getFieldValue
+      this.options.getFieldValue,
     );
   }
 
@@ -582,7 +578,7 @@ export class IndexedDataStore<TData extends Row = Row> {
     this.filteredIndices.clear();
 
     const filterEntries = Object.entries(this.filterModel).filter(
-      ([, value]) => value != null
+      ([, value]) => value != null,
     );
 
     if (filterEntries.length === 0) {
@@ -639,13 +635,15 @@ export class IndexedDataStore<TData extends Row = Row> {
    */
   private updateDistinctValuesForRow(
     row: TData,
-    operation: "add" | "remove"
+    operation: "add" | "remove",
   ): void {
     // For now, we track all fields
     // Could be optimized to only track fields we care about
     if (typeof row !== "object" || row === null) return;
 
-    for (const [field, value] of Object.entries(row as Record<string, unknown>)) {
+    for (const [field, value] of Object.entries(
+      row as Record<string, unknown>,
+    )) {
       if (value == null) continue;
 
       if (operation === "add") {
@@ -676,7 +674,7 @@ export class IndexedDataStore<TData extends Row = Row> {
   private updateDistinctValueForField(
     field: string,
     _oldValue: CellValue,
-    newValue: CellValue
+    newValue: CellValue,
   ): void {
     // Add new value (old value stays since other rows might use it)
     if (newValue != null) {

@@ -100,8 +100,8 @@ export class FillManager {
   commitFillDrag(): void {
     if (!this.state) return;
 
-    const { sourceRange, targetRow, targetCol } = this.state;
-    const filledCells = this.calculateFilledCells(sourceRange, targetRow, targetCol);
+    const { sourceRange, targetRow } = this.state;
+    const filledCells = this.calculateFilledCells(sourceRange, targetRow);
 
     // Apply values
     for (const { row, col, value } of filledCells) {
@@ -145,7 +145,6 @@ export class FillManager {
   private calculateFilledCells(
     sourceRange: CellRange,
     targetRow: number,
-    targetCol: number
   ): Array<{ row: number; col: number; value: CellValue }> {
     const result: Array<{ row: number; col: number; value: CellValue }> = [];
 
@@ -161,7 +160,11 @@ export class FillManager {
     // Only vertical fills are supported
     if (fillDown || fillUp) {
       for (let col = srcMinCol; col <= srcMaxCol; col++) {
-        const sourceValues = this.getSourceColumnValues(srcMinRow, srcMaxRow, col);
+        const sourceValues = this.getSourceColumnValues(
+          srcMinRow,
+          srcMaxRow,
+          col,
+        );
         const pattern = this.detectPattern(sourceValues);
 
         if (fillDown) {
@@ -173,7 +176,12 @@ export class FillManager {
         } else if (fillUp) {
           for (let row = srcMinRow - 1; row >= targetRow; row--) {
             const fillIndex = srcMinRow - row - 1;
-            const value = this.applyPattern(pattern, sourceValues, fillIndex, true);
+            const value = this.applyPattern(
+              pattern,
+              sourceValues,
+              fillIndex,
+              true,
+            );
             result.push({ row, col, value });
           }
         }
@@ -183,7 +191,11 @@ export class FillManager {
     return result;
   }
 
-  private getSourceColumnValues(minRow: number, maxRow: number, col: number): CellValue[] {
+  private getSourceColumnValues(
+    minRow: number,
+    maxRow: number,
+    col: number,
+  ): CellValue[] {
     const values: CellValue[] = [];
     for (let row = minRow; row <= maxRow; row++) {
       values.push(this.options.getCellValue(row, col));
@@ -227,7 +239,7 @@ export class FillManager {
     pattern: FillPattern,
     sourceValues: CellValue[],
     fillIndex: number,
-    reverse: boolean = false
+    reverse: boolean = false,
   ): CellValue {
     switch (pattern.type) {
       case "constant":
@@ -235,7 +247,9 @@ export class FillManager {
 
       case "arithmetic": {
         const multiplier = reverse ? -(fillIndex + 1) : fillIndex + 1;
-        const lastValue = reverse ? pattern.start : pattern.start + pattern.step * (sourceValues.length - 1);
+        const lastValue = reverse
+          ? pattern.start
+          : pattern.start + pattern.step * (sourceValues.length - 1);
         return lastValue + pattern.step * multiplier;
       }
 
@@ -261,4 +275,3 @@ type FillPattern =
   | { type: "constant"; value: CellValue }
   | { type: "arithmetic"; start: number; step: number }
   | { type: "repeat"; values: CellValue[] };
-
