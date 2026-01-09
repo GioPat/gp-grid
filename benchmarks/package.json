@@ -1,0 +1,44 @@
+{
+  "name": "gp-grid-benchmarks",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:gp-grid": "vite --config apps/gp-grid-react/vite.config.ts",
+    "dev:ag-grid": "vite --config apps/ag-grid/vite.config.ts",
+    "dev:tanstack": "vite --config apps/tanstack-table/vite.config.ts",
+    "dev:handsontable": "vite --config apps/handsontable/vite.config.ts",
+    "clean:cache": "rimraf node_modules/.vite",
+    "bench": "pnpm bench:gp-grid && pnpm bench:ag-grid && pnpm bench:tanstack && pnpm bench:handsontable && pnpm bench:report",
+    "bench:gp-grid": "cross-env BENCH_GRID=gp-grid playwright test --grep gp-grid",
+    "bench:ag-grid": "cross-env BENCH_GRID=ag-grid playwright test --grep ag-grid",
+    "bench:tanstack": "cross-env BENCH_GRID=tanstack-table playwright test --grep tanstack",
+    "bench:handsontable": "cross-env BENCH_GRID=handsontable playwright test --grep handsontable",
+    "bench:scroll": "playwright test scroll-performance",
+    "bench:render": "playwright test initial-render",
+    "bench:sort": "playwright test sort-filter",
+    "bench:memory": "playwright test memory-usage",
+    "bench:report": "node scripts/generate-report.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.3",
+    "cross-env": "^7.0.3",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.8.3",
+    "vite": "npm:rolldown-vite@7.1.12"
+  },
+  "dependencies": {
+    "ag-grid-community": "^33.0.0",
+    "ag-grid-react": "^33.0.0",
+    "@tanstack/react-table": "^8.21.0",
+    "@tanstack/react-virtual": "^3.11.0",
+    "handsontable": "^15.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "gp-grid-react": "workspace:*"
+  }
+}
