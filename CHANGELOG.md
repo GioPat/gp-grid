@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.0...gp-grid-v0.5.1) (2026-01-09)
+
+
+### 📝 Documentation
+
+* add website to main README ([d04e498](https://github.com/GioPat/gp-grid/commit/d04e4981f7208aae245d30dd60d26ee0d6b0c118))
+
 ## [0.5.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.4.0...gp-grid-v0.5.0) (2026-01-09)
 
 
