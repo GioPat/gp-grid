@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.4.0...gp-grid-v0.5.0) (2026-01-09)
+
+
+### ✨ Features
+
+* **react,vue:** expose GridCore for programmatic Grid management ([4e2facb](https://github.com/GioPat/gp-grid/commit/4e2facbfc2bba3e40017407b9dc6e390000b35ff))
+
+
+### 🐛 Bug Fixes
+
+* manage memory deallocation when freeing data in the table ([d405506](https://github.com/GioPat/gp-grid/commit/d4055060beb66dd9afe36e08e6a42ff19d5c02f8))
+
+
+### ♻️ Refactoring
+
+* rationalize filtering for datasource and indexed-data-store ([160ca32](https://github.com/GioPat/gp-grid/commit/160ca32b9878d5db983df69e0f4699ccbe5c3e93))
+
 ## [0.4.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.3.0...gp-grid-v0.4.0) (2026-01-06)
 
 
