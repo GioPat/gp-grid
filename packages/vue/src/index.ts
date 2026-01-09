@@ -83,6 +83,8 @@ export {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  // GridCore class (for typing component refs)
+  GridCore,
 } from "gp-grid-core";
 
 export type {

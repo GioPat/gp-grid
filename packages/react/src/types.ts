@@ -7,7 +7,18 @@ import type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  GridCore,
 } from "gp-grid-core";
+
+// =============================================================================
+// Grid Ref Types
+// =============================================================================
+
+/** Ref handle exposed by the Grid component */
+export interface GridRef<TData extends Row = Row> {
+  /** Access to the underlying GridCore instance */
+  core: GridCore<TData> | null;
+}
 
 // =============================================================================
 // Renderer Types
@@ -67,4 +78,7 @@ export interface GridProps<TData extends Row = Row> {
   initialWidth?: number;
   /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
   initialHeight?: number;
+
+  /** Optional ref to access GridCore API */
+  gridRef?: React.MutableRefObject<GridRef<TData> | null>;
 }

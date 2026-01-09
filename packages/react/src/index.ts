@@ -1,12 +1,14 @@
 // packages/react/src/index.ts
 
-export {
-  Grid,
-  type GridProps,
-  type ReactCellRenderer,
-  type ReactEditRenderer,
-  type ReactHeaderRenderer,
-} from "./Grid";
+export { Grid } from "./Grid";
+
+export type {
+  GridRef,
+  GridProps,
+  ReactCellRenderer,
+  ReactEditRenderer,
+  ReactHeaderRenderer,
+} from "./types";
 
 // Re-export core types for convenience
 export type {
@@ -17,7 +19,9 @@ export type {
   SortDirection,
   SortModel,
   FilterModel,
-  
+  FilterCondition,
+  ColumnFilterModel,
+
   // Column definition
   ColumnDefinition,
   
@@ -49,3 +53,6 @@ export {
 
 // Re-export MutableDataSource type
 export type { MutableDataSource } from "gp-grid-core";
+
+// Re-export GridCore class for typing (used with GridRef)
+export { GridCore } from "gp-grid-core";
