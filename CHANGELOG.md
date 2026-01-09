@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.2...gp-grid-v0.5.3) (2026-01-09)
+
+
+### 📝 Documentation
+
+* **react,vue:** change default logo ([d4e7ae4](https://github.com/GioPat/gp-grid/commit/d4e7ae401b25bbc744bac0071de83a5cdf932dd8))
+
 ## [0.5.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.1...gp-grid-v0.5.2) (2026-01-09)
 
 
