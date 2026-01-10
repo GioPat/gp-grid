@@ -1,7 +1,7 @@
-// gp-grid-core/src/sort-worker.ts
+// gp-grid-core/src/sorting/sort-worker.ts
 // Web Worker for sorting large datasets off the main thread
 
-import type { SortModel, CellValue } from "./types";
+import type { SortModel, CellValue } from "../types";
 
 // =============================================================================
 // Worker Message Types
@@ -62,6 +62,65 @@ export interface SortStringHashesResponse {
   indices: Uint32Array;
   /** Collision runs: [start1, end1, start2, end2, ...] for runs of identical hashes */
   collisionRuns: Uint32Array;
+}
+
+// =============================================================================
+// Chunk-aware Message Types (for parallel sorting)
+// =============================================================================
+
+export interface SortChunkRequest {
+  type: "sortChunk";
+  id: number;
+  values: Float64Array;
+  direction: "asc" | "desc";
+  /** Offset of this chunk in the original array */
+  chunkOffset: number;
+}
+
+export interface SortChunkResponse {
+  type: "sortedChunk";
+  id: number;
+  /** Sorted indices (local to this chunk) */
+  indices: Uint32Array;
+  /** Sorted values (reordered to match indices) */
+  sortedValues: Float64Array;
+  /** Offset echoed back for merge coordination */
+  chunkOffset: number;
+}
+
+export interface SortStringChunkRequest {
+  type: "sortStringChunk";
+  id: number;
+  hashChunks: Float64Array[];
+  direction: "asc" | "desc";
+  chunkOffset: number;
+}
+
+export interface SortStringChunkResponse {
+  type: "sortedStringChunk";
+  id: number;
+  indices: Uint32Array;
+  /** Sorted hash values for merge comparison (first hash chunk only for efficiency) */
+  sortedHashes: Float64Array;
+  collisionRuns: Uint32Array;
+  chunkOffset: number;
+}
+
+export interface SortMultiColumnChunkRequest {
+  type: "sortMultiColumnChunk";
+  id: number;
+  columns: Float64Array[];
+  directions: Int8Array;
+  chunkOffset: number;
+}
+
+export interface SortMultiColumnChunkResponse {
+  type: "sortedMultiColumnChunk";
+  id: number;
+  indices: Uint32Array;
+  /** Sorted column values for merge (reordered to match indices) */
+  sortedColumns: Float64Array[];
+  chunkOffset: number;
 }
 
 // =============================================================================
@@ -268,6 +327,110 @@ function sortStringHashes(hashChunks, direction) {
   return { indices, collisionRuns: new Uint32Array(collisionRuns) };
 }
 
+// Chunk-aware sorting for parallel execution
+function sortChunk(values, direction) {
+  const len = values.length;
+  const indices = new Uint32Array(len);
+  for (let i = 0; i < len; i++) indices[i] = i;
+
+  const mult = direction === "asc" ? 1 : -1;
+  indices.sort((a, b) => {
+    const va = values[a];
+    const vb = values[b];
+    if (va < vb) return -1 * mult;
+    if (va > vb) return 1 * mult;
+    return 0;
+  });
+
+  // Create sorted values array for merge comparison
+  const sortedValues = new Float64Array(len);
+  for (let i = 0; i < len; i++) {
+    sortedValues[i] = values[indices[i]];
+  }
+
+  return { indices, sortedValues };
+}
+
+function sortStringChunk(hashChunks, direction) {
+  const len = hashChunks[0].length;
+  const numChunks = hashChunks.length;
+  const indices = new Uint32Array(len);
+  for (let i = 0; i < len; i++) indices[i] = i;
+
+  const mult = direction === "asc" ? 1 : -1;
+
+  indices.sort((a, b) => {
+    for (let c = 0; c < numChunks; c++) {
+      const va = hashChunks[c][a];
+      const vb = hashChunks[c][b];
+      if (va < vb) return -1 * mult;
+      if (va > vb) return 1 * mult;
+    }
+    return 0;
+  });
+
+  // Detect collision runs
+  const collisionRuns = [];
+  let runStart = 0;
+
+  for (let i = 1; i <= len; i++) {
+    let isDifferent = i === len;
+    if (!isDifferent) {
+      const prevIdx = indices[i - 1];
+      const currIdx = indices[i];
+      for (let c = 0; c < numChunks; c++) {
+        if (hashChunks[c][prevIdx] !== hashChunks[c][currIdx]) {
+          isDifferent = true;
+          break;
+        }
+      }
+    }
+
+    if (isDifferent) {
+      if (i - runStart > 1) {
+        collisionRuns.push(runStart, i);
+      }
+      runStart = i;
+    }
+  }
+
+  // Create sorted hashes for merge (use first hash chunk)
+  const sortedHashes = new Float64Array(len);
+  for (let i = 0; i < len; i++) {
+    sortedHashes[i] = hashChunks[0][indices[i]];
+  }
+
+  return { indices, sortedHashes, collisionRuns: new Uint32Array(collisionRuns) };
+}
+
+function sortMultiColumnChunk(columns, directions) {
+  const len = columns[0].length;
+  const numCols = columns.length;
+  const indices = new Uint32Array(len);
+  for (let i = 0; i < len; i++) indices[i] = i;
+
+  indices.sort((a, b) => {
+    for (let c = 0; c < numCols; c++) {
+      const va = columns[c][a];
+      const vb = columns[c][b];
+      if (va < vb) return -1 * directions[c];
+      if (va > vb) return 1 * directions[c];
+    }
+    return 0;
+  });
+
+  // Create sorted column values for merge
+  const sortedColumns = columns.map(col => {
+    const sorted = new Float64Array(len);
+    for (let i = 0; i < len; i++) {
+      sorted[i] = col[indices[i]];
+    }
+    return sorted;
+  });
+
+  return { indices, sortedColumns };
+}
+
 self.onmessage = function(e) {
   const { type, id } = e.data;
 
@@ -303,6 +466,40 @@ self.onmessage = function(e) {
       self.postMessage(
         { type: "sortedStringHashes", id, indices: result.indices, collisionRuns: result.collisionRuns },
         [result.indices.buffer, result.collisionRuns.buffer]
+      );
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: String(error) });
+    }
+  } else if (type === "sortChunk") {
+    try {
+      const { values, direction, chunkOffset } = e.data;
+      const result = sortChunk(values, direction);
+      self.postMessage(
+        { type: "sortedChunk", id, indices: result.indices, sortedValues: result.sortedValues, chunkOffset },
+        [result.indices.buffer, result.sortedValues.buffer]
+      );
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: String(error) });
+    }
+  } else if (type === "sortStringChunk") {
+    try {
+      const { hashChunks, direction, chunkOffset } = e.data;
+      const result = sortStringChunk(hashChunks, direction);
+      self.postMessage(
+        { type: "sortedStringChunk", id, indices: result.indices, sortedHashes: result.sortedHashes, collisionRuns: result.collisionRuns, chunkOffset },
+        [result.indices.buffer, result.sortedHashes.buffer, result.collisionRuns.buffer]
+      );
+    } catch (error) {
+      self.postMessage({ type: "error", id, error: String(error) });
+    }
+  } else if (type === "sortMultiColumnChunk") {
+    try {
+      const { columns, directions, chunkOffset } = e.data;
+      const result = sortMultiColumnChunk(columns, directions);
+      const transferables = [result.indices.buffer, ...result.sortedColumns.map(c => c.buffer)];
+      self.postMessage(
+        { type: "sortedMultiColumnChunk", id, indices: result.indices, sortedColumns: result.sortedColumns, chunkOffset },
+        transferables
       );
     } catch (error) {
       self.postMessage({ type: "error", id, error: String(error) });

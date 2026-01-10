@@ -7,7 +7,7 @@ import type {
   Row,
   CellValue,
 } from "../types";
-import { SortWorkerManager } from "../worker-manager";
+import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
 import {
   toSortableNumber,
   stringToSortableHashes,
@@ -53,6 +53,8 @@ export interface ClientDataSourceOptions<TData> {
   getFieldValue?: (row: TData, field: string) => CellValue;
   /** Use Web Worker for sorting large datasets (default: true) */
   useWorker?: boolean;
+  /** Options for parallel sorting (only used when useWorker is true) */
+  parallelSort?: ParallelSortOptions | false;
 }
 
 /**
@@ -64,13 +66,16 @@ export function createClientDataSource<TData extends Row = Row>(
   data: TData[],
   options: ClientDataSourceOptions<TData> = {},
 ): DataSource<TData> {
-  const { getFieldValue = defaultGetFieldValue, useWorker = true } = options;
+  const { getFieldValue = defaultGetFieldValue, useWorker = true, parallelSort } = options;
 
   // Mutable reference so we can clear it on destroy
   let internalData: TData[] | null = data;
 
-  // Create worker manager only if useWorker is enabled
-  const workerManager = useWorker ? new SortWorkerManager() : null;
+  // Create parallel sort manager only if useWorker is enabled
+  // parallelSort: false disables parallel sorting, undefined or object enables it
+  const sortManager = useWorker
+    ? new ParallelSortManager(parallelSort === false ? { maxWorkers: 1 } : parallelSort)
+    : null;
 
   return {
     async fetch(
@@ -91,8 +96,8 @@ export function createClientDataSource<TData extends Row = Row>(
       // Apply sorting (async with worker for large datasets)
       if (request.sort && request.sort.length > 0) {
         const canUseWorkerSort =
-          workerManager &&
-          workerManager.isAvailable() &&
+          sortManager &&
+          sortManager.isAvailable() &&
           processedData.length >= WORKER_THRESHOLD;
 
         if (canUseWorkerSort) {
@@ -135,7 +140,7 @@ export function createClientDataSource<TData extends Row = Row>(
                 (chunk) => new Float64Array(chunk),
               );
 
-              sortedIndices = await workerManager.sortStringHashes(
+              sortedIndices = await sortManager.sortStringHashes(
                 hashChunkArrays,
                 direction,
                 originalStrings,
@@ -146,7 +151,7 @@ export function createClientDataSource<TData extends Row = Row>(
                 const val = getFieldValue(row, colId);
                 return toSortableNumber(val);
               });
-              sortedIndices = await workerManager.sortIndices(
+              sortedIndices = await sortManager.sortIndices(
                 values,
                 direction,
               );
@@ -165,7 +170,7 @@ export function createClientDataSource<TData extends Row = Row>(
               directions.push(direction);
             }
 
-            sortedIndices = await workerManager.sortMultiColumn(
+            sortedIndices = await sortManager.sortMultiColumn(
               columnValues,
               directions,
             );
@@ -197,9 +202,9 @@ export function createClientDataSource<TData extends Row = Row>(
       // Clear data reference to allow garbage collection
       internalData = null;
 
-      // Terminate worker manager to clean up Web Worker
-      if (workerManager) {
-        workerManager.terminate();
+      // Terminate sort manager to clean up Web Workers
+      if (sortManager) {
+        sortManager.terminate();
       }
     },
   };
