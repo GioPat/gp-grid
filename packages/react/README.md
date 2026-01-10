@@ -31,7 +31,7 @@ A high-performance, feature lean React data grid component built to manage grids
 
 ## Features
 
-- **Virtual Scrolling**: Efficiently handles 150,000+ rows through slot-based recycling
+- **Virtual Scrolling**: Efficiently handles millions of rows through slot-based recycling
 - **Cell Selection**: Single cell, range selection, Shift+click extend, Ctrl+click toggle
 - **Multi-Column Sorting**: Click to sort, Shift+click for multi-column sort
 - **Column Filtering**: Built-in filter row with debounced input
