@@ -239,6 +239,11 @@ watch(
   },
   { immediate: true },
 );
+
+// Expose core for external access (e.g., via template ref)
+defineExpose({
+  core: coreRef,
+});
 </script>
 
 <template>

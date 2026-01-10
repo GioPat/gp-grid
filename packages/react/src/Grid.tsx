@@ -70,6 +70,7 @@ export function Grid<TData extends Row = Row>(
     headerRenderer,
     initialWidth,
     initialHeight,
+    gridRef,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -135,6 +136,11 @@ export function Grid<TData extends Row = Row>(
 
     coreRef.current = core;
 
+    // Expose core via gridRef prop
+    if (gridRef) {
+      gridRef.current = { core };
+    }
+
     // Subscribe to batched instructions for efficient state updates
     const unsubscribe = core.onBatchInstruction((instructions) => {
       dispatch({ type: "BATCH_INSTRUCTIONS", instructions });
@@ -146,6 +152,9 @@ export function Grid<TData extends Row = Row>(
     return () => {
       unsubscribe();
       coreRef.current = null;
+      if (gridRef) {
+        gridRef.current = null;
+      }
     };
   }, [
     columns,
@@ -154,6 +163,7 @@ export function Grid<TData extends Row = Row>(
     totalHeaderHeight,
     overscan,
     sortingEnabled,
+    gridRef,
   ]);
 
   // Subscribe to data source changes (for MutableDataSource)
