@@ -1,7 +1,7 @@
 # gp-grid-vue 🏁 🏎️
 
 <div align="center">
-    <a href="https://gp-grid-docs.vercel.app">
+    <a href="https://www.gp-grid.io">
         <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
@@ -10,12 +10,11 @@
     </a>
     <div align="center">
      Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
-      <h4><a href="https://gp-grid-docs.vercel.app/">🎮 Demo</a> • <a href="https://gp-grid-docs.vercel.app/docs/vue">📖 Documentation</a>
+      <h4><a href="https://www.gp-grid.io/">🎮 Demo</a> • <a href="https://www.gp-grid.io/docs/vue">📖 Documentation</a>
     </div>
 </div>
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GioPat/gp-grid)
-
 
 A high-performance, feature lean Vue 3 data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
@@ -301,8 +300,7 @@ const cellRenderers: Record<string, VueCellRenderer> = {
   },
 
   // Bold text
-  bold: (params: CellRendererParams) =>
-    h("strong", String(params.value ?? "")),
+  bold: (params: CellRendererParams) => h("strong", String(params.value ?? "")),
 };
 
 const columns: ColumnDefinition[] = [
@@ -377,30 +375,34 @@ interface Task {
 // Custom select editor for priority field
 const editRenderers: Record<string, VueEditRenderer> = {
   prioritySelect: (params: EditRendererParams) => {
-    return h("select", {
-      autofocus: true,
-      value: params.initialValue as string,
-      onChange: (e: Event) => {
-        const target = e.target as HTMLSelectElement;
-        params.onValueChange(target.value);
+    return h(
+      "select",
+      {
+        autofocus: true,
+        value: params.initialValue as string,
+        onChange: (e: Event) => {
+          const target = e.target as HTMLSelectElement;
+          params.onValueChange(target.value);
+        },
+        onBlur: () => params.onCommit(),
+        onKeydown: (e: KeyboardEvent) => {
+          if (e.key === "Enter") params.onCommit();
+          if (e.key === "Escape") params.onCancel();
+        },
+        style: {
+          width: "100%",
+          height: "100%",
+          border: "none",
+          outline: "none",
+          padding: "0 8px",
+        },
       },
-      onBlur: () => params.onCommit(),
-      onKeydown: (e: KeyboardEvent) => {
-        if (e.key === "Enter") params.onCommit();
-        if (e.key === "Escape") params.onCancel();
-      },
-      style: {
-        width: "100%",
-        height: "100%",
-        border: "none",
-        outline: "none",
-        padding: "0 8px",
-      },
-    }, [
-      h("option", { value: "low" }, "Low"),
-      h("option", { value: "medium" }, "Medium"),
-      h("option", { value: "high" }, "High"),
-    ]);
+      [
+        h("option", { value: "low" }, "Low"),
+        h("option", { value: "medium" }, "Medium"),
+        h("option", { value: "high" }, "High"),
+      ],
+    );
   },
 
   checkbox: (params: EditRendererParams) =>
@@ -469,7 +471,12 @@ const dataSource = createClientDataSource(tasks);
 
 ```vue
 <template>
-  <GpGrid :columns="columns" :row-data="data" :row-height="36" :dark-mode="true" />
+  <GpGrid
+    :columns="columns"
+    :row-data="data"
+    :row-height="36"
+    :dark-mode="true"
+  />
 </template>
 ```
 
@@ -550,7 +557,9 @@ interface HeaderRendererParams {
 }
 
 // Vue header renderer
-type VueHeaderRenderer = (params: HeaderRendererParams) => VNode | string | null;
+type VueHeaderRenderer = (
+  params: HeaderRendererParams,
+) => VNode | string | null;
 ```
 
 ## Keyboard Shortcuts
