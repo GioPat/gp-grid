@@ -81,6 +81,9 @@ export class GridCore<TData extends Row = Row> {
   private virtualContentHeight: number = 0;
   private scrollRatio: number = 1;
 
+  // Lifecycle state
+  private isDestroyed: boolean = false;
+
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
     this.dataSource = options.dataSource;
@@ -816,6 +819,31 @@ export class GridCore<TData extends Row = Row> {
     this.emitContentSize();
     this.emitHeaders();
     this.slotPool.syncSlots();
+  }
+
+  /**
+   * Destroy the grid core and release all references.
+   * Call this before discarding the GridCore to ensure proper cleanup.
+   * This method is idempotent - safe to call multiple times.
+   */
+  destroy(): void {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+
+    // Destroy child managers
+    this.slotPool.destroy();
+
+    // Clear cached row data (can be large for big datasets)
+    this.cachedRows.clear();
+
+    // Clear listeners
+    this.listeners = [];
+    this.batchListeners = [];
+
+    // Reset state
+    this.totalRows = 0;
+    this.sortModel = [];
+    this.filterModel = {};
   }
 }
 

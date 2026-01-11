@@ -1,7 +1,7 @@
 # gp-grid-react 🏁 🏎️
 
 <div align="center">
-    <a href="https://gp-grid-docs.vercel.app">
+    <a href="https://www.gp-grid.io">
         <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
@@ -10,7 +10,7 @@
     </a>
     <div align="center">
      Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
-      <h4><a href="https://gp-grid-docs.vercel.app/">🎮 Demo</a> • <a href="https://gp-grid-docs.vercel.app/docs/react">📖 Documentation</a>
+      <h4><a href="https://www.gp-grid.io/">🎮 Demo</a> • <a href="https://www.gp-grid.io/docs/react">📖 Documentation</a>
     </div>
 </div>
 
@@ -31,7 +31,7 @@ A high-performance, feature lean React data grid component built to manage grids
 
 ## Features
 
-- **Virtual Scrolling**: Efficiently handles 150,000+ rows through slot-based recycling
+- **Virtual Scrolling**: Efficiently handles millions of rows through slot-based recycling
 - **Cell Selection**: Single cell, range selection, Shift+click extend, Ctrl+click toggle
 - **Multi-Column Sorting**: Click to sort, Shift+click for multi-column sort
 - **Column Filtering**: Built-in filter row with debounced input

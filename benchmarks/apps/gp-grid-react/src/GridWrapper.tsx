@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Grid, createClientDataSource } from "gp-grid-react";
-import type { GridRef, FilterCondition as CoreFilterCondition, ColumnDefinition } from "gp-grid-react";
+import type { GridRef, FilterCondition as CoreFilterCondition, ColumnDefinition, DataSource } from "gp-grid-react";
 import {
   generateData,
   type BenchmarkRow,
@@ -22,12 +22,25 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
   const [isReady, setIsReady] = useState(false);
   const gridRef = useRef<GridRef<BenchmarkRow> | null>(null);
+  const prevDataSourceRef = useRef<DataSource<BenchmarkRow> | null>(null);
 
   const columns = useMemo(() => toGpGridColumns(BENCHMARK_COLUMNS) as ColumnDefinition[], []);
 
   const dataSource = useMemo(() => {
     return createClientDataSource(data);
   }, [data]);
+
+  // Cleanup old dataSource when it changes (benchmark owns the dataSource lifecycle)
+  // Note: Only destroy in effect body, not cleanup, to avoid race conditions with Grid
+  useEffect(() => {
+    const prevDataSource = prevDataSourceRef.current;
+    // Destroy previous dataSource if it changed (not on initial mount)
+    if (prevDataSource && prevDataSource !== dataSource) {
+      // Small delay to ensure Grid has finished cleanup first
+      setTimeout(() => prevDataSource.destroy?.(), 0);
+    }
+    prevDataSourceRef.current = dataSource;
+  }, [dataSource]);
 
   // Track when data source changes to set ready state
   useEffect(() => {

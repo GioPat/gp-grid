@@ -1,7 +1,7 @@
 # gp-grid 🏁 🏎️
 
 <div align="center">
-    <a href="https://gp-grid-docs.vercel.app">
+    <a href="https://www.gp-grid.io">
         <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-light.svg"/>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/GioPat/gp-grid-docs/refs/heads/master/public/logo-dark.svg"/>
@@ -10,7 +10,7 @@
     </a>
     <div align="center">
      Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
-      <h4><a href="https://gp-grid-docs.vercel.app/">🎮 Demo</a> • <a href="https://gp-grid-docs.vercel.app/docs">📖 Documentation</a>
+      <h4><a href="https://www.gp-grid.io/">🎮 Demo</a> • <a href="https://www.gp-grid.io/docs">📖 Documentation</a>
     </div>
 </div>
 
@@ -28,7 +28,7 @@ A high-performance, TypeScript-first data grid library designed to handle massiv
 
 ## Overview
 
-Demo and documentation available at: [https://gp-grid-docs.vercel.app/](https://gp-grid-docs.vercel.app/)
+Demo and documentation available at: [https://www.gp-grid.io/](https://www.gp-grid.io/)
 
 **gp-grid** is built on three core principles:
 

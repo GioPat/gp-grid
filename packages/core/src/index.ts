@@ -55,12 +55,24 @@ export {
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
 export type { Transaction, TransactionResult, TransactionManagerOptions } from "./transaction-manager";
 
-/** Web Worker utilities for sorting */
+/** Sorting utilities (worker pool, parallel sorting, k-way merge) */
 export {
-  SortWorkerManager,
-  getSharedSortWorker,
-  terminateSharedSortWorker,
-} from "./worker-manager";
+  // Parallel sort manager
+  ParallelSortManager,
+  // Worker pool
+  WorkerPool,
+  // K-way merge
+  kWayMerge,
+  kWayMergeMultiColumn,
+  detectBoundaryCollisions,
+} from "./sorting";
+
+export type {
+  ParallelSortOptions,
+  WorkerPoolOptions,
+  SortedChunk,
+  MultiColumnSortedChunk,
+} from "./sorting";
 
 /** Types */
 export type {
