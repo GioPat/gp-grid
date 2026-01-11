@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.3...gp-grid-v0.6.0) (2026-01-11)
+
+
+### ✨ Features
+
+* **core:** add parallel sorting capability using web workers and k-way merge ([88a20c8](https://github.com/GioPat/gp-grid/commit/88a20c851c579a5b526435f36490e1f254db4cce))
+
+
+### 🐛 Bug Fixes
+
+* destroy previous datasource if new one is provided ([2d4e0b9](https://github.com/GioPat/gp-grid/commit/2d4e0b9f73285c7b6f8615db276ec991d9724a9e))
+* reference to the core was not wired to the actual GridCore ([76c9483](https://github.com/GioPat/gp-grid/commit/76c94836cfe39d357303ae656643f22af31d3481))
+
+
+### 📝 Documentation
+
+* **core,react,vue:** update link in the READMEs with the new domain ([4f28882](https://github.com/GioPat/gp-grid/commit/4f2888206c0ef95086a9d36e6d8e11a8de36bba0))
+* fix react README ([a5fe440](https://github.com/GioPat/gp-grid/commit/a5fe4409a719bb4c431c63c7ec7491ea0142a788))
+
 ## [0.5.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.2...gp-grid-v0.5.3) (2026-01-09)
 
 
