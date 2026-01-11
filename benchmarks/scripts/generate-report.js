@@ -33,10 +33,7 @@ function loadAllResults() {
   const files = fs.readdirSync(RESULTS_DIR).filter((f) => f.endsWith(".json"));
 
   for (const file of files) {
-    if (
-      file === "benchmark-report.json" ||
-      file === "playwright-report.json"
-    ) {
+    if (file === "benchmark-report.json" || file === "playwright-report.json") {
       continue;
     }
 
@@ -86,9 +83,9 @@ function generateMarkdownSummary(run) {
 
   lines.push("# gp-grid Benchmark Results");
   lines.push("");
-  lines.push(`**Date:** ${run.timestamp}`);
-  lines.push(`**Platform:** ${run.environment.os}`);
-  lines.push(`**Node:** ${run.environment.nodeVersion}`);
+  lines.push(`**Date:** ${run.timestamp}\n`);
+  lines.push(`**Platform:** ${run.environment.os}\n`);
+  lines.push(`**Node:** ${run.environment.nodeVersion}\n`);
   lines.push("");
   lines.push("---");
   lines.push("");
@@ -112,17 +109,23 @@ function generateMarkdownSummary(run) {
 
     for (const rowCount of rowCounts) {
       const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows`);
-      lines.push("");
-      lines.push("| Grid | Avg FPS ⬆️ | Min FPS ⬆️ | Frame Drops ⬇️ | P95 FPS ⬆️ |");
-      lines.push("|------|------------|------------|----------------|------------|");
-
+      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
+      lines.push("<table>\n  <thead>\n    <tr>");
+      lines.push(
+        "      <th>Grid</th>\n      <th>Avg FPS </th>\n      <th>Min FPS </th>\n      <th>Frame Drops </th>\n      <th>P95 FPS </th>",
+      );
+      lines.push("    </tr>\n  </thead>");
+      lines.push("  <tbody>");
       for (const r of results) {
         lines.push(
-          `| **${r.grid}** | ${r.metrics.avgFPS} | ${r.metrics.minFPS} | ${r.metrics.frameDropCount} | ${r.metrics.percentile95FPS} |`
+          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
         );
+        lines.push(
+          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.avgFPS}</td>\n      <td>${r.metrics.minFPS}</td>\n      <td>${r.metrics.frameDropCount}</td>\n      <td>${r.metrics.percentile95FPS}</td>`,
+        );
+        lines.push("    </tr>");
       }
-      lines.push("");
+      lines.push("  </tbody>\n</table>\n");
     }
   }
 
@@ -145,17 +148,23 @@ function generateMarkdownSummary(run) {
 
     for (const rowCount of rowCounts) {
       const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows`);
-      lines.push("");
-      lines.push("| Grid | First Paint ⬇️ | Full Render ⬇️ | LCP ⬇️ | TBT ⬇️ |");
-      lines.push("|------|----------------|----------------|--------|--------|");
-
+      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
+      lines.push("<table>\n  <thead>\n    <tr>");
+      lines.push(
+        "      <th>Grid</th>\n      <th>First Paint </th>\n      <th>Full Render </th>\n      <th>LCP </th>\n      <th>TBT </th>",
+      );
+      lines.push("    </tr>\n  </thead>");
+      lines.push("  <tbody>");
       for (const r of results) {
         lines.push(
-          `| **${r.grid}** | ${r.metrics.timeToFirstPaint}ms | ${r.metrics.timeToFullRender}ms | ${r.metrics.largestContentfulPaint}ms | ${r.metrics.totalBlockingTime}ms |`
+          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
         );
+        lines.push(
+          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.timeToFirstPaint}ms</td>\n      <td>${r.metrics.timeToFullRender}ms</td>\n      <td>${r.metrics.largestContentfulPaint}ms</td>\n      <td>${r.metrics.totalBlockingTime}ms</td>`,
+        );
+        lines.push("    </tr>");
       }
-      lines.push("");
+      lines.push("  </tbody>\n</table>\n");
     }
   }
 
@@ -175,17 +184,23 @@ function generateMarkdownSummary(run) {
 
     for (const rowCount of rowCounts) {
       const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows`);
-      lines.push("");
-      lines.push("| Grid | Sort Asc ⬇️ | Sort Desc ⬇️ | Text Filter ⬇️ | Number Filter ⬇️ |");
-      lines.push("|------|-------------|--------------|----------------|------------------|");
-
+      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
+      lines.push("<table>\n  <thead>\n    <tr>");
+      lines.push(
+        "      <th>Grid</th>\n      <th>Sort Asc </th>\n      <th>Sort Desc </th>\n      <th>Text Filter </th>\n      <th>Number Filter </th>",
+      );
+      lines.push("    </tr>\n  </thead>");
+      lines.push("  <tbody>");
       for (const r of results) {
         lines.push(
-          `| **${r.grid}** | ${r.metrics.sortAscTime}ms | ${r.metrics.sortDescTime}ms | ${r.metrics.textFilterTime}ms | ${r.metrics.numberFilterTime}ms |`
+          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
         );
+        lines.push(
+          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.sortAscTime}ms</td>\n      <td>${r.metrics.sortDescTime}ms</td>\n      <td>${r.metrics.textFilterTime}ms</td>\n      <td>${r.metrics.numberFilterTime}ms</td>`,
+        );
+        lines.push("    </tr>");
       }
-      lines.push("");
+      lines.push("  </tbody>\n</table>\n");
     }
   }
 
@@ -208,17 +223,23 @@ function generateMarkdownSummary(run) {
 
     for (const rowCount of rowCounts) {
       const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows`);
-      lines.push("");
-      lines.push("| Grid | After Load ⬇️ | Peak ⬇️ | Growth (MB/1K) ⬇️ | Retained ⬇️ |");
-      lines.push("|------|---------------|---------|-------------------|-------------|");
-
+      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
+      lines.push("<table>\n  <thead>\n    <tr>");
+      lines.push(
+        "      <th>Grid</th>\n      <th>After Load </th>\n      <th>Peak </th>\n      <th>Growth (MB/1K) </th>\n      <th>Retained </th>",
+      );
+      lines.push("    </tr>\n  </thead>");
+      lines.push("  <tbody>");
       for (const r of results) {
         lines.push(
-          `| **${r.grid}** | ${r.metrics.afterDataLoadHeapSizeMB}MB | ${r.metrics.peakHeapSizeMB}MB | ${r.metrics.heapGrowthRateMBPer1KRows} | ${r.metrics.retainedAfterClearMB}MB |`
+          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
         );
+        lines.push(
+          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.afterDataLoadHeapSizeMB}MB</td>\n      <td>${r.metrics.peakHeapSizeMB}MB</td>\n      <td>${r.metrics.heapGrowthRateMBPer1KRows}</td>\n      <td>${r.metrics.retainedAfterClearMB}MB</td>`,
+        );
+        lines.push("    </tr>");
       }
-      lines.push("");
+      lines.push("  </tbody>\n</table>\n");
     }
   }
 
@@ -227,8 +248,12 @@ function generateMarkdownSummary(run) {
   lines.push("");
   lines.push("## Legend");
   lines.push("");
-  lines.push("- ⬆️ **Higher is better** - For these metrics, larger values indicate better performance");
-  lines.push("- ⬇️ **Lower is better** - For these metrics, smaller values indicate better performance");
+  lines.push(
+    "- ⬆️ **Higher is better** - For these metrics, larger values indicate better performance",
+  );
+  lines.push(
+    "- ⬇️ **Lower is better** - For these metrics, smaller values indicate better performance",
+  );
   lines.push("");
   lines.push("### Metrics Explained");
   lines.push("");
@@ -263,9 +288,9 @@ console.log(`JSON report saved to: ${jsonPath}`);
 
 // Save Markdown report
 const markdown = generateMarkdownSummary(run);
-const mdPath = path.join(RESULTS_DIR, "BENCHMARK-RESULTS.md");
+const mdPath = path.join(RESULTS_DIR, "BENCHMARK-RESULTS.mdx");
 fs.writeFileSync(mdPath, markdown);
-console.log(`Markdown report saved to: ${mdPath}`);
+console.log(`MDX report saved to: ${mdPath}`);
 
 // Print summary
 console.log("\n" + markdown);

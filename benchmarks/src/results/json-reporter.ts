@@ -29,7 +29,7 @@ export function saveResult<T>(
   category: "scroll" | "render" | "sort" | "memory",
   grid: GridType,
   rowCount: number,
-  metrics: T
+  metrics: T,
 ): void {
   ensureResultsDir();
 
@@ -76,7 +76,7 @@ export function loadAllResults(): BenchmarkRun {
 
     if (file.startsWith("scroll-")) {
       run.results.scrollPerformance.push(
-        result as BenchmarkResult<ScrollMetrics>
+        result as BenchmarkResult<ScrollMetrics>,
       );
     } else if (file.startsWith("render-")) {
       run.results.initialRender.push(result as BenchmarkResult<RenderMetrics>);
@@ -108,27 +108,25 @@ export function generateMarkdownSummary(): string {
 
   lines.push("# gp-grid Benchmark Results");
   lines.push("");
-  lines.push(`**Date:** ${run.timestamp}`);
-  lines.push(`**Platform:** ${run.environment.os}`);
-  lines.push(`**Node:** ${run.environment.nodeVersion}`);
+  lines.push(`**Date:** ${run.timestamp}\n`);
+  lines.push(`**Platform:** ${run.environment.os}\n`);
+  lines.push(`**Node:** ${run.environment.nodeVersion}\n`);
   lines.push("");
 
   // Scroll Performance Table
   if (run.results.scrollPerformance.length > 0) {
     lines.push("## Scroll Performance");
     lines.push("");
-    lines.push(
-      "| Grid | Rows | Avg FPS | Min FPS | Frame Drops | P95 FPS |"
-    );
+    lines.push("| Grid | Rows | Avg FPS | Min FPS | Frame Drops | P95 FPS |");
     lines.push("|------|------|---------|---------|-------------|---------|");
 
     const sorted = [...run.results.scrollPerformance].sort(
-      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid)
+      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid),
     );
 
     for (const r of sorted) {
       lines.push(
-        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.avgFPS} | ${r.metrics.minFPS} | ${r.metrics.frameDropCount} | ${r.metrics.percentile95FPS} |`
+        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.avgFPS} | ${r.metrics.minFPS} | ${r.metrics.frameDropCount} | ${r.metrics.percentile95FPS} |`,
       );
     }
     lines.push("");
@@ -138,16 +136,20 @@ export function generateMarkdownSummary(): string {
   if (run.results.initialRender.length > 0) {
     lines.push("## Initial Render");
     lines.push("");
-    lines.push("| Grid | Rows | First Paint (ms) | Full Render (ms) | LCP (ms) |");
-    lines.push("|------|------|------------------|------------------|----------|");
+    lines.push(
+      "| Grid | Rows | First Paint (ms) | Full Render (ms) | LCP (ms) |",
+    );
+    lines.push(
+      "|------|------|------------------|------------------|----------|",
+    );
 
     const sorted = [...run.results.initialRender].sort(
-      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid)
+      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid),
     );
 
     for (const r of sorted) {
       lines.push(
-        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.timeToFirstPaint} | ${r.metrics.timeToFullRender} | ${r.metrics.largestContentfulPaint} |`
+        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.timeToFirstPaint} | ${r.metrics.timeToFullRender} | ${r.metrics.largestContentfulPaint} |`,
       );
     }
     lines.push("");
@@ -158,19 +160,19 @@ export function generateMarkdownSummary(): string {
     lines.push("## Sort/Filter Performance");
     lines.push("");
     lines.push(
-      "| Grid | Rows | Sort Asc (ms) | Sort Desc (ms) | Text Filter (ms) | Number Filter (ms) |"
+      "| Grid | Rows | Sort Asc (ms) | Sort Desc (ms) | Text Filter (ms) | Number Filter (ms) |",
     );
     lines.push(
-      "|------|------|---------------|----------------|------------------|--------------------|"
+      "|------|------|---------------|----------------|------------------|--------------------|",
     );
 
     const sorted = [...run.results.sortFilter].sort(
-      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid)
+      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid),
     );
 
     for (const r of sorted) {
       lines.push(
-        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.sortAscTime} | ${r.metrics.sortDescTime} | ${r.metrics.textFilterTime} | ${r.metrics.numberFilterTime} |`
+        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.sortAscTime} | ${r.metrics.sortDescTime} | ${r.metrics.textFilterTime} | ${r.metrics.numberFilterTime} |`,
       );
     }
     lines.push("");
@@ -181,17 +183,19 @@ export function generateMarkdownSummary(): string {
     lines.push("## Memory Usage");
     lines.push("");
     lines.push(
-      "| Grid | Rows | After Load (MB) | Peak (MB) | Growth (MB/1K rows) |"
+      "| Grid | Rows | After Load (MB) | Peak (MB) | Growth (MB/1K rows) |",
     );
-    lines.push("|------|------|-----------------|-----------|---------------------|");
+    lines.push(
+      "|------|------|-----------------|-----------|---------------------|",
+    );
 
     const sorted = [...run.results.memoryUsage].sort(
-      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid)
+      (a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid),
     );
 
     for (const r of sorted) {
       lines.push(
-        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.afterDataLoadHeapSizeMB} | ${r.metrics.peakHeapSizeMB} | ${r.metrics.heapGrowthRateMBPer1KRows} |`
+        `| ${r.grid} | ${r.rowCount.toLocaleString()} | ${r.metrics.afterDataLoadHeapSizeMB} | ${r.metrics.peakHeapSizeMB} | ${r.metrics.heapGrowthRateMBPer1KRows} |`,
       );
     }
     lines.push("");
