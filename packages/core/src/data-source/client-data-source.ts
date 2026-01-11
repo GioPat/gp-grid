@@ -71,6 +71,9 @@ export function createClientDataSource<TData extends Row = Row>(
   // Mutable reference so we can clear it on destroy
   let internalData: TData[] | null = data;
 
+  // Lifecycle state for idempotent destroy
+  let isDestroyed = false;
+
   // Create parallel sort manager only if useWorker is enabled
   // parallelSort: false disables parallel sorting, undefined or object enables it
   const sortManager = useWorker
@@ -199,6 +202,10 @@ export function createClientDataSource<TData extends Row = Row>(
     },
 
     destroy(): void {
+      // Idempotent - safe to call multiple times
+      if (isDestroyed) return;
+      isDestroyed = true;
+
       // Clear data reference to allow garbage collection
       internalData = null;
 

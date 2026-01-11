@@ -69,9 +69,11 @@ const props = withDefaults(
 // Refs
 const containerRef = ref<HTMLDivElement | null>(null);
 const coreRef = shallowRef<GridCore | null>(null);
+const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
+const coreUnsubscribeRef = shallowRef<(() => void) | null>(null);
 
 // State
-const { state, applyInstructions } = useGridState({
+const { state, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
 });
@@ -162,12 +164,29 @@ function getCellClasses(rowIndex: number, colIndex: number): string {
   return buildCellClasses(active, selected, isEditing, inFillPreview);
 }
 
-// Initialize GridCore
-onMounted(() => {
-  const dataSource =
-    props.dataSource ??
+// Helper to create or get data source
+function getOrCreateDataSource(): DataSource<Row> {
+  return props.dataSource ??
     (props.rowData ? createDataSourceFromArray(props.rowData) : createClientDataSource<Row>([]));
+}
 
+/**
+ * Initialize or reinitialize the GridCore with a data source.
+ * Handles cleanup of old core and subscription before creating new ones.
+ */
+function initializeCore(dataSource: DataSource<Row>): void {
+  // Cleanup old subscription
+  if (coreUnsubscribeRef.value) {
+    coreUnsubscribeRef.value();
+    coreUnsubscribeRef.value = null;
+  }
+
+  // Destroy old core (idempotent - safe if already destroyed)
+  if (coreRef.value) {
+    coreRef.value.destroy();
+  }
+
+  // Create new GridCore
   const core = new GridCore<Row>({
     columns: props.columns,
     dataSource,
@@ -180,14 +199,13 @@ onMounted(() => {
   coreRef.value = core;
 
   // Subscribe to batched instructions
-  const unsubscribe = core.onBatchInstruction((instructions) => {
+  coreUnsubscribeRef.value = core.onBatchInstruction((instructions) => {
     applyInstructions(instructions);
   });
 
-  // Initialize
+  // Initialize and set viewport
   core.initialize();
 
-  // Initial measurement
   const container = containerRef.value;
   if (container) {
     core.setViewport(
@@ -196,30 +214,75 @@ onMounted(() => {
       container.clientWidth,
       container.clientHeight,
     );
+  }
+}
 
-    // Guard for SSR - ResizeObserver not available in Node.js
-    if (typeof ResizeObserver !== "undefined") {
-      const resizeObserver = new ResizeObserver(() => {
-        core.setViewport(
-          container.scrollTop,
-          container.scrollLeft,
-          container.clientWidth,
-          container.clientHeight,
-        );
-      });
-      resizeObserver.observe(container);
+// Initialize on mount
+onMounted(() => {
+  const dataSource = getOrCreateDataSource();
+  currentDataSourceRef.value = dataSource;
 
-      onUnmounted(() => {
-        resizeObserver.disconnect();
-      });
-    }
+  initializeCore(dataSource);
+
+  // Set up ResizeObserver (only once, not per-core)
+  const container = containerRef.value;
+  if (container && typeof ResizeObserver !== "undefined") {
+    const resizeObserver = new ResizeObserver(() => {
+      // Use current core ref (may change during lifecycle)
+      coreRef.value?.setViewport(
+        container.scrollTop,
+        container.scrollLeft,
+        container.clientWidth,
+        container.clientHeight,
+      );
+    });
+    resizeObserver.observe(container);
 
     onUnmounted(() => {
-      unsubscribe();
-      coreRef.value = null;
+      resizeObserver.disconnect();
     });
   }
+
+  // Cleanup on unmount
+  onUnmounted(() => {
+    if (coreUnsubscribeRef.value) {
+      coreUnsubscribeRef.value();
+      coreUnsubscribeRef.value = null;
+    }
+    if (coreRef.value) {
+      coreRef.value.destroy();
+      coreRef.value = null;
+    }
+    if (currentDataSourceRef.value) {
+      currentDataSourceRef.value.destroy?.();
+      currentDataSourceRef.value = null;
+    }
+  });
 });
+
+// Watch for data source changes - cleanup old, create new
+watch(
+  [() => props.dataSource, () => props.rowData],
+  () => {
+    const newDataSource = getOrCreateDataSource();
+    const oldDataSource = currentDataSourceRef.value;
+
+    // Only reinitialize if data source actually changed
+    if (oldDataSource && oldDataSource !== newDataSource) {
+      // Destroy old data source (terminates Web Workers)
+      oldDataSource.destroy?.();
+      // Reset state to clear slot rowData references
+      resetState();
+      // Update data source ref
+      currentDataSourceRef.value = newDataSource;
+      // Reinitialize core with new data source
+      initializeCore(newDataSource);
+    } else if (!oldDataSource) {
+      // First time setting data source after mount
+      currentDataSourceRef.value = newDataSource;
+    }
+  },
+);
 
 // Subscribe to data source changes
 watch(

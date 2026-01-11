@@ -60,6 +60,7 @@ export class SlotPoolManager {
   private options: SlotPoolManagerOptions;
   private listeners: InstructionListener[] = [];
   private batchListeners: BatchInstructionListener[] = [];
+  private isDestroyed: boolean = false;
 
   constructor(options: SlotPoolManagerOptions) {
     this.options = options;
@@ -273,8 +274,12 @@ export class SlotPoolManager {
 
   /**
    * Clean up resources for garbage collection.
+   * This method is idempotent - safe to call multiple times.
    */
   destroy(): void {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+
     // Clear slots without emitting (no listeners to notify during cleanup)
     this.state.slots.clear();
     this.state.rowToSlot.clear();

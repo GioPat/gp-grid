@@ -20,7 +20,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
 } from "gp-grid-core";
-import type { Row, ColumnFilterModel } from "gp-grid-core";
+import type { Row, ColumnFilterModel, DataSource } from "gp-grid-core";
 import { FilterPopup } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import { useInputHandler } from "./hooks/useInputHandler";
@@ -75,6 +75,7 @@ export function Grid<TData extends Row = Row>(
 
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
+  const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
   const [state, dispatch] = useReducer(
     gridReducer,
     { initialWidth, initialHeight },
@@ -85,16 +86,33 @@ export function Grid<TData extends Row = Row>(
   const totalHeaderHeight = headerHeight;
 
   // Create data source from rowData if not provided
-  const dataSource = useMemo(() => {
+  // Track whether we own the dataSource (created internally vs provided as prop)
+  const { dataSource, ownsDataSource } = useMemo(() => {
     if (providedDataSource) {
-      return providedDataSource;
+      return { dataSource: providedDataSource, ownsDataSource: false };
     }
     if (rowData) {
-      return createDataSourceFromArray(rowData);
+      return { dataSource: createDataSourceFromArray(rowData), ownsDataSource: true };
     }
     // Empty data source
-    return createClientDataSource<TData>([]);
+    return { dataSource: createClientDataSource<TData>([]), ownsDataSource: true };
   }, [providedDataSource, rowData]);
+
+  // Handle data source changes: reset state early (before GridCore recreates)
+  // Cleanup responsibilities:
+  // - This effect: reset state on dataSource change
+  // - GridCore effect: destroy old core AND old dataSource in cleanup
+  useEffect(() => {
+    const prevDataSource = prevDataSourceRef.current;
+
+    // On change (not initial mount), reset state to clear slot rowData references
+    if (prevDataSource && prevDataSource !== dataSource) {
+      dispatch({ type: "RESET" });
+    }
+
+    // Track current data source
+    prevDataSourceRef.current = dataSource;
+  }, [dataSource]);
 
   // Compute column positions (scaled to fill container when wider)
   const { positions: columnPositions, widths: columnWidths } = useMemo(
@@ -151,6 +169,13 @@ export function Grid<TData extends Row = Row>(
 
     return () => {
       unsubscribe();
+      // Destroy core to release cached row data
+      core.destroy();
+      // Only destroy dataSource if we created it internally
+      // Don't destroy user-provided dataSources (they may be reused)
+      if (ownsDataSource) {
+        dataSource.destroy?.();
+      }
       coreRef.current = null;
       if (gridRef) {
         gridRef.current = null;
@@ -159,6 +184,7 @@ export function Grid<TData extends Row = Row>(
   }, [
     columns,
     dataSource,
+    ownsDataSource,
     rowHeight,
     totalHeaderHeight,
     overscan,
