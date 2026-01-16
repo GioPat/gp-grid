@@ -248,10 +248,17 @@ const columns: ColumnDefinition[] = [
     field: "id",
     cellDataType: "number",
     width: 80,
+    hidden: true,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
   },
-  { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
+  {
+    field: "name",
+    editable: true,
+    cellDataType: "text",
+    width: 150,
+    headerName: "Name",
+  },
   { field: "age", cellDataType: "number", width: 110, headerName: "Age" },
   {
     field: "email",
@@ -346,6 +353,22 @@ function MainDemo() {
       </h2>
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
+          highlighting={{
+            hoverScope: "cell",
+            computeRowClasses: (context) => {
+              if (context.rowData?.name === "Person Ennio")
+                return ["background-row"];
+              else return [];
+            },
+            computeColumnClasses: (context) => {
+              if (context.column?.field === "salary") return ["column-styling"];
+              else return [];
+            },
+            computeCellClasses: (context) => {
+              if (context.isHovered) return ["column-styling"];
+              else return [];
+            },
+          }}
           columns={columns}
           dataSource={dataSource}
           rowHeight={36}
