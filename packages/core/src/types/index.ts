@@ -19,7 +19,6 @@ export type {
 
 // Highlighting types (must come before columns, which depends on these)
 export type {
-  HoverScope,
   HighlightColumnInfo,
   HighlightContext,
   HighlightingOptions,

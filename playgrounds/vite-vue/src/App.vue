@@ -191,7 +191,6 @@ const columns: ColumnDefinition[] = [
 const rowData = generateRowData();
 
 const highlightingProps = {
-  hoverScope: "row",
   computeRowClasses: (context) => {
     if (context.rowData?.name === "Person Ennio")
       return ["background-row"];
@@ -202,7 +201,7 @@ const highlightingProps = {
     else return [];
   },
   computeCellClasses: (context) => {
-    if (context.isHoveredCell) return ["column-styling"];
+    if (context.isHovered) return ["column-styling"];
     else return [];
   },
 }

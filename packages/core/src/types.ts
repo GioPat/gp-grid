@@ -62,7 +62,6 @@ export type {
   InstructionListener,
   BatchInstructionListener,
   // Highlighting types
-  HoverScope,
   HighlightColumnInfo,
   HighlightContext,
   HighlightingOptions,

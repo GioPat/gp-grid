@@ -354,7 +354,6 @@ function MainDemo() {
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
           highlighting={{
-            hoverScope: "cell",
             computeRowClasses: (context) => {
               if (context.rowData?.name === "Person Ennio")
                 return ["background-row"];

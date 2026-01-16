@@ -1,6 +1,6 @@
 // packages/core/src/utils/classNames.ts
 
-import type { CellPosition, CellRange, HoverScope } from "../types";
+import type { CellPosition, CellRange } from "../types";
 
 /**
  * Check if a cell is within the selection range
@@ -128,32 +128,6 @@ export function buildCellClasses(
 // =============================================================================
 // Highlighting Helpers
 // =============================================================================
-
-/**
- * Check if a row is in the hover scope based on hover position and scope setting
- */
-export function isRowInHoverScope(
-  rowIndex: number,
-  hoverPosition: CellPosition | null,
-  scope: HoverScope,
-): boolean {
-  if (!hoverPosition) return false;
-  if (scope !== "row" && scope !== "crosshair") return false;
-  return hoverPosition.row === rowIndex;
-}
-
-/**
- * Check if a column is in the hover scope based on hover position and scope setting
- */
-export function isColumnInHoverScope(
-  colIndex: number,
-  hoverPosition: CellPosition | null,
-  scope: HoverScope,
-): boolean {
-  if (!hoverPosition) return false;
-  if (scope !== "column" && scope !== "crosshair") return false;
-  return hoverPosition.col === colIndex;
-}
 
 /**
  * Check if a row overlaps the selection range

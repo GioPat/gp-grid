@@ -12,13 +12,9 @@ export const cellStyles: string = `
   left: 0;
 }
 
-/* Row backgrounds use :where() for zero specificity, so user highlight classes always win */
+/* Row background - :where() for zero specificity, so user highlight classes always win */
 :where(.gp-grid-row) {
   background-color: var(--gp-grid-bg);
-}
-
-:where(.gp-grid-row--even) {
-  background-color: var(--gp-grid-bg-alt);
 }
 
 /* Structural properties - required for grid layout */
@@ -43,11 +39,6 @@ export const cellStyles: string = `
   border-right: 1px solid var(--gp-grid-border-light);
   border-bottom: 1px solid var(--gp-grid-border-light);
   background-color: transparent;
-}
-
-/* Cell hover - :where() so user highlights can override */
-:where(.gp-grid-cell:hover) {
-  background-color: var(--gp-grid-hover);
 }
 
 /* Active cell (focused) - structural properties stay, visual use :where() */

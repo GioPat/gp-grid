@@ -176,16 +176,9 @@ function handleCellMouseLeave(): void {
 
 // Get row classes including highlight classes (pass rowData for content-based rules)
 function getRowClasses(slot: { rowIndex: number; rowData: Row }): string {
-  const isEvenRow = slot.rowIndex % 2 === 0;
   const highlightRowClasses =
     coreRef.value?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  return [
-    "gp-grid-row",
-    isEvenRow ? "gp-grid-row--even" : "",
-    ...highlightRowClasses,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
 }
 
 // Get cell classes

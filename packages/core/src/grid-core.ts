@@ -399,6 +399,8 @@ export class GridCore<TData extends Row = Row> {
 
     // console.log("[GP-Grid Core] setSort - fetching sorted data...");
     await this.fetchData();
+    // Clear highlight caches since row data has changed order
+    this.highlight?.clearAllCaches();
     // Refresh all slots with newly sorted data
     this.slotPool.refreshAllSlots();
     this.emitHeaders();
@@ -427,6 +429,8 @@ export class GridCore<TData extends Row = Row> {
     }
 
     await this.fetchData();
+    // Clear highlight caches since visible row data has changed
+    this.highlight?.clearAllCaches();
     // Force refresh all slots since filtered data changed
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
@@ -803,6 +807,8 @@ export class GridCore<TData extends Row = Row> {
    */
   async refresh(): Promise<void> {
     await this.fetchData();
+    // Clear highlight caches since row data may have changed
+    this.highlight?.clearAllCaches();
     // Use refreshAllSlots instead of syncSlots to ensure all slot data is updated
     // This is important when data changes (e.g., rows added) but visible indices stay the same
     this.slotPool.refreshAllSlots();
@@ -862,9 +868,11 @@ export class GridCore<TData extends Row = Row> {
     this.totalRows = newTotalRows;
 
     // Emit instruction and update UI
+    const addedIndices = rows.map((_, i) => insertIndex + i);
     this.emit({
       type: "ROWS_ADDED",
-      indices: rows.map((_, i) => insertIndex + i),
+      indices: addedIndices,
+      count: addedIndices.length,
       totalRows: this.totalRows,
     });
 
@@ -936,7 +944,7 @@ export class GridCore<TData extends Row = Row> {
     // Clear selection if it references deleted rows
     const activeCell = this.selection.getActiveCell();
     if (activeCell && activeCell.row >= this.totalRows) {
-      this.selection.setActiveCell(null);
+      this.selection.clearSelection();
     }
 
     // Emit instruction and update UI

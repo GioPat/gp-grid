@@ -443,16 +443,10 @@ export function Grid<TData extends Row = Row>(
         {slotsArray.map((slot) => {
           if (slot.rowIndex < 0) return null;
 
-          const isEvenRow = slot.rowIndex % 2 === 0;
-
           // Compute row highlight classes (pass rowData for content-based rules)
           const highlightRowClasses =
             coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-          const rowClassName = [
-            "gp-grid-row",
-            isEvenRow ? "gp-grid-row--even" : "",
-            ...highlightRowClasses,
-          ]
+          const rowClassName = ["gp-grid-row", ...highlightRowClasses]
             .filter(Boolean)
             .join(" ");
 

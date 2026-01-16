@@ -156,7 +156,6 @@ export type {
   BatchInstructionListener,
 
   // Highlighting types
-  HoverScope,
   HighlightContext,
   HighlightingOptions,
   SetHoverPositionInstruction,
@@ -210,8 +209,6 @@ export {
   isCellInFillPreview,
   buildCellClasses,
   // Highlighting helpers
-  isRowInHoverScope,
-  isColumnInHoverScope,
   isRowInSelectionRange,
   isColumnInSelectionRange,
 } from "./utils/classNames";

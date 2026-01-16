@@ -2,15 +2,6 @@
 
 import type { CellPosition, CellRange } from "./basic";
 
-/**
- * Hover scope configuration for highlighting.
- * - "none": Disable hover-based highlighting (default)
- * - "cell": Only the hovered cell is marked as hovered (isHoveredCell = true)
- * - "row": The entire row is marked as hovered (isHoveredRow = true for all cells in row)
- * - "column": The entire column is marked as hovered (isHoveredColumn = true for all cells in column)
- * - "crosshair": Both row and column are marked as hovered
- */
-export type HoverScope = "none" | "cell" | "row" | "column" | "crosshair";
 
 /**
  * Minimal column info for highlighting context.
@@ -58,20 +49,20 @@ export interface HighlightContext<TData = Record<string, unknown>> {
 
 /**
  * Grid-level highlighting options.
- * Callbacks are only invoked on state changes and completely skipped
- * if the highlighting option is not configured.
+ * Hover tracking is automatically enabled when any highlighting callback is defined.
+ * Each callback type has its own natural interpretation of `isHovered`:
+ * - computeRowClasses: isHovered = mouse is on any cell in this row
+ * - computeColumnClasses: isHovered = mouse is on any cell in this column
+ * - computeCellClasses: isHovered = mouse is on this exact cell
+ *
+ * For a crosshair effect, implement both computeRowClasses and computeColumnClasses.
  */
 export interface HighlightingOptions<TData = Record<string, unknown>> {
-  /**
-   * Hover scope: which dimension(s) to highlight on hover.
-   * Defaults to "none" (hover tracking disabled).
-   */
-  hoverScope?: HoverScope;
-
   /**
    * Row-level class callback.
    * Classes returned are applied to the row container element.
    * Context has `rowIndex` set, `colIndex` is null.
+   * `isHovered` is true when the mouse is on any cell in this row.
    * @returns Array of CSS class names
    */
   computeRowClasses?: (context: HighlightContext<TData>) => string[];
@@ -80,6 +71,7 @@ export interface HighlightingOptions<TData = Record<string, unknown>> {
    * Column-level class callback.
    * Classes returned are applied to all cells in that column (not header).
    * Context has `colIndex` set, `rowIndex` is null.
+   * `isHovered` is true when the mouse is on any cell in this column.
    * @returns Array of CSS class names
    */
   computeColumnClasses?: (context: HighlightContext<TData>) => string[];
@@ -88,6 +80,7 @@ export interface HighlightingOptions<TData = Record<string, unknown>> {
    * Cell-level class callback.
    * Classes returned are applied to individual cells for fine-grained control.
    * Context has both `rowIndex` and `colIndex` set.
+   * `isHovered` is true only when the mouse is on this exact cell.
    * @returns Array of CSS class names
    */
   computeCellClasses?: (context: HighlightContext<TData>) => string[];

@@ -7,12 +7,9 @@ import type {
   GridInstruction,
   InstructionListener,
   HighlightingOptions,
-  HoverScope,
   HighlightContext,
 } from "./types";
 import {
-  isRowInHoverScope,
-  isColumnInHoverScope,
   isRowInSelectionRange,
   isColumnInSelectionRange,
 } from "./utils/classNames";
@@ -75,19 +72,9 @@ export class HighlightManager<TData = Record<string, unknown>> {
   // Configuration
   // ===========================================================================
 
-  getHoverScope(): HoverScope {
-    return this.highlightingOptions.hoverScope ?? "none";
-  }
-
   /**
-   * Check if hover tracking is enabled (hoverScope !== "none")
-   */
-  isHoverTrackingEnabled(): boolean {
-    return this.getHoverScope() !== "none";
-  }
-
-  /**
-   * Check if highlighting is enabled (any callback defined)
+   * Check if highlighting is enabled (any callback defined).
+   * Hover tracking is automatically enabled when highlighting is enabled.
    */
   isEnabled(): boolean {
     return !!(
@@ -103,10 +90,11 @@ export class HighlightManager<TData = Record<string, unknown>> {
 
   /**
    * Set the current hover position. Clears caches and emits instruction.
+   * Hover tracking is automatically enabled when any highlighting callback is defined.
    */
   setHoverPosition(position: CellPosition | null): void {
-    // Skip if hover tracking is disabled
-    if (!this.isHoverTrackingEnabled()) return;
+    // Skip if highlighting is not enabled
+    if (!this.isEnabled()) return;
 
     // Skip if position unchanged
     if (
@@ -152,6 +140,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
   /**
    * Build context for row highlighting callback.
    * Returns context with `rowIndex` set, `colIndex` is null.
+   * `isHovered` is true when the mouse is on any cell in this row.
    */
   buildRowContext(
     rowIndex: number,
@@ -159,7 +148,6 @@ export class HighlightManager<TData = Record<string, unknown>> {
   ): HighlightContext<TData> {
     const activeCell = this.options.getActiveCell();
     const selectionRange = this.options.getSelectionRange();
-    const scope = this.getHoverScope();
 
     return {
       rowIndex,
@@ -169,7 +157,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
       hoverPosition: this.hoverPosition,
       activeCell,
       selectionRange,
-      isHovered: isRowInHoverScope(rowIndex, this.hoverPosition, scope),
+      isHovered: this.hoverPosition?.row === rowIndex,
       isActive: activeCell?.row === rowIndex,
       isSelected: isRowInSelectionRange(rowIndex, selectionRange),
     };
@@ -178,6 +166,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
   /**
    * Build context for column highlighting callback.
    * Returns context with `colIndex` set, `rowIndex` is null.
+   * `isHovered` is true when the mouse is on any cell in this column.
    */
   buildColumnContext(
     colIndex: number,
@@ -185,7 +174,6 @@ export class HighlightManager<TData = Record<string, unknown>> {
   ): HighlightContext<TData> {
     const activeCell = this.options.getActiveCell();
     const selectionRange = this.options.getSelectionRange();
-    const scope = this.getHoverScope();
 
     return {
       rowIndex: null,
@@ -195,7 +183,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
       hoverPosition: this.hoverPosition,
       activeCell,
       selectionRange,
-      isHovered: isColumnInHoverScope(colIndex, this.hoverPosition, scope),
+      isHovered: this.hoverPosition?.col === colIndex,
       isActive: activeCell?.col === colIndex,
       isSelected: isColumnInSelectionRange(colIndex, selectionRange),
     };
@@ -204,6 +192,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
   /**
    * Build context for cell highlighting callback.
    * Returns context with both `rowIndex` and `colIndex` set.
+   * `isHovered` is true only when the mouse is on this exact cell.
    */
   buildCellContext(
     rowIndex: number,
@@ -213,10 +202,11 @@ export class HighlightManager<TData = Record<string, unknown>> {
   ): HighlightContext<TData> {
     const activeCell = this.options.getActiveCell();
     const selectionRange = this.options.getSelectionRange();
-    const scope = this.getHoverScope();
 
-    // Compute isHovered based on scope
-    const isHovered = this.computeCellHovered(rowIndex, colIndex, scope);
+    // isHovered is true only for the exact cell
+    const isHovered =
+      this.hoverPosition?.row === rowIndex &&
+      this.hoverPosition?.col === colIndex;
 
     // Check if cell is in selection
     let isSelected = false;
@@ -244,39 +234,6 @@ export class HighlightManager<TData = Record<string, unknown>> {
       isActive: activeCell?.row === rowIndex && activeCell?.col === colIndex,
       isSelected,
     };
-  }
-
-  /**
-   * Compute whether a cell is hovered based on scope.
-   * For "cell" scope, only the exact cell is hovered.
-   * For "row"/"column"/"crosshair", the entire row/column/both are hovered.
-   */
-  private computeCellHovered(
-    rowIndex: number,
-    colIndex: number,
-    scope: HoverScope,
-  ): boolean {
-    if (!this.hoverPosition || scope === "none") return false;
-
-    const isExactCell =
-      this.hoverPosition.row === rowIndex &&
-      this.hoverPosition.col === colIndex;
-
-    switch (scope) {
-      case "cell":
-        return isExactCell;
-      case "row":
-        return this.hoverPosition.row === rowIndex;
-      case "column":
-        return this.hoverPosition.col === colIndex;
-      case "crosshair":
-        return (
-          this.hoverPosition.row === rowIndex ||
-          this.hoverPosition.col === colIndex
-        );
-      default:
-        return false;
-    }
   }
 
   // ===========================================================================
