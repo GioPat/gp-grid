@@ -111,6 +111,24 @@ export class InputHandler<TData extends Row = Row> {
   }
 
   // ===========================================================================
+  // Hover Tracking (for highlighting)
+  // ===========================================================================
+
+  /**
+   * Handle cell mouse enter event (for hover highlighting)
+   */
+  handleCellMouseEnter(rowIndex: number, colIndex: number): void {
+    this.core.highlight?.setHoverPosition({ row: rowIndex, col: colIndex });
+  }
+
+  /**
+   * Handle cell mouse leave event (for hover highlighting)
+   */
+  handleCellMouseLeave(): void {
+    this.core.highlight?.setHoverPosition(null);
+  }
+
+  // ===========================================================================
   // Fill Handle Mouse Down
   // ===========================================================================
 
@@ -212,11 +230,15 @@ export class InputHandler<TData extends Row = Row> {
       )
     );
 
-    // Find target column
-    const targetCol = Math.max(
+    // Find target column (visible index first, then convert to original)
+    const visibleColIndex = Math.max(
       0,
       Math.min(this.findColumnAtX(mouseX, columnPositions), columnCount - 1)
     );
+    // Convert visible index to original column index (for hidden column support)
+    const targetCol = this.deps.getOriginalColumnIndex
+      ? this.deps.getOriginalColumnIndex(visibleColIndex)
+      : visibleColIndex;
 
     // Handle selection drag
     if (this.isDraggingSelection) {

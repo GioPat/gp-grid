@@ -95,10 +95,16 @@ export interface InputHandlerDeps {
   getHeaderHeight: () => number;
   /** Get row height */
   getRowHeight: () => number;
-  /** Get column positions array */
+  /** Get column positions array (indexed by visible column) */
   getColumnPositions: () => number[];
-  /** Get column count */
+  /** Get visible column count */
   getColumnCount: () => number;
+  /**
+   * Convert visible column index to original column index.
+   * Used when columns can be hidden. Returns the original index for selection tracking.
+   * If not provided, visible index is used directly (no hidden columns).
+   */
+  getOriginalColumnIndex?: (visibleIndex: number) => number;
 }
 
 // =============================================================================

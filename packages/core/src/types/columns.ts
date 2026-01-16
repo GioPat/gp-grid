@@ -16,6 +16,8 @@ export interface ColumnDefinition {
   sortable?: boolean;
   /** Whether column is filterable. Default: true */
   filterable?: boolean;
+  /** Whether column is hidden. Hidden columns are not rendered but still exist in the definition. Default: false */
+  hidden?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string;
   editRenderer?: string;
