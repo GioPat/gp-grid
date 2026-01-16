@@ -20,7 +20,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
 } from "gp-grid-core";
-import type { Row, ColumnDefinition, ColumnFilterModel, DataSource, CellRange } from "gp-grid-core";
+import type { Row, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, HighlightingOptions } from "gp-grid-core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -54,6 +54,8 @@ const props = withDefaults(
     initialWidth?: number;
     /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
     initialHeight?: number;
+    /** Row/column/cell highlighting configuration */
+    highlighting?: HighlightingOptions<Row>;
   }>(),
   {
     overscan: 3,
@@ -68,7 +70,7 @@ const props = withDefaults(
 
 // Refs
 const containerRef = ref<HTMLDivElement | null>(null);
-const coreRef = shallowRef<GridCore | null>(null);
+const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
 const coreUnsubscribeRef = shallowRef<(() => void) | null>(null);
 
@@ -149,8 +151,39 @@ function handleFilterPopupClose(): void {
   }
 }
 
+// Handle cell mouse enter (for highlighting)
+function handleCellMouseEnter(rowIndex: number, colIndex: number): void {
+  coreRef.value?.input.handleCellMouseEnter(rowIndex, colIndex);
+}
+
+// Handle cell mouse leave (for highlighting)
+function handleCellMouseLeave(): void {
+  coreRef.value?.input.handleCellMouseLeave();
+}
+
+// Get row classes including highlight classes (pass rowData for content-based rules)
+function getRowClasses(slot: { rowIndex: number; rowData: Row }): string {
+  const isEvenRow = slot.rowIndex % 2 === 0;
+  const highlightRowClasses =
+    coreRef.value?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
+  return [
+    "gp-grid-row",
+    isEvenRow ? "gp-grid-row--even" : "",
+    ...highlightRowClasses,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 // Get cell classes
-function getCellClasses(rowIndex: number, colIndex: number): string {
+// Note: hoverPosition param establishes Vue reactivity dependency for re-render on hover changes
+function getCellClasses(
+  rowIndex: number,
+  colIndex: number,
+  column: ColumnDefinition,
+  rowData: Row,
+  _hoverPosition: { row: number; col: number } | null,
+): string {
   const isEditing = isCellEditing(rowIndex, colIndex, state.editingCell);
   const active = isCellActive(rowIndex, colIndex, state.activeCell);
   const selected = isCellSelected(rowIndex, colIndex, state.selectionRange);
@@ -161,7 +194,13 @@ function getCellClasses(rowIndex: number, colIndex: number): string {
     dragState.value.fillSourceRange,
     dragState.value.fillTarget,
   );
-  return buildCellClasses(active, selected, isEditing, inFillPreview);
+  const baseCellClasses = buildCellClasses(active, selected, isEditing, inFillPreview);
+
+  // Compute highlight cell classes
+  const highlightCellClasses =
+    coreRef.value?.highlight?.computeCombinedCellClasses(rowIndex, colIndex, column, rowData) ?? [];
+
+  return [baseCellClasses, ...highlightCellClasses].filter(Boolean).join(" ");
 }
 
 // Helper to create or get data source
@@ -194,6 +233,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     headerHeight: totalHeaderHeight.value,
     overscan: props.overscan,
     sortingEnabled: props.sortingEnabled,
+    highlighting: props.highlighting,
   });
 
   coreRef.value = core;
@@ -377,7 +417,7 @@ defineExpose({
       <div
         v-for="slot in slotsArray.filter((s) => s.rowIndex >= 0)"
         :key="slot.slotId"
-        :class="['gp-grid-row', { 'gp-grid-row--even': slot.rowIndex % 2 === 0 }]"
+        :class="getRowClasses(slot)"
         :style="{
           position: 'absolute',
           top: 0,

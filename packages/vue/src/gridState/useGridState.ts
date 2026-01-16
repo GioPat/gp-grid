@@ -32,6 +32,7 @@ function createInitialState(args?: InitialStateArgs): GridState {
     error: null,
     totalRows: 0,
     visibleRowRange: null,
+    hoverPosition: null,
   };
 }
 
@@ -93,6 +94,10 @@ function applyInstruction(
 
     case "UPDATE_VISIBLE_RANGE":
       state.visibleRowRange = { start: instruction.start, end: instruction.end };
+      break;
+
+    case "SET_HOVER_POSITION":
+      state.hoverPosition = instruction.position;
       break;
 
     case "START_EDIT":
@@ -204,6 +209,7 @@ export function useGridState(args?: InitialStateArgs) {
     state.error = initial.error;
     state.totalRows = initial.totalRows;
     state.visibleRowRange = initial.visibleRowRange;
+    state.hoverPosition = initial.hoverPosition;
   }
 
   return {

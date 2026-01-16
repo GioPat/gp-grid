@@ -14,10 +14,10 @@ import type {
 // Slot & Header Data Types
 // =============================================================================
 
-export interface SlotData {
+export interface SlotData<TData = Row> {
   slotId: string;
   rowIndex: number;
-  rowData: Row;
+  rowData: TData;
   translateY: number;
 }
 
@@ -43,8 +43,8 @@ export interface FilterPopupState {
 // Grid State
 // =============================================================================
 
-export interface GridState {
-  slots: Map<string, SlotData>;
+export interface GridState<TData = Row> {
+  slots: Map<string, SlotData<TData>>;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
@@ -59,4 +59,6 @@ export interface GridState {
   totalRows: number;
   /** Visible row range (start inclusive, end inclusive). Used to prevent selection showing in overscan. */
   visibleRowRange: { start: number; end: number } | null;
+  /** Currently hovered cell position (for highlighting) */
+  hoverPosition: CellPosition | null;
 }

@@ -21,6 +21,7 @@ import { FillManager } from "./fill";
 import { SlotPoolManager } from "./slot-pool";
 import { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
+import { HighlightManager } from "./highlight-manager";
 
 // =============================================================================
 // Constants
@@ -66,6 +67,7 @@ export class GridCore<TData extends Row = Row> {
   public readonly selection: SelectionManager;
   public readonly fill: FillManager;
   public readonly input: InputHandler<TData>;
+  public readonly highlight: HighlightManager<TData> | null;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
 
@@ -104,7 +106,28 @@ export class GridCore<TData extends Row = Row> {
     });
 
     // Forward selection instructions
-    this.selection.onInstruction((instruction) => this.emit(instruction));
+    this.selection.onInstruction((instruction) => {
+      this.emit(instruction);
+      // Notify highlight manager of selection changes
+      this.highlight?.onSelectionChange();
+    });
+
+    // Initialize highlight manager (only if highlighting options provided)
+    if (options.highlighting) {
+      this.highlight = new HighlightManager<TData>(
+        {
+          getActiveCell: () => this.selection.getActiveCell(),
+          getSelectionRange: () => this.selection.getSelectionRange(),
+          getColumn: (colIndex) => this.columns[colIndex],
+        },
+        options.highlighting,
+      );
+
+      // Forward highlight instructions
+      this.highlight.onInstruction((instruction) => this.emit(instruction));
+    } else {
+      this.highlight = null;
+    }
 
     // Initialize fill manager
     this.fill = new FillManager({

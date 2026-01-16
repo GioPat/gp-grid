@@ -23,6 +23,7 @@ import {
 import type { Row, ColumnFilterModel, DataSource } from "gp-grid-core";
 import { FilterPopup } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
+import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
 import { renderCell } from "./renderers/cellRenderer";
 import { renderEditCell } from "./renderers/editRenderer";
@@ -71,6 +72,7 @@ export function Grid<TData extends Row = Row>(
     initialWidth,
     initialHeight,
     gridRef,
+    highlighting,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +82,7 @@ export function Grid<TData extends Row = Row>(
     gridReducer,
     { initialWidth, initialHeight },
     createInitialState,
-  );
+  ) as [GridState<TData>, React.Dispatch<GridAction>];
 
   // Computed heights
   const totalHeaderHeight = headerHeight;
@@ -150,6 +152,7 @@ export function Grid<TData extends Row = Row>(
       headerHeight: totalHeaderHeight,
       overscan,
       sortingEnabled,
+      highlighting,
     });
 
     coreRef.current = core;
@@ -190,6 +193,7 @@ export function Grid<TData extends Row = Row>(
     overscan,
     sortingEnabled,
     gridRef,
+    highlighting,
   ]);
 
   // Subscribe to data source changes (for MutableDataSource)
@@ -265,6 +269,18 @@ export function Grid<TData extends Row = Row>(
     }
   }, []);
 
+  // Handle cell mouse enter (for highlighting)
+  const handleCellMouseEnter = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      coreRef.current?.input.handleCellMouseEnter(rowIndex, colIndex);
+    },
+    [],
+  );
+
+  // Handle cell mouse leave (for highlighting)
+  const handleCellMouseLeave = useCallback(() => {
+    coreRef.current?.input.handleCellMouseLeave();
+  }, []);
   // Convert slots map to array for rendering
   const slotsArray = useMemo(
     () => Array.from(state.slots.values()),
@@ -406,10 +422,21 @@ export function Grid<TData extends Row = Row>(
 
           const isEvenRow = slot.rowIndex % 2 === 0;
 
+          // Compute row highlight classes (pass rowData for content-based rules)
+          const highlightRowClasses =
+            coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
+          const rowClassName = [
+            "gp-grid-row",
+            isEvenRow ? "gp-grid-row--even" : "",
+            ...highlightRowClasses,
+          ]
+            .filter(Boolean)
+            .join(" ");
+
           return (
             <div
               key={slot.slotId}
-              className={`gp-grid-row ${isEvenRow ? "gp-grid-row--even" : ""}`}
+              className={rowClassName}
               style={{
                 position: "absolute",
                 top: 0,
@@ -443,12 +470,26 @@ export function Grid<TData extends Row = Row>(
                   dragState.fillTarget,
                 );
 
-                const cellClasses = buildCellClasses(
+                // Build base cell classes
+                const baseCellClasses = buildCellClasses(
                   active,
                   selected,
                   isEditing,
                   inFillPreview,
                 );
+
+                // Compute highlight cell classes
+                const highlightCellClasses =
+                  coreRef.current?.highlight?.computeCombinedCellClasses(
+                    slot.rowIndex,
+                    originalIndex,
+                    column,
+                    slot.rowData,
+                  ) ?? [];
+
+                const cellClasses = [baseCellClasses, ...highlightCellClasses]
+                  .filter(Boolean)
+                  .join(" ");
 
                 return (
                   <div

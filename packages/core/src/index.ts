@@ -13,6 +13,7 @@ export { FillManager } from "./fill";
 export { SlotPoolManager } from "./slot-pool";
 export { EditManager } from "./edit-manager";
 export { InputHandler } from "./input-handler";
+export { HighlightManager } from "./highlight-manager";
 
 /** Manager types */
 export type { SlotPoolManagerOptions, BatchInstructionListener as SlotPoolBatchListener } from "./slot-pool";
@@ -144,15 +145,21 @@ export type {
 
   /** Options */
   GridCoreOptions,
-  
+
   // Renderer params (for adapters)
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
-  
+
   // Listener types
   InstructionListener,
   BatchInstructionListener,
+
+  // Highlighting types
+  HoverScope,
+  HighlightContext,
+  HighlightingOptions,
+  SetHoverPositionInstruction,
 } from "./types";
 
 /** Direction type from selection */
@@ -202,6 +209,11 @@ export {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  // Highlighting helpers
+  isRowInHoverScope,
+  isColumnInHoverScope,
+  isRowInSelectionRange,
+  isColumnInSelectionRange,
 } from "./utils/classNames";
 
 /** UI State types (shared between framework wrappers) */

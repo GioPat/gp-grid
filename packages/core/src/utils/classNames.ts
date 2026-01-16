@@ -1,6 +1,6 @@
 // packages/core/src/utils/classNames.ts
 
-import type { CellPosition, CellRange } from "../types";
+import type { CellPosition, CellRange, HoverScope } from "../types";
 
 /**
  * Check if a cell is within the selection range
@@ -123,4 +123,60 @@ export function buildCellClasses(
   }
 
   return classes.join(" ");
+}
+
+// =============================================================================
+// Highlighting Helpers
+// =============================================================================
+
+/**
+ * Check if a row is in the hover scope based on hover position and scope setting
+ */
+export function isRowInHoverScope(
+  rowIndex: number,
+  hoverPosition: CellPosition | null,
+  scope: HoverScope,
+): boolean {
+  if (!hoverPosition) return false;
+  if (scope !== "row" && scope !== "crosshair") return false;
+  return hoverPosition.row === rowIndex;
+}
+
+/**
+ * Check if a column is in the hover scope based on hover position and scope setting
+ */
+export function isColumnInHoverScope(
+  colIndex: number,
+  hoverPosition: CellPosition | null,
+  scope: HoverScope,
+): boolean {
+  if (!hoverPosition) return false;
+  if (scope !== "column" && scope !== "crosshair") return false;
+  return hoverPosition.col === colIndex;
+}
+
+/**
+ * Check if a row overlaps the selection range
+ */
+export function isRowInSelectionRange(
+  rowIndex: number,
+  range: CellRange | null,
+): boolean {
+  if (!range) return false;
+  const minRow = Math.min(range.startRow, range.endRow);
+  const maxRow = Math.max(range.startRow, range.endRow);
+  return rowIndex >= minRow && rowIndex <= maxRow;
+}
+
+/**
+ * Check if a column overlaps the selection range
+ */
+export function isColumnInSelectionRange(
+  colIndex: number,
+  range: CellRange | null,
+): boolean {
+  if (!range) return false;
+  const minCol = Math.min(range.startCol, range.endCol);
+  const maxCol = Math.max(range.startCol, range.endCol);
+  return colIndex >= minCol && colIndex <= maxCol;
 }

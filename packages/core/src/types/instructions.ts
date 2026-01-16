@@ -46,6 +46,12 @@ export interface SetActiveCellInstruction {
   position: CellPosition | null;
 }
 
+/** Set hover position instruction (for highlighting) */
+export interface SetHoverPositionInstruction {
+  type: "SET_HOVER_POSITION";
+  position: CellPosition | null;
+}
+
 /** Set selection range instruction */
 export interface SetSelectionRangeInstruction {
   type: "SET_SELECTION_RANGE";
@@ -226,6 +232,8 @@ export type GridInstruction =
   | SetActiveCellInstruction
   | SetSelectionRangeInstruction
   | UpdateVisibleRangeInstruction
+  /** Highlighting */
+  | SetHoverPositionInstruction
   /** Editing */
   | StartEditInstruction
   | StopEditInstruction

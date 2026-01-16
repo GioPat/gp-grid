@@ -17,6 +17,14 @@ export type {
   SlotState,
 } from "./basic";
 
+// Highlighting types (must come before columns, which depends on these)
+export type {
+  HoverScope,
+  HighlightColumnInfo,
+  HighlightContext,
+  HighlightingOptions,
+} from "./highlighting";
+
 // Column types
 export type { ColumnDefinition } from "./columns";
 
@@ -50,6 +58,7 @@ export type {
   SetActiveCellInstruction,
   SetSelectionRangeInstruction,
   UpdateVisibleRangeInstruction,
+  SetHoverPositionInstruction,
   StartEditInstruction,
   StopEditInstruction,
   CommitEditInstruction,

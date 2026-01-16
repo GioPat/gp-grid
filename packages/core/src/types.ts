@@ -57,9 +57,15 @@ export type {
   RowsRemovedInstruction,
   RowsUpdatedInstruction,
   TransactionProcessedInstruction,
+  SetHoverPositionInstruction,
   GridInstruction,
   InstructionListener,
   BatchInstructionListener,
+  // Highlighting types
+  HoverScope,
+  HighlightColumnInfo,
+  HighlightContext,
+  HighlightingOptions,
   // Renderer types
   CellRendererParams,
   EditRendererParams,
