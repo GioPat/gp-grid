@@ -825,6 +825,159 @@ export class GridCore<TData extends Row = Row> {
     this.slotPool.refreshAllSlots();
   }
 
+  // ===========================================================================
+  // Row Mutation API
+  // ===========================================================================
+
+  /**
+   * Add rows to the grid at the specified index.
+   * If no index is provided, rows are added at the end.
+   * @param rows Array of row data to add
+   * @param index Optional index to insert at (shifts existing rows)
+   */
+  addRows(rows: TData[], index?: number): void {
+    if (rows.length === 0) return;
+
+    const insertIndex = index ?? this.totalRows;
+    const newTotalRows = this.totalRows + rows.length;
+
+    // Shift existing rows if inserting in the middle
+    if (insertIndex < this.totalRows) {
+      const newCache = new Map<number, TData>();
+      for (const [rowIndex, rowData] of this.cachedRows) {
+        if (rowIndex >= insertIndex) {
+          newCache.set(rowIndex + rows.length, rowData);
+        } else {
+          newCache.set(rowIndex, rowData);
+        }
+      }
+      this.cachedRows = newCache;
+    }
+
+    // Insert new rows
+    rows.forEach((row, i) => {
+      this.cachedRows.set(insertIndex + i, row);
+    });
+
+    this.totalRows = newTotalRows;
+
+    // Emit instruction and update UI
+    this.emit({
+      type: "ROWS_ADDED",
+      indices: rows.map((_, i) => insertIndex + i),
+      totalRows: this.totalRows,
+    });
+
+    this.emitContentSize();
+    this.slotPool.refreshAllSlots();
+  }
+
+  /**
+   * Update existing rows with partial data.
+   * @param updates Array of updates with row index and partial data to merge
+   */
+  updateRows(updates: Array<{ index: number; data: Partial<TData> }>): void {
+    if (updates.length === 0) return;
+
+    const updatedIndices: number[] = [];
+
+    for (const update of updates) {
+      const existing = this.cachedRows.get(update.index);
+      if (existing) {
+        // Merge the update into existing row
+        this.cachedRows.set(update.index, { ...existing, ...update.data });
+        updatedIndices.push(update.index);
+      }
+    }
+
+    if (updatedIndices.length === 0) return;
+
+    // Emit instruction
+    this.emit({
+      type: "ROWS_UPDATED",
+      indices: updatedIndices,
+    });
+
+    // Refresh only the affected slots
+    for (const index of updatedIndices) {
+      this.slotPool.updateSlot(index);
+    }
+  }
+
+  /**
+   * Delete rows at the specified indices.
+   * @param indices Array of row indices to delete (will be sorted and processed in reverse)
+   */
+  deleteRows(indices: number[]): void {
+    if (indices.length === 0) return;
+
+    // Sort indices in descending order to handle shifts correctly
+    const sortedIndices = [...indices].sort((a, b) => b - a);
+
+    for (const index of sortedIndices) {
+      if (index < 0 || index >= this.totalRows) continue;
+
+      // Remove the row and shift subsequent rows
+      this.cachedRows.delete(index);
+
+      // Shift all rows after the deleted one
+      const newCache = new Map<number, TData>();
+      for (const [rowIndex, rowData] of this.cachedRows) {
+        if (rowIndex > index) {
+          newCache.set(rowIndex - 1, rowData);
+        } else {
+          newCache.set(rowIndex, rowData);
+        }
+      }
+      this.cachedRows = newCache;
+      this.totalRows--;
+    }
+
+    // Clear selection if it references deleted rows
+    const activeCell = this.selection.getActiveCell();
+    if (activeCell && activeCell.row >= this.totalRows) {
+      this.selection.setActiveCell(null);
+    }
+
+    // Emit instruction and update UI
+    this.emit({
+      type: "ROWS_REMOVED",
+      indices: sortedIndices,
+      totalRows: this.totalRows,
+    });
+
+    this.emitContentSize();
+    this.slotPool.refreshAllSlots();
+  }
+
+  /**
+   * Get a row by index.
+   * @param index Row index
+   * @returns Row data or undefined if not found
+   */
+  getRow(index: number): TData | undefined {
+    return this.cachedRows.get(index);
+  }
+
+  /**
+   * Set a complete row at the specified index.
+   * Use this for complete row replacement. For partial updates, use updateRows.
+   * @param index Row index
+   * @param data Complete row data
+   */
+  setRow(index: number, data: TData): void {
+    if (index < 0 || index >= this.totalRows) return;
+
+    this.cachedRows.set(index, data);
+
+    this.emit({
+      type: "ROWS_UPDATED",
+      indices: [index],
+    });
+
+    this.slotPool.updateSlot(index);
+  }
+
   /**
    * Update the data source and refresh.
    */
@@ -855,6 +1008,7 @@ export class GridCore<TData extends Row = Row> {
 
     // Destroy child managers
     this.slotPool.destroy();
+    this.highlight?.destroy();
 
     // Clear cached row data (can be large for big datasets)
     this.cachedRows.clear();
