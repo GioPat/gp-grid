@@ -465,8 +465,11 @@ export class GridCore<TData extends Row = Row> {
     this.columnPositions = [0];
     let pos = 0;
     for (const col of this.columns) {
-      pos += col.width;
-      this.columnPositions.push(pos);
+      // Only include visible columns in content width calculation
+      if (!col.hidden) {
+        pos += col.width;
+        this.columnPositions.push(pos);
+      }
     }
   }
 

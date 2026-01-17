@@ -78,6 +78,7 @@ export function Grid<TData extends Row = Row>(
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
+  const hasInitializedRef = useRef(false);
   const [state, dispatch] = useReducer(
     gridReducer,
     { initialWidth, initialHeight },
@@ -205,6 +206,13 @@ export function Grid<TData extends Row = Row>(
 
   // Initialize GridCore
   useEffect(() => {
+    // Reset state on re-initialization to clear stale slots from previous core
+    // Skip on first initialization (nothing to reset)
+    if (hasInitializedRef.current) {
+      dispatch({ type: "RESET" });
+    }
+    hasInitializedRef.current = true;
+
     const core = new GridCore<TData>({
       columns,
       dataSource,
@@ -229,6 +237,18 @@ export function Grid<TData extends Row = Row>(
 
     // Initialize
     core.initialize();
+
+    // Immediately set viewport if container is available
+    // This ensures column scaling happens before first paint
+    const container = containerRef.current;
+    if (container) {
+      core.setViewport(
+        container.scrollTop,
+        container.scrollLeft,
+        container.clientWidth,
+        container.clientHeight,
+      );
+    }
 
     return () => {
       unsubscribe();
