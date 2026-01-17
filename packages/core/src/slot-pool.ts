@@ -1,11 +1,10 @@
 // packages/core/src/slot-pool.ts
 
-import type {
-  SlotState,
-  GridInstruction,
-  InstructionListener,
-  Row,
-} from "./types";
+import type { SlotState, Row, GridInstruction } from "./types";
+import { createBatchInstructionEmitter } from "./utils";
+
+// Re-export for backwards compatibility
+export type { BatchInstructionListener } from "./utils";
 
 // =============================================================================
 // Types
@@ -47,9 +46,6 @@ interface SlotPoolState {
  * Manages the slot pool for virtual scrolling.
  * Handles slot creation, recycling, positioning, and destruction.
  */
-/** Batch instruction listener for efficient React state updates */
-export type BatchInstructionListener = (instructions: GridInstruction[]) => void;
-
 export class SlotPoolManager {
   private state: SlotPoolState = {
     slots: new Map(),
@@ -58,57 +54,17 @@ export class SlotPoolManager {
   };
 
   private options: SlotPoolManagerOptions;
-  private listeners: InstructionListener[] = [];
-  private batchListeners: BatchInstructionListener[] = [];
+  private emitter = createBatchInstructionEmitter();
   private isDestroyed: boolean = false;
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  onBatchInstruction = this.emitter.onBatchInstruction;
+  private emit = this.emitter.emit;
+  private emitBatch = this.emitter.emitBatch;
 
   constructor(options: SlotPoolManagerOptions) {
     this.options = options;
-  }
-
-  // ===========================================================================
-  // Instruction Emission
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  /**
-   * Subscribe to batched instructions for efficient state updates.
-   */
-  onBatchInstruction(listener: BatchInstructionListener): () => void {
-    this.batchListeners.push(listener);
-    return () => {
-      this.batchListeners = this.batchListeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
-    // Also emit as single-item batch for batch listeners
-    for (const listener of this.batchListeners) {
-      listener([instruction]);
-    }
-  }
-
-  private emitBatch(instructions: GridInstruction[]): void {
-    if (instructions.length === 0) return;
-    // Emit to batch listeners as a single batch
-    for (const listener of this.batchListeners) {
-      listener(instructions);
-    }
-    // Also emit to individual listeners for backwards compatibility
-    for (const instruction of instructions) {
-      for (const listener of this.listeners) {
-        listener(instruction);
-      }
-    }
   }
 
   // ===========================================================================
@@ -283,8 +239,7 @@ export class SlotPoolManager {
     // Clear slots without emitting (no listeners to notify during cleanup)
     this.state.slots.clear();
     this.state.rowToSlot.clear();
-    this.listeners = [];
-    this.batchListeners = [];
+    this.emitter.clearListeners();
   }
 
   /**

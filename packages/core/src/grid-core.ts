@@ -2,9 +2,6 @@
 
 import type {
   GridCoreOptions,
-  GridInstruction,
-  InstructionListener,
-  BatchInstructionListener,
   ColumnDefinition,
   CellValue,
   DataSource,
@@ -22,6 +19,13 @@ import { SlotPoolManager } from "./slot-pool";
 import { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
 import { HighlightManager } from "./highlight-manager";
+import { SortFilterManager } from "./sort-filter-manager";
+import { RowMutationManager } from "./row-mutation-manager";
+import {
+  createBatchInstructionEmitter,
+  getFieldValue,
+  setFieldValue,
+} from "./utils";
 
 // =============================================================================
 // Constants
@@ -58,25 +62,27 @@ export class GridCore<TData extends Row = Row> {
   // Use large page size to avoid excessive pagination for client-side data sources
   private pageSize: number = 1000000;
 
-  // Sort & Filter
-  private sortModel: SortModel[] = [];
-  private filterModel: FilterModel = {};
-  private openFilterColIndex: number | null = null;
-
   // Managers
   public readonly selection: SelectionManager;
   public readonly fill: FillManager;
   public readonly input: InputHandler<TData>;
   public readonly highlight: HighlightManager<TData> | null;
+  public readonly sortFilter: SortFilterManager<TData>;
+  public readonly rowMutation: RowMutationManager<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
 
   // Column positions (computed)
   private columnPositions: number[] = [];
 
-  // Instruction listeners
-  private listeners: InstructionListener[] = [];
-  private batchListeners: BatchInstructionListener[] = [];
+  // Instruction emitter
+  private emitter = createBatchInstructionEmitter();
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  onBatchInstruction = this.emitter.onBatchInstruction;
+  private emit = this.emitter.emit;
+  private emitBatch = this.emitter.emitBatch;
 
   // Scroll virtualization state
   private naturalContentHeight: number = 0;
@@ -171,6 +177,45 @@ export class GridCore<TData extends Row = Row> {
     // Forward edit manager instructions
     this.editManager.onInstruction((instruction) => this.emit(instruction));
 
+    // Initialize sort/filter manager
+    this.sortFilter = new SortFilterManager<TData>({
+      getColumns: () => this.columns,
+      isSortingEnabled: () => this.sortingEnabled,
+      getCachedRows: () => this.cachedRows,
+      onSortFilterChange: async () => {
+        await this.fetchData();
+        this.highlight?.clearAllCaches();
+        this.slotPool.refreshAllSlots();
+      },
+      onDataRefreshed: () => {
+        this.emitContentSize();
+        this.emitHeaders();
+      },
+    });
+
+    // Forward sort/filter instructions
+    this.sortFilter.onInstruction((instruction) => this.emit(instruction));
+
+    // Initialize row mutation manager
+    this.rowMutation = new RowMutationManager<TData>({
+      getCachedRows: () => this.cachedRows,
+      setCachedRows: (rows) => { this.cachedRows = rows; },
+      getTotalRows: () => this.totalRows,
+      setTotalRows: (count) => { this.totalRows = count; },
+      updateSlot: (rowIndex) => this.slotPool.updateSlot(rowIndex),
+      refreshAllSlots: () => this.slotPool.refreshAllSlots(),
+      emitContentSize: () => this.emitContentSize(),
+      clearSelectionIfInvalid: (maxValidRow) => {
+        const activeCell = this.selection.getActiveCell();
+        if (activeCell && activeCell.row >= maxValidRow) {
+          this.selection.clearSelection();
+        }
+      },
+    });
+
+    // Forward row mutation instructions
+    this.rowMutation.onInstruction((instruction) => this.emit(instruction));
+
     // Initialize input handler
     this.input = new InputHandler(this, {
       getHeaderHeight: () => this.headerHeight,
@@ -178,61 +223,6 @@ export class GridCore<TData extends Row = Row> {
       getColumnPositions: () => this.columnPositions,
       getColumnCount: () => this.columns.length,
     });
-  }
-
-  // ===========================================================================
-  // Instruction System
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  /**
-   * Subscribe to batched instructions for efficient React state updates.
-   * Batch listeners receive arrays of instructions instead of individual ones.
-   */
-  onBatchInstruction(listener: BatchInstructionListener): () => void {
-    this.batchListeners.push(listener);
-    return () => {
-      this.batchListeners = this.batchListeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    // console.log("[GP-Grid Core] emit:", instruction.type, { 
-    //   listenerCount: this.listeners.length, 
-    //   batchListenerCount: this.batchListeners.length 
-    // });
-    // Emit to individual listeners
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
-    // Also emit as a single-item batch
-    for (const listener of this.batchListeners) {
-      listener([instruction]);
-    }
-  }
-
-  private emitBatch(instructions: GridInstruction[]): void {
-    if (instructions.length === 0) return;
-    
-    // console.log("[GP-Grid Core] emitBatch:", instructions.map(i => i.type), {
-    //   batchListenerCount: this.batchListeners.length
-    // });
-    // Emit to batch listeners as a single batch
-    for (const listener of this.batchListeners) {
-      listener(instructions);
-    }
-    // Also emit to individual listeners for backwards compatibility
-    for (const instruction of instructions) {
-      for (const listener of this.listeners) {
-        listener(instruction);
-      }
-    }
   }
 
   // ===========================================================================
@@ -310,13 +300,16 @@ export class GridCore<TData extends Row = Row> {
     this.emit({ type: "DATA_LOADING" });
 
     try {
+      const sortModel = this.sortFilter.getSortModel();
+      const filterModel = this.sortFilter.getFilterModel();
+
       const request: DataSourceRequest = {
         pagination: {
           pageIndex: this.currentPageIndex,
           pageSize: this.pageSize,
         },
-        sort: this.sortModel.length > 0 ? this.sortModel : undefined,
-        filter: Object.keys(this.filterModel).length > 0 ? this.filterModel : undefined,
+        sort: sortModel.length > 0 ? sortModel : undefined,
+        filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
       };
 
       const response = await this.dataSource.fetch(request);
@@ -348,6 +341,8 @@ export class GridCore<TData extends Row = Row> {
   private async fetchAllData(): Promise<void> {
     // Fetch all data in chunks for client-side data source
     const totalPages = Math.ceil(this.totalRows / this.pageSize);
+    const sortModel = this.sortFilter.getSortModel();
+    const filterModel = this.sortFilter.getFilterModel();
 
     for (let page = 1; page < totalPages; page++) {
       const request: DataSourceRequest = {
@@ -355,8 +350,8 @@ export class GridCore<TData extends Row = Row> {
           pageIndex: page,
           pageSize: this.pageSize,
         },
-        sort: this.sortModel.length > 0 ? this.sortModel : undefined,
-        filter: Object.keys(this.filterModel).length > 0 ? this.filterModel : undefined,
+        sort: sortModel.length > 0 ? sortModel : undefined,
+        filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
       };
 
       const response = await this.dataSource.fetch(request);
@@ -367,7 +362,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   // ===========================================================================
-  // Sort & Filter
+  // Sort & Filter (delegates to SortFilterManager)
   // ===========================================================================
 
   async setSort(
@@ -375,184 +370,43 @@ export class GridCore<TData extends Row = Row> {
     direction: SortDirection | null,
     addToExisting: boolean = false
   ): Promise<void> {
-    // Check if sorting is enabled globally and for this column
-    if (!this.sortingEnabled) return;
-
-    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
-    if (column?.sortable === false) return;
-
-    const existingIndex = this.sortModel.findIndex((s) => s.colId === colId);
-
-    if (!addToExisting) {
-      this.sortModel = direction === null ? [] : [{ colId, direction }];
-    } else {
-      if (direction === null) {
-        if (existingIndex >= 0) {
-          this.sortModel.splice(existingIndex, 1);
-        }
-      } else if (existingIndex >= 0) {
-        this.sortModel[existingIndex]!.direction = direction;
-      } else {
-        this.sortModel.push({ colId, direction });
-      }
-    }
-
-    // console.log("[GP-Grid Core] setSort - fetching sorted data...");
-    await this.fetchData();
-    // Clear highlight caches since row data has changed order
-    this.highlight?.clearAllCaches();
-    // Refresh all slots with newly sorted data
-    this.slotPool.refreshAllSlots();
-    this.emitHeaders();
-    // console.log("[GP-Grid Core] setSort - complete");
+    return this.sortFilter.setSort(colId, direction, addToExisting);
   }
 
   async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
-    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
-    if (column?.filterable === false) return;
-
-    // Handle null, empty string, or empty conditions
-    const isEmpty = filter === null ||
-      (typeof filter === "string" && filter.trim() === "") ||
-      (typeof filter === "object" && filter.conditions && filter.conditions.length === 0);
-
-    if (isEmpty) {
-      delete this.filterModel[colId];
-    } else if (typeof filter === "string") {
-      // Convert old string format to new ColumnFilterModel format
-      this.filterModel[colId] = {
-        conditions: [{ type: "text", operator: "contains", value: filter }],
-        combination: "and",
-      };
-    } else {
-      this.filterModel[colId] = filter;
-    }
-
-    await this.fetchData();
-    // Clear highlight caches since visible row data has changed
-    this.highlight?.clearAllCaches();
-    // Force refresh all slots since filtered data changed
-    this.slotPool.refreshAllSlots();
-    this.emitContentSize();
-    this.emitHeaders();
+    return this.sortFilter.setFilter(colId, filter);
   }
 
-  /**
-   * Check if a column has an active filter
-   */
   hasActiveFilter(colId: string): boolean {
-    const filter = this.filterModel[colId];
-    if (!filter) return false;
-    return filter.conditions.length > 0;
+    return this.sortFilter.hasActiveFilter(colId);
   }
 
-  /**
-   * Check if a column is sortable
-   */
   isColumnSortable(colIndex: number): boolean {
-    if (!this.sortingEnabled) return false;
-    const column = this.columns[colIndex];
-    return column?.sortable !== false;
+    return this.sortFilter.isColumnSortable(colIndex);
   }
 
-  /**
-   * Check if a column is filterable
-   */
   isColumnFilterable(colIndex: number): boolean {
-    const column = this.columns[colIndex];
-    return column?.filterable !== false;
+    return this.sortFilter.isColumnFilterable(colIndex);
   }
 
-  /**
-   * Get distinct values for a column (for filter dropdowns)
-   * For array-type columns (like tags), each unique array combination is returned.
-   * Arrays are sorted internally for consistent comparison.
-   * Limited to MAX_DISTINCT_VALUES to avoid performance issues with large datasets.
-   */
   getDistinctValuesForColumn(colId: string, maxValues: number = 500): CellValue[] {
-    // Find column once outside the loop
-    const column = this.columns.find(c => (c.colId ?? c.field) === colId);
-    if (!column) return [];
-
-    // Use Map with stringified keys to handle deduplication of arrays
-    const valuesMap = new Map<string, CellValue>();
-
-    for (const row of this.cachedRows.values()) {
-      const value = this.getFieldValue(row, column.field);
-
-      if (Array.isArray(value)) {
-        // Sort array items internally for consistent comparison (["vip", "new"] == ["new", "vip"])
-        const sortedArray = [...value].sort((a, b) =>
-          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
-        );
-        const key = JSON.stringify(sortedArray);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, sortedArray);
-          // Stop early if we have too many distinct values
-          if (valuesMap.size >= maxValues) break;
-        }
-      } else {
-        const key = JSON.stringify(value);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, value);
-          // Stop early if we have too many distinct values
-          if (valuesMap.size >= maxValues) break;
-        }
-      }
-    }
-
-    // Sort the results: arrays first (by string representation), then primitives
-    const results = Array.from(valuesMap.values());
-    results.sort((a, b) => {
-      const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
-      const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
-      return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
-    });
-
-    return results;
+    return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
-  /**
-   * Open filter popup for a column (toggles if already open for same column)
-   */
   openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
-    // If clicking on the same column's filter icon, close the popup
-    if (this.openFilterColIndex === colIndex) {
-      this.closeFilterPopup();
-      return;
-    }
-
-    const column = this.columns[colIndex];
-    if (!column || !this.isColumnFilterable(colIndex)) return;
-
-    const colId = column.colId ?? column.field;
-    const distinctValues = this.getDistinctValuesForColumn(colId);
-
-    this.openFilterColIndex = colIndex;
-    this.emit({
-      type: "OPEN_FILTER_POPUP",
-      colIndex,
-      column,
-      anchorRect,
-      distinctValues,
-      currentFilter: this.filterModel[colId],
-    });
+    this.sortFilter.openFilterPopup(colIndex, anchorRect);
   }
 
-  /**
-   * Close filter popup
-   */
   closeFilterPopup(): void {
-    this.openFilterColIndex = null;
-    this.emit({ type: "CLOSE_FILTER_POPUP" });
+    this.sortFilter.closeFilterPopup();
   }
 
   getSortModel(): SortModel[] {
-    return [...this.sortModel];
+    return this.sortFilter.getSortModel();
   }
 
   getFilterModel(): FilterModel {
-    return { ...this.filterModel };
+    return this.sortFilter.getFilterModel();
   }
 
   // ===========================================================================
@@ -590,7 +444,7 @@ export class GridCore<TData extends Row = Row> {
     const column = this.columns[col];
     if (!column) return null;
 
-    return this.getFieldValue(rowData, column.field);
+    return getFieldValue(rowData, column.field);
   }
 
   setCellValue(row: number, col: number, value: CellValue): void {
@@ -600,37 +454,7 @@ export class GridCore<TData extends Row = Row> {
     const column = this.columns[col];
     if (!column) return;
 
-    this.setFieldValue(rowData as Record<string, unknown>, column.field, value);
-  }
-
-  private getFieldValue(data: TData, field: string): CellValue {
-    const parts = field.split(".");
-    let value: unknown = data;
-
-    for (const part of parts) {
-      if (value == null || typeof value !== "object") {
-        return null;
-      }
-      value = (value as Record<string, unknown>)[part];
-    }
-
-    return (value ?? null) as CellValue;
-  }
-
-  private setFieldValue(data: Record<string, unknown>, field: string, value: CellValue): void {
-    const parts = field.split(".");
-    let obj = data;
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i]!;
-      if (!(part in obj)) {
-        obj[part] = {};
-      }
-      obj = obj[part] as Record<string, unknown>;
-    }
-
-    const lastPart = parts[parts.length - 1]!;
-    obj[lastPart] = value;
+    setFieldValue(rowData as Record<string, unknown>, column.field, value);
   }
 
   // ===========================================================================
@@ -670,10 +494,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   private emitHeaders(): void {
-    const sortInfoMap = new Map<string, { direction: SortDirection; index: number }>();
-    this.sortModel.forEach((sort, index) => {
-      sortInfoMap.set(sort.colId, { direction: sort.direction, index: index + 1 });
-    });
+    const sortInfoMap = this.sortFilter.getSortInfoMap();
 
     for (let i = 0; i < this.columns.length; i++) {
       const column = this.columns[i]!;
@@ -686,9 +507,9 @@ export class GridCore<TData extends Row = Row> {
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
-        sortable: this.isColumnSortable(i),
-        filterable: this.isColumnFilterable(i),
-        hasFilter: this.hasActiveFilter(colId),
+        sortable: this.sortFilter.isColumnSortable(i),
+        filterable: this.sortFilter.isColumnFilterable(i),
+        hasFilter: this.sortFilter.hasActiveFilter(colId),
       });
     }
   }
@@ -832,158 +653,44 @@ export class GridCore<TData extends Row = Row> {
   }
 
   // ===========================================================================
-  // Row Mutation API
+  // Row Mutation API (delegates to RowMutationManager)
   // ===========================================================================
 
   /**
    * Add rows to the grid at the specified index.
    * If no index is provided, rows are added at the end.
-   * @param rows Array of row data to add
-   * @param index Optional index to insert at (shifts existing rows)
    */
   addRows(rows: TData[], index?: number): void {
-    if (rows.length === 0) return;
-
-    const insertIndex = index ?? this.totalRows;
-    const newTotalRows = this.totalRows + rows.length;
-
-    // Shift existing rows if inserting in the middle
-    if (insertIndex < this.totalRows) {
-      const newCache = new Map<number, TData>();
-      for (const [rowIndex, rowData] of this.cachedRows) {
-        if (rowIndex >= insertIndex) {
-          newCache.set(rowIndex + rows.length, rowData);
-        } else {
-          newCache.set(rowIndex, rowData);
-        }
-      }
-      this.cachedRows = newCache;
-    }
-
-    // Insert new rows
-    rows.forEach((row, i) => {
-      this.cachedRows.set(insertIndex + i, row);
-    });
-
-    this.totalRows = newTotalRows;
-
-    // Emit instruction and update UI
-    const addedIndices = rows.map((_, i) => insertIndex + i);
-    this.emit({
-      type: "ROWS_ADDED",
-      indices: addedIndices,
-      count: addedIndices.length,
-      totalRows: this.totalRows,
-    });
-
-    this.emitContentSize();
-    this.slotPool.refreshAllSlots();
+    this.rowMutation.addRows(rows, index);
   }
 
   /**
    * Update existing rows with partial data.
-   * @param updates Array of updates with row index and partial data to merge
    */
   updateRows(updates: Array<{ index: number; data: Partial<TData> }>): void {
-    if (updates.length === 0) return;
-
-    const updatedIndices: number[] = [];
-
-    for (const update of updates) {
-      const existing = this.cachedRows.get(update.index);
-      if (existing) {
-        // Merge the update into existing row
-        this.cachedRows.set(update.index, { ...existing, ...update.data });
-        updatedIndices.push(update.index);
-      }
-    }
-
-    if (updatedIndices.length === 0) return;
-
-    // Emit instruction
-    this.emit({
-      type: "ROWS_UPDATED",
-      indices: updatedIndices,
-    });
-
-    // Refresh only the affected slots
-    for (const index of updatedIndices) {
-      this.slotPool.updateSlot(index);
-    }
+    this.rowMutation.updateRows(updates);
   }
 
   /**
    * Delete rows at the specified indices.
-   * @param indices Array of row indices to delete (will be sorted and processed in reverse)
    */
   deleteRows(indices: number[]): void {
-    if (indices.length === 0) return;
-
-    // Sort indices in descending order to handle shifts correctly
-    const sortedIndices = [...indices].sort((a, b) => b - a);
-
-    for (const index of sortedIndices) {
-      if (index < 0 || index >= this.totalRows) continue;
-
-      // Remove the row and shift subsequent rows
-      this.cachedRows.delete(index);
-
-      // Shift all rows after the deleted one
-      const newCache = new Map<number, TData>();
-      for (const [rowIndex, rowData] of this.cachedRows) {
-        if (rowIndex > index) {
-          newCache.set(rowIndex - 1, rowData);
-        } else {
-          newCache.set(rowIndex, rowData);
-        }
-      }
-      this.cachedRows = newCache;
-      this.totalRows--;
-    }
-
-    // Clear selection if it references deleted rows
-    const activeCell = this.selection.getActiveCell();
-    if (activeCell && activeCell.row >= this.totalRows) {
-      this.selection.clearSelection();
-    }
-
-    // Emit instruction and update UI
-    this.emit({
-      type: "ROWS_REMOVED",
-      indices: sortedIndices,
-      totalRows: this.totalRows,
-    });
-
-    this.emitContentSize();
-    this.slotPool.refreshAllSlots();
+    this.rowMutation.deleteRows(indices);
   }
 
   /**
    * Get a row by index.
-   * @param index Row index
-   * @returns Row data or undefined if not found
    */
   getRow(index: number): TData | undefined {
-    return this.cachedRows.get(index);
+    return this.rowMutation.getRow(index);
   }
 
   /**
    * Set a complete row at the specified index.
    * Use this for complete row replacement. For partial updates, use updateRows.
-   * @param index Row index
-   * @param data Complete row data
    */
   setRow(index: number, data: TData): void {
-    if (index < 0 || index >= this.totalRows) return;
-
-    this.cachedRows.set(index, data);
-
-    this.emit({
-      type: "ROWS_UPDATED",
-      indices: [index],
-    });
-
-    this.slotPool.updateSlot(index);
+    this.rowMutation.setRow(index, data);
   }
 
   /**
@@ -1017,18 +724,17 @@ export class GridCore<TData extends Row = Row> {
     // Destroy child managers
     this.slotPool.destroy();
     this.highlight?.destroy();
+    this.sortFilter.destroy();
+    this.rowMutation.destroy();
 
     // Clear cached row data (can be large for big datasets)
     this.cachedRows.clear();
 
     // Clear listeners
-    this.listeners = [];
-    this.batchListeners = [];
+    this.emitter.clearListeners();
 
     // Reset state
     this.totalRows = 0;
-    this.sortModel = [];
-    this.filterModel = {};
   }
 }
 

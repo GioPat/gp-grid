@@ -4,15 +4,15 @@ import type {
   CellPosition,
   CellRange,
   ColumnDefinition,
-  GridInstruction,
-  InstructionListener,
   HighlightingOptions,
   HighlightContext,
 } from "./types";
 import {
+  createInstructionEmitter,
+  normalizeRange,
   isRowInSelectionRange,
   isColumnInSelectionRange,
-} from "./utils/classNames";
+} from "./utils";
 
 // =============================================================================
 // Types
@@ -36,7 +36,11 @@ export class HighlightManager<TData = Record<string, unknown>> {
   private options: HighlightManagerOptions;
   private highlightingOptions: HighlightingOptions<TData>;
   private hoverPosition: CellPosition | null = null;
-  private listeners: InstructionListener[] = [];
+  private emitter = createInstructionEmitter();
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  private emit = this.emitter.emit;
 
   // Caches (cleared on state change: hover or selection)
   private rowClassCache: Map<number, string[]> = new Map();
@@ -49,23 +53,6 @@ export class HighlightManager<TData = Record<string, unknown>> {
   ) {
     this.options = options;
     this.highlightingOptions = highlightingOptions;
-  }
-
-  // ===========================================================================
-  // Instruction Emission
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
   }
 
   // ===========================================================================
@@ -211,10 +198,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
     // Check if cell is in selection
     let isSelected = false;
     if (selectionRange) {
-      const minRow = Math.min(selectionRange.startRow, selectionRange.endRow);
-      const maxRow = Math.max(selectionRange.startRow, selectionRange.endRow);
-      const minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
-      const maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
+      const { minRow, maxRow, minCol, maxCol } = normalizeRange(selectionRange);
       isSelected =
         rowIndex >= minRow &&
         rowIndex <= maxRow &&
@@ -344,7 +328,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
    * Destroy the manager and release resources
    */
   destroy(): void {
-    this.listeners = [];
+    this.emitter.clearListeners();
     this.clearAllCaches();
     this.hoverPosition = null;
   }

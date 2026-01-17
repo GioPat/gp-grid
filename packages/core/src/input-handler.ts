@@ -14,6 +14,7 @@ import type {
   DragState,
 } from "./types/input";
 import type { Direction } from "./selection";
+import { findColumnAtX } from "./utils";
 
 // =============================================================================
 // Constants
@@ -233,7 +234,7 @@ export class InputHandler<TData extends Row = Row> {
     // Find target column (visible index first, then convert to original)
     const visibleColIndex = Math.max(
       0,
-      Math.min(this.findColumnAtX(mouseX, columnPositions), columnCount - 1)
+      Math.min(findColumnAtX(mouseX, columnPositions), columnCount - 1)
     );
     // Convert visible index to original column index (for hidden column support)
     const targetCol = this.deps.getOriginalColumnIndex
@@ -428,22 +429,6 @@ export class InputHandler<TData extends Row = Row> {
   // ===========================================================================
   // Helper Methods
   // ===========================================================================
-
-  /**
-   * Find column index at a given X coordinate
-   */
-  private findColumnAtX(x: number, columnPositions: number[]): number {
-    for (let i = 0; i < columnPositions.length - 1; i++) {
-      if (x >= columnPositions[i]! && x < columnPositions[i + 1]!) {
-        return i;
-      }
-    }
-    // If beyond last column, return last column
-    if (x >= columnPositions[columnPositions.length - 1]!) {
-      return columnPositions.length - 2;
-    }
-    return 0;
-  }
 
   /**
    * Calculate auto-scroll deltas based on mouse position

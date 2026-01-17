@@ -2,111 +2,131 @@
 
 import type { CellPosition, CellRange } from "../types";
 
+// =============================================================================
+// Range Normalization
+// =============================================================================
+
+/**
+ * Normalized range with guaranteed min/max values
+ */
+export interface NormalizedRange {
+  minRow: number;
+  maxRow: number;
+  minCol: number;
+  maxCol: number;
+}
+
+/**
+ * Normalize a cell range to ensure min/max values are correct
+ * Handles ranges where start > end
+ */
+export const normalizeRange = (range: CellRange): NormalizedRange => ({
+  minRow: Math.min(range.startRow, range.endRow),
+  maxRow: Math.max(range.startRow, range.endRow),
+  minCol: Math.min(range.startCol, range.endCol),
+  maxCol: Math.max(range.startCol, range.endCol),
+});
+
+/**
+ * Check if a cell position is within a normalized range
+ */
+export const isCellInRange = (
+  row: number,
+  col: number,
+  range: NormalizedRange,
+): boolean =>
+  row >= range.minRow &&
+  row <= range.maxRow &&
+  col >= range.minCol &&
+  col <= range.maxCol;
+
+// =============================================================================
+// Cell State Checks
+// =============================================================================
+
 /**
  * Check if a cell is within the selection range
  */
-export function isCellSelected(
+export const isCellSelected = (
   row: number,
   col: number,
   selectionRange: CellRange | null,
-): boolean {
+): boolean => {
   if (!selectionRange) return false;
-
-  const minRow = Math.min(selectionRange.startRow, selectionRange.endRow);
-  const maxRow = Math.max(selectionRange.startRow, selectionRange.endRow);
-  const minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
-  const maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
-
-  return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
-}
+  const range = normalizeRange(selectionRange);
+  return isCellInRange(row, col, range);
+};
 
 /**
  * Check if a cell is the active cell
  */
-export function isCellActive(
+export const isCellActive = (
   row: number,
   col: number,
   activeCell: CellPosition | null,
-): boolean {
-  return activeCell?.row === row && activeCell?.col === col;
-}
+): boolean => activeCell?.row === row && activeCell?.col === col;
 
 /**
  * Check if a row is within the visible range (not in overscan)
  */
-export function isRowVisible(
+export const isRowVisible = (
   row: number,
   visibleRowRange: { start: number; end: number } | null,
-): boolean {
+): boolean => {
   // No range or invalid range means show everything (permissive default)
   if (!visibleRowRange) return true;
   // If end is negative or less than start, the range is invalid - show everything
   if (visibleRowRange.end < 0 || visibleRowRange.start > visibleRowRange.end) return true;
   return row >= visibleRowRange.start && row <= visibleRowRange.end;
-}
+};
 
 /**
  * Check if a cell is being edited
  */
-export function isCellEditing(
+export const isCellEditing = (
   row: number,
   col: number,
   editingCell: { row: number; col: number } | null,
-): boolean {
-  return editingCell?.row === row && editingCell?.col === col;
-}
+): boolean => editingCell?.row === row && editingCell?.col === col;
 
 /**
  * Check if a cell is in the fill preview range (vertical-only fill)
  */
-export function isCellInFillPreview(
+export const isCellInFillPreview = (
   row: number,
   col: number,
   isDraggingFill: boolean,
-  fillSourceRange: { startRow: number; startCol: number; endRow: number; endCol: number } | null,
+  fillSourceRange: CellRange | null,
   fillTarget: { row: number; col: number } | null,
-): boolean {
+): boolean => {
   if (!isDraggingFill || !fillSourceRange || !fillTarget) return false;
 
-  const srcMinRow = Math.min(fillSourceRange.startRow, fillSourceRange.endRow);
-  const srcMaxRow = Math.max(fillSourceRange.startRow, fillSourceRange.endRow);
-  const srcMinCol = Math.min(fillSourceRange.startCol, fillSourceRange.endCol);
-  const srcMaxCol = Math.max(fillSourceRange.startCol, fillSourceRange.endCol);
+  const { minRow, maxRow, minCol, maxCol } = normalizeRange(fillSourceRange);
 
   // Determine fill direction (vertical only)
-  const fillDown = fillTarget.row > srcMaxRow;
-  const fillUp = fillTarget.row < srcMinRow;
+  const fillDown = fillTarget.row > maxRow;
+  const fillUp = fillTarget.row < minRow;
 
   // Check if cell is in the fill preview area (not the source area)
   if (fillDown) {
-    return (
-      row > srcMaxRow &&
-      row <= fillTarget.row &&
-      col >= srcMinCol &&
-      col <= srcMaxCol
-    );
+    return row > maxRow && row <= fillTarget.row && col >= minCol && col <= maxCol;
   }
   if (fillUp) {
-    return (
-      row < srcMinRow &&
-      row >= fillTarget.row &&
-      col >= srcMinCol &&
-      col <= srcMaxCol
-    );
+    return row < minRow && row >= fillTarget.row && col >= minCol && col <= maxCol;
   }
 
   return false;
-}
+};
 
 /**
  * Build cell CSS classes based on state
  */
-export function buildCellClasses(
+export const buildCellClasses = (
   isActive: boolean,
   isSelected: boolean,
   isEditing: boolean,
   inFillPreview: boolean,
-): string {
+): string => {
   const classes = ["gp-grid-cell"];
 
   if (isActive) {
@@ -123,7 +143,7 @@ export function buildCellClasses(
   }
 
   return classes.join(" ");
-}
+};
 
 // =============================================================================
 // Highlighting Helpers
@@ -132,25 +152,23 @@ export function buildCellClasses(
 /**
  * Check if a row overlaps the selection range
  */
-export function isRowInSelectionRange(
+export const isRowInSelectionRange = (
   rowIndex: number,
   range: CellRange | null,
-): boolean {
+): boolean => {
   if (!range) return false;
-  const minRow = Math.min(range.startRow, range.endRow);
-  const maxRow = Math.max(range.startRow, range.endRow);
+  const { minRow, maxRow } = normalizeRange(range);
   return rowIndex >= minRow && rowIndex <= maxRow;
-}
+};
 
 /**
  * Check if a column overlaps the selection range
  */
-export function isColumnInSelectionRange(
+export const isColumnInSelectionRange = (
   colIndex: number,
   range: CellRange | null,
-): boolean {
+): boolean => {
   if (!range) return false;
-  const minCol = Math.min(range.startCol, range.endCol);
-  const maxCol = Math.max(range.startCol, range.endCol);
+  const { minCol, maxCol } = normalizeRange(range);
   return colIndex >= minCol && colIndex <= maxCol;
-}
+};

@@ -7,7 +7,7 @@ import type { ColumnDefinition } from "../types";
  * Returns an array where positions[i] is the left position of column i
  * positions[columns.length] is the total width
  */
-export function calculateColumnPositions(columns: ColumnDefinition[]): number[] {
+export const calculateColumnPositions = (columns: ColumnDefinition[]): number[] => {
   const positions = [0];
   let pos = 0;
   for (const col of columns) {
@@ -15,14 +15,13 @@ export function calculateColumnPositions(columns: ColumnDefinition[]): number[] 
     positions.push(pos);
   }
   return positions;
-}
+};
 
 /**
  * Get total width from column positions
  */
-export function getTotalWidth(columnPositions: number[]): number {
-  return columnPositions[columnPositions.length - 1] ?? 0;
-}
+export const getTotalWidth = (columnPositions: number[]): number =>
+  columnPositions[columnPositions.length - 1] ?? 0;
 
 /**
  * Calculate scaled column positions when container is wider than total column widths.
@@ -32,10 +31,10 @@ export function getTotalWidth(columnPositions: number[]): number {
  * @param containerWidth - Available container width
  * @returns Object with positions array and widths array
  */
-export function calculateScaledColumnPositions(
+export const calculateScaledColumnPositions = (
   columns: ColumnDefinition[],
   containerWidth: number,
-): { positions: number[]; widths: number[] } {
+): { positions: number[]; widths: number[] } => {
   const originalPositions = calculateColumnPositions(columns);
   const totalOriginalWidth = getTotalWidth(originalPositions);
 
@@ -62,15 +61,12 @@ export function calculateScaledColumnPositions(
   }
 
   return { positions: scaledPositions, widths: scaledWidths };
-}
+};
 
 /**
  * Find column index at a given X coordinate
  */
-export function findColumnAtX(
-  x: number,
-  columnPositions: number[],
-): number {
+export const findColumnAtX = (x: number, columnPositions: number[]): number => {
   for (let i = 0; i < columnPositions.length - 1; i++) {
     if (x >= columnPositions[i]! && x < columnPositions[i + 1]!) {
       return i;
@@ -81,4 +77,4 @@ export function findColumnAtX(
     return columnPositions.length - 2;
   }
   return 0;
-}
+};

@@ -4,12 +4,11 @@ import type {
   CellPosition,
   CellRange,
   SelectionState,
-  GridInstruction,
-  InstructionListener,
   CellValue,
   ColumnDefinition,
   Row,
 } from "./types";
+import { createInstructionEmitter, normalizeRange } from "./utils";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -33,27 +32,14 @@ export class SelectionManager {
   };
 
   private options: SelectionManagerOptions;
-  private listeners: InstructionListener[] = [];
+  private emitter = createInstructionEmitter();
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  private emit = this.emitter.emit;
 
   constructor(options: SelectionManagerOptions) {
     this.options = options;
-  }
-
-  // ===========================================================================
-  // Instruction Emission
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
   }
 
   // ===========================================================================
@@ -76,11 +62,7 @@ export class SelectionManager {
     const { range } = this.state;
     if (!range) return false;
 
-    const minRow = Math.min(range.startRow, range.endRow);
-    const maxRow = Math.max(range.startRow, range.endRow);
-    const minCol = Math.min(range.startCol, range.endCol);
-    const maxCol = Math.max(range.startCol, range.endCol);
-
+    const { minRow, maxRow, minCol, maxCol } = normalizeRange(range);
     return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
   }
 
@@ -103,7 +85,6 @@ export class SelectionManager {
     cell: CellPosition,
     opts: { shift?: boolean; ctrl?: boolean } = {}
   ): void {
-    // console.log("[GP-Grid Selection] startSelection:", { cell, opts, listenerCount: this.listeners.length });
     const { shift = false, ctrl = false } = opts;
     const { row, col } = this.clampPosition(cell);
 
@@ -125,9 +106,7 @@ export class SelectionManager {
 
     this.state.selectionMode = ctrl;
 
-    // console.log("[GP-Grid Selection] Emitting SET_ACTIVE_CELL:", this.state.activeCell);
     this.emit({ type: "SET_ACTIVE_CELL", position: this.state.activeCell });
-    // console.log("[GP-Grid Selection] Emitting SET_SELECTION_RANGE:", this.state.range);
     this.emit({ type: "SET_SELECTION_RANGE", range: this.state.range });
   }
 
@@ -267,11 +246,7 @@ export class SelectionManager {
       endCol: activeCell!.col,
     };
 
-    const minRow = Math.min(effectiveRange.startRow, effectiveRange.endRow);
-    const maxRow = Math.max(effectiveRange.startRow, effectiveRange.endRow);
-    const minCol = Math.min(effectiveRange.startCol, effectiveRange.endCol);
-    const maxCol = Math.max(effectiveRange.startCol, effectiveRange.endCol);
-
+    const { minRow, maxRow, minCol, maxCol } = normalizeRange(effectiveRange);
     const data: CellValue[][] = [];
 
     for (let r = minRow; r <= maxRow; r++) {
@@ -327,7 +302,7 @@ export class SelectionManager {
    * Clean up resources for garbage collection.
    */
   destroy(): void {
-    this.listeners = [];
+    this.emitter.clearListeners();
     this.state = {
       activeCell: null,
       range: null,
