@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.1...gp-grid-v0.7.2) (2026-01-17)
+
+
+### 🐛 Bug Fixes
+
+* skip computing width for the hidden columns ([0d82351](https://github.com/GioPat/gp-grid/commit/0d823511b1987b6754a36d31218b7aab9865fc5b))
+
 ## [0.7.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.0...gp-grid-v0.7.1) (2026-01-17)
 
 
