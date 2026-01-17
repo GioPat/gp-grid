@@ -369,7 +369,7 @@ function MainDemo() {
             },
           }}
           columns={columns}
-          dataSource={dataSource}
+          rowData={rowData}
           rowHeight={36}
           darkMode={true}
           headerHeight={40}

@@ -88,17 +88,63 @@ export function Grid<TData extends Row = Row>(
   const totalHeaderHeight = headerHeight;
 
   // Create data source from rowData if not provided
-  // Track whether we own the dataSource (created internally vs provided as prop)
-  const { dataSource, ownsDataSource } = useMemo(() => {
+  // Use a ref to cache the created data source and avoid recreating on StrictMode remounts
+  const dataSourceCacheRef = useRef<{
+    dataSource: DataSource<TData>;
+    ownsDataSource: boolean;
+    // Track the inputs that created this data source
+    providedDataSource: DataSource<TData> | undefined;
+    rowData: TData[] | undefined;
+  } | null>(null);
+
+  // Determine if we need to create a new data source
+  const cache = dataSourceCacheRef.current;
+  const needsNewDataSource = !cache ||
+    cache.providedDataSource !== providedDataSource ||
+    cache.rowData !== rowData;
+
+  if (needsNewDataSource) {
+    // Cleanup previous owned data source
+    if (cache?.ownsDataSource) {
+      cache.dataSource.destroy?.();
+    }
+
+    // Create new data source
     if (providedDataSource) {
-      return { dataSource: providedDataSource, ownsDataSource: false };
+      dataSourceCacheRef.current = {
+        dataSource: providedDataSource,
+        ownsDataSource: false,
+        providedDataSource,
+        rowData,
+      };
+    } else if (rowData) {
+      dataSourceCacheRef.current = {
+        dataSource: createDataSourceFromArray(rowData),
+        ownsDataSource: true,
+        providedDataSource,
+        rowData,
+      };
+    } else {
+      dataSourceCacheRef.current = {
+        dataSource: createClientDataSource<TData>([]),
+        ownsDataSource: true,
+        providedDataSource,
+        rowData,
+      };
     }
-    if (rowData) {
-      return { dataSource: createDataSourceFromArray(rowData), ownsDataSource: true };
-    }
-    // Empty data source
-    return { dataSource: createClientDataSource<TData>([]), ownsDataSource: true };
-  }, [providedDataSource, rowData]);
+  }
+
+  const { dataSource, ownsDataSource } = dataSourceCacheRef.current!;
+
+  // Cleanup owned data source on unmount
+  useEffect(() => {
+    return () => {
+      if (dataSourceCacheRef.current?.ownsDataSource) {
+        dataSourceCacheRef.current.dataSource.destroy?.();
+        dataSourceCacheRef.current = null;
+      }
+    };
+  }, []);
 
   // Handle data source changes: reset state early (before GridCore recreates)
   // Cleanup responsibilities:
@@ -188,11 +234,8 @@ export function Grid<TData extends Row = Row>(
       unsubscribe();
       // Destroy core to release cached row data
       core.destroy();
-      // Only destroy dataSource if we created it internally
-      // Don't destroy user-provided dataSources (they may be reused)
-      if (ownsDataSource) {
-        dataSource.destroy?.();
-      }
+      // Note: dataSource cleanup is handled separately via ownedDataSourceRef
+      // to avoid issues with React StrictMode double-mounting
       coreRef.current = null;
       if (gridRef) {
         gridRef.current = null;
@@ -201,7 +244,6 @@ export function Grid<TData extends Row = Row>(
   }, [
     columns,
     dataSource,
-    ownsDataSource,
     rowHeight,
     totalHeaderHeight,
     overscan,
@@ -263,6 +305,20 @@ export function Grid<TData extends Row = Row>(
 
     return () => resizeObserver.disconnect();
   }, [handleScroll]);
+
+  // Attach wheel event listener with { passive: false } to allow preventDefault
+  // React's onWheel uses passive listeners by default, which prevents dampening
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const wheelHandler = (e: WheelEvent) => {
+      handleWheel(e as unknown as React.WheelEvent, wheelDampening);
+    };
+
+    container.addEventListener("wheel", wheelHandler, { passive: false });
+    return () => container.removeEventListener("wheel", wheelHandler);
+  }, [handleWheel, wheelDampening]);
 
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(
@@ -379,7 +435,6 @@ export function Grid<TData extends Row = Row>(
         position: "relative",
       }}
       onScroll={handleScroll}
-      onWheel={(e) => handleWheel(e, wheelDampening)}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
