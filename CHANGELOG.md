@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.2...gp-grid-v0.7.3) (2026-01-17)
+
+
+### 🐛 Bug Fixes
+
+* make sure the grid is reactive to change of highlighting options ([28f7d00](https://github.com/GioPat/gp-grid/commit/28f7d002ddb9126c2456809b3481eb93afff31c3))
+
 ## [0.7.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.1...gp-grid-v0.7.2) (2026-01-17)
 
 
