@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.6.0...gp-grid-v0.7.0) (2026-01-17)
+
+
+### ✨ Features
+
+* **core,react,vue:** add hidden property to column to avoid display ([ef61e75](https://github.com/GioPat/gp-grid/commit/ef61e75b20053fce6ec4c1f0c44e6f225a9203ca))
+* **core,react,vue:** add highlighting properties to enable user custom highlighting classes ([6cb6736](https://github.com/GioPat/gp-grid/commit/6cb6736b11345c9d6718c4cb11bafd942364e4f5))
+* **core:** add APIs to the GridCore to add/delete/update rows ([1cc5550](https://github.com/GioPat/gp-grid/commit/1cc55505b098f331caa57c58000e2fe3850cf598))
+
+
+### ♻️ Refactoring
+
+* rationalize common operations to increase code quality and fix tests ([58a052e](https://github.com/GioPat/gp-grid/commit/58a052e1d5f7edf446ab8eaabdf7fe3990097be3))
+
 ## [0.6.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.5.3...gp-grid-v0.6.0) (2026-01-11)
 
 
