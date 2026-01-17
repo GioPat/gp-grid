@@ -1,6 +1,6 @@
 // packages/react/src/gridState/reducer.ts
 
-import type { GridInstruction } from "gp-grid-core";
+import type { GridInstruction, Row } from "gp-grid-core";
 import type { SlotData, HeaderData, GridState, GridAction } from "./types";
 
 // =============================================================================
@@ -12,7 +12,7 @@ export interface InitialStateArgs {
   initialHeight?: number;
 }
 
-export function createInitialState(args?: InitialStateArgs): GridState {
+export function createInitialState<TData = Row>(args?: InitialStateArgs): GridState<TData> {
   return {
     slots: new Map(),
     activeCell: null,
@@ -27,6 +27,7 @@ export function createInitialState(args?: InitialStateArgs): GridState {
     error: null,
     totalRows: 0,
     visibleRowRange: null,
+    hoverPosition: null,
   };
 }
 
@@ -38,17 +39,17 @@ export function createInitialState(args?: InitialStateArgs): GridState {
  * Apply a single instruction to mutable slot maps and return other state changes.
  * This allows batching multiple slot operations efficiently.
  */
-export function applyInstruction(
+export function applyInstruction<TData = Row>(
   instruction: GridInstruction,
-  slots: Map<string, SlotData>,
+  slots: Map<string, SlotData<TData>>,
   headers: Map<number, HeaderData>,
-): Partial<GridState> | null {
+): Partial<GridState<TData>> | null {
   switch (instruction.type) {
     case "CREATE_SLOT":
       slots.set(instruction.slotId, {
         slotId: instruction.slotId,
         rowIndex: -1,
-        rowData: {},
+        rowData: {} as TData,
         translateY: 0,
       });
       return null; // Slots map is mutated
@@ -63,7 +64,7 @@ export function applyInstruction(
         slots.set(instruction.slotId, {
           ...existing,
           rowIndex: instruction.rowIndex,
-          rowData: instruction.rowData,
+          rowData: instruction.rowData as TData,
         });
       }
       return null;
@@ -88,6 +89,9 @@ export function applyInstruction(
 
     case "UPDATE_VISIBLE_RANGE":
       return { visibleRowRange: { start: instruction.start, end: instruction.end } };
+
+    case "SET_HOVER_POSITION":
+      return { hoverPosition: instruction.position };
 
     case "START_EDIT":
       return {
@@ -162,9 +166,9 @@ export function applyInstruction(
 // Reducer
 // =============================================================================
 
-export function gridReducer(state: GridState, action: GridAction): GridState {
+export function gridReducer<TData = Row>(state: GridState<TData>, action: GridAction): GridState<TData> {
   if (action.type === "RESET") {
-    return createInitialState();
+    return createInitialState<TData>();
   }
 
   // Process batch of instructions in one state update
@@ -176,11 +180,11 @@ export function gridReducer(state: GridState, action: GridAction): GridState {
   // Create mutable copies of Maps to batch updates
   const newSlots = new Map(state.slots);
   const newHeaders = new Map(state.headers);
-  let stateChanges: Partial<GridState> = {};
+  let stateChanges: Partial<GridState<TData>> = {};
 
   // Apply all instructions
   for (const instruction of instructions) {
-    const changes = applyInstruction(instruction, newSlots, newHeaders);
+    const changes = applyInstruction<TData>(instruction, newSlots, newHeaders);
     if (changes) {
       stateChanges = { ...stateChanges, ...changes };
     }

@@ -77,3 +77,11 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.background-row {
+  background-color: #ff000038;
+}
+
+.column-styling {
+  background-color: #00ff0038;
+}

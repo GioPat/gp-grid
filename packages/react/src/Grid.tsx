@@ -23,6 +23,7 @@ import {
 import type { Row, ColumnFilterModel, DataSource } from "gp-grid-core";
 import { FilterPopup } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
+import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
 import { renderCell } from "./renderers/cellRenderer";
 import { renderEditCell } from "./renderers/editRenderer";
@@ -71,6 +72,7 @@ export function Grid<TData extends Row = Row>(
     initialWidth,
     initialHeight,
     gridRef,
+    highlighting,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +82,7 @@ export function Grid<TData extends Row = Row>(
     gridReducer,
     { initialWidth, initialHeight },
     createInitialState,
-  );
+  ) as [GridState<TData>, React.Dispatch<GridAction>];
 
   // Computed heights
   const totalHeaderHeight = headerHeight;
@@ -114,10 +116,23 @@ export function Grid<TData extends Row = Row>(
     prevDataSourceRef.current = dataSource;
   }, [dataSource]);
 
-  // Compute column positions (scaled to fill container when wider)
+  // Create visible columns with original index tracking (for hidden column support)
+  const visibleColumnsWithIndices = useMemo(
+    () =>
+      columns
+        .map((col, index) => ({ column: col, originalIndex: index }))
+        .filter(({ column }) => !column.hidden),
+    [columns],
+  );
+
+  // Compute column positions (scaled to fill container when wider) - only for visible columns
   const { positions: columnPositions, widths: columnWidths } = useMemo(
-    () => calculateScaledColumnPositions(columns, state.viewportWidth),
-    [columns, state.viewportWidth],
+    () =>
+      calculateScaledColumnPositions(
+        visibleColumnsWithIndices.map((v) => v.column),
+        state.viewportWidth,
+      ),
+    [visibleColumnsWithIndices, state.viewportWidth],
   );
   const totalWidth = getTotalWidth(columnPositions);
 
@@ -138,6 +153,7 @@ export function Grid<TData extends Row = Row>(
     rowHeight,
     headerHeight: totalHeaderHeight,
     columnPositions,
+    visibleColumnsWithIndices,
     slots: state.slots,
   });
 
@@ -150,6 +166,7 @@ export function Grid<TData extends Row = Row>(
       headerHeight: totalHeaderHeight,
       overscan,
       sortingEnabled,
+      highlighting,
     });
 
     coreRef.current = core;
@@ -190,6 +207,7 @@ export function Grid<TData extends Row = Row>(
     overscan,
     sortingEnabled,
     gridRef,
+    highlighting,
   ]);
 
   // Subscribe to data source changes (for MutableDataSource)
@@ -265,6 +283,19 @@ export function Grid<TData extends Row = Row>(
     }
   }, []);
 
+  // Handle cell mouse enter (for highlighting)
+  const handleCellMouseEnter = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      coreRef.current?.input.handleCellMouseEnter(rowIndex, colIndex);
+    },
+    [],
+  );
+
+  // Handle cell mouse leave (for highlighting)
+  const handleCellMouseLeave = useCallback(() => {
+    coreRef.current?.input.handleCellMouseLeave();
+  }, []);
+
   // Convert slots map to array for rendering
   const slotsArray = useMemo(
     () => Array.from(state.slots.values()),
@@ -293,13 +324,20 @@ export function Grid<TData extends Row = Row>(
       return null;
     }
 
-    // Check if ALL columns in the selection are editable
+    // Check if ALL columns in the selection are editable (skip hidden columns)
     for (let c = minCol; c <= maxCol; c++) {
       const column = columns[c];
-      if (!column || column.editable !== true) {
+      if (!column || column.hidden) continue; // Skip hidden columns
+      if (column.editable !== true) {
         return null;
       }
     }
+
+    // Find the visible index for the target column
+    const visibleIndex = visibleColumnsWithIndices.findIndex(
+      (v) => v.originalIndex === col,
+    );
+    if (visibleIndex === -1) return null; // Column is hidden
 
     // Find the slot for this row and use its actual translateY
     let cellTop: number | null = null;
@@ -312,8 +350,8 @@ export function Grid<TData extends Row = Row>(
 
     if (cellTop === null) return null;
 
-    const cellLeft = columnPositions[col] ?? 0;
-    const cellWidth = columnWidths[col] ?? 0;
+    const cellLeft = columnPositions[visibleIndex] ?? 0;
+    const cellWidth = columnWidths[visibleIndex] ?? 0;
 
     return {
       top: cellTop + rowHeight - 5,
@@ -327,6 +365,7 @@ export function Grid<TData extends Row = Row>(
     columnPositions,
     columnWidths,
     columns,
+    visibleColumnsWithIndices,
   ]);
 
   return (
@@ -365,26 +404,26 @@ export function Grid<TData extends Row = Row>(
             minWidth: "100%",
           }}
         >
-          {columns.map((column, colIndex) => {
-            const headerInfo = state.headers.get(colIndex);
+          {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
+            const headerInfo = state.headers.get(originalIndex);
             return (
               <div
                 key={column.colId ?? column.field}
                 className="gp-grid-header-cell"
-                data-col-index={colIndex}
+                data-col-index={originalIndex}
                 style={{
                   position: "absolute",
-                  left: `${columnPositions[colIndex]}px`,
+                  left: `${columnPositions[visibleIndex]}px`,
                   top: 0,
-                  width: `${columnWidths[colIndex]}px`,
+                  width: `${columnWidths[visibleIndex]}px`,
                   height: `${headerHeight}px`,
                   background: "transparent",
                 }}
-                onClick={(e) => handleHeaderClick(colIndex, e)}
+                onClick={(e) => handleHeaderClick(originalIndex, e)}
               >
                 {renderHeader({
                   column,
-                  colIndex,
+                  colIndex: originalIndex,
                   sortDirection: headerInfo?.sortDirection,
                   sortIndex: headerInfo?.sortIndex,
                   sortable: headerInfo?.sortable ?? true,
@@ -404,12 +443,17 @@ export function Grid<TData extends Row = Row>(
         {slotsArray.map((slot) => {
           if (slot.rowIndex < 0) return null;
 
-          const isEvenRow = slot.rowIndex % 2 === 0;
+          // Compute row highlight classes (pass rowData for content-based rules)
+          const highlightRowClasses =
+            coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
+          const rowClassName = ["gp-grid-row", ...highlightRowClasses]
+            .filter(Boolean)
+            .join(" ");
 
           return (
             <div
               key={slot.slotId}
-              className={`gp-grid-row ${isEvenRow ? "gp-grid-row--even" : ""}`}
+              className={rowClassName}
               style={{
                 position: "absolute",
                 top: 0,
@@ -419,61 +463,79 @@ export function Grid<TData extends Row = Row>(
                 height: `${rowHeight}px`,
               }}
             >
-              {columns.map((column, colIndex) => {
+              {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
                 const isEditing = isCellEditing(
                   slot.rowIndex,
-                  colIndex,
+                  originalIndex,
                   state.editingCell,
                 );
                 const active = isCellActive(
                   slot.rowIndex,
-                  colIndex,
+                  originalIndex,
                   state.activeCell,
                 );
                 const selected = isCellSelected(
                   slot.rowIndex,
-                  colIndex,
+                  originalIndex,
                   state.selectionRange,
                 );
                 const inFillPreview = isCellInFillPreview(
                   slot.rowIndex,
-                  colIndex,
+                  originalIndex,
                   dragState.dragType === "fill",
                   dragState.fillSourceRange,
                   dragState.fillTarget,
                 );
 
-                const cellClasses = buildCellClasses(
+                // Build base cell classes
+                const baseCellClasses = buildCellClasses(
                   active,
                   selected,
                   isEditing,
                   inFillPreview,
                 );
 
+                // Compute highlight cell classes
+                const highlightCellClasses =
+                  coreRef.current?.highlight?.computeCombinedCellClasses(
+                    slot.rowIndex,
+                    originalIndex,
+                    column,
+                    slot.rowData,
+                  ) ?? [];
+
+                const cellClasses = [baseCellClasses, ...highlightCellClasses]
+                  .filter(Boolean)
+                  .join(" ");
+
                 return (
                   <div
-                    key={`${slot.slotId}-${colIndex}`}
+                    key={`${slot.slotId}-${originalIndex}`}
                     className={cellClasses}
                     style={{
                       position: "absolute",
-                      left: `${columnPositions[colIndex]}px`,
+                      left: `${columnPositions[visibleIndex]}px`,
                       top: 0,
-                      width: `${columnWidths[colIndex]}px`,
+                      width: `${columnWidths[visibleIndex]}px`,
                       height: `${rowHeight}px`,
                     }}
                     onMouseDown={(e) =>
-                      handleCellMouseDown(slot.rowIndex, colIndex, e)
+                      handleCellMouseDown(slot.rowIndex, originalIndex, e)
                     }
                     onDoubleClick={() =>
-                      handleCellDoubleClick(slot.rowIndex, colIndex)
+                      handleCellDoubleClick(slot.rowIndex, originalIndex)
                     }
+                    onMouseEnter={() =>
+                      handleCellMouseEnter(slot.rowIndex, originalIndex)
+                    }
+                    onMouseLeave={handleCellMouseLeave}
                   >
                     {isEditing && state.editingCell
                       ? renderEditCell({
                           column,
                           rowData: slot.rowData,
                           rowIndex: slot.rowIndex,
-                          colIndex,
+                          colIndex: originalIndex,
                           initialValue: state.editingCell.initialValue,
                           coreRef,
                           editRenderers,
@@ -483,7 +545,7 @@ export function Grid<TData extends Row = Row>(
                           column,
                           rowData: slot.rowData,
                           rowIndex: slot.rowIndex,
-                          colIndex,
+                          colIndex: originalIndex,
                           isActive: active,
                           isSelected: selected,
                           isEditing,

@@ -21,9 +21,10 @@ import type {
   DataSource,
   GridState,
   SlotData,
+  HighlightingOptions,
 } from "gp-grid-core";
 import { useGridState } from "../gridState";
-import { useInputHandler } from "./useInputHandler";
+import { useInputHandler, type VisibleColumnInfo } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";
 import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "../types";
 
@@ -41,6 +42,7 @@ export interface UseGpGridOptions<TData extends Row = Row> {
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
+  highlighting?: HighlightingOptions<TData>;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   headerRenderers?: Record<string, VueHeaderRenderer>;
@@ -75,6 +77,8 @@ export interface UseGpGridResult<TData extends Row = Row> {
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   handleFilterApply: (colId: string, filter: ColumnFilterModel | null) => void;
   handleFilterPopupClose: () => void;
+  handleCellMouseEnter: (rowIndex: number, colIndex: number) => void;
+  handleCellMouseLeave: () => void;
 
   // Drag state
   dragState: Ref<{
@@ -115,8 +119,19 @@ export function useGpGrid<TData extends Row = Row>(
 
   // Computed values
   const totalHeaderHeight = computed(() => options.headerHeight ?? options.rowHeight);
+
+  // Create visible columns with original index tracking (for hidden column support)
+  const visibleColumnsWithIndices = computed<VisibleColumnInfo[]>(() =>
+    options.columns
+      .map((col, index) => ({ column: col, originalIndex: index }))
+      .filter(({ column }) => !column.hidden),
+  );
+
   const scaledColumns = computed(() =>
-    calculateScaledColumnPositions(options.columns, state.viewportWidth),
+    calculateScaledColumnPositions(
+      visibleColumnsWithIndices.value.map((v) => v.column),
+      state.viewportWidth,
+    ),
   );
   const columnPositions = computed(() => scaledColumns.value.positions);
   const columnWidths = computed(() => scaledColumns.value.widths);
@@ -144,6 +159,7 @@ export function useGpGrid<TData extends Row = Row>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       columnPositions,
+      visibleColumnsWithIndices,
       slots: computed(() => state.slots),
     },
   );
@@ -178,6 +194,16 @@ export function useGpGrid<TData extends Row = Row>(
     }
   };
 
+  // Handle cell mouse enter (for hover highlighting)
+  const handleCellMouseEnter = (rowIndex: number, colIndex: number): void => {
+    coreRef.value?.input.handleCellMouseEnter(rowIndex, colIndex);
+  };
+
+  // Handle cell mouse leave (for hover highlighting)
+  const handleCellMouseLeave = (): void => {
+    coreRef.value?.input.handleCellMouseLeave();
+  };
+
   // Initialize GridCore
   onMounted(() => {
     const dataSource = options.dataSource ??
@@ -192,6 +218,7 @@ export function useGpGrid<TData extends Row = Row>(
       headerHeight: totalHeaderHeight.value,
       overscan: options.overscan ?? 3,
       sortingEnabled: options.sortingEnabled ?? true,
+      highlighting: options.highlighting,
     });
 
     coreRef.value = core;
@@ -258,6 +285,7 @@ export function useGpGrid<TData extends Row = Row>(
     selectionRange: computed(() => state.selectionRange),
     slots: computed(() => state.slots),
     columns: computed(() => options.columns),
+    visibleColumnsWithIndices,
     columnPositions,
     columnWidths,
     rowHeight: options.rowHeight,
@@ -289,6 +317,8 @@ export function useGpGrid<TData extends Row = Row>(
     handleWheel,
     handleFilterApply,
     handleFilterPopupClose,
+    handleCellMouseEnter,
+    handleCellMouseLeave,
 
     // Drag state
     dragState,

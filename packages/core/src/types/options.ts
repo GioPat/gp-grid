@@ -4,6 +4,7 @@
 import type { Row, RowId } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { DataSource } from "./data-source";
+import type { HighlightingOptions } from "./highlighting";
 
 /** Grid core options */
 export interface GridCoreOptions<TData = Row> {
@@ -23,4 +24,6 @@ export interface GridCoreOptions<TData = Row> {
   transactionDebounceMs?: number;
   /** Function to extract unique ID from row. Required for mutations. */
   getRowId?: (row: TData) => RowId;
+  /** Row/column/cell highlighting configuration */
+  highlighting?: HighlightingOptions<TData>;
 }

@@ -8,6 +8,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   GridCore,
+  HighlightingOptions,
 } from "gp-grid-core";
 
 // =============================================================================
@@ -81,4 +82,7 @@ export interface GridProps<TData extends Row = Row> {
 
   /** Optional ref to access GridCore API */
   gridRef?: React.MutableRefObject<GridRef<TData> | null>;
+
+  /** Row/column/cell highlighting configuration */
+  highlighting?: HighlightingOptions<TData>;
 }

@@ -1,7 +1,13 @@
 // packages/core/src/types/instructions.ts
 // Grid instruction types (declarative commands)
 
-import type { Row, CellValue, CellPosition, CellRange, SortDirection } from "./basic";
+import type {
+  Row,
+  CellValue,
+  CellPosition,
+  CellRange,
+  SortDirection,
+} from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
 
@@ -43,6 +49,12 @@ export interface MoveSlotInstruction {
 /** Set active cell instruction */
 export interface SetActiveCellInstruction {
   type: "SET_ACTIVE_CELL";
+  position: CellPosition | null;
+}
+
+/** Set hover position instruction (for highlighting) */
+export interface SetHoverPositionInstruction {
+  type: "SET_HOVER_POSITION";
   position: CellPosition | null;
 }
 
@@ -186,6 +198,7 @@ export interface DataErrorInstruction {
 /** Rows added instruction */
 export interface RowsAddedInstruction {
   type: "ROWS_ADDED";
+  indices: number[];
   count: number;
   totalRows: number;
 }
@@ -193,14 +206,14 @@ export interface RowsAddedInstruction {
 /** Rows removed instruction */
 export interface RowsRemovedInstruction {
   type: "ROWS_REMOVED";
-  count: number;
+  indices: number[];
   totalRows: number;
 }
 
 /** Rows updated instruction */
 export interface RowsUpdatedInstruction {
   type: "ROWS_UPDATED";
-  count: number;
+  indices: number[];
 }
 
 /** Transaction processed instruction */
@@ -226,6 +239,8 @@ export type GridInstruction =
   | SetActiveCellInstruction
   | SetSelectionRangeInstruction
   | UpdateVisibleRangeInstruction
+  /** Highlighting */
+  | SetHoverPositionInstruction
   /** Editing */
   | StartEditInstruction
   | StopEditInstruction
@@ -259,4 +274,6 @@ export type GridInstruction =
 export type InstructionListener = (instruction: GridInstruction) => void;
 
 /** Batch instruction listener: Batch instruction Listener that receives an array of instructions, used by frameworks to update their state */
-export type BatchInstructionListener = (instructions: GridInstruction[]) => void;
+export type BatchInstructionListener = (
+  instructions: GridInstruction[],
+) => void;

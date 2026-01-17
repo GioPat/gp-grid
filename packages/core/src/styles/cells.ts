@@ -12,18 +12,18 @@ export const cellStyles: string = `
   left: 0;
 }
 
+/* Row background - :where() for zero specificity, so user highlight classes always win */
+:where(.gp-grid-row) {
+  background-color: var(--gp-grid-bg);
+}
+
+/* Structural properties - required for grid layout */
 .gp-grid-cell {
   position: absolute;
   top: 0;
   box-sizing: border-box;
-  padding: 0 12px;
   display: flex;
   align-items: center;
-  cursor: cell;
-  color: var(--gp-grid-text);
-  border-right: 1px solid var(--gp-grid-border-light);
-  border-bottom: 1px solid var(--gp-grid-border-light);
-  background-color: var(--gp-grid-bg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -31,35 +31,40 @@ export const cellStyles: string = `
   -webkit-user-select: none;
 }
 
-/* Alternating row colors */
-.gp-grid-row--even .gp-grid-cell {
-  background-color: var(--gp-grid-bg-alt);
+/* Visual properties - :where() for zero specificity, so user highlight classes always win */
+:where(.gp-grid-cell) {
+  padding: 0 12px;
+  cursor: cell;
+  color: var(--gp-grid-text);
+  border-right: 1px solid var(--gp-grid-border-light);
+  border-bottom: 1px solid var(--gp-grid-border-light);
+  background-color: transparent;
 }
 
-.gp-grid-cell:hover {
-  background-color: var(--gp-grid-hover) !important;
-}
-
-/* Active cell (focused) */
+/* Active cell (focused) - structural properties stay, visual use :where() */
 .gp-grid-cell--active {
-  background-color: var(--gp-grid-primary-light) !important;
-  border: 2px solid var(--gp-grid-primary) !important;
   outline: none;
   z-index: 5;
+}
+:where(.gp-grid-cell--active) {
+  background-color: var(--gp-grid-primary-light);
+  border: 2px solid var(--gp-grid-primary);
   padding: 0 11px;
 }
 
 /* Selected cells (range selection) */
-.gp-grid-cell--selected {
-  background-color: var(--gp-grid-primary-light) !important;
+:where(.gp-grid-cell--selected) {
+  background-color: var(--gp-grid-primary-light);
 }
 
-/* Editing cell */
+/* Editing cell - structural properties stay, visual use :where() */
 .gp-grid-cell--editing {
-  background-color: var(--gp-grid-bg) !important;
-  border: 2px solid var(--gp-grid-primary) !important;
-  padding: 0 !important;
   z-index: 10;
+}
+:where(.gp-grid-cell--editing) {
+  background-color: var(--gp-grid-bg);
+  border: 2px solid var(--gp-grid-primary);
+  padding: 0;
 }
 
 /* =============================================================================
@@ -84,9 +89,9 @@ export const cellStyles: string = `
 }
 
 /* Fill preview (cells being filled) */
-.gp-grid-cell--fill-preview {
-  background-color: var(--gp-grid-primary-light) !important;
-  border: 1px dashed var(--gp-grid-primary) !important;
+.gp-grid-cell.gp-grid-cell--fill-preview {
+  background-color: var(--gp-grid-primary-light);
+  border: 1px dashed var(--gp-grid-primary);
 }
 
 /* =============================================================================

@@ -25,6 +25,11 @@ import { useAutoScroll } from "./useAutoScroll";
 // Types
 // =============================================================================
 
+export interface VisibleColumnInfo {
+  column: ColumnDefinition;
+  originalIndex: number;
+}
+
 export interface UseInputHandlerOptions {
   activeCell: ComputedRef<CellPosition | null>;
   selectionRange: ComputedRef<CellRange | null>;
@@ -33,6 +38,8 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: ComputedRef<number[]>;
+  /** Visible columns with their original indices (for hidden column support) */
+  visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
   slots: ComputedRef<Map<string, SlotData>>;
 }
 
@@ -72,8 +79,8 @@ function findSlotForRow(
 /**
  * Scroll a cell into view if needed
  */
-function scrollCellIntoView(
-  core: GridCore,
+function scrollCellIntoView<TData extends Row = Row>(
+  core: GridCore<TData>,
   container: HTMLDivElement,
   row: number,
   rowHeight: number,
@@ -120,6 +127,7 @@ export function useInputHandler<TData extends Row = Row>(
     rowHeight,
     headerHeight,
     columnPositions,
+    visibleColumnsWithIndices,
     slots,
   } = options;
 
@@ -140,16 +148,21 @@ export function useInputHandler<TData extends Row = Row>(
       () => headerHeight,
       () => rowHeight,
       columnPositions,
-      () => columns.value.length,
+      visibleColumnsWithIndices,
     ],
     () => {
       const core = coreRef.value;
       if (core?.input) {
+        const visible = visibleColumnsWithIndices.value;
         core.input.updateDeps({
           getHeaderHeight: () => headerHeight,
           getRowHeight: () => rowHeight,
           getColumnPositions: () => columnPositions.value,
-          getColumnCount: () => columns.value.length,
+          getColumnCount: () => visible.length,
+          getOriginalColumnIndex: (visibleIndex: number) => {
+            const info = visible[visibleIndex];
+            return info ? info.originalIndex : visibleIndex;
+          },
         });
       }
     },

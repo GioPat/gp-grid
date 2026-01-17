@@ -1,12 +1,7 @@
 // packages/core/src/edit-manager.ts
 
-import type {
-  EditState,
-  CellValue,
-  ColumnDefinition,
-  GridInstruction,
-  InstructionListener,
-} from "./types";
+import type { EditState, CellValue, ColumnDefinition } from "./types";
+import { createInstructionEmitter } from "./utils";
 
 // =============================================================================
 // Types
@@ -33,27 +28,14 @@ export interface EditManagerOptions {
 export class EditManager {
   private editState: EditState | null = null;
   private options: EditManagerOptions;
-  private listeners: InstructionListener[] = [];
+  private emitter = createInstructionEmitter();
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  private emit = this.emitter.emit;
 
   constructor(options: EditManagerOptions) {
     this.options = options;
-  }
-
-  // ===========================================================================
-  // Instruction Emission
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
   }
 
   // ===========================================================================
@@ -171,7 +153,7 @@ export class EditManager {
    * Clean up resources for garbage collection.
    */
   destroy(): void {
-    this.listeners = [];
+    this.emitter.clearListeners();
     this.editState = null;
   }
 }

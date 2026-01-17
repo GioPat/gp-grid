@@ -75,7 +75,15 @@ describe("IndexedDataStore", () => {
     it("should apply filtering", () => {
       const result = store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ob" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ob",
+            }], combination: "or"
+          }
+        },
       });
 
       expect(result.rows.length).toBe(1);
@@ -128,7 +136,16 @@ describe("IndexedDataStore", () => {
       // First apply a filter
       const result1 = store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ob" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ob",
+            }], combination: "or"
+          }
+        },
+
       });
       expect(result1.totalRows).toBe(1); // Only Bob matches
 
@@ -138,7 +155,16 @@ describe("IndexedDataStore", () => {
       // Query again - should have 2 matching rows
       const result2 = store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ob" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ob",
+            }], combination: "or"
+          }
+        },
+
       });
       expect(result2.totalRows).toBe(2);
       expect(result2.rows.map((r) => r.name).sort()).toEqual(["Bob", "Robert"]);
@@ -149,7 +175,15 @@ describe("IndexedDataStore", () => {
       // Query again - should still have only 2 matching rows
       const result3 = store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ob" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ob",
+            }], combination: "or"
+          }
+        },
       });
       expect(result3.totalRows).toBe(2);
       expect(result3.rows.map((r) => r.name).sort()).toEqual(["Bob", "Robert"]);
@@ -253,7 +287,15 @@ describe("IndexedDataStore", () => {
       // Set up filter
       store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ali" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ali",
+            }], combination: "or"
+          }
+        },
       });
 
       // Change Alice's name so it no longer matches
@@ -261,7 +303,15 @@ describe("IndexedDataStore", () => {
 
       const result = store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "ali" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ali",
+            }], combination: "or"
+          }
+        },
       });
 
       expect(result.rows.length).toBe(1);
@@ -322,10 +372,26 @@ describe("IndexedDataStore", () => {
     it("should track filter model", () => {
       store.query({
         pagination: { pageIndex: 0, pageSize: 10 },
-        filter: { name: "bob" },
+        filter: {
+          name: {
+            conditions: [{
+              type: "text",
+              operator: "contains",
+              value: "ali",
+            }], combination: "or"
+          }
+        }
       });
 
-      expect(store.getFilterModel()).toEqual({ name: "bob" });
+      expect(store.getFilterModel()).toEqual({
+        name: {
+          conditions: [{
+            type: "text",
+            operator: "contains",
+            value: "ali",
+          }], combination: "or"
+        }
+      });
     });
   });
 });

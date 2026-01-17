@@ -4,10 +4,9 @@ import type {
   CellRange,
   CellValue,
   FillHandleState,
-  GridInstruction,
-  InstructionListener,
   ColumnDefinition,
 } from "./types";
+import { createInstructionEmitter, normalizeRange } from "./utils";
 
 export interface FillManagerOptions {
   getRowCount: () => number;
@@ -23,27 +22,14 @@ export interface FillManagerOptions {
 export class FillManager {
   private state: FillHandleState | null = null;
   private options: FillManagerOptions;
-  private listeners: InstructionListener[] = [];
+  private emitter = createInstructionEmitter();
+
+  // Public API delegates to emitter
+  onInstruction = this.emitter.onInstruction;
+  private emit = this.emitter.emit;
 
   constructor(options: FillManagerOptions) {
     this.options = options;
-  }
-
-  // ===========================================================================
-  // Instruction Emission
-  // ===========================================================================
-
-  onInstruction(listener: InstructionListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emit(instruction: GridInstruction): void {
-    for (const listener of this.listeners) {
-      listener(instruction);
-    }
   }
 
   // ===========================================================================
@@ -131,7 +117,7 @@ export class FillManager {
    * Clean up resources for garbage collection.
    */
   destroy(): void {
-    this.listeners = [];
+    this.emitter.clearListeners();
     this.state = null;
   }
 
@@ -148,10 +134,8 @@ export class FillManager {
   ): Array<{ row: number; col: number; value: CellValue }> {
     const result: Array<{ row: number; col: number; value: CellValue }> = [];
 
-    const srcMinRow = Math.min(sourceRange.startRow, sourceRange.endRow);
-    const srcMaxRow = Math.max(sourceRange.startRow, sourceRange.endRow);
-    const srcMinCol = Math.min(sourceRange.startCol, sourceRange.endCol);
-    const srcMaxCol = Math.max(sourceRange.startCol, sourceRange.endCol);
+    const { minRow: srcMinRow, maxRow: srcMaxRow, minCol: srcMinCol, maxCol: srcMaxCol } =
+      normalizeRange(sourceRange);
 
     // Determine fill direction (vertical only)
     const fillDown = targetRow > srcMaxRow;

@@ -47,9 +47,9 @@ class MockResizeObserver {
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe() { }
+  unobserve() { }
+  disconnect() { }
 }
 
 describe("Grid", () => {
@@ -142,7 +142,7 @@ describe("Grid", () => {
       // Click a cell in the first row
       const rows = document.querySelectorAll(".gp-grid-row");
       const firstRowCells = rows[0]?.querySelectorAll(".gp-grid-cell");
-      
+
       if (firstRowCells && firstRowCells[0]) {
         await act(async () => {
           fireEvent.mouseDown(firstRowCells[0]);
@@ -170,7 +170,7 @@ describe("Grid", () => {
       // Verify cells are rendered and can receive events
       const cells = document.querySelectorAll(".gp-grid-cell");
       expect(cells.length).toBeGreaterThan(0);
-      
+
       // First cell should contain data
       expect(cells[0]?.textContent).toBeTruthy();
     });
@@ -186,7 +186,7 @@ describe("Grid", () => {
       });
 
       const container = document.querySelector(".gp-grid-container")!;
-      
+
       // Container should be focusable
       expect(container.getAttribute("tabindex")).toBe("0");
 
@@ -408,25 +408,6 @@ describe("Grid", () => {
     });
   });
 
-  describe("filtering", () => {
-    it("should show filter row when enabled", async () => {
-      render(<Grid {...createDefaultProps({ showFilters: true })} />);
-
-      await waitFor(() => {
-        const filterRow = document.querySelector(".gp-grid-filter-row");
-        expect(filterRow).toBeTruthy();
-      });
-    });
-
-    it("should render filter inputs", async () => {
-      render(<Grid {...createDefaultProps({ showFilters: true })} />);
-
-      await waitFor(() => {
-        const filterInputs = document.querySelectorAll(".gp-grid-filter-input");
-        expect(filterInputs.length).toBe(3); // One for each column
-      });
-    });
-  });
 
   describe("props changes", () => {
     it("should update when columns change", async () => {

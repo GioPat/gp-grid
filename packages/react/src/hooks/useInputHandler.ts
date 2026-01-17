@@ -16,6 +16,11 @@ import type { SlotData } from "../gridState/types";
 // Types
 // =============================================================================
 
+export interface VisibleColumnInfo {
+  column: { colId?: string; field: string };
+  originalIndex: number;
+}
+
 export interface UseInputHandlerOptions {
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
@@ -24,6 +29,8 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: number[];
+  /** Visible columns with their original indices (for hidden column support) */
+  visibleColumnsWithIndices: VisibleColumnInfo[];
   slots: Map<string, SlotData>;
 }
 
@@ -110,6 +117,7 @@ export function useInputHandler<TData extends Row>(
     rowHeight,
     headerHeight,
     columnPositions,
+    visibleColumnsWithIndices,
     slots,
   } = options;
 
@@ -132,10 +140,14 @@ export function useInputHandler<TData extends Row>(
         getHeaderHeight: () => headerHeight,
         getRowHeight: () => rowHeight,
         getColumnPositions: () => columnPositions,
-        getColumnCount: () => columns.length,
+        getColumnCount: () => visibleColumnsWithIndices.length,
+        getOriginalColumnIndex: (visibleIndex: number) => {
+          const info = visibleColumnsWithIndices[visibleIndex];
+          return info ? info.originalIndex : visibleIndex;
+        },
       });
     }
-  }, [coreRef, headerHeight, rowHeight, columnPositions, columns.length]);
+  }, [coreRef, headerHeight, rowHeight, columnPositions, visibleColumnsWithIndices]);
 
   // Auto-scroll helpers
   const startAutoScroll = useCallback((dx: number, dy: number) => {

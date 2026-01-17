@@ -149,6 +149,7 @@ const columns: ColumnDefinition[] = [
   {
     field: "id",
     cellDataType: "number",
+    hidden: true,
     width: 80,
     headerName: "ID",
     cellRenderer: "bold",
@@ -189,6 +190,22 @@ const columns: ColumnDefinition[] = [
 // Create row data (once, not reactive)
 const rowData = generateRowData();
 
+const highlightingProps = {
+  computeRowClasses: (context) => {
+    if (context.rowData?.name === "Person Ennio")
+      return ["background-row"];
+    else return [];
+  },
+  computeColumnClasses: (context) => {
+    if (context.column?.field === "salary") return ["column-styling"];
+    else return [];
+  },
+  computeCellClasses: (context) => {
+    if (context.isHovered) return ["column-styling"];
+    else return [];
+  },
+}
+
 // Handler to demonstrate reading all grid data
 const handleGetAllData = () => {
   console.log("=== All Grid Data ===");
@@ -199,7 +216,6 @@ const handleGetAllData = () => {
   rowData.slice(0, 10).forEach((row) => {
     console.log(`  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`);
   });
-
   // Count rows by tag
   const tagCounts: Record<string, number> = {};
   rowData.forEach((row) => {
@@ -228,6 +244,7 @@ const handleGetAllData = () => {
 
   <div class="grid-container">
     <GpGrid
+      :highlighting="highlightingProps"
       :columns="columns"
       :row-data="rowData"
       :row-height="36"
