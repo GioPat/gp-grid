@@ -349,6 +349,16 @@ watch(
   { immediate: true },
 );
 
+// Watch for highlighting prop changes
+watch(
+  () => props.highlighting,
+  (highlighting) => {
+    if (coreRef.value?.highlight && highlighting) {
+      coreRef.value.highlight.updateOptions(highlighting);
+    }
+  },
+);
+
 // Expose core for external access (e.g., via template ref)
 defineExpose({
   core: coreRef,

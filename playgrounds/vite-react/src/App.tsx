@@ -312,8 +312,11 @@ const generateRowData = (): Person[] =>
     tags: getRandomTags(),
   }));
 
+type HighlightMode = "row" | "column" | "cell";
+
 function MainDemo() {
   const [count, setCount] = useState(0);
+  const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
 
   // Keep reference to raw data so we can access it later
   const rowData = useMemo(() => generateRowData(), []);
@@ -351,22 +354,43 @@ function MainDemo() {
       <h2 style={{ marginBottom: "16px", color: "#f3f4f6" }}>
         Large Dataset Demo (1.5M rows)
       </h2>
+      {/* Highlight Mode Switcher */}
+      <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>Highlight Mode:</span>
+        {(["row", "column", "cell"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setHighlightMode(mode)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "4px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: highlightMode === mode ? "600" : "400",
+              backgroundColor: highlightMode === mode ? "#3b82f6" : "#374151",
+              color: highlightMode === mode ? "white" : "#9ca3af",
+            }}
+          >
+            {mode.charAt(0).toUpperCase() + mode.slice(1)} Hover
+          </button>
+        ))}
+      </div>
+
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
           highlighting={{
-            computeRowClasses: (context) => {
-              if (context.rowData?.name === "Person Ennio")
-                return ["background-row"];
-              else return [];
-            },
-            computeColumnClasses: (context) => {
-              if (context.column?.field === "salary") return ["column-styling"];
-              else return [];
-            },
-            computeCellClasses: (context) => {
-              if (context.isHovered) return ["column-styling"];
-              else return [];
-            },
+            computeRowClasses: highlightMode === "row" ? (context) => {
+              if (context.isHovered) return ["row-highlight"];
+              return [];
+            } : undefined,
+            computeColumnClasses: highlightMode === "column" ? (context) => {
+              if (context.isHovered) return ["column-highlight"];
+              return [];
+            } : undefined,
+            computeCellClasses: highlightMode === "cell" ? (context) => {
+              if (context.isHovered) return ["cell-highlight"];
+              return [];
+            } : undefined,
           }}
           columns={columns}
           rowData={rowData}

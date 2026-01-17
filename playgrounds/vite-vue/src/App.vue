@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { h } from "vue";
+import { h, ref, computed } from "vue";
 import {
   GpGrid,
   type ColumnDefinition,
   type CellRendererParams,
   type VueCellRenderer,
+  type HighlightingOptions,
 } from "gp-grid-vue";
+
+type HighlightMode = "row" | "column" | "cell";
+const highlightMode = ref<HighlightMode>("row");
 
 // Types
 interface Person {
@@ -190,21 +194,20 @@ const columns: ColumnDefinition[] = [
 // Create row data (once, not reactive)
 const rowData = generateRowData();
 
-const highlightingProps = {
-  computeRowClasses: (context) => {
-    if (context.rowData?.name === "Person Ennio")
-      return ["background-row"];
-    else return [];
-  },
-  computeColumnClasses: (context) => {
-    if (context.column?.field === "salary") return ["column-styling"];
-    else return [];
-  },
-  computeCellClasses: (context) => {
-    if (context.isHovered) return ["column-styling"];
-    else return [];
-  },
-}
+const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
+  computeRowClasses: highlightMode.value === "row" ? (context) => {
+    if (context.isHovered) return ["row-highlight"];
+    return [];
+  } : undefined,
+  computeColumnClasses: highlightMode.value === "column" ? (context) => {
+    if (context.isHovered) return ["column-highlight"];
+    return [];
+  } : undefined,
+  computeCellClasses: highlightMode.value === "cell" ? (context) => {
+    if (context.isHovered) return ["cell-highlight"];
+    return [];
+  } : undefined,
+}));
 
 // Handler to demonstrate reading all grid data
 const handleGetAllData = () => {
@@ -241,6 +244,19 @@ const handleGetAllData = () => {
   <h1>GP Grid Vue Demo</h1>
 
   <h2 class="subtitle">Large Dataset Demo (1.5M rows) - {{ rowData.length }} rows loaded</h2>
+
+  <!-- Highlight Mode Switcher -->
+  <div class="mode-switcher">
+    <span class="mode-label">Highlight Mode:</span>
+    <button
+      v-for="mode in (['row', 'column', 'cell'] as const)"
+      :key="mode"
+      @click="highlightMode = mode"
+      :class="['mode-btn', { active: highlightMode === mode }]"
+    >
+      {{ mode.charAt(0).toUpperCase() + mode.slice(1) }} Hover
+    </button>
+  </div>
 
   <div class="grid-container">
     <GpGrid
@@ -316,5 +332,49 @@ const handleGetAllData = () => {
 
 .read-the-docs {
   color: #888;
+}
+
+/* Highlight mode switcher */
+.mode-switcher {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mode-label {
+  color: #9ca3af;
+  margin-right: 8px;
+}
+
+.mode-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 400;
+  background-color: #374151;
+  color: #9ca3af;
+}
+
+.mode-btn.active {
+  font-weight: 600;
+  background-color: #3b82f6;
+  color: white;
+}
+</style>
+
+<style>
+/* Highlight classes (global, not scoped) */
+.row-highlight {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.column-highlight {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.cell-highlight {
+  background-color: rgba(245, 158, 11, 0.5) !important;
 }
 </style>

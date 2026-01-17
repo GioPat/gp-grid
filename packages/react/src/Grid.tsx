@@ -225,6 +225,20 @@ export function Grid<TData extends Row = Row>(
 
     coreRef.current = core;
 
+    // Set input handler deps immediately after creation
+    // This ensures scaled column positions are used even when the core is recreated
+    // (e.g., when highlighting options change)
+    core.input.updateDeps({
+      getHeaderHeight: () => totalHeaderHeight,
+      getRowHeight: () => rowHeight,
+      getColumnPositions: () => columnPositions,
+      getColumnCount: () => visibleColumnsWithIndices.length,
+      getOriginalColumnIndex: (visibleIndex: number) => {
+        const info = visibleColumnsWithIndices[visibleIndex];
+        return info ? info.originalIndex : visibleIndex;
+      },
+    });
+
     // Expose core via gridRef prop
     if (gridRef) {
       gridRef.current = { core };

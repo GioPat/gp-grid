@@ -71,6 +71,14 @@ export class HighlightManager<TData = Record<string, unknown>> {
     );
   }
 
+  /**
+   * Update highlighting options. Clears all caches.
+   */
+  updateOptions(options: HighlightingOptions<TData>): void {
+    this.highlightingOptions = options;
+    this.clearAllCaches();
+  }
+
   // ===========================================================================
   // Hover State Management
   // ===========================================================================

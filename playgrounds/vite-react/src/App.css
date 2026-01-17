@@ -25,6 +25,19 @@
 .column-styling {
   background-color: #00ff0038;
 }
+
+/* Highlight mode classes for testing */
+.row-highlight {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.column-highlight {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.cell-highlight {
+  background-color: rgba(245, 158, 11, 0.5) !important;
+}
 @keyframes logo-spin {
   from {
     transform: rotate(0deg);

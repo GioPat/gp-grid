@@ -279,6 +279,16 @@ export function useGpGrid<TData extends Row = Row>(
     { immediate: true },
   );
 
+  // Watch for highlighting option changes
+  watch(
+    () => options.highlighting,
+    (highlighting) => {
+      if (coreRef.value?.highlight && highlighting) {
+        coreRef.value.highlight.updateOptions(highlighting);
+      }
+    },
+  );
+
   // Calculate fill handle position using composable
   const { fillHandlePosition } = useFillHandle({
     activeCell: computed(() => state.activeCell),
