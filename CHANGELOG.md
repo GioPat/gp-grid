@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.3...gp-grid-v0.7.4) (2026-01-28)
+
+
+### 🐛 Bug Fixes
+
+* use organization for package names ([376ff55](https://github.com/GioPat/gp-grid/commit/376ff5518196bae8f9f968c6a121e3235d5f07c2))
+
 ## [0.7.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.2...gp-grid-v0.7.3) (2026-01-17)
 
 
