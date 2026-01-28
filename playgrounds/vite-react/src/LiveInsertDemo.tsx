@@ -3,7 +3,7 @@ import {
   Grid,
   createMutableClientDataSource,
   type ColumnDefinition,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 
 interface StockTick {
   id: number;

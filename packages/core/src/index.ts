@@ -1,4 +1,4 @@
-// gp-grid-core/src/index.ts
+// @gp-grid/core/src/index.ts
 
 // =============================================================================
 // New Architecture Exports
@@ -103,19 +103,19 @@ export type {
   CellPosition,
   /** Cell range: start and end row and column, zero-based indices */
   CellRange,
-  
+
   /** Selection state */
   SelectionState,
 
   EditState,
   FillHandleState,
   SlotState,
-  
+
   /** DataSource */
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
-  
+
   // Instructions
   GridInstruction,
   CreateSlotInstruction,

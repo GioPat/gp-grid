@@ -9,7 +9,7 @@ import type {
   HeaderRendererParams,
   GridCore,
   HighlightingOptions,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // =============================================================================
 // Grid Ref Types

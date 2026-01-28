@@ -41,7 +41,7 @@ export type {
 
   // Instructions (for advanced use cases)
   GridInstruction,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // Re-export data source factories
 export {
@@ -49,10 +49,10 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // Re-export MutableDataSource type
-export type { MutableDataSource } from "gp-grid-core";
+export type { MutableDataSource } from "@gp-grid/core";
 
 // Re-export GridCore class for typing (used with GridRef)
-export { GridCore } from "gp-grid-core";
+export { GridCore } from "@gp-grid/core";

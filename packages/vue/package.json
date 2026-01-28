@@ -1,5 +1,5 @@
 {
-  "name": "gp-grid-vue",
+  "name": "@gp-grid/vue",
   "description": "A high-performance Vue 3 data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
   "version": "0.7.3",
   "license": "Apache-2.0",
@@ -48,7 +48,7 @@
     "build:production": "tsdown --clean --minify --treeshake"
   },
   "dependencies": {
-    "gp-grid-core": "workspace:*"
+    "@gp-grid/core": "workspace:*"
   },
   "peerDependencies": {
     "vue": "^3.4.0"

@@ -1,7 +1,7 @@
 // packages/vue/src/composables/useFillHandle.ts
 
 import { computed, type ComputedRef } from "vue";
-import type { CellPosition, CellRange, ColumnDefinition, SlotData } from "gp-grid-core";
+import type { CellPosition, CellRange, ColumnDefinition, SlotData } from "@gp-grid/core";
 
 export interface VisibleColumnInfo {
   column: ColumnDefinition;

@@ -8,7 +8,7 @@ import {
   type ColumnDefinition,
   type CellRendererParams,
   type EditRendererParams,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
 

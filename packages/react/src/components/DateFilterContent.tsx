@@ -1,7 +1,7 @@
 // packages/react/src/components/DateFilterContent.tsx
 
 import React, { useState, useCallback, useMemo } from "react";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "gp-grid-core";
+import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "@gp-grid/core";
 
 export interface DateFilterContentProps {
   currentFilter?: ColumnFilterModel;

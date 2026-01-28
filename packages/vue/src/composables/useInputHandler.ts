@@ -18,7 +18,7 @@ import type {
   DragState,
   ColumnDefinition,
   SlotData,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
 // =============================================================================

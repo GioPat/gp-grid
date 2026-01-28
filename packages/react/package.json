@@ -1,5 +1,5 @@
 {
-  "name": "gp-grid-react",
+  "name": "@gp-grid/react",
   "description": "A high-performance React data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
   "version": "0.7.3",
   "license": "Apache-2.0",
@@ -45,7 +45,7 @@
     "link-workspace-packages": false
   },
   "dependencies": {
-    "gp-grid-core": "workspace:*"
+    "@gp-grid/core": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.0.0",

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev:gp-grid": "vite --config apps/gp-grid-react/vite.config.ts",
+    "dev:gp-grid": "vite --config apps/@gp-grid/react/vite.config.ts",
     "dev:ag-grid": "vite --config apps/ag-grid/vite.config.ts",
     "dev:tanstack": "vite --config apps/tanstack-table/vite.config.ts",
     "dev:handsontable": "vite --config apps/handsontable/vite.config.ts",
@@ -39,6 +39,6 @@
     "handsontable": "^15.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "gp-grid-react": "workspace:*"
+    "@gp-grid/react": "workspace:*"
   }
 }

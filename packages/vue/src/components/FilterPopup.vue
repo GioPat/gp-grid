@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import type { ColumnDefinition, CellValue, ColumnFilterModel } from "gp-grid-core";
+import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
 import TextFilterContent from "./TextFilterContent.vue";
 import NumberFilterContent from "./NumberFilterContent.vue";

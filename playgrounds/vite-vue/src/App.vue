@@ -6,7 +6,7 @@ import {
   type CellRendererParams,
   type VueCellRenderer,
   type HighlightingOptions,
-} from "gp-grid-vue";
+} from "@gp-grid/vue";
 
 type HighlightMode = "row" | "column" | "cell";
 const highlightMode = ref<HighlightMode>("row");

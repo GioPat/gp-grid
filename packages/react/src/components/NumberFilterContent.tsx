@@ -1,7 +1,7 @@
 // packages/react/src/components/NumberFilterContent.tsx
 
 import React, { useState, useCallback, useMemo } from "react";
-import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "gp-grid-core";
+import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
 
 export interface NumberFilterContentProps {
   currentFilter?: ColumnFilterModel;

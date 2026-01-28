@@ -1,4 +1,4 @@
-// gp-grid-core/src/transaction-manager.ts
+// @gp-grid/core/src/transaction-manager.ts
 
 import type { CellValue, Row, RowId } from "./types";
 import type { IndexedDataStore } from "./indexed-data-store";

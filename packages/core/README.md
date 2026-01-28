@@ -1,4 +1,4 @@
-# gp-grid-core 🏁 🏎️
+# @gp-grid/core 🏁 🏎️
 
 <div align="center">
     <a href="https://www.gp-grid.io">
@@ -31,12 +31,12 @@ A framework-agnostic TypeScript library for building high-performance data grids
 
 ## Available implementations
 
-- [**gp-grid-react**](https://www.npmjs.com/package/gp-grid-react) | Official
-- [**gp-grid-vue**](https://www.npmjs.com/package/gp-grid-vue) | Official
+- [**@gp-grid/react**](https://www.npmjs.com/package/@gp-grid/react) | Official
+- [**@gp-grid/vue**](https://www.npmjs.com/package/@gp-grid/vue) | Official
 
 ## Philosophy
 
-**gp-grid-core** is built on three core principles:
+**@gp-grid/core** is built on three core principles:
 
 ### 1. Slot-Based Virtual Scrolling
 
@@ -66,7 +66,7 @@ Data fetching is abstracted through a `DataSource` interface, supporting both:
 npm/pnpm/yarn
 
 ```bash
-pnpm add gp-grid-core
+pnpm add @gp-grid/core
 ```
 
 ## Architecture Overview
@@ -81,7 +81,7 @@ The main orchestrator class that manages:
 - Sort and filter state
 
 ```typescript
-import { GridCore, createClientDataSource } from "gp-grid-core";
+import { GridCore, createClientDataSource } from "@gp-grid/core";
 
 const dataSource = createClientDataSource(myData);
 
@@ -150,7 +150,7 @@ The core emits these instruction types:
 For datasets that can be loaded entirely in memory. Sorting and filtering are performed client-side.
 
 ```typescript
-import { createClientDataSource } from "gp-grid-core";
+import { createClientDataSource } from "@gp-grid/core";
 
 interface Person {
   id: number;
@@ -191,7 +191,7 @@ import {
   createServerDataSource,
   DataSourceRequest,
   DataSourceResponse,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 interface Person {
   id: number;
@@ -310,7 +310,7 @@ interface HeaderRendererParams {
 
 ## Creating a Framework Adapter
 
-To integrate gp-grid-core with any UI framework:
+To integrate @gp-grid/core with any UI framework:
 
 1. **Subscribe to instructions** using `onBatchInstruction()`
 2. **Maintain UI state** by processing instructions
@@ -320,7 +320,7 @@ To integrate gp-grid-core with any UI framework:
 ### Example: Minimal Adapter Pattern
 
 ```typescript
-import { GridCore, GridInstruction } from "gp-grid-core";
+import { GridCore, GridInstruction } from "@gp-grid/core";
 
 class MyGridAdapter {
   private core: GridCore;

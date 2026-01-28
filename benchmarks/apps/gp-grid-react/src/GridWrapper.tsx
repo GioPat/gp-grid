@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Grid, createClientDataSource } from "gp-grid-react";
-import type { GridRef, FilterCondition as CoreFilterCondition, ColumnDefinition, DataSource } from "gp-grid-react";
+import { Grid, createClientDataSource } from "@gp-grid/react";
+import type { GridRef, FilterCondition as CoreFilterCondition, ColumnDefinition, DataSource } from "@gp-grid/react";
 import {
   generateData,
   type BenchmarkRow,

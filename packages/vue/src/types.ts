@@ -8,7 +8,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   DataSource,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // =============================================================================
 // Vue Renderer Types

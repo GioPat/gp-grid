@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/editRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "gp-grid-core";
+import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "@gp-grid/core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 

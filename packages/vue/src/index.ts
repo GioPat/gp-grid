@@ -85,7 +85,7 @@ export {
   buildCellClasses,
   // GridCore class (for typing component refs)
   GridCore,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 export type {
   // Basic types
@@ -130,4 +130,4 @@ export type {
   KeyEventData,
   ContainerBounds,
   DragState,
-} from "gp-grid-core";
+} from "@gp-grid/core";

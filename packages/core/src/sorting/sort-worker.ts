@@ -1,4 +1,4 @@
-// gp-grid-core/src/sorting/sort-worker.ts
+// @gp-grid/core/src/sorting/sort-worker.ts
 // Web Worker for sorting large datasets off the main thread
 
 import type { SortModel, CellValue } from "../types";

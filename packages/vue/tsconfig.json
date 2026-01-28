@@ -17,7 +17,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "gp-grid-core": [
+      "@gp-grid/core": [
         "../core/src"
       ]
     }

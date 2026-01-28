@@ -1,5 +1,5 @@
 {
-  "name": "gp-grid-core",
+  "name": "@gp-grid/core",
   "description": "A high-performance, framework-agnostic TypeScript data grid core with virtual scrolling",
   "private": false,
   "version": "0.7.3",

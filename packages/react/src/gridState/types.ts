@@ -1,6 +1,6 @@
 // packages/react/src/gridState/types.ts
 
-import type { GridInstruction } from "gp-grid-core";
+import type { GridInstruction } from "@gp-grid/core";
 
 // Re-export types from core for backwards compatibility
 export type {
@@ -8,7 +8,7 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // =============================================================================
 // Grid Actions (React-specific)

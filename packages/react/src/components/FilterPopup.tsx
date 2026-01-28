@@ -1,7 +1,7 @@
 // packages/react/src/components/FilterPopup.tsx
 
 import React, { useEffect, useRef, useCallback } from "react";
-import type { ColumnDefinition, CellValue, ColumnFilterModel } from "gp-grid-core";
+import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";

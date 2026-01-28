@@ -8,4 +8,4 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
-} from "gp-grid-core";
+} from "@gp-grid/core";

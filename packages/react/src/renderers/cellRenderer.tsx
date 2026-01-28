@@ -1,7 +1,7 @@
 // packages/react/src/renderers/cellRenderer.tsx
 
 import React from "react";
-import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "gp-grid-core";
+import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "@gp-grid/core";
 import type { ReactCellRenderer } from "../types";
 
 /**

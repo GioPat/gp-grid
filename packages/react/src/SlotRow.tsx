@@ -7,7 +7,7 @@ import type {
   CellValue,
   CellRendererParams,
   EditRendererParams,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // =============================================================================
 // Types
@@ -25,18 +25,18 @@ export interface SlotRowProps {
   columnPositions: number[];
   rowHeight: number;
   contentWidth: number;
-  
+
   // Selection state
   activeCell: { row: number; col: number } | null;
   selectionRange: { startRow: number; startCol: number; endRow: number; endCol: number } | null;
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
-  
+
   // Renderers
   cellRenderers: Record<string, ReactCellRenderer>;
   editRenderers: Record<string, ReactEditRenderer>;
   cellRenderer?: ReactCellRenderer;
   editRenderer?: ReactEditRenderer;
-  
+
   // Callbacks
   onCellClick: (rowIndex: number, colIndex: number, e: React.MouseEvent) => void;
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;

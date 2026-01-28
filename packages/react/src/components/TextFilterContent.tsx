@@ -1,7 +1,7 @@
 // packages/react/src/components/TextFilterContent.tsx
 
 import React, { useState, useMemo, useCallback } from "react";
-import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "gp-grid-core";
+import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
 
 export interface TextFilterContentProps {
   distinctValues: CellValue[];
