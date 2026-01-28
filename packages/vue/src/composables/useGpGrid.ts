@@ -13,7 +13,7 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 import type {
   Row,
   ColumnDefinition,
@@ -22,7 +22,7 @@ import type {
   GridState,
   SlotData,
   HighlightingOptions,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 import { useGridState } from "../gridState";
 import { useInputHandler, type VisibleColumnInfo } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";

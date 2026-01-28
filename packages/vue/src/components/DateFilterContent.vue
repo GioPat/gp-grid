@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "gp-grid-core";
+import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const OPERATORS: { value: DateFilterOperator; label: string }[] = [

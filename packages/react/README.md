@@ -1,4 +1,4 @@
-# gp-grid-react 🏁 🏎️
+# @gp-grid/react 🏁 🏎️
 
 <div align="center">
     <a href="https://www.gp-grid.io">
@@ -16,7 +16,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GioPat/gp-grid)
 
-A high-performance, feature lean React data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
+A high-performance, feature lean React data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `@gp-grid/core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
 ## Table of Contents
 
@@ -47,13 +47,13 @@ A high-performance, feature lean React data grid component built to manage grids
 Use `npm`, `yarn` or `pnpm`
 
 ```bash
-pnpm add gp-grid-react
+pnpm add @gp-grid/react
 ```
 
 ## Quick Start
 
 ```tsx
-import { Grid, type ColumnDefinition } from "gp-grid-react";
+import { Grid, type ColumnDefinition } from "@gp-grid/react";
 
 interface Person {
   id: number;
@@ -96,7 +96,7 @@ import {
   Grid,
   createClientDataSource,
   type ColumnDefinition,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 
 interface Product {
   id: number;
@@ -161,7 +161,7 @@ import {
   type ColumnDefinition,
   type DataSourceRequest,
   type DataSourceResponse,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 
 interface User {
   id: number;
@@ -260,7 +260,7 @@ import {
   Grid,
   type ColumnDefinition,
   type CellRendererParams,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 
 interface Order {
   id: number;
@@ -367,7 +367,7 @@ import {
   createClientDataSource,
   type ColumnDefinition,
   type EditRendererParams,
-} from "gp-grid-react";
+} from "@gp-grid/react";
 
 interface Task {
   id: number;

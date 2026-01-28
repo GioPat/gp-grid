@@ -1,4 +1,4 @@
-# gp-grid-vue 🏁 🏎️
+# @gp-grid/vue 🏁 🏎️
 
 <div align="center">
     <a href="https://www.gp-grid.io">
@@ -16,7 +16,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GioPat/gp-grid)
 
-A high-performance, feature lean Vue 3 data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `gp-grid-core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
+A high-performance, feature lean Vue 3 data grid component built to manage grids with huge amount (millions) of rows. It's based on its core dependency: `@gp-grid/core`, featuring virtual scrolling, cell selection, sorting, filtering, editing, and Excel-like fill handle.
 
 ## Table of Contents
 
@@ -47,14 +47,14 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 Use `npm`, `yarn` or `pnpm`
 
 ```bash
-pnpm add gp-grid-vue
+pnpm add @gp-grid/vue
 ```
 
 ## Quick Start
 
 ```vue
 <script setup lang="ts">
-import { GpGrid, type ColumnDefinition } from "gp-grid-vue";
+import { GpGrid, type ColumnDefinition } from "@gp-grid/vue";
 
 interface Person {
   id: number;
@@ -97,7 +97,7 @@ import {
   GpGrid,
   createClientDataSource,
   type ColumnDefinition,
-} from "gp-grid-vue";
+} from "@gp-grid/vue";
 
 interface Product {
   id: number;
@@ -155,7 +155,7 @@ import {
   type ColumnDefinition,
   type DataSourceRequest,
   type DataSourceResponse,
-} from "gp-grid-vue";
+} from "@gp-grid/vue";
 
 interface User {
   id: number;
@@ -251,7 +251,7 @@ import {
   type ColumnDefinition,
   type CellRendererParams,
   type VueCellRenderer,
-} from "gp-grid-vue";
+} from "@gp-grid/vue";
 
 interface Order {
   id: number;
@@ -363,7 +363,7 @@ import {
   type ColumnDefinition,
   type EditRendererParams,
   type VueEditRenderer,
-} from "gp-grid-vue";
+} from "@gp-grid/vue";
 
 interface Task {
   id: number;

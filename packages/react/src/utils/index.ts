@@ -11,4 +11,4 @@ export {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-} from "gp-grid-core";
+} from "@gp-grid/core";

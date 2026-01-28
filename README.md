@@ -72,20 +72,20 @@ Data fetching is abstracted through a `DataSource` interface, supporting both:
 
 | Package                                         | Description                                                                                              |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [**gp-grid-core**](./packages/core/README.md)   | Framework-agnostic core library with virtual scrolling, data sources, and instruction-based architecture |
-| [**gp-grid-react**](./packages/react/README.md) | Official React implementation with full feature support                                                  |
-| [**gp-grid-vue**](./packages/vue/README.md)     | Official Vue3 implementation with full feature support                                                   |
+| [**@gp-grid/core**](./packages/core/README.md)   | Framework-agnostic core library with virtual scrolling, data sources, and instruction-based architecture |
+| [**@gp-grid/react**](./packages/react/README.md) | Official React implementation with full feature support                                                  |
+| [**@gp-grid/vue**](./packages/vue/README.md)     | Official Vue3 implementation with full feature support                                                   |
 
 ## Quick Start
 
 ### React
 
 ```bash
-pnpm add gp-grid-react
+pnpm add @gp-grid/react
 ```
 
 ```tsx
-import { Grid, type ColumnDefinition } from "gp-grid-react";
+import { Grid, type ColumnDefinition } from "@gp-grid/react";
 
 const columns: ColumnDefinition[] = [
   { field: "id", cellDataType: "number", width: 80, headerName: "ID" },
@@ -110,10 +110,10 @@ function App() {
 ### Core (for custom framework adapters)
 
 ```bash
-pnpm add gp-grid-core
+pnpm add @gp-grid/core
 ```
 
-See the [gp-grid-core README](./packages/core/README.md) for detailed documentation on creating custom framework adapters.
+See the [@gp-grid/core README](./packages/core/README.md) for detailed documentation on creating custom framework adapters.
 
 ## Donations
 

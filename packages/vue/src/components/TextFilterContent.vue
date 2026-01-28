@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "gp-grid-core";
+import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const MAX_VALUES_FOR_LIST = 100;

@@ -1,7 +1,7 @@
 // packages/react/src/renderers/headerRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, Row, SortDirection, HeaderRendererParams } from "gp-grid-core";
+import type { GridCore, ColumnDefinition, Row, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { ReactHeaderRenderer } from "../types";
 
 export interface RenderHeaderOptions<TData extends Row> {

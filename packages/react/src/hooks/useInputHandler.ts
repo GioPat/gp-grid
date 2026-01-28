@@ -9,7 +9,7 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 import type { SlotData } from "../gridState/types";
 
 // =============================================================================

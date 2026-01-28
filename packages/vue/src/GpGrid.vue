@@ -19,8 +19,8 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-} from "gp-grid-core";
-import type { Row, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, HighlightingOptions } from "gp-grid-core";
+} from "@gp-grid/core";
+import type { Row, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, HighlightingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";

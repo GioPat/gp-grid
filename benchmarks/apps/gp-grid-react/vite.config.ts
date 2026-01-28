@@ -10,7 +10,7 @@ export default defineConfig({
     port: 5100,
   },
   build: {
-    outDir: path.resolve(__dirname, "../../dist/gp-grid-react"),
+    outDir: path.resolve(__dirname, "../../dist/@gp-grid/react"),
   },
   optimizeDeps: {
     include: ["react", "react-dom", "react/jsx-runtime"],

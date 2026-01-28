@@ -4,7 +4,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SlotRow, type SlotRowProps } from "../src/SlotRow";
-import type { ColumnDefinition, CellRendererParams, EditRendererParams } from "gp-grid-core";
+import type { ColumnDefinition, CellRendererParams, EditRendererParams } from "@gp-grid/core";
 
 // Test data
 const columns: ColumnDefinition[] = [

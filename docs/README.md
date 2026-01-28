@@ -14,7 +14,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for version history and release notes.
 ## Quick Start
 
 ```tsx
-import { Grid } from 'gp-grid-react';
+import { Grid } from '@gp-grid/react';
 
 const columns = [
   { field: 'id', cellDataType: 'number', width: 80 },
@@ -43,5 +43,5 @@ function App() {
 
 ## Packages
 
-- **gp-grid-core**: Framework-agnostic core library
-- **gp-grid-react**: React adapter and components
+- **@gp-grid/core**: Framework-agnostic core library
+- **@gp-grid/react**: React adapter and components

@@ -6,6 +6,6 @@
   "license": "Apache-2.0",
   "imports": {
     "vue": "npm:vue@^3.4.0",
-    "gp-grid-core": "@gp-grid/core"
+    "@gp-grid/core": "@gp-grid/core"
   }
 }

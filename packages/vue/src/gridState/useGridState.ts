@@ -6,7 +6,7 @@ import type {
   GridState,
   SlotData,
   HeaderData,
-} from "gp-grid-core";
+} from "@gp-grid/core";
 
 // =============================================================================
 // Initial State

@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Grid, type GridProps } from "../src/Grid";
-import { createClientDataSource } from "gp-grid-core";
-import type { ColumnDefinition, CellRendererParams, HeaderRendererParams } from "gp-grid-core";
+import { createClientDataSource } from "@gp-grid/core";
+import type { ColumnDefinition, CellRendererParams, HeaderRendererParams } from "@gp-grid/core";
 
 // Test data
 interface TestRow {

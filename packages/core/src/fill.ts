@@ -1,4 +1,4 @@
-// gp-grid-core/src/fill.ts
+// @gp-grid/core/src/fill.ts
 
 import type {
   CellRange,

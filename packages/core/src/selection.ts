@@ -1,4 +1,4 @@
-// gp-grid-core/src/selection.ts
+// @gp-grid/core/src/selection.ts
 
 import type {
   CellPosition,

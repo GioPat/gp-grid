@@ -1,6 +1,6 @@
 // packages/react/src/gridState/reducer.ts
 
-import type { GridInstruction, Row } from "gp-grid-core";
+import type { GridInstruction, Row } from "@gp-grid/core";
 import type { SlotData, HeaderData, GridState, GridAction } from "./types";
 
 // =============================================================================

@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
 import { h, Fragment, createTextVNode, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "gp-grid-core";
+import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { VueHeaderRenderer } from "../types";
 
 /**

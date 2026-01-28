@@ -19,8 +19,8 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-} from "gp-grid-core";
-import type { Row, ColumnFilterModel, DataSource } from "gp-grid-core";
+} from "@gp-grid/core";
+import type { Row, ColumnFilterModel, DataSource } from "@gp-grid/core";
 import { FilterPopup } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
@@ -621,26 +621,26 @@ export function Grid<TData extends Row = Row>(
                   >
                     {isEditing && state.editingCell
                       ? renderEditCell({
-                          column,
-                          rowData: slot.rowData,
-                          rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
-                          initialValue: state.editingCell.initialValue,
-                          coreRef,
-                          editRenderers,
-                          globalEditRenderer: editRenderer,
-                        })
+                        column,
+                        rowData: slot.rowData,
+                        rowIndex: slot.rowIndex,
+                        colIndex: originalIndex,
+                        initialValue: state.editingCell.initialValue,
+                        coreRef,
+                        editRenderers,
+                        globalEditRenderer: editRenderer,
+                      })
                       : renderCell({
-                          column,
-                          rowData: slot.rowData,
-                          rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
-                          isActive: active,
-                          isSelected: selected,
-                          isEditing,
-                          cellRenderers,
-                          globalCellRenderer: cellRenderer,
-                        })}
+                        column,
+                        rowData: slot.rowData,
+                        rowIndex: slot.rowIndex,
+                        colIndex: originalIndex,
+                        isActive: active,
+                        isSelected: selected,
+                        isEditing,
+                        cellRenderers,
+                        globalCellRenderer: cellRenderer,
+                      })}
                   </div>
                 );
               })}

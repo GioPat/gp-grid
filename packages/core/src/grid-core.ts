@@ -1,4 +1,4 @@
-// gp-grid-core/src/grid-core.ts
+// @gp-grid/core/src/grid-core.ts
 
 import type {
   GridCoreOptions,
@@ -475,10 +475,10 @@ export class GridCore<TData extends Row = Row> {
 
   private emitContentSize(): void {
     const width = this.columnPositions[this.columnPositions.length - 1] ?? 0;
-    
+
     // Calculate natural (real) content height
     this.naturalContentHeight = this.totalRows * this.rowHeight + this.headerHeight;
-    
+
     // Apply scroll virtualization if content exceeds browser limits
     if (this.naturalContentHeight > MAX_SCROLL_HEIGHT) {
       this.virtualContentHeight = MAX_SCROLL_HEIGHT;
@@ -487,7 +487,7 @@ export class GridCore<TData extends Row = Row> {
       this.virtualContentHeight = this.naturalContentHeight;
       this.scrollRatio = 1;
     }
-    
+
     this.emit({
       type: "SET_CONTENT_SIZE",
       width,

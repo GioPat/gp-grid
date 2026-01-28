@@ -1,7 +1,7 @@
 // packages/react/src/renderers/editRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "gp-grid-core";
+import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "@gp-grid/core";
 import type { ReactEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 

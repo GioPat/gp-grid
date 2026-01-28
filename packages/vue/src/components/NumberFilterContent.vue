@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "gp-grid-core";
+import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const OPERATORS: { value: NumberFilterOperator; label: string }[] = [

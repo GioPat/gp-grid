@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/cellRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
-import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "gp-grid-core";
+import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
 
 /**
