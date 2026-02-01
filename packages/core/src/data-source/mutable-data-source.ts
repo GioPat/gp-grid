@@ -9,10 +9,7 @@ import type {
   CellValue,
 } from "../types";
 import { IndexedDataStore } from "../indexed-data-store";
-import {
-  TransactionManager,
-  type TransactionResult,
-} from "../transaction-manager";
+import { TransactionManager, type TransactionResult } from "../managers";
 
 // =============================================================================
 // Types

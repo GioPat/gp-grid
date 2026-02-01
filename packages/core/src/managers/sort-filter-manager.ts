@@ -7,8 +7,8 @@ import type {
   SortDirection,
   FilterModel,
   ColumnFilterModel,
-} from "./types";
-import { createInstructionEmitter, getFieldValue } from "./utils";
+} from "./../types";
+import { createInstructionEmitter, getFieldValue } from "./../utils";
 
 // =============================================================================
 // Types
@@ -58,14 +58,14 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   async setSort(
     colId: string,
     direction: SortDirection | null,
-    addToExisting: boolean = false
+    addToExisting: boolean = false,
   ): Promise<void> {
     // Check if sorting is enabled globally
     if (!this.options.isSortingEnabled()) return;
 
     // Check if sorting is enabled for this column
     const columns = this.options.getColumns();
-    const column = columns.find(c => (c.colId ?? c.field) === colId);
+    const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (column?.sortable === false) return;
 
     const existingIndex = this.sortModel.findIndex((s) => s.colId === colId);
@@ -96,15 +96,21 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   // Filter Operations
   // ===========================================================================
 
-  async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
+  async setFilter(
+    colId: string,
+    filter: ColumnFilterModel | string | null,
+  ): Promise<void> {
     const columns = this.options.getColumns();
-    const column = columns.find(c => (c.colId ?? c.field) === colId);
+    const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (column?.filterable === false) return;
 
     // Handle null, empty string, or empty conditions
-    const isEmpty = filter === null ||
+    const isEmpty =
+      filter === null ||
       (typeof filter === "string" && filter.trim() === "") ||
-      (typeof filter === "object" && filter.conditions && filter.conditions.length === 0);
+      (typeof filter === "object" &&
+        filter.conditions &&
+        filter.conditions.length === 0);
 
     if (isEmpty) {
       delete this.filterModel[colId];
@@ -168,9 +174,12 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * Arrays are sorted internally for consistent comparison.
    * Limited to maxValues to avoid performance issues with large datasets.
    */
-  getDistinctValuesForColumn(colId: string, maxValues: number = 500): CellValue[] {
+  getDistinctValuesForColumn(
+    colId: string,
+    maxValues: number = 500,
+  ): CellValue[] {
     const columns = this.options.getColumns();
-    const column = columns.find(c => (c.colId ?? c.field) === colId);
+    const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (!column) return [];
 
     const cachedRows = this.options.getCachedRows();
@@ -182,7 +191,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       if (Array.isArray(value)) {
         // Sort array items internally for consistent comparison
         const sortedArray = [...value].sort((a, b) =>
-          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+          String(a).localeCompare(String(b), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          }),
         );
         const key = JSON.stringify(sortedArray);
         if (!valuesMap.has(key)) {
@@ -201,9 +213,12 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     // Sort the results
     const results = Array.from(valuesMap.values());
     results.sort((a, b) => {
-      const strA = Array.isArray(a) ? a.join(', ') : String(a ?? '');
-      const strB = Array.isArray(b) ? b.join(', ') : String(b ?? '');
-      return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+      const strA = Array.isArray(a) ? a.join(", ") : String(a ?? "");
+      const strB = Array.isArray(b) ? b.join(", ") : String(b ?? "");
+      return strA.localeCompare(strB, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
     });
 
     return results;
@@ -218,7 +233,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    */
   openFilterPopup(
     colIndex: number,
-    anchorRect: { top: number; left: number; width: number; height: number }
+    anchorRect: { top: number; left: number; width: number; height: number },
   ): void {
     // If clicking on the same column's filter icon, close the popup
     if (this.openFilterColIndex === colIndex) {
@@ -260,9 +275,15 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * Get sort info map for header rendering
    */
   getSortInfoMap(): Map<string, { direction: SortDirection; index: number }> {
-    const sortInfoMap = new Map<string, { direction: SortDirection; index: number }>();
+    const sortInfoMap = new Map<
+      string,
+      { direction: SortDirection; index: number }
+    >();
     this.sortModel.forEach((sort, index) => {
-      sortInfoMap.set(sort.colId, { direction: sort.direction, index: index + 1 });
+      sortInfoMap.set(sort.colId, {
+        direction: sort.direction,
+        index: index + 1,
+      });
     });
     return sortInfoMap;
   }

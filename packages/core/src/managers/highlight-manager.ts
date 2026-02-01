@@ -6,13 +6,13 @@ import type {
   ColumnDefinition,
   HighlightingOptions,
   HighlightContext,
-} from "./types";
+} from "./../types";
 import {
   createInstructionEmitter,
   normalizeRange,
   isRowInSelectionRange,
   isColumnInSelectionRange,
-} from "./utils";
+} from "./../utils";
 
 // =============================================================================
 // Types
@@ -137,10 +137,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
    * Returns context with `rowIndex` set, `colIndex` is null.
    * `isHovered` is true when the mouse is on any cell in this row.
    */
-  buildRowContext(
-    rowIndex: number,
-    rowData?: TData,
-  ): HighlightContext<TData> {
+  buildRowContext(rowIndex: number, rowData?: TData): HighlightContext<TData> {
     const activeCell = this.options.getActiveCell();
     const selectionRange = this.options.getSelectionRange();
 
@@ -251,10 +248,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
   /**
    * Compute column classes using cache and user callback (or per-column override)
    */
-  computeColumnClasses(
-    colIndex: number,
-    column: ColumnDefinition,
-  ): string[] {
+  computeColumnClasses(colIndex: number, column: ColumnDefinition): string[] {
     const cached = this.columnClassCache.get(colIndex);
     if (cached !== undefined) return cached;
 
@@ -315,7 +309,12 @@ export class HighlightManager<TData = Record<string, unknown>> {
     rowData?: TData,
   ): string[] {
     const columnClasses = this.computeColumnClasses(colIndex, column);
-    const cellClasses = this.computeCellClasses(rowIndex, colIndex, column, rowData);
+    const cellClasses = this.computeCellClasses(
+      rowIndex,
+      colIndex,
+      column,
+      rowData,
+    );
     return [...columnClasses, ...cellClasses];
   }
 

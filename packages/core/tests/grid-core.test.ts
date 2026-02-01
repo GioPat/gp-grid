@@ -61,11 +61,10 @@ describe("GridCore", () => {
     grid = createTestGrid();
     emittedInstructions = [];
     batchedInstructions = [];
-    
-    grid.onInstruction((instruction) => {
-      emittedInstructions.push(instruction);
-    });
+
     grid.onBatchInstruction((batch) => {
+      // Flatten batch into emittedInstructions for test compatibility
+      emittedInstructions.push(...batch);
       batchedInstructions.push(batch);
     });
   });
@@ -135,7 +134,7 @@ describe("GridCore", () => {
       }));
       
       grid = createTestGrid(largeData, { rowHeight: 32, overscan: 1 });
-      grid.onInstruction((i) => emittedInstructions.push(i));
+      grid.onBatchInstruction((batch) => emittedInstructions.push(...batch));
       
       await grid.initialize();
       // Set initial viewport to create slots
@@ -199,7 +198,7 @@ describe("GridCore", () => {
       }));
       
       grid = createTestGrid(largeData);
-      grid.onInstruction((i) => emittedInstructions.push(i));
+      grid.onBatchInstruction((batch) => emittedInstructions.push(...batch));
       
       await grid.initialize();
       grid.setViewport(0, 0, 800, 600); // More visible rows
@@ -526,43 +525,20 @@ describe("GridCore", () => {
   });
 
   describe("instruction listeners", () => {
-    it("should support multiple individual listeners", async () => {
+    it("should support multiple batch listeners", async () => {
       const listener1 = vi.fn();
       const listener2 = vi.fn();
 
-      grid.onInstruction(listener1);
-      grid.onInstruction(listener2);
+      grid.onBatchInstruction(listener1);
+      grid.onBatchInstruction(listener2);
 
       await grid.initialize();
 
       expect(listener1).toHaveBeenCalled();
       expect(listener2).toHaveBeenCalled();
-    });
-
-    it("should support unsubscribing individual listener", async () => {
-      const listener = vi.fn();
-      const unsubscribe = grid.onInstruction(listener);
-
-      await grid.initialize();
-      expect(listener).toHaveBeenCalled();
-
-      unsubscribe();
-      listener.mockClear();
-
-      await grid.refresh();
-      expect(listener).not.toHaveBeenCalled();
-    });
-
-    it("should support batch listeners", async () => {
-      const batchListener = vi.fn();
-      grid.onBatchInstruction(batchListener);
-
-      await grid.initialize();
-
-      expect(batchListener).toHaveBeenCalled();
-      // Batch listener should receive arrays
-      const calls = batchListener.mock.calls;
-      expect(Array.isArray(calls[0][0])).toBe(true);
+      // Batch listeners should receive arrays
+      expect(Array.isArray(listener1.mock.calls[0][0])).toBe(true);
+      expect(Array.isArray(listener2.mock.calls[0][0])).toBe(true);
     });
 
     it("should support unsubscribing batch listener", async () => {
@@ -643,7 +619,7 @@ describe("GridCore", () => {
       });
 
       const errors: GridInstruction[] = [];
-      errorGrid.onInstruction((i) => errors.push(i));
+      errorGrid.onBatchInstruction((batch) => errors.push(...batch));
 
       await errorGrid.initialize();
 
@@ -687,7 +663,7 @@ describe("GridCore", () => {
       });
 
       const instructions: GridInstruction[] = [];
-      extremeGrid.onInstruction((i) => instructions.push(i));
+      extremeGrid.onBatchInstruction((batch) => instructions.push(...batch));
 
       await extremeGrid.initialize();
 
@@ -746,7 +722,7 @@ describe("GridCore", () => {
       });
 
       const instructions: GridInstruction[] = [];
-      extremeGrid.onInstruction((i) => instructions.push(i));
+      extremeGrid.onBatchInstruction((batch) => instructions.push(...batch));
 
       await extremeGrid.initialize();
       instructions.length = 0;

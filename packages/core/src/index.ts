@@ -13,10 +13,22 @@ export { FillManager } from "./fill";
 export { SlotPoolManager } from "./slot-pool";
 export { EditManager } from "./edit-manager";
 export { InputHandler } from "./input-handler";
-export { HighlightManager } from "./highlight-manager";
+export {
+  HighlightManager,
+  SortFilterManager,
+  RowMutationManager,
+  ScrollVirtualizationManager,
+  TransactionManager,
+  type RowMutationManagerOptions,
+  type SortFilterManagerOptions,
+  type ScrollVirtualizationManagerOptions,
+} from "./managers";
 
 /** Manager types */
-export type { SlotPoolManagerOptions, BatchInstructionListener as SlotPoolBatchListener } from "./slot-pool";
+export type {
+  SlotPoolManagerOptions,
+  BatchInstructionListener as SlotPoolBatchListener,
+} from "./slot-pool";
 export type { EditManagerOptions } from "./edit-manager";
 
 /** Data sources */
@@ -29,11 +41,17 @@ export {
 
 /** Transaction system */
 export { IndexedDataStore } from "./indexed-data-store/index";
-export { TransactionManager } from "./transaction-manager";
 
 /** Data source types */
-export type { MutableDataSource, MutableClientDataSourceOptions, DataChangeListener } from "./data-source";
-export type { IndexedDataStoreOptions, RowSortCache } from "./indexed-data-store/index";
+export type {
+  MutableDataSource,
+  MutableClientDataSourceOptions,
+  DataChangeListener,
+} from "./data-source";
+export type {
+  IndexedDataStoreOptions,
+  RowSortCache,
+} from "./indexed-data-store/index";
 
 /** Sorting utilities (from indexed-data-store) */
 export {
@@ -54,7 +72,11 @@ export {
 
 /** Field helpers (from indexed-data-store) */
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
-export type { Transaction, TransactionResult, TransactionManagerOptions } from "./transaction-manager";
+export type {
+  Transaction,
+  TransactionResult,
+  TransactionManagerOptions,
+} from "./managers";
 
 /** Sorting utilities (worker pool, parallel sorting, k-way merge) */
 export {
@@ -106,7 +128,6 @@ export type {
 
   /** Selection state */
   SelectionState,
-
   EditState,
   FillHandleState,
   SlotState,
