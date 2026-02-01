@@ -123,8 +123,6 @@ function applyInstruction(
         column: instruction.column,
         sortDirection: instruction.sortDirection,
         sortIndex: instruction.sortIndex,
-        sortable: instruction.sortable,
-        filterable: instruction.filterable,
         hasFilter: instruction.hasFilter,
       });
       break;

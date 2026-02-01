@@ -117,8 +117,6 @@ export function applyInstruction<TData = Row>(
         column: instruction.column,
         sortDirection: instruction.sortDirection,
         sortIndex: instruction.sortIndex,
-        sortable: instruction.sortable,
-        filterable: instruction.filterable,
         hasFilter: instruction.hasFilter,
       });
       return null;

@@ -382,14 +382,6 @@ export class GridCore<TData extends Row = Row> {
     return this.sortFilter.hasActiveFilter(colId);
   }
 
-  isColumnSortable(colIndex: number): boolean {
-    return this.sortFilter.isColumnSortable(colIndex);
-  }
-
-  isColumnFilterable(colIndex: number): boolean {
-    return this.sortFilter.isColumnFilterable(colIndex);
-  }
-
   getDistinctValuesForColumn(
     colId: string,
     maxValues: number = 500,
@@ -508,8 +500,6 @@ export class GridCore<TData extends Row = Row> {
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
-        sortable: this.sortFilter.isColumnSortable(i),
-        filterable: this.sortFilter.isColumnFilterable(i),
         hasFilter: this.sortFilter.hasActiveFilter(colId),
       });
     }

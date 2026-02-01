@@ -115,10 +115,6 @@ export interface UpdateHeaderInstruction {
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
-  /** Whether column is sortable */
-  sortable: boolean;
-  /** Whether column is filterable */
-  filterable: boolean;
   /** Whether column has an active filter */
   hasFilter: boolean;
 }

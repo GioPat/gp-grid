@@ -25,8 +25,6 @@ export interface HeaderData {
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
-  sortable: boolean;
-  filterable: boolean;
   hasFilter: boolean;
 }
 
