@@ -350,45 +350,11 @@ export class GridCore<TData extends Row = Row> {
       });
       this.totalRows = response.totalRows;
 
-      // For client-side data source, fetch all data for simplicity
-      // (the client data source handles filtering/sorting internally)
-      if (
-        response.totalRows > response.rows.length &&
-        this.currentPageIndex === 0
-      ) {
-        // Fetch all remaining pages for client-side mode
-        await this.fetchAllData();
-      }
-
       this.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
     } catch (error) {
       this.emit({
         type: "DATA_ERROR",
         error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async fetchAllData(): Promise<void> {
-    // Fetch all data in chunks for client-side data source
-    const totalPages = Math.ceil(this.totalRows / this.pageSize);
-    const sortModel = this.sortFilter.getSortModel();
-    const filterModel = this.sortFilter.getFilterModel();
-
-    for (let page = 1; page < totalPages; page++) {
-      const request: DataSourceRequest = {
-        pagination: {
-          pageIndex: page,
-          pageSize: this.pageSize,
-        },
-        sort: sortModel.length > 0 ? sortModel : undefined,
-        filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
-      };
-
-      const response = await this.dataSource.fetch(request);
-      const startIndex = page * this.pageSize;
-      response.rows.forEach((row, i) => {
-        this.cachedRows.set(startIndex + i, row);
       });
     }
   }

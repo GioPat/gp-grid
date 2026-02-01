@@ -1,5 +1,3 @@
-// packages/core/src/sort-filter-manager.ts
-
 import type {
   ColumnDefinition,
   CellValue,
