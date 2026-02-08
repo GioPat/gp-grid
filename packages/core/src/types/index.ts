@@ -14,6 +14,7 @@ export type {
   SelectionState,
   EditState,
   FillHandleState,
+  CellValueChangedEvent,
   SlotState,
 } from "./basic";
 

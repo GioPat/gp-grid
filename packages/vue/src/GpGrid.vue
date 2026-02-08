@@ -20,7 +20,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
 } from "@gp-grid/core";
-import type { Row, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, HighlightingOptions } from "@gp-grid/core";
+import type { Row, RowId, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -56,6 +56,10 @@ const props = withDefaults(
     initialHeight?: number;
     /** Row/column/cell highlighting configuration */
     highlighting?: HighlightingOptions<Row>;
+    /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
+    getRowId?: (row: Row) => RowId;
+    /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+    onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
   }>(),
   {
     overscan: 3,
@@ -240,6 +244,10 @@ function initializeCore(dataSource: DataSource<Row>): void {
     overscan: props.overscan,
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
+    getRowId: props.getRowId,
+    onCellValueChanged: props.onCellValueChanged
+      ? (event) => props.onCellValueChanged?.(event)
+      : undefined,
   });
 
   coreRef.value = core;
@@ -306,23 +314,20 @@ onMounted(() => {
   });
 });
 
-// Watch for data source changes - cleanup old, create new
+// Watch for data source changes - swap via setDataSource to preserve grid state
 watch(
   [() => props.dataSource, () => props.rowData],
   () => {
     const newDataSource = getOrCreateDataSource();
     const oldDataSource = currentDataSourceRef.value;
 
-    // Only reinitialize if data source actually changed
     if (oldDataSource && oldDataSource !== newDataSource) {
       // Destroy old data source (terminates Web Workers)
       oldDataSource.destroy?.();
-      // Reset state to clear slot rowData references
-      resetState();
       // Update data source ref
       currentDataSourceRef.value = newDataSource;
-      // Reinitialize core with new data source
-      initializeCore(newDataSource);
+      // Swap data source without destroying core (preserves sort, filter, scroll, selection)
+      coreRef.value?.setDataSource(newDataSource);
     } else if (!oldDataSource) {
       // First time setting data source after mount
       currentDataSourceRef.value = newDataSource;

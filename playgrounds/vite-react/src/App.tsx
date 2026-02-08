@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
@@ -8,6 +8,8 @@ import {
   type ColumnDefinition,
   type CellRendererParams,
   type EditRendererParams,
+  type RowId,
+  type CellValueChangedEvent,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
@@ -22,6 +24,15 @@ interface Person {
   status: "active" | "inactive" | "pending";
   salary: number;
   tags: string[];
+}
+
+const getRowId = (person: Person): RowId => {
+  return person.id;
+};
+
+const onCellUpdate = (context: CellValueChangedEvent<Person>): void => {
+  console.log(`Old value was ${context.oldValue} and new value is ${context.newValue}`);
+  return;
 }
 
 // Available tag options for the multi-select
@@ -318,11 +329,19 @@ function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
 
-  // Keep reference to raw data so we can access it later
-  const rowData = useMemo(() => generateRowData(), []);
+  const [rowData, setRowData] = useState(() => generateRowData());
 
-  // Create data source from the row data
-  const dataSource = useMemo(() => createClientDataSource(rowData), [rowData]);
+  const handleUpdateRow = () => {
+    setRowData((prev) => {
+      const updated = [...prev];
+      updated[0] = {
+        ...updated[0],
+        name: `Person ${names[getRandomInt(0, 3)]}`,
+        salary: getRandomInt(30000, 150000),
+      };
+      return updated;
+    });
+  };
 
   // Handler to demonstrate reading all grid data
   const handleGetAllData = () => {
@@ -392,6 +411,8 @@ function MainDemo() {
               return [];
             } : undefined,
           }}
+          getRowId={getRowId}
+          onCellValueChanged={onCellUpdate}
           columns={columns}
           rowData={rowData}
           rowHeight={36}
@@ -421,6 +442,20 @@ function MainDemo() {
           }}
         >
           Get All Data
+        </button>
+        <button
+          onClick={handleUpdateRow}
+          style={{
+            backgroundColor: "#6366f1",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "500",
+          }}
+        >
+          Update Row 1
         </button>
         <p style={{ margin: 0 }}>
           Double-click on Tags column to edit with multi-select

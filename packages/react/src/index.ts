@@ -25,9 +25,15 @@ export type {
   // Column definition
   ColumnDefinition,
 
+  // Row ID
+  RowId,
+
   // Cell position & range
   CellPosition,
   CellRange,
+
+  // Events
+  CellValueChangedEvent,
 
   // DataSource
   DataSource,

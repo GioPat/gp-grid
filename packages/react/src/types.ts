@@ -2,9 +2,11 @@
 
 import type {
   Row,
+  RowId,
   ColumnDefinition,
   DataSource,
   CellRendererParams,
+  CellValueChangedEvent,
   EditRendererParams,
   HeaderRendererParams,
   GridCore,
@@ -85,4 +87,9 @@ export interface GridProps<TData extends Row = Row> {
 
   /** Row/column/cell highlighting configuration */
   highlighting?: HighlightingOptions<TData>;
+
+  /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
+  getRowId?: (row: TData) => RowId;
+  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
 }

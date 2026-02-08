@@ -100,6 +100,8 @@ export type {
   // Cell coordinates
   CellPosition,
   CellRange,
+  // Events
+  CellValueChangedEvent,
   // Selection
   SelectionState,
   // Data source

@@ -3,8 +3,10 @@
 import type { VNode, Component } from "vue";
 import type {
   Row,
+  RowId,
   ColumnDefinition,
   CellRendererParams,
+  CellValueChangedEvent,
   EditRendererParams,
   HeaderRendererParams,
   DataSource,
@@ -55,4 +57,8 @@ export interface GpGridProps<TData extends Row = Row> {
   cellRenderer?: VueCellRenderer<TData> | Component;
   editRenderer?: VueEditRenderer<TData> | Component;
   headerRenderer?: VueHeaderRenderer | Component;
+  /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
+  getRowId?: (row: TData) => RowId;
+  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
 }

@@ -4,9 +4,11 @@ import type {
   GridCoreOptions,
   ColumnDefinition,
   CellValue,
+  CellValueChangedEvent,
   DataSource,
   DataSourceRequest,
   Row,
+  RowId,
   SortModel,
   SortDirection,
   FilterModel,
@@ -48,6 +50,8 @@ export class GridCore<TData extends Row = Row> {
   private headerHeight: number;
   private overscan: number;
   private sortingEnabled: boolean;
+  private getRowId?: (row: TData) => RowId;
+  private onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -99,6 +103,12 @@ export class GridCore<TData extends Row = Row> {
     this.headerHeight = options.headerHeight ?? options.rowHeight;
     this.overscan = options.overscan ?? 3;
     this.sortingEnabled = options.sortingEnabled ?? true;
+    this.getRowId = options.getRowId;
+    this.onCellValueChanged = options.onCellValueChanged;
+
+    if (this.onCellValueChanged && !this.getRowId) {
+      throw new Error("getRowId is required when onCellValueChanged is provided");
+    }
 
     this.computeColumnPositions();
 
@@ -205,12 +215,7 @@ export class GridCore<TData extends Row = Row> {
       updateSlot: (rowIndex) => this.slotPool.updateSlot(rowIndex),
       refreshAllSlots: () => this.slotPool.refreshAllSlots(),
       emitContentSize: () => this.emitContentSize(),
-      clearSelectionIfInvalid: (maxValidRow) => {
-        const activeCell = this.selection.getActiveCell();
-        if (activeCell && activeCell.row >= maxValidRow) {
-          this.selection.clearSelection();
-        }
-      },
+      clearSelectionIfInvalid: (maxValidRow) => this.clearSelectionIfInvalid(maxValidRow),
     });
 
     // Forward row mutation instructions
@@ -454,12 +459,34 @@ export class GridCore<TData extends Row = Row> {
     const column = this.columns[col];
     if (!column) return;
 
+    const oldValue = this.onCellValueChanged
+      ? getFieldValue(rowData, column.field)
+      : undefined;
+
     setFieldValue(rowData as Record<string, unknown>, column.field, value);
+
+    if (this.onCellValueChanged) {
+      this.onCellValueChanged({
+        rowId: this.getRowId!(rowData),
+        colIndex: col,
+        field: column.field,
+        oldValue: oldValue!,
+        newValue: value,
+        rowData,
+      });
+    }
   }
 
   // ===========================================================================
   // Layout Helpers
   // ===========================================================================
+
+  private clearSelectionIfInvalid(maxValidRow: number): void {
+    const activeCell = this.selection.getActiveCell();
+    if (activeCell && activeCell.row >= maxValidRow) {
+      this.selection.clearSelection();
+    }
+  }
 
   private computeColumnPositions(): void {
     this.columnPositions = [0];
@@ -698,10 +725,16 @@ export class GridCore<TData extends Row = Row> {
 
   /**
    * Update the data source and refresh.
+   * Preserves grid state (sort, filter, scroll position).
+   * Cancels any active edit and clamps selection to valid range.
    */
   async setDataSource(dataSource: DataSource<TData>): Promise<void> {
+    if (this.editManager.getState()) {
+      this.editManager.cancel();
+    }
     this.dataSource = dataSource;
     await this.refresh();
+    this.clearSelectionIfInvalid(this.totalRows);
   }
 
   /**
