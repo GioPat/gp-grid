@@ -16,6 +16,12 @@ export type {
   UseGpGridResult,
 } from "./composables/useGpGrid";
 
+export { useGridData } from "./composables/useGridData";
+export type {
+  UseGridDataOptions,
+  UseGridDataResult,
+} from "./composables/useGridData";
+
 export { useInputHandler } from "./composables/useInputHandler";
 export type {
   UseInputHandlerOptions,

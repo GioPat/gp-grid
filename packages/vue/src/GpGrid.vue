@@ -318,6 +318,13 @@ onMounted(() => {
 watch(
   [() => props.dataSource, () => props.rowData],
   () => {
+    // Dev warning: rowData prop changed with large dataset
+    if (props.rowData && props.rowData.length > 10_000 && currentDataSourceRef.value) {
+      console.warn(
+        `[gp-grid] rowData prop changed with ${props.rowData.length} rows — this triggers a full rebuild. Use useGridData() for efficient updates.`,
+      );
+    }
+
     const newDataSource = getOrCreateDataSource();
     const oldDataSource = currentDataSourceRef.value;
 
@@ -345,7 +352,7 @@ watch(
       };
       if (mutableDataSource.subscribe) {
         const unsubscribe = mutableDataSource.subscribe(() => {
-          coreRef.value?.refresh();
+          coreRef.value?.refreshFromTransaction();
         });
         onUnmounted(() => unsubscribe());
       }

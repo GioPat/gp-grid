@@ -107,6 +107,13 @@ export function Grid<TData extends Row = Row>(
     cache.rowData !== rowData;
 
   if (needsNewDataSource) {
+    // Dev warning: rowData prop changed with large dataset
+    if (cache && rowData && rowData.length > 10_000) {
+      console.warn(
+        `[gp-grid] rowData prop changed with ${rowData.length} rows — this triggers a full rebuild. Use useGridData() for efficient updates.`,
+      );
+    }
+
     // Cleanup previous owned data source
     if (cache?.ownsDataSource) {
       cache.dataSource.destroy?.();
@@ -305,7 +312,7 @@ export function Grid<TData extends Row = Row>(
     };
     if (mutableDataSource.subscribe) {
       const unsubscribe = mutableDataSource.subscribe(() => {
-        coreRef.current?.refresh();
+        coreRef.current?.refreshFromTransaction();
       });
       return unsubscribe;
     }

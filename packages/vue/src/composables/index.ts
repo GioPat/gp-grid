@@ -17,3 +17,5 @@ export { useFilterPopup } from "./useFilterPopup";
 export type { UseFilterPopupOptions } from "./useFilterPopup";
 export { useFilterConditions } from "./useFilterConditions";
 export type { UseFilterConditionsResult } from "./useFilterConditions";
+export { useGridData } from "./useGridData";
+export type { UseGridDataOptions, UseGridDataResult } from "./useGridData";

@@ -675,6 +675,47 @@ export class GridCore<TData extends Row = Row> {
   }
 
   /**
+   * Fast-path refresh for transaction-based mutations.
+   * Only re-fetches the visible window instead of all rows.
+   * Use this when data was mutated via MutableDataSource transactions.
+   */
+  async refreshFromTransaction(): Promise<void> {
+    const visibleRange = this.getVisibleRowRange();
+    const start = Math.max(0, visibleRange.start - this.overscan);
+    const end = visibleRange.end + this.overscan;
+
+    const sortModel = this.sortFilter.getSortModel();
+    const filterModel = this.sortFilter.getFilterModel();
+
+    const response = await this.dataSource.fetch({
+      pagination: {
+        pageIndex: 0,
+        pageSize: end + 1,
+      },
+      sort: sortModel.length > 0 ? sortModel : undefined,
+      filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
+    });
+
+    // Update totalRows (may have changed from add/remove)
+    this.totalRows = response.totalRows;
+
+    // Update only the visible range in the cache
+    for (let i = start; i < Math.min(end + 1, response.rows.length); i++) {
+      this.cachedRows.set(i, response.rows[i]);
+    }
+
+    this.highlight?.clearAllCaches();
+    this.slotPool.refreshAllSlots();
+    this.emitContentSize();
+
+    this.emit({
+      type: "UPDATE_VISIBLE_RANGE",
+      start: visibleRange.start,
+      end: visibleRange.end,
+    });
+  }
+
+  /**
    * Refresh slot display without refetching data.
    * Useful after in-place data modifications like fill operations.
    */

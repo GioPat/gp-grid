@@ -4,7 +4,7 @@ import viteLogo from "/vite.svg";
 import "./App.css";
 import {
   Grid,
-  createClientDataSource,
+  useGridData,
   type ColumnDefinition,
   type CellRendererParams,
   type EditRendererParams,
@@ -259,7 +259,6 @@ const columns: ColumnDefinition[] = [
     field: "id",
     cellDataType: "number",
     width: 80,
-    hidden: true,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
   },
@@ -329,43 +328,16 @@ function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
 
-  const [rowData, setRowData] = useState(() => generateRowData());
+  const { dataSource, updateRow } = useGridData<Person>(
+    generateRowData(),
+    { getRowId: (row) => row.id },
+  );
 
   const handleUpdateRow = () => {
-    setRowData((prev) => {
-      const updated = [...prev];
-      updated[0] = {
-        ...updated[0],
-        name: `Person ${names[getRandomInt(0, 3)]}`,
-        salary: getRandomInt(30000, 150000),
-      };
-      return updated;
+    updateRow(20, {
+      name: `Person ${names[getRandomInt(0, 3)]}`,
+      salary: getRandomInt(30000, 150000),
     });
-  };
-
-  // Handler to demonstrate reading all grid data
-  const handleGetAllData = () => {
-    console.log("=== All Grid Data ===");
-    console.log(`Total rows: ${rowData.length}`);
-
-    // Show first 10 rows with their tags
-    console.log("First 10 rows with tags:");
-    rowData.slice(0, 10).forEach((row) => {
-      console.log(
-        `  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`,
-      );
-    });
-
-    // Count rows by tag
-    const tagCounts: Record<string, number> = {};
-    rowData.forEach((row) => {
-      row.tags.forEach((tag) => {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-      });
-    });
-    console.log("Tag distribution:", tagCounts);
-
-    alert("Data logged to console. Open DevTools to see the output.");
   };
 
   return (
@@ -414,7 +386,7 @@ function MainDemo() {
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
           columns={columns}
-          rowData={rowData}
+          dataSource={dataSource}
           rowHeight={36}
           darkMode={true}
           headerHeight={40}
@@ -428,20 +400,6 @@ function MainDemo() {
       >
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
-        </button>
-        <button
-          onClick={handleGetAllData}
-          style={{
-            backgroundColor: "#3b82f6",
-            color: "white",
-            padding: "8px 16px",
-            borderRadius: "6px",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "500",
-          }}
-        >
-          Get All Data
         </button>
         <button
           onClick={handleUpdateRow}
