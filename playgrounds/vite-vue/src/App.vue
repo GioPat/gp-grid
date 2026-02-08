@@ -2,6 +2,7 @@
 import { h, ref, computed } from "vue";
 import {
   GpGrid,
+  useGridData,
   type ColumnDefinition,
   type CellRendererParams,
   type VueCellRenderer,
@@ -191,8 +192,19 @@ const columns: ColumnDefinition[] = [
   },
 ];
 
-// Create row data (once, not reactive)
-const rowData = generateRowData();
+// Create data source via useGridData
+const { dataSource, updateRow } = useGridData<Person>(generateRowData(), {
+  getRowId: (row) => row.id,
+});
+
+const rowIdToUpdate = ref(1);
+
+const handleUpdateRow = () => {
+  updateRow(rowIdToUpdate.value, {
+    name: `Person ${names[getRandomInt(0, 3)]}`,
+    salary: getRandomInt(30000, 150000),
+  });
+};
 
 const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
   computeRowClasses: highlightMode.value === "row" ? (context) => {
@@ -209,27 +221,6 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
   } : undefined,
 }));
 
-// Handler to demonstrate reading all grid data
-const handleGetAllData = () => {
-  console.log("=== All Grid Data ===");
-  console.log(`Total rows: ${rowData.length}`);
-
-  // Show first 10 rows with their tags
-  console.log("First 10 rows with tags:");
-  rowData.slice(0, 10).forEach((row) => {
-    console.log(`  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`);
-  });
-  // Count rows by tag
-  const tagCounts: Record<string, number> = {};
-  rowData.forEach((row) => {
-    row.tags.forEach((tag) => {
-      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-    });
-  });
-  console.log("Tag distribution:", tagCounts);
-
-  alert("Data logged to console. Open DevTools to see the output.");
-};
 </script>
 
 <template>
@@ -243,7 +234,7 @@ const handleGetAllData = () => {
   </div>
   <h1>GP Grid Vue Demo</h1>
 
-  <h2 class="subtitle">Large Dataset Demo (1.5M rows) - {{ rowData.length }} rows loaded</h2>
+  <h2 class="subtitle">Large Dataset Demo (1.5M rows)</h2>
 
   <!-- Highlight Mode Switcher -->
   <div class="mode-switcher">
@@ -262,7 +253,7 @@ const handleGetAllData = () => {
     <GpGrid
       :highlighting="highlightingProps"
       :columns="columns"
-      :row-data="rowData"
+      :data-source="dataSource"
       :row-height="36"
       :header-height="40"
       :dark-mode="true"
@@ -271,7 +262,17 @@ const handleGetAllData = () => {
   </div>
 
   <div class="card">
-    <button class="get-data-btn" @click="handleGetAllData">Get All Data</button>
+    <input
+      type="number"
+      :value="rowIdToUpdate"
+      @input="(e) => rowIdToUpdate = Number((e.target as HTMLInputElement).value)"
+      :min="1"
+      :max="1500000"
+      class="row-id-input"
+    />
+    <button class="update-row-btn" @click="handleUpdateRow">
+      Update Row {{ rowIdToUpdate }}
+    </button>
     <p class="hint">Double-click on cells to edit (Email column is editable)</p>
   </div>
 
@@ -311,8 +312,17 @@ const handleGetAllData = () => {
   padding: 2em;
 }
 
-.get-data-btn {
-  background-color: #3b82f6;
+.row-id-input {
+  width: 100px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #4b5563;
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+.update-row-btn {
+  background-color: #6366f1;
   color: white;
   padding: 8px 16px;
   border-radius: 6px;
@@ -321,8 +331,8 @@ const handleGetAllData = () => {
   font-weight: 500;
 }
 
-.get-data-btn:hover {
-  background-color: #2563eb;
+.update-row-btn:hover {
+  background-color: #4f46e5;
 }
 
 .hint {
