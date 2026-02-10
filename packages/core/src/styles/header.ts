@@ -115,4 +115,11 @@ export const headerStyles: string = `
   color: var(--gp-grid-primary);
   background-color: var(--gp-grid-primary-light);
 }
+
+/* Disabled header state during data loading */
+.gp-grid-header--loading .gp-grid-header-cell {
+  pointer-events: none;
+  opacity: 0.6;
+  cursor: default;
+}
 `;

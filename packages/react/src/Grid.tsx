@@ -75,6 +75,7 @@ export function Grid<TData extends Row = Row>(
     highlighting,
     getRowId,
     onCellValueChanged,
+    loadingComponent,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -502,7 +503,7 @@ export function Grid<TData extends Row = Row>(
       >
         {/* Headers */}
         <div
-          className="gp-grid-header"
+          className={`gp-grid-header${state.isLoading ? " gp-grid-header--loading" : ""}`}
           style={{
             position: "sticky",
             top: 0,
@@ -681,12 +682,18 @@ export function Grid<TData extends Row = Row>(
           />
         )}
 
-        {/* Loading indicator */}
+        {/* Loading overlay with indicator */}
         {state.isLoading && (
-          <div className="gp-grid-loading">
-            <div className="gp-grid-loading-spinner" />
-            Loading...
-          </div>
+          <>
+            <div className="gp-grid-loading-overlay" />
+            {loadingComponent ? (
+              React.createElement(loadingComponent, { isLoading: true })
+            ) : (
+              <div className="gp-grid-loading">
+                <div className="gp-grid-loading-spinner" />
+              </div>
+            )}
+          </>
         )}
 
         {/* Error message */}

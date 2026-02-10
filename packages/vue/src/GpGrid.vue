@@ -60,6 +60,8 @@ const props = withDefaults(
     getRowId?: (row: Row) => RowId;
     /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
     onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
+    /** Custom loading component to render instead of default spinner */
+    loadingComponent?: Component<{ isLoading: boolean }>;
   }>(),
   {
     overscan: 3,
@@ -398,7 +400,7 @@ defineExpose({
     >
       <!-- Headers -->
       <div
-        class="gp-grid-header"
+        :class="['gp-grid-header', { 'gp-grid-header--loading': state.isLoading }]"
         :style="{
           position: 'sticky',
           top: 0,
@@ -518,11 +520,18 @@ defineExpose({
         @mousedown="handleFillHandleMouseDown"
       />
 
-      <!-- Loading indicator -->
-      <div v-if="state.isLoading" class="gp-grid-loading">
-        <div class="gp-grid-loading-spinner" />
-        Loading...
-      </div>
+      <!-- Loading overlay with indicator -->
+      <template v-if="state.isLoading">
+        <div class="gp-grid-loading-overlay" />
+        <component 
+          v-if="props.loadingComponent" 
+          :is="props.loadingComponent" 
+          :is-loading="true"
+        />
+        <div v-else class="gp-grid-loading">
+          <div class="gp-grid-loading-spinner" />
+        </div>
+      </template>
 
       <!-- Error message -->
       <div v-if="state.error" class="gp-grid-error">

@@ -96,6 +96,9 @@ export class GridCore<TData extends Row = Row> {
   // Lifecycle state
   private isDestroyed: boolean = false;
 
+  // Loading state (guards against concurrent sort/filter operations)
+  private _isDataLoading: boolean = false;
+
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
     this.dataSource = options.dataSource;
@@ -302,6 +305,7 @@ export class GridCore<TData extends Row = Row> {
   // ===========================================================================
 
   private async fetchData(): Promise<void> {
+    this._isDataLoading = true;
     this.emit({ type: "DATA_LOADING" });
 
     try {
@@ -340,6 +344,8 @@ export class GridCore<TData extends Row = Row> {
         type: "DATA_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this._isDataLoading = false;
     }
   }
 
@@ -375,10 +381,12 @@ export class GridCore<TData extends Row = Row> {
     direction: SortDirection | null,
     addToExisting: boolean = false
   ): Promise<void> {
+    if (this._isDataLoading) return;
     return this.sortFilter.setSort(colId, direction, addToExisting);
   }
 
   async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
+    if (this._isDataLoading) return;
     return this.sortFilter.setFilter(colId, filter);
   }
 
@@ -399,6 +407,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+    if (this._isDataLoading) return;
     this.sortFilter.openFilterPopup(colIndex, anchorRect);
   }
 
@@ -701,7 +710,10 @@ export class GridCore<TData extends Row = Row> {
 
     // Update only the visible range in the cache
     for (let i = start; i < Math.min(end + 1, response.rows.length); i++) {
-      this.cachedRows.set(i, response.rows[i]);
+      const row = response.rows[i];
+      if (row !== undefined) {
+        this.cachedRows.set(i, row);
+      }
     }
 
     this.highlight?.clearAllCaches();

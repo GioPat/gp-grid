@@ -92,4 +92,6 @@ export interface GridProps<TData extends Row = Row> {
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /** Custom loading component to render instead of default spinner */
+  loadingComponent?: React.ComponentType<{ isLoading: boolean }>;
 }

@@ -2,13 +2,17 @@
 
 import { onUnmounted } from "vue";
 import { createMutableClientDataSource } from "@gp-grid/core";
-import type { Row, RowId, CellValue, MutableDataSource } from "@gp-grid/core";
+import type { Row, RowId, CellValue, MutableDataSource, ParallelSortOptions } from "@gp-grid/core";
 
 export interface UseGridDataOptions<TData> {
   /** Function to extract a unique ID from each row. Required. */
   getRowId: (row: TData) => RowId;
   /** Debounce time for batching transactions in ms. Default 50. */
   debounceMs?: number;
+  /** Use Web Worker for sorting large datasets (default: true) */
+  useWorker?: boolean;
+  /** Options for parallel sorting (only used when useWorker is true) */
+  parallelSort?: ParallelSortOptions | false;
 }
 
 export interface UseGridDataResult<TData> {
@@ -58,6 +62,8 @@ export const useGridData = <TData extends Row = Row>(
   const ds = createMutableClientDataSource<TData>(initialData, {
     getRowId: options.getRowId,
     debounceMs: options.debounceMs,
+    useWorker: options.useWorker,
+    parallelSort: options.parallelSort,
   });
 
   onUnmounted(() => {
