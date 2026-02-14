@@ -131,7 +131,7 @@ export function renderHeader<TData extends Row>(
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
+              <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z" />
             </svg>
           </span>
         )}
