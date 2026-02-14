@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.4...gp-grid-v0.8.0) (2026-02-14)
+
+
+### ✨ Features
+
+* add APIs for reactivity ([b0b11dd](https://github.com/GioPat/gp-grid/commit/b0b11dd6a371b64d390d8524c4eb4b33e2f0abbf))
+* add loader when sorting the data also for Mutable datasource ([a393529](https://github.com/GioPat/gp-grid/commit/a393529acc5b6b8d90639298196c3ed6be24269d))
+* change UI filter icon with funnel ([08f3b0a](https://github.com/GioPat/gp-grid/commit/08f3b0a3b79695ab4fea1da6846229fbd991f985))
+* expose APIs for mutating data and add warning for big datasets ([03bc3ff](https://github.com/GioPat/gp-grid/commit/03bc3ff19d718b18fd3b7cd36d1cc89a3e9f4035))
+
 ## [0.7.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.3...gp-grid-v0.7.4) (2026-01-28)
 
 
