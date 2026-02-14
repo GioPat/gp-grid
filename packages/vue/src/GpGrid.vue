@@ -75,6 +75,7 @@ const props = withDefaults(
 );
 
 // Refs
+const outerContainerRef = ref<HTMLDivElement | null>(null);
 const bodyContainerRef = ref<HTMLDivElement | null>(null);
 const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
@@ -393,6 +394,7 @@ defineExpose({
 
 <template>
   <div
+    ref="outerContainerRef"
     :class="['gp-grid-container', { 'gp-grid-container--dark': darkMode }]"
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
     tabindex="0"
@@ -444,7 +446,7 @@ defineExpose({
               filterable: state.headers.get(originalIndex)?.filterable ?? true,
               hasFilter: state.headers.get(originalIndex)?.hasFilter ?? false,
               core: coreRef,
-              container: bodyContainerRef,
+              container: outerContainerRef,
               headerRenderers: headerRenderers ?? {},
               globalHeaderRenderer: headerRenderer,
             })"

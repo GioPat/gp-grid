@@ -78,6 +78,7 @@ export function Grid<TData extends Row = Row>(
     loadingComponent,
   } = props;
 
+  const outerContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
@@ -491,6 +492,7 @@ export function Grid<TData extends Row = Row>(
 
   return (
     <div
+      ref={outerContainerRef}
       className={`gp-grid-container${darkMode ? " gp-grid-container--dark" : ""}`}
       style={{
         width: "100%",
@@ -549,7 +551,7 @@ export function Grid<TData extends Row = Row>(
                   filterable: headerInfo?.filterable ?? true,
                   hasFilter: headerInfo?.hasFilter ?? false,
                   coreRef,
-                  containerRef,
+                  containerRef: outerContainerRef,
                   headerRenderers,
                   globalHeaderRenderer: headerRenderer,
                 })}
