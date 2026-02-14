@@ -292,6 +292,7 @@ export class GridCore<TData extends Row = Row> {
       type: "UPDATE_VISIBLE_RANGE",
       start: visibleRange.start,
       end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
 
     // Emit content size when viewport size changes (for column scaling)
@@ -529,6 +530,8 @@ export class GridCore<TData extends Row = Row> {
       width,
       height: this.virtualContentHeight,
       viewportWidth: this.viewportWidth,
+      viewportHeight: this.viewportHeight,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
   }
 
@@ -680,6 +683,7 @@ export class GridCore<TData extends Row = Row> {
       type: "UPDATE_VISIBLE_RANGE",
       start: visibleRange.start,
       end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
   }
 
@@ -724,6 +728,7 @@ export class GridCore<TData extends Row = Row> {
       type: "UPDATE_VISIBLE_RANGE",
       start: visibleRange.start,
       end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
   }
 

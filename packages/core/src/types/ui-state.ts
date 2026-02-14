@@ -52,6 +52,10 @@ export interface GridState<TData = Row> {
   contentHeight: number;
   /** Viewport width (container's visible width) for column scaling */
   viewportWidth: number;
+  /** Viewport height (container's visible height) for loader positioning */
+  viewportHeight: number;
+  /** Y offset for rows wrapper when virtualization is active (keeps row translateY values small) */
+  rowsWrapperOffset: number;
   headers: Map<number, HeaderData>;
   filterPopup: FilterPopupState | null;
   isLoading: boolean;

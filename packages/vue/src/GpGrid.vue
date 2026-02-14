@@ -75,10 +75,13 @@ const props = withDefaults(
 );
 
 // Refs
-const containerRef = ref<HTMLDivElement | null>(null);
+const bodyContainerRef = ref<HTMLDivElement | null>(null);
 const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
 const coreUnsubscribeRef = shallowRef<(() => void) | null>(null);
+
+// Header scroll sync
+const scrollLeft = ref(0);
 
 // State
 const { state, applyInstructions, reset: resetState } = useGridState({
@@ -116,7 +119,7 @@ const {
   handleKeyDown,
   handleWheel,
   dragState,
-} = useInputHandler(coreRef, containerRef, computed(() => props.columns), {
+} = useInputHandler(coreRef, bodyContainerRef, computed(() => props.columns), {
   activeCell: computed(() => state.activeCell),
   selectionRange: computed(() => state.selectionRange),
   editingCell: computed(() => state.editingCell),
@@ -142,7 +145,7 @@ const { fillHandlePosition } = useFillHandle({
 
 // Handle scroll
 function handleScroll(): void {
-  const container = containerRef.value;
+  const container = bodyContainerRef.value;
   const core = coreRef.value;
   if (!container || !core) return;
 
@@ -152,6 +155,15 @@ function handleScroll(): void {
     container.clientWidth,
     container.clientHeight,
   );
+}
+
+// Handle scroll with header sync
+function handleScrollWithHeaderSync(): void {
+  const container = bodyContainerRef.value;
+  if (container) {
+    scrollLeft.value = container.scrollLeft;
+  }
+  handleScroll();
 }
 
 // Handle filter apply
@@ -262,7 +274,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
   // Initialize and set viewport
   core.initialize();
 
-  const container = containerRef.value;
+  const container = bodyContainerRef.value;
   if (container) {
     core.setViewport(
       container.scrollTop,
@@ -281,7 +293,7 @@ onMounted(() => {
   initializeCore(dataSource);
 
   // Set up ResizeObserver (only once, not per-core)
-  const container = containerRef.value;
+  const container = bodyContainerRef.value;
   if (container && typeof ResizeObserver !== "undefined") {
     const resizeObserver = new ResizeObserver(() => {
       // Use current core ref (may change during lifecycle)
@@ -381,33 +393,30 @@ defineExpose({
 
 <template>
   <div
-    ref="containerRef"
     :class="['gp-grid-container', { 'gp-grid-container--dark': darkMode }]"
-    style="width: 100%; height: 100%; overflow: auto; position: relative"
+    style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
     tabindex="0"
-    @scroll="handleScroll"
-    @wheel="(e) => handleWheel(e, wheelDampening)"
     @keydown="handleKeyDown"
   >
-    <!-- Content sizer -->
+    <!-- Header container - fixed height, horizontal scroll synced with body -->
     <div
+      :class="['gp-grid-header', { 'gp-grid-header--loading': state.isLoading }]"
       :style="{
-        width: `${Math.max(state.contentWidth, totalWidth)}px`,
-        height: `${Math.max(state.contentHeight, totalHeaderHeight)}px`,
+        flexShrink: 0,
+        height: `${totalHeaderHeight}px`,
+        overflow: 'hidden',
         position: 'relative',
-        minWidth: '100%',
+        zIndex: 100,
       }"
     >
-      <!-- Headers -->
       <div
-        :class="['gp-grid-header', { 'gp-grid-header--loading': state.isLoading }]"
         :style="{
-          position: 'sticky',
+          position: 'absolute',
           top: 0,
           left: 0,
-          height: `${totalHeaderHeight}px`,
+          transform: `translateX(${-scrollLeft}px)`,
           width: `${Math.max(state.contentWidth, totalWidth)}px`,
-          minWidth: '100%',
+          height: `${totalHeaderHeight}px`,
         }"
       >
         <div
@@ -435,103 +444,121 @@ defineExpose({
               filterable: state.headers.get(originalIndex)?.filterable ?? true,
               hasFilter: state.headers.get(originalIndex)?.hasFilter ?? false,
               core: coreRef,
-              container: containerRef,
+              container: bodyContainerRef,
               headerRenderers: headerRenderers ?? {},
               globalHeaderRenderer: headerRenderer,
             })"
           />
         </div>
       </div>
+    </div>
 
-      <!-- Row slots -->
+    <!-- Scrollable body container -->
+    <div
+      ref="bodyContainerRef"
+      style="flex: 1; overflow: auto; position: relative"
+      @scroll="handleScrollWithHeaderSync"
+      @wheel="(e) => handleWheel(e, wheelDampening)"
+    >
+      <!-- Content sizer - provides scroll range -->
       <div
-        v-for="slot in slotsArray.filter((s) => s.rowIndex >= 0)"
-        :key="slot.slotId"
-        :class="getRowClasses(slot)"
         :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          transform: `translateY(${slot.translateY}px)`,
           width: `${Math.max(state.contentWidth, totalWidth)}px`,
-          height: `${rowHeight}px`,
+          height: `${Math.max(state.contentHeight - totalHeaderHeight, 0)}px`,
+          position: 'relative',
+          minWidth: '100%',
         }"
       >
+        <!-- Rows wrapper - uses transform to position rows with small translateY values -->
+        <!-- This prevents browser rendering issues at extreme pixel positions (millions of px) -->
         <div
-          v-for="({ column, originalIndex }, visibleIndex) in visibleColumnsWithIndices"
-          :key="`${slot.slotId}-${originalIndex}`"
-          :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, state.hoverPosition)"
+          class="gp-grid-rows-wrapper"
           :style="{
             position: 'absolute',
-            left: `${columnPositions[visibleIndex]}px`,
             top: 0,
-            width: `${columnWidths[visibleIndex]}px`,
+            left: 0,
+            width: `${Math.max(state.contentWidth, totalWidth)}px`,
+            transform: `translateY(${state.rowsWrapperOffset}px)`,
+            willChange: 'transform',
+          }"
+        >
+        <!-- Row slots -->
+        <div
+          v-for="slot in slotsArray.filter((s) => s.rowIndex >= 0)"
+          :key="slot.slotId"
+          :class="getRowClasses(slot)"
+          :style="{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            transform: `translateY(${slot.translateY}px)`,
+            width: `${Math.max(state.contentWidth, totalWidth)}px`,
             height: `${rowHeight}px`,
           }"
-          @mousedown="(e) => handleCellMouseDown(slot.rowIndex, originalIndex, e)"
-          @dblclick="() => handleCellDoubleClick(slot.rowIndex, originalIndex)"
-          @mouseenter="() => handleCellMouseEnter(slot.rowIndex, originalIndex)"
-          @mouseleave="handleCellMouseLeave"
         >
-          <!-- Edit mode -->
-          <template v-if="isCellEditing(slot.rowIndex, originalIndex, state.editingCell) && state.editingCell">
-            <component
-              :is="renderEditCell({
-                column,
-                rowData: slot.rowData,
-                rowIndex: slot.rowIndex,
-                colIndex: originalIndex,
-                initialValue: state.editingCell.initialValue,
-                core: coreRef,
-                editRenderers: editRenderers ?? {},
-                globalEditRenderer: editRenderer,
-              })"
-            />
-          </template>
-          <!-- View mode -->
-          <template v-else>
-            <component
-              :is="renderCell({
-                column,
-                rowData: slot.rowData,
-                rowIndex: slot.rowIndex,
-                colIndex: originalIndex,
-                isActive: isCellActive(slot.rowIndex, originalIndex, state.activeCell),
-                isSelected: isCellSelected(slot.rowIndex, originalIndex, state.selectionRange),
-                isEditing: false,
-                cellRenderers: cellRenderers ?? {},
-                globalCellRenderer: cellRenderer,
-              })"
-            />
-          </template>
+          <div
+            v-for="({ column, originalIndex }, visibleIndex) in visibleColumnsWithIndices"
+            :key="`${slot.slotId}-${originalIndex}`"
+            :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, state.hoverPosition)"
+            :style="{
+              position: 'absolute',
+              left: `${columnPositions[visibleIndex]}px`,
+              top: 0,
+              width: `${columnWidths[visibleIndex]}px`,
+              height: `${rowHeight}px`,
+            }"
+            @mousedown="(e) => handleCellMouseDown(slot.rowIndex, originalIndex, e)"
+            @dblclick="() => handleCellDoubleClick(slot.rowIndex, originalIndex)"
+            @mouseenter="() => handleCellMouseEnter(slot.rowIndex, originalIndex)"
+            @mouseleave="handleCellMouseLeave"
+          >
+            <!-- Edit mode -->
+            <template v-if="isCellEditing(slot.rowIndex, originalIndex, state.editingCell) && state.editingCell">
+              <component
+                :is="renderEditCell({
+                  column,
+                  rowData: slot.rowData,
+                  rowIndex: slot.rowIndex,
+                  colIndex: originalIndex,
+                  initialValue: state.editingCell.initialValue,
+                  core: coreRef,
+                  editRenderers: editRenderers ?? {},
+                  globalEditRenderer: editRenderer,
+                })"
+              />
+            </template>
+            <!-- View mode -->
+            <template v-else>
+              <component
+                :is="renderCell({
+                  column,
+                  rowData: slot.rowData,
+                  rowIndex: slot.rowIndex,
+                  colIndex: originalIndex,
+                  isActive: isCellActive(slot.rowIndex, originalIndex, state.activeCell),
+                  isSelected: isCellSelected(slot.rowIndex, originalIndex, state.selectionRange),
+                  isEditing: false,
+                  cellRenderers: cellRenderers ?? {},
+                  globalCellRenderer: cellRenderer,
+                })"
+              />
+            </template>
+          </div>
         </div>
-      </div>
 
-      <!-- Fill handle -->
-      <div
-        v-if="fillHandlePosition && !state.editingCell"
-        class="gp-grid-fill-handle"
-        :style="{
-          position: 'absolute',
-          top: `${fillHandlePosition.top}px`,
-          left: `${fillHandlePosition.left}px`,
-          zIndex: 200,
-        }"
-        @mousedown="handleFillHandleMouseDown"
-      />
-
-      <!-- Loading overlay with indicator -->
-      <template v-if="state.isLoading">
-        <div class="gp-grid-loading-overlay" />
-        <component 
-          v-if="props.loadingComponent" 
-          :is="props.loadingComponent" 
-          :is-loading="true"
+        <!-- Fill handle - inside wrapper so it moves with rows -->
+        <div
+          v-if="fillHandlePosition && !state.editingCell"
+          class="gp-grid-fill-handle"
+          :style="{
+            position: 'absolute',
+            top: `${fillHandlePosition.top}px`,
+            left: `${fillHandlePosition.left}px`,
+            zIndex: 200,
+          }"
+          @mousedown="handleFillHandleMouseDown"
         />
-        <div v-else class="gp-grid-loading">
-          <div class="gp-grid-loading-spinner" />
-        </div>
-      </template>
+      </div>
 
       <!-- Error message -->
       <div v-if="state.error" class="gp-grid-error">
@@ -546,8 +573,54 @@ defineExpose({
         No data to display
       </div>
     </div>
+    <!-- End content sizer -->
+  </div>
+  <!-- End scrollable body container -->
 
-    <!-- Filter Popup -->
+  <!-- Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues -->
+  <div
+    v-if="state.isLoading"
+    :style="{
+      position: 'absolute',
+      top: `${totalHeaderHeight}px`,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 50,
+      pointerEvents: 'none',
+    }"
+  >
+    <div
+      class="gp-grid-loading-overlay"
+      :style="{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+      }"
+    />
+    <component
+      v-if="props.loadingComponent"
+      :is="props.loadingComponent"
+      :is-loading="true"
+    />
+    <div
+      v-else
+      class="gp-grid-loading"
+      :style="{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        pointerEvents: 'auto',
+      }"
+    >
+      <div class="gp-grid-loading-spinner" />
+    </div>
+  </div>
+
+  <!-- Filter Popup -->
     <FilterPopup
       v-if="state.filterPopup?.isOpen && state.filterPopup.column && state.filterPopup.anchorRect"
       :column="state.filterPopup.column"

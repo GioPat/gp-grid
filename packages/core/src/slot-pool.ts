@@ -96,9 +96,13 @@ export class SlotPoolManager {
   syncSlots(): void {
     const scrollTop = this.options.getScrollTop();
     const rowHeight = this.options.getRowHeight();
+    const headerHeight = this.options.getHeaderHeight();
     const viewportHeight = this.options.getViewportHeight();
     const totalRows = this.options.getTotalRows();
     const overscan = this.options.getOverscan();
+
+    // Visible content area excludes the sticky header
+    const contentHeight = viewportHeight - headerHeight;
 
     const visibleStartRow = Math.max(
       0,
@@ -106,7 +110,7 @@ export class SlotPoolManager {
     );
     const visibleEndRow = Math.min(
       totalRows - 1,
-      Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan
+      Math.ceil((scrollTop + contentHeight) / rowHeight) + overscan
     );
 
     if (totalRows === 0 || visibleEndRow < visibleStartRow) {
@@ -304,35 +308,53 @@ export class SlotPoolManager {
   /**
    * Calculate the translateY position for a row.
    * Handles scroll virtualization for very large datasets.
+   *
+   * When virtualization is active (scrollRatio < 1), we use viewport-relative
+   * positioning to keep translateY values small. This prevents browser rendering
+   * issues that occur at extreme pixel values (millions of pixels).
+   *
+   * Note: The header is rendered outside the content sizer, so row positions
+   * start at 0 (not headerHeight) within the rows container.
    */
   private getRowTranslateY(rowIndex: number): number {
     const rowHeight = this.options.getRowHeight();
-    const headerHeight = this.options.getHeaderHeight();
     const scrollRatio = this.options.getScrollRatio();
-    const virtualContentHeight = this.options.getVirtualContentHeight();
     const scrollTop = this.options.getScrollTop();
 
-    // Calculate the natural position for this row
-    const naturalY = rowIndex * rowHeight + headerHeight;
+    // Calculate the natural position for this row (no headerHeight since header is outside)
+    const naturalY = rowIndex * rowHeight;
 
     if (scrollRatio >= 1) {
       return naturalY;
     }
 
-    // With scroll virtualization, we need to position rows relative to the viewport
-    // so they appear at the correct location within the capped container height.
-    //
-    // scrollTop is where we are in "real" content space (already mapped from virtual)
-    // virtualScrollTop is where the browser thinks we are in the DOM
-    // offset = the difference we need to subtract to keep rows within bounds
-    const naturalScrollTop = scrollTop;
-    const virtualScrollTop = naturalScrollTop * scrollRatio;
-    const offset = naturalScrollTop - virtualScrollTop;
+    // With virtualization active, position rows relative to the first visible row.
+    // This keeps translateY values small (0 to viewportHeight + overscan buffer)
+    // instead of millions of pixels.
+    const firstVisibleRowIndex = Math.floor(scrollTop / rowHeight);
+    const firstVisibleRowY = firstVisibleRowIndex * rowHeight;
 
-    // Position row at its natural Y minus the offset
-    // Clamp to ensure it stays within virtual container bounds (0 to virtualContentHeight)
-    // This prevents floating point precision issues at extreme scroll positions
-    const translateY = naturalY - offset;
-    return Math.max(0, Math.min(translateY, virtualContentHeight));
+    // Row's position relative to first visible row
+    return naturalY - firstVisibleRowY;
+  }
+
+  /**
+   * Get the Y offset for the rows wrapper container.
+   * When virtualization is active, this positions the wrapper so rows
+   * with small translateY values appear at the correct scroll position.
+   */
+  getRowsWrapperOffset(): number {
+    const scrollRatio = this.options.getScrollRatio();
+    const scrollTop = this.options.getScrollTop();
+    const rowHeight = this.options.getRowHeight();
+
+    if (scrollRatio >= 1) {
+      return 0; // No wrapper offset needed without virtualization
+    }
+
+    // Position wrapper at the virtual scroll position of the first visible row
+    const firstVisibleRowIndex = Math.floor(scrollTop / rowHeight);
+    const firstVisibleRowY = firstVisibleRowIndex * rowHeight;
+    return firstVisibleRowY * scrollRatio;
   }
 }

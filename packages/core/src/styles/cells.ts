@@ -6,6 +6,15 @@ export const cellStyles: string = `
    Data Cells
    ============================================================================= */
 
+/* Rows wrapper - positions rows with small translateY values for large datasets */
+.gp-grid-rows-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Keep wrapper below the sticky header (z-index: 10) */
+  z-index: 1;
+}
+
 .gp-grid-row {
   position: absolute;
   top: 0;

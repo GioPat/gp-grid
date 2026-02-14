@@ -64,11 +64,17 @@ export interface SetSelectionRangeInstruction {
   range: CellRange | null;
 }
 
-/** Update visible range instruction - emitted when selection moves outside visible viewport */
+/** Update visible range instruction - emitted on scroll or when selection moves outside visible viewport */
 export interface UpdateVisibleRangeInstruction {
   type: "UPDATE_VISIBLE_RANGE";
   start: number;
   end: number;
+  /**
+   * Y offset for the rows wrapper container when virtualization is active.
+   * This allows rows to use small translateY values (viewport-relative)
+   * instead of absolute positions (millions of pixels).
+   */
+  rowsWrapperOffset: number;
 }
 
 // =============================================================================
@@ -106,6 +112,13 @@ export interface SetContentSizeInstruction {
   width: number;
   height: number;
   viewportWidth: number;
+  viewportHeight: number;
+  /**
+   * Y offset for the rows wrapper container when virtualization is active.
+   * This allows rows to use small translateY values (viewport-relative)
+   * instead of absolute positions (millions of pixels).
+   */
+  rowsWrapperOffset: number;
 }
 
 /** Update header instruction */
