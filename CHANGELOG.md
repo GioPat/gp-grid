@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.1...gp-grid-v0.8.2) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* filter popup ([50aa074](https://github.com/GioPat/gp-grid/commit/50aa0746375b06d316a7d0666a9e132035ef6fb3))
+
 ## [0.8.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.0...gp-grid-v0.8.1) (2026-02-14)
 
 
