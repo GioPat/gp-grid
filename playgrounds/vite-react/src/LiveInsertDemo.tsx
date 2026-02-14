@@ -102,6 +102,16 @@ export function LiveInsertDemo() {
     }
   }, [dataSource]);
 
+  const handleUpdateFirstRow = useCallback(() => {
+    const newPrice = getRandomPrice();
+    const newSymbol = symbols[Math.floor(Math.random() * symbols.length)];
+    dataSource.updateRow(1, {
+      price: newPrice,
+      symbol: newSymbol,
+      timestamp: new Date().toISOString().slice(11, 23),
+    });
+  }, [dataSource]);
+
   const handleClearAll = useCallback(async () => {
     await dataSource.flushTransactions();
     const count = dataSource.getTotalRowCount();
@@ -225,6 +235,21 @@ export function LiveInsertDemo() {
           />
           <span style={{ color: "#9ca3af" }}>ms</span>
         </div>
+
+        <button
+          onClick={handleUpdateFirstRow}
+          style={{
+            backgroundColor: "#6366f1",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "500",
+          }}
+        >
+          Update Row 1
+        </button>
 
         <button
           onClick={handleRemoveFirst}

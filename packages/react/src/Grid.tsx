@@ -73,6 +73,9 @@ export function Grid<TData extends Row = Row>(
     initialHeight,
     gridRef,
     highlighting,
+    getRowId,
+    onCellValueChanged,
+    loadingComponent,
   } = props;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +108,13 @@ export function Grid<TData extends Row = Row>(
     cache.rowData !== rowData;
 
   if (needsNewDataSource) {
+    // Dev warning: rowData prop changed with large dataset
+    if (cache && rowData && rowData.length > 10_000) {
+      console.warn(
+        `[gp-grid] rowData prop changed with ${rowData.length} rows — this triggers a full rebuild. Use useGridData() for efficient updates.`,
+      );
+    }
+
     // Cleanup previous owned data source
     if (cache?.ownsDataSource) {
       cache.dataSource.destroy?.();
@@ -147,21 +157,15 @@ export function Grid<TData extends Row = Row>(
     };
   }, []);
 
-  // Handle data source changes: reset state early (before GridCore recreates)
-  // Cleanup responsibilities:
-  // - This effect: reset state on dataSource change
-  // - GridCore effect: destroy old core AND old dataSource in cleanup
-  useEffect(() => {
-    const prevDataSource = prevDataSourceRef.current;
+  // Refs for callback props to avoid triggering core re-creation on identity changes
+  const getRowIdRef = useRef(getRowId);
+  getRowIdRef.current = getRowId;
+  const onCellValueChangedRef = useRef(onCellValueChanged);
+  onCellValueChangedRef.current = onCellValueChanged;
 
-    // On change (not initial mount), reset state to clear slot rowData references
-    if (prevDataSource && prevDataSource !== dataSource) {
-      dispatch({ type: "RESET" });
-    }
-
-    // Track current data source
-    prevDataSourceRef.current = dataSource;
-  }, [dataSource]);
+  // Ref for dataSource so initial core gets the right one without being in the dep array
+  const dataSourceRef = useRef(dataSource);
+  dataSourceRef.current = dataSource;
 
   // Create visible columns with original index tracking (for hidden column support)
   const visibleColumnsWithIndices = useMemo(
@@ -215,12 +219,16 @@ export function Grid<TData extends Row = Row>(
 
     const core = new GridCore<TData>({
       columns,
-      dataSource,
+      dataSource: dataSourceRef.current,
       rowHeight,
       headerHeight: totalHeaderHeight,
       overscan,
       sortingEnabled,
       highlighting,
+      getRowId: getRowIdRef.current,
+      onCellValueChanged: onCellValueChangedRef.current
+        ? (event) => onCellValueChangedRef.current?.(event)
+        : undefined,
     });
 
     coreRef.current = core;
@@ -277,7 +285,6 @@ export function Grid<TData extends Row = Row>(
     };
   }, [
     columns,
-    dataSource,
     rowHeight,
     totalHeaderHeight,
     overscan,
@@ -286,6 +293,19 @@ export function Grid<TData extends Row = Row>(
     highlighting,
   ]);
 
+  // Handle reactive data source changes without re-creating core
+  useEffect(() => {
+    const core = coreRef.current;
+    if (!core) return;
+    const prev = prevDataSourceRef.current;
+    if (!prev || prev === dataSource) {
+      prevDataSourceRef.current = dataSource;
+      return;
+    }
+    prevDataSourceRef.current = dataSource;
+    core.setDataSource(dataSource);
+  }, [dataSource]);
+
   // Subscribe to data source changes (for MutableDataSource)
   useEffect(() => {
     const mutableDataSource = dataSource as {
@@ -293,7 +313,7 @@ export function Grid<TData extends Row = Row>(
     };
     if (mutableDataSource.subscribe) {
       const unsubscribe = mutableDataSource.subscribe(() => {
-        coreRef.current?.refresh();
+        coreRef.current?.refreshFromTransaction();
       });
       return unsubscribe;
     }
@@ -483,7 +503,7 @@ export function Grid<TData extends Row = Row>(
       >
         {/* Headers */}
         <div
-          className="gp-grid-header"
+          className={`gp-grid-header${state.isLoading ? " gp-grid-header--loading" : ""}`}
           style={{
             position: "sticky",
             top: 0,
@@ -662,12 +682,18 @@ export function Grid<TData extends Row = Row>(
           />
         )}
 
-        {/* Loading indicator */}
+        {/* Loading overlay with indicator */}
         {state.isLoading && (
-          <div className="gp-grid-loading">
-            <div className="gp-grid-loading-spinner" />
-            Loading...
-          </div>
+          <>
+            <div className="gp-grid-loading-overlay" />
+            {loadingComponent ? (
+              React.createElement(loadingComponent, { isLoading: true })
+            ) : (
+              <div className="gp-grid-loading">
+                <div className="gp-grid-loading-spinner" />
+              </div>
+            )}
+          </>
         )}
 
         {/* Error message */}

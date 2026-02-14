@@ -13,6 +13,22 @@ import {
   TransactionManager,
   type TransactionResult,
 } from "../transaction-manager";
+import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
+import {
+  toSortableNumber,
+  stringToSortableHashes,
+  applySort,
+  HASH_CHUNK_COUNT,
+} from "./sorting";
+import { applyFilters } from "./filtering";
+import { createInstructionEmitter } from "../utils";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+/** Threshold for using Web Worker (rows). Below this, sync sort is used. */
+const WORKER_THRESHOLD = 200000;
 
 // =============================================================================
 // Types
@@ -59,6 +75,10 @@ export interface MutableClientDataSourceOptions<TData> {
   debounceMs?: number;
   /** Callback when transactions are processed. */
   onTransactionProcessed?: (result: TransactionResult) => void;
+  /** Use Web Worker for sorting large datasets (default: true) */
+  useWorker?: boolean;
+  /** Options for parallel sorting (only used when useWorker is true) */
+  parallelSort?: ParallelSortOptions | false;
 }
 
 // =============================================================================
@@ -68,6 +88,7 @@ export interface MutableClientDataSourceOptions<TData> {
 /**
  * Creates a mutable client-side data source with transaction support.
  * Uses IndexedDataStore for efficient incremental operations.
+ * For large datasets, sorting is automatically offloaded to a Web Worker.
  */
 export function createMutableClientDataSource<TData extends Row = Row>(
   data: TData[],
@@ -78,16 +99,38 @@ export function createMutableClientDataSource<TData extends Row = Row>(
     getFieldValue,
     debounceMs = 50,
     onTransactionProcessed,
+    useWorker = true,
+    parallelSort,
   } = options;
 
   // Create the indexed data store
   const store = new IndexedDataStore(data, {
     getRowId,
-    getFieldValue,
+    getFieldValue: getFieldValue ?? ((row, field) => {
+      const parts = field.split(".");
+      let value: unknown = row;
+      for (const part of parts) {
+        if (value == null || typeof value !== "object") {
+          return null;
+        }
+        value = (value as Record<string, unknown>)[part];
+      }
+      return (value ?? null) as CellValue;
+    }),
   });
 
   // Subscribers for data change notifications
   const subscribers = new Set<DataChangeListener>();
+
+  // Create instruction emitter for DATA_LOADING/DATA_LOADED
+  const instructionEmitter = createInstructionEmitter();
+  const emit = instructionEmitter.emit;
+
+  // Create parallel sort manager only if useWorker is enabled
+  // parallelSort: false disables parallel sorting, undefined or object enables it
+  const sortManager = useWorker
+    ? new ParallelSortManager(parallelSort === false ? { maxWorkers: 1 } : parallelSort)
+    : null;
 
   // Create the transaction manager
   const transactionManager = new TransactionManager<TData>({
@@ -109,10 +152,138 @@ export function createMutableClientDataSource<TData extends Row = Row>(
     ): Promise<DataSourceResponse<TData>> {
       // Flush any pending transactions before fetching
       if (transactionManager.hasPending()) {
-        await transactionManager.flush();
+        emit({ type: "DATA_LOADING" });
+        try {
+          await transactionManager.flush();
+        } finally {
+          emit({ type: "DATA_LOADED", totalRows: store.getTotalRowCount() });
+        }
       }
 
-      return store.query(request);
+      // Get all data directly from store for sorting and filtering
+      let processedData = store.getAllRows();
+
+      // Define field accessor for use in filtering and sorting
+      const fieldAccessor = getFieldValue ?? ((row, field) => {
+        const parts = field.split(".");
+        let value: unknown = row;
+        for (const part of parts) {
+          if (value == null || typeof value !== "object") {
+            return null;
+          }
+          value = (value as Record<string, unknown>)[part];
+        }
+        return (value ?? null) as CellValue;
+      });
+
+      // Apply filters (always sync - filtering is fast)
+      if (request.filter && Object.keys(request.filter).length > 0) {
+        processedData = applyFilters(processedData, request.filter, fieldAccessor);
+      }
+
+      // Apply sorting (async with worker for large datasets, sync for small)
+      if (request.sort && request.sort.length > 0) {
+        const canUseWorkerSort =
+          sortManager &&
+          sortManager.isAvailable() &&
+          processedData.length >= WORKER_THRESHOLD;
+
+        if (canUseWorkerSort) {
+          emit({ type: "DATA_LOADING" });
+          try {
+            let sortedIndices: Uint32Array;
+
+            // For single-column string sorting, use multi-hash approach
+            if (request.sort.length === 1) {
+              const { colId, direction } = request.sort[0]!;
+
+              // Detect column type - arrays are treated as string columns
+              let isStringColumn = false;
+              for (const row of processedData) {
+                const val = fieldAccessor(row, colId);
+                if (val != null) {
+                  isStringColumn = typeof val === "string" || Array.isArray(val);
+                  break;
+                }
+              }
+
+              if (isStringColumn) {
+                // Use multi-hash sorting for strings
+                const originalStrings: string[] = [];
+                const hashChunks: number[][] = Array.from(
+                  { length: HASH_CHUNK_COUNT },
+                  () => [],
+                );
+
+                for (const row of processedData) {
+                  const val = fieldAccessor(row, colId);
+                  const str = val == null ? "" : Array.isArray(val) ? val.join(', ') : String(val);
+                  originalStrings.push(str);
+                  const hashes = stringToSortableHashes(str);
+                  for (let c = 0; c < HASH_CHUNK_COUNT; c++) {
+                    hashChunks[c]!.push(hashes[c]!);
+                  }
+                }
+
+                // Convert to Float64Arrays for transfer to worker
+                const hashChunkArrays = hashChunks.map(
+                  (chunk) => new Float64Array(chunk),
+                );
+
+                sortedIndices = await sortManager.sortStringHashes(
+                  hashChunkArrays,
+                  direction,
+                  originalStrings,
+                );
+              } else {
+                // Use single-value sorting for numeric columns
+                const values = processedData.map((row) => {
+                  const val = fieldAccessor(row, colId);
+                  return toSortableNumber(val);
+                });
+                sortedIndices = await sortManager.sortIndices(values, direction);
+              }
+            } else {
+              // Multi-column sorting: use single hash per value
+              const columnValues: number[][] = [];
+              const directions: Array<"asc" | "desc"> = [];
+
+              for (const { colId, direction } of request.sort) {
+                const values = processedData.map((row) => {
+                  const val = fieldAccessor(row, colId);
+                  return toSortableNumber(val);
+                });
+                columnValues.push(values);
+                directions.push(direction);
+              }
+
+              sortedIndices = await sortManager.sortMultiColumn(columnValues, directions);
+            }
+
+            // Reorder data using sorted indices
+            const reordered = new Array<TData>(processedData.length);
+            for (let i = 0; i < sortedIndices.length; i++) {
+              const sourceIndex = sortedIndices[i]!;
+              reordered[i] = processedData[sourceIndex]!;
+            }
+            processedData = reordered;
+          } finally {
+            emit({ type: "DATA_LOADED", totalRows: processedData.length });
+          }
+        } else {
+          // Use sync sorting for small datasets or when worker is unavailable
+          processedData = applySort(processedData, request.sort, fieldAccessor);
+        }
+      }
+
+      const totalRows = processedData.length;
+
+      // Apply pagination
+      const { pageIndex, pageSize } = request.pagination;
+      const startIndex = pageIndex * pageSize;
+      const rows = processedData.slice(startIndex, startIndex + pageSize);
+
+      return { rows, totalRows };
     },
 
     addRows(rows: TData[]): void {

@@ -4,10 +4,12 @@ import viteLogo from "/vite.svg";
 import "./App.css";
 import {
   Grid,
-  createClientDataSource,
+  useGridData,
   type ColumnDefinition,
   type CellRendererParams,
   type EditRendererParams,
+  type RowId,
+  type CellValueChangedEvent,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
@@ -22,6 +24,15 @@ interface Person {
   status: "active" | "inactive" | "pending";
   salary: number;
   tags: string[];
+}
+
+const getRowId = (person: Person): RowId => {
+  return person.id;
+};
+
+const onCellUpdate = (context: CellValueChangedEvent<Person>): void => {
+  console.log(`Old value was ${context.oldValue} and new value is ${context.newValue}`);
+  return;
 }
 
 // Available tag options for the multi-select
@@ -248,7 +259,6 @@ const columns: ColumnDefinition[] = [
     field: "id",
     cellDataType: "number",
     width: 80,
-    hidden: true,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
   },
@@ -314,39 +324,38 @@ const generateRowData = (): Person[] =>
 
 type HighlightMode = "row" | "column" | "cell";
 
+const initialRowData = generateRowData();
+
 function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
+  const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
 
-  // Keep reference to raw data so we can access it later
-  const rowData = useMemo(() => generateRowData(), []);
+  const { dataSource, updateRow } = useGridData<Person>(
+    initialRowData,
+    { getRowId: (row) => row.id },
+  );
 
-  // Create data source from the row data
-  const dataSource = useMemo(() => createClientDataSource(rowData), [rowData]);
+  const highlighting = useMemo(() => ({
+    computeRowClasses: highlightMode === "row" ? (context: { isHovered: boolean }) => {
+      if (context.isHovered) return ["row-highlight"];
+      return [];
+    } : undefined,
+    computeColumnClasses: highlightMode === "column" ? (context: { isHovered: boolean }) => {
+      if (context.isHovered) return ["column-highlight"];
+      return [];
+    } : undefined,
+    computeCellClasses: highlightMode === "cell" ? (context: { isHovered: boolean }) => {
+      if (context.isHovered) return ["cell-highlight"];
+      return [];
+    } : undefined,
+  }), [highlightMode]);
 
-  // Handler to demonstrate reading all grid data
-  const handleGetAllData = () => {
-    console.log("=== All Grid Data ===");
-    console.log(`Total rows: ${rowData.length}`);
-
-    // Show first 10 rows with their tags
-    console.log("First 10 rows with tags:");
-    rowData.slice(0, 10).forEach((row) => {
-      console.log(
-        `  ID ${row.id}: ${row.name} - Tags: [${row.tags.join(", ")}]`,
-      );
+  const handleUpdateRow = () => {
+    updateRow(rowIdToUpdate, {
+      name: `Person ${names[getRandomInt(0, 3)]}`,
+      salary: getRandomInt(30000, 150000),
     });
-
-    // Count rows by tag
-    const tagCounts: Record<string, number> = {};
-    rowData.forEach((row) => {
-      row.tags.forEach((tag) => {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-      });
-    });
-    console.log("Tag distribution:", tagCounts);
-
-    alert("Data logged to console. Open DevTools to see the output.");
   };
 
   return (
@@ -378,22 +387,11 @@ function MainDemo() {
 
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
-          highlighting={{
-            computeRowClasses: highlightMode === "row" ? (context) => {
-              if (context.isHovered) return ["row-highlight"];
-              return [];
-            } : undefined,
-            computeColumnClasses: highlightMode === "column" ? (context) => {
-              if (context.isHovered) return ["column-highlight"];
-              return [];
-            } : undefined,
-            computeCellClasses: highlightMode === "cell" ? (context) => {
-              if (context.isHovered) return ["cell-highlight"];
-              return [];
-            } : undefined,
-          }}
+          highlighting={highlighting}
+          getRowId={getRowId}
+          onCellValueChanged={onCellUpdate}
           columns={columns}
-          rowData={rowData}
+          dataSource={dataSource}
           rowHeight={36}
           darkMode={true}
           headerHeight={40}
@@ -408,10 +406,25 @@ function MainDemo() {
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
         </button>
-        <button
-          onClick={handleGetAllData}
+        <input
+          type="number"
+          value={rowIdToUpdate}
+          onChange={(e) => setRowIdToUpdate(Number(e.target.value))}
+          min={1}
+          max={1500000}
           style={{
-            backgroundColor: "#3b82f6",
+            width: "100px",
+            padding: "8px",
+            borderRadius: "6px",
+            border: "1px solid #4b5563",
+            backgroundColor: "#1f2937",
+            color: "#f3f4f6",
+          }}
+        />
+        <button
+          onClick={handleUpdateRow}
+          style={{
+            backgroundColor: "#6366f1",
             color: "white",
             padding: "8px 16px",
             borderRadius: "6px",
@@ -420,7 +433,7 @@ function MainDemo() {
             fontWeight: "500",
           }}
         >
-          Get All Data
+          Update Row {rowIdToUpdate}
         </button>
         <p style={{ margin: 0 }}>
           Double-click on Tags column to edit with multi-select

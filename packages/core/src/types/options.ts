@@ -1,7 +1,7 @@
 // packages/core/src/types/options.ts
 // Grid options types
 
-import type { Row, RowId } from "./basic";
+import type { Row, RowId, CellValueChangedEvent } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { DataSource } from "./data-source";
 import type { HighlightingOptions } from "./highlighting";
@@ -26,4 +26,6 @@ export interface GridCoreOptions<TData = Row> {
   getRowId?: (row: TData) => RowId;
   /** Row/column/cell highlighting configuration */
   highlighting?: HighlightingOptions<TData>;
+  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
 }

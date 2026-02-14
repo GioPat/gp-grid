@@ -109,6 +109,7 @@ export type {
 
   EditState,
   FillHandleState,
+  CellValueChangedEvent,
   SlotState,
 
   /** DataSource */

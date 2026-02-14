@@ -75,6 +75,22 @@ export interface FillHandleState {
   targetCol: number;
 }
 
+/** Event emitted when a cell value is changed via editing or fill drag */
+export interface CellValueChangedEvent<TData = Row> {
+  /** Stable row ID (from getRowId) */
+  rowId: RowId;
+  /** Column index */
+  colIndex: number;
+  /** Column field name */
+  field: string;
+  /** Previous cell value */
+  oldValue: CellValue;
+  /** New cell value */
+  newValue: CellValue;
+  /** The full row data object */
+  rowData: TData;
+}
+
 /** The slot is the virtualized row, this represents the state of the slot */
 export interface SlotState {
   /** Slot ID */

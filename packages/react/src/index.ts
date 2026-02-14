@@ -1,6 +1,8 @@
 // packages/react/src/index.ts
 
 export { Grid } from "./Grid";
+export { useGridData } from "./useGridData";
+export type { UseGridDataOptions, UseGridDataResult } from "./useGridData";
 
 export type {
   GridRef,
@@ -25,9 +27,15 @@ export type {
   // Column definition
   ColumnDefinition,
 
+  // Row ID
+  RowId,
+
   // Cell position & range
   CellPosition,
   CellRange,
+
+  // Events
+  CellValueChangedEvent,
 
   // DataSource
   DataSource,

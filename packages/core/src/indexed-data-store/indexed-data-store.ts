@@ -187,6 +187,14 @@ export class IndexedDataStore<TData extends Row = Row> {
   }
 
   /**
+   * Get all rows as a new array.
+   * Used for direct data access when bypassing store's query system.
+   */
+  getAllRows(): TData[] {
+    return [...this.rows];
+  }
+
+  /**
    * Get visible row count (after filtering).
    */
   getVisibleRowCount(): number {
