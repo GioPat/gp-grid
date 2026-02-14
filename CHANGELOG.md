@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.0...gp-grid-v0.8.1) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* header disappearing on firefox after 1.3M rows ([3c62ff3](https://github.com/GioPat/gp-grid/commit/3c62ff3fbdb3d7caaa423c0e1cd02274ad6c0195))
+
 ## [0.8.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.4...gp-grid-v0.8.0) (2026-02-14)
 
 
