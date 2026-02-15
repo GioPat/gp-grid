@@ -6,9 +6,33 @@ export const statesStyles: string = `
    Loading & Error States
    ============================================================================= */
 
+/* Sticky wrapper: stays pinned at viewport top, takes no layout space */
+.gp-grid-loading-anchor {
+  position: sticky;
+  top: 0;
+  left: 0;
+  height: 0;
+  z-index: 900;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Semi-transparent overlay covering the visible viewport area */
+.gp-grid-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background-color: var(--gp-grid-loading-overlay-bg, rgba(255, 255, 255, 0.4));
+}
+
+.gp-grid-container--dark .gp-grid-loading-overlay {
+  background-color: var(--gp-grid-loading-overlay-bg, rgba(0, 0, 0, 0.3));
+}
+
+/* Loading indicator centered in the visible viewport */
 .gp-grid-loading {
   position: absolute;
-  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 12px 20px;
@@ -22,6 +46,7 @@ export const statesStyles: string = `
   display: flex;
   align-items: center;
   gap: 10px;
+  pointer-events: auto;
 }
 
 .gp-grid-loading-spinner {

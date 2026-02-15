@@ -16,8 +16,10 @@ import {
 } from "@gp-grid/core";
 import type {
   Row,
+  RowId,
   ColumnDefinition,
   ColumnFilterModel,
+  CellValueChangedEvent,
   DataSource,
   GridState,
   SlotData,
@@ -43,6 +45,10 @@ export interface UseGpGridOptions<TData extends Row = Row> {
   darkMode?: boolean;
   wheelDampening?: number;
   highlighting?: HighlightingOptions<TData>;
+  /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
+  getRowId?: (row: TData) => RowId;
+  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   headerRenderers?: Record<string, VueHeaderRenderer>;
@@ -219,6 +225,10 @@ export function useGpGrid<TData extends Row = Row>(
       overscan: options.overscan ?? 3,
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,
+      getRowId: options.getRowId,
+      onCellValueChanged: options.onCellValueChanged
+        ? (event) => options.onCellValueChanged?.(event)
+        : undefined,
     });
 
     coreRef.value = core;

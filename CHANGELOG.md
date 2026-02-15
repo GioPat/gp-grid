@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.1...gp-grid-v0.8.2) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* filter popup ([50aa074](https://github.com/GioPat/gp-grid/commit/50aa0746375b06d316a7d0666a9e132035ef6fb3))
+
+## [0.8.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.0...gp-grid-v0.8.1) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* header disappearing on firefox after 1.3M rows ([3c62ff3](https://github.com/GioPat/gp-grid/commit/3c62ff3fbdb3d7caaa423c0e1cd02274ad6c0195))
+
+## [0.8.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.4...gp-grid-v0.8.0) (2026-02-14)
+
+
+### ✨ Features
+
+* add APIs for reactivity ([b0b11dd](https://github.com/GioPat/gp-grid/commit/b0b11dd6a371b64d390d8524c4eb4b33e2f0abbf))
+* add loader when sorting the data also for Mutable datasource ([a393529](https://github.com/GioPat/gp-grid/commit/a393529acc5b6b8d90639298196c3ed6be24269d))
+* change UI filter icon with funnel ([08f3b0a](https://github.com/GioPat/gp-grid/commit/08f3b0a3b79695ab4fea1da6846229fbd991f985))
+* expose APIs for mutating data and add warning for big datasets ([03bc3ff](https://github.com/GioPat/gp-grid/commit/03bc3ff19d718b18fd3b7cd36d1cc89a3e9f4035))
+
 ## [0.7.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.7.3...gp-grid-v0.7.4) (2026-01-28)
 
 

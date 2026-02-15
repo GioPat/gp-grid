@@ -26,6 +26,8 @@ function createInitialState(args?: InitialStateArgs): GridState {
     contentWidth: 0,
     contentHeight: args?.initialHeight ?? 0,
     viewportWidth: args?.initialWidth ?? 0,
+    viewportHeight: args?.initialHeight ?? 0,
+    rowsWrapperOffset: 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,
@@ -94,6 +96,7 @@ function applyInstruction(
 
     case "UPDATE_VISIBLE_RANGE":
       state.visibleRowRange = { start: instruction.start, end: instruction.end };
+      state.rowsWrapperOffset = instruction.rowsWrapperOffset;
       break;
 
     case "SET_HOVER_POSITION":
@@ -116,6 +119,8 @@ function applyInstruction(
       state.contentWidth = instruction.width;
       state.contentHeight = instruction.height;
       state.viewportWidth = instruction.viewportWidth;
+      state.viewportHeight = instruction.viewportHeight;
+      state.rowsWrapperOffset = instruction.rowsWrapperOffset;
       break;
 
     case "UPDATE_HEADER":
@@ -201,6 +206,8 @@ export function useGridState(args?: InitialStateArgs) {
     state.contentWidth = initial.contentWidth;
     state.contentHeight = initial.contentHeight;
     state.viewportWidth = initial.viewportWidth;
+    state.viewportHeight = initial.viewportHeight;
+    state.rowsWrapperOffset = initial.rowsWrapperOffset;
     state.headers = initial.headers;
     state.filterPopup = initial.filterPopup;
     state.isLoading = initial.isLoading;

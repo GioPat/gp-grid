@@ -10,7 +10,7 @@ export const headerStyles: string = `
   position: sticky;
   top: 0;
   left: 0;
-  z-index: var(--gp-grid-header-z-index);
+  /* z-index set inline (100) to ensure header stays above rows wrapper */
   background-color: var(--gp-grid-header-bg);
   border-bottom: 1px solid var(--gp-grid-border);
 }
@@ -114,5 +114,12 @@ export const headerStyles: string = `
 .gp-grid-filter-icon.active {
   color: var(--gp-grid-primary);
   background-color: var(--gp-grid-primary-light);
+}
+
+/* Disabled header state during data loading */
+.gp-grid-header--loading .gp-grid-header-cell {
+  pointer-events: none;
+  opacity: 0.6;
+  cursor: default;
 }
 `;

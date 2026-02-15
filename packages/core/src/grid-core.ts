@@ -6,9 +6,11 @@ import type {
   BatchInstructionListener,
   ColumnDefinition,
   CellValue,
+  CellValueChangedEvent,
   DataSource,
   DataSourceRequest,
   Row,
+  RowId,
   SortModel,
   SortDirection,
   FilterModel,
@@ -43,6 +45,8 @@ export class GridCore<TData extends Row = Row> {
   private headerHeight: number;
   private overscan: number;
   private sortingEnabled: boolean;
+  private getRowId?: (row: TData) => RowId;
+  private onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -79,6 +83,9 @@ export class GridCore<TData extends Row = Row> {
   // Lifecycle state
   private isDestroyed: boolean = false;
 
+  // Loading state (guards against concurrent sort/filter operations)
+  private _isDataLoading: boolean = false;
+
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
     this.dataSource = options.dataSource;
@@ -86,6 +93,12 @@ export class GridCore<TData extends Row = Row> {
     this.headerHeight = options.headerHeight ?? options.rowHeight;
     this.overscan = options.overscan ?? 3;
     this.sortingEnabled = options.sortingEnabled ?? true;
+    this.getRowId = options.getRowId;
+    this.onCellValueChanged = options.onCellValueChanged;
+
+    if (this.onCellValueChanged && !this.getRowId) {
+      throw new Error("getRowId is required when onCellValueChanged is provided");
+    }
 
     this.computeColumnPositions();
 
@@ -208,12 +221,7 @@ export class GridCore<TData extends Row = Row> {
       updateSlot: (rowIndex) => this.slotPool.updateSlot(rowIndex),
       refreshAllSlots: () => this.slotPool.refreshAllSlots(),
       emitContentSize: () => this.emitContentSize(),
-      clearSelectionIfInvalid: (maxValidRow) => {
-        const activeCell = this.selection.getActiveCell();
-        if (activeCell && activeCell.row >= maxValidRow) {
-          this.selection.clearSelection();
-        }
-      },
+      clearSelectionIfInvalid: (maxValidRow) => this.clearSelectionIfInvalid(maxValidRow),
     });
 
     // Forward row mutation instructions
@@ -312,6 +320,7 @@ export class GridCore<TData extends Row = Row> {
       type: "UPDATE_VISIBLE_RANGE",
       start: visibleRange.start,
       end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
 
     // Emit content size when viewport size changes (for column scaling)
@@ -325,6 +334,7 @@ export class GridCore<TData extends Row = Row> {
   // ===========================================================================
 
   private async fetchData(): Promise<void> {
+    this._isDataLoading = true;
     this.emit({ type: "DATA_LOADING" });
 
     try {
@@ -356,6 +366,8 @@ export class GridCore<TData extends Row = Row> {
         type: "DATA_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this._isDataLoading = false;
     }
   }
 
@@ -368,13 +380,12 @@ export class GridCore<TData extends Row = Row> {
     direction: SortDirection | null,
     addToExisting: boolean = false,
   ): Promise<void> {
+    if (this._isDataLoading) return;
     return this.sortFilter.setSort(colId, direction, addToExisting);
   }
 
-  async setFilter(
-    colId: string,
-    filter: ColumnFilterModel | string | null,
-  ): Promise<void> {
+  async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
+    if (this._isDataLoading) return;
     return this.sortFilter.setFilter(colId, filter);
   }
 
@@ -389,10 +400,8 @@ export class GridCore<TData extends Row = Row> {
     return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
-  openFilterPopup(
-    colIndex: number,
-    anchorRect: { top: number; left: number; width: number; height: number },
-  ): void {
+  openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+    if (this._isDataLoading) return;
     this.sortFilter.openFilterPopup(colIndex, anchorRect);
   }
 
@@ -453,12 +462,34 @@ export class GridCore<TData extends Row = Row> {
     const column = this.columns[col];
     if (!column) return;
 
+    const oldValue = this.onCellValueChanged
+      ? getFieldValue(rowData, column.field)
+      : undefined;
+
     setFieldValue(rowData as Record<string, unknown>, column.field, value);
+
+    if (this.onCellValueChanged) {
+      this.onCellValueChanged({
+        rowId: this.getRowId!(rowData),
+        colIndex: col,
+        field: column.field,
+        oldValue: oldValue!,
+        newValue: value,
+        rowData,
+      });
+    }
   }
 
   // ===========================================================================
   // Layout Helpers
   // ===========================================================================
+
+  private clearSelectionIfInvalid(maxValidRow: number): void {
+    const activeCell = this.selection.getActiveCell();
+    if (activeCell && activeCell.row >= maxValidRow) {
+      this.selection.clearSelection();
+    }
+  }
 
   private computeColumnPositions(): void {
     this.columnPositions = [0];
@@ -483,6 +514,8 @@ export class GridCore<TData extends Row = Row> {
       width,
       height: this.scrollVirtualization.getVirtualHeight(),
       viewportWidth: this.viewportWidth,
+      viewportHeight: this.viewportHeight,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
   }
 
@@ -590,6 +623,52 @@ export class GridCore<TData extends Row = Row> {
       type: "UPDATE_VISIBLE_RANGE",
       start: visibleRange.start,
       end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
+    });
+  }
+
+  /**
+   * Fast-path refresh for transaction-based mutations.
+   * Only re-fetches the visible window instead of all rows.
+   * Use this when data was mutated via MutableDataSource transactions.
+   */
+  async refreshFromTransaction(): Promise<void> {
+    const visibleRange = this.getVisibleRowRange();
+    const start = Math.max(0, visibleRange.start - this.overscan);
+    const end = visibleRange.end + this.overscan;
+
+    const sortModel = this.sortFilter.getSortModel();
+    const filterModel = this.sortFilter.getFilterModel();
+
+    const response = await this.dataSource.fetch({
+      pagination: {
+        pageIndex: 0,
+        pageSize: end + 1,
+      },
+      sort: sortModel.length > 0 ? sortModel : undefined,
+      filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
+    });
+
+    // Update totalRows (may have changed from add/remove)
+    this.totalRows = response.totalRows;
+
+    // Update only the visible range in the cache
+    for (let i = start; i < Math.min(end + 1, response.rows.length); i++) {
+      const row = response.rows[i];
+      if (row !== undefined) {
+        this.cachedRows.set(i, row);
+      }
+    }
+
+    this.highlight?.clearAllCaches();
+    this.slotPool.refreshAllSlots();
+    this.emitContentSize();
+
+    this.emit({
+      type: "UPDATE_VISIBLE_RANGE",
+      start: visibleRange.start,
+      end: visibleRange.end,
+      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
     });
   }
 
@@ -644,10 +723,16 @@ export class GridCore<TData extends Row = Row> {
 
   /**
    * Update the data source and refresh.
+   * Preserves grid state (sort, filter, scroll position).
+   * Cancels any active edit and clamps selection to valid range.
    */
   async setDataSource(dataSource: DataSource<TData>): Promise<void> {
+    if (this.editManager.getState()) {
+      this.editManager.cancel();
+    }
     this.dataSource = dataSource;
     await this.refresh();
+    this.clearSelectionIfInvalid(this.totalRows);
   }
 
   /**

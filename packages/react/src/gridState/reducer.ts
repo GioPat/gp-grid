@@ -21,6 +21,8 @@ export function createInitialState<TData = Row>(args?: InitialStateArgs): GridSt
     contentWidth: 0,
     contentHeight: args?.initialHeight ?? 0,
     viewportWidth: args?.initialWidth ?? 0,
+    viewportHeight: args?.initialHeight ?? 0,
+    rowsWrapperOffset: 0,
     headers: new Map(),
     filterPopup: null,
     isLoading: false,
@@ -88,7 +90,10 @@ export function applyInstruction<TData = Row>(
       return { selectionRange: instruction.range };
 
     case "UPDATE_VISIBLE_RANGE":
-      return { visibleRowRange: { start: instruction.start, end: instruction.end } };
+      return {
+        visibleRowRange: { start: instruction.start, end: instruction.end },
+        rowsWrapperOffset: instruction.rowsWrapperOffset,
+      };
 
     case "SET_HOVER_POSITION":
       return { hoverPosition: instruction.position };
@@ -110,6 +115,8 @@ export function applyInstruction<TData = Row>(
         contentWidth: instruction.width,
         contentHeight: instruction.height,
         viewportWidth: instruction.viewportWidth,
+        viewportHeight: instruction.viewportHeight,
+        rowsWrapperOffset: instruction.rowsWrapperOffset,
       };
 
     case "UPDATE_HEADER":

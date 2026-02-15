@@ -2,7 +2,7 @@
   "name": "@gp-grid/core",
   "description": "A high-performance, framework-agnostic TypeScript data grid core with virtual scrolling",
   "private": false,
-  "version": "0.7.4",
+  "version": "0.8.2",
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -48,7 +48,7 @@
   "devDependencies": {
     "@types/node": "^24.9.1",
     "@vitest/coverage-v8": "^4.0.15",
-    "tsdown": "0.19.0-beta.5",
+    "tsdown": "^0.20.3",
     "typescript": "~5.8.3",
     "vitest": "^4.0.15"
   }
