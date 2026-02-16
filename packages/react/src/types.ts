@@ -94,4 +94,12 @@ export interface GridProps<TData extends Row = Row> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: React.ComponentType<{ isLoading: boolean }>;
+  /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
+  rowDragEntireRow?: boolean;
+  /** Called when a row is dropped after dragging. Consumer handles data reordering. */
+  onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  /** Called when a column is resized. */
+  onColumnResized?: (colIndex: number, newWidth: number) => void;
+  /** Called when a column is moved/reordered. */
+  onColumnMoved?: (fromIndex: number, toIndex: number) => void;
 }

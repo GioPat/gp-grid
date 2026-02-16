@@ -52,6 +52,8 @@ export interface UseInputHandlerResult {
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   handleFillHandleMouseDown: (e: MouseEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
+  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: MouseEvent) => void;
+  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: MouseEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   dragState: Ref<DragState>;
@@ -131,15 +133,30 @@ export function useInputHandler<TData extends Row = Row>(
     slots,
   } = options;
 
-  // Auto-scroll helpers
-  const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef);
-
   // Drag state for UI (mirrors core's InputHandler state)
   const dragState = ref<DragState>({
     isDragging: false,
     dragType: null,
     fillSourceRange: null,
     fillTarget: null,
+    columnResize: null,
+    columnMove: null,
+    rowDrag: null,
+  });
+
+  // Store last mouse event for re-processing during auto-scroll
+  let lastMouseEvent: PointerEventData | null = null;
+
+  // Auto-scroll helpers — onTick re-processes drag so drop target stays in sync as the grid scrolls
+  const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef, () => {
+    const core = coreRef.value;
+    if (lastMouseEvent && core?.input) {
+      const bounds = getContainerBounds();
+      if (bounds) {
+        core.input.handleDragMove(lastMouseEvent, bounds);
+        dragState.value = core.input.getDragState();
+      }
+    }
   });
 
   // Update InputHandler deps when options change
@@ -206,7 +223,10 @@ export function useInputHandler<TData extends Row = Row>(
       const bounds = getContainerBounds();
       if (!core?.input || !bounds) return;
 
-      const result = core.input.handleDragMove(toPointerEventData(e), bounds);
+      const eventData = toPointerEventData(e);
+      lastMouseEvent = eventData;
+
+      const result = core.input.handleDragMove(eventData, bounds);
       if (result) {
         if (result.autoScroll) {
           startAutoScroll(result.autoScroll.dx, result.autoScroll.dy);
@@ -224,6 +244,7 @@ export function useInputHandler<TData extends Row = Row>(
         core.input.handleDragEnd();
         dragState.value = core.input.getDragState();
       }
+      lastMouseEvent = null;
       stopAutoScroll();
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
@@ -256,6 +277,9 @@ export function useInputHandler<TData extends Row = Row>(
     }
     if (result.startDrag === "selection") {
       core.input.startSelectionDrag();
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    } else if (result.startDrag === "row-drag") {
       dragState.value = core.input.getDragState();
       startGlobalDragListeners();
     }
@@ -294,6 +318,52 @@ export function useInputHandler<TData extends Row = Row>(
 
     const colId = column.colId ?? column.field;
     core.input.handleHeaderClick(colId, e.shiftKey);
+  }
+
+  function handleHeaderMouseDown(
+    colIndex: number,
+    colWidth: number,
+    colHeight: number,
+    e: MouseEvent,
+  ): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+
+    const result = core.input.handleHeaderMouseDown(
+      colIndex,
+      colWidth,
+      colHeight,
+      toPointerEventData(e),
+    );
+
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-move") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
+  }
+
+  function handleHeaderResizeMouseDown(
+    colIndex: number,
+    colWidth: number,
+    e: MouseEvent,
+  ): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+
+    const result = core.input.handleHeaderResizeMouseDown(
+      colIndex,
+      colWidth,
+      toPointerEventData(e),
+    );
+
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-resize") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
@@ -351,6 +421,8 @@ export function useInputHandler<TData extends Row = Row>(
     handleCellDoubleClick,
     handleFillHandleMouseDown,
     handleHeaderClick,
+    handleHeaderMouseDown,
+    handleHeaderResizeMouseDown,
     handleKeyDown,
     handleWheel,
     dragState,

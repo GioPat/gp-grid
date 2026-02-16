@@ -18,6 +18,16 @@ export interface ColumnDefinition {
   filterable?: boolean;
   /** Whether column is hidden. Hidden columns are not rendered but still exist in the definition. Default: false */
   hidden?: boolean;
+  /** Whether column is resizable by dragging the header edge. Default: true */
+  resizable?: boolean;
+  /** Minimum width in pixels when resizing. Default: 50 */
+  minWidth?: number;
+  /** Maximum width in pixels when resizing. Default: undefined (no limit) */
+  maxWidth?: number;
+  /** Whether column can be moved/reordered by dragging the header. Default: true */
+  movable?: boolean;
+  /** Whether this column acts as a drag handle for row dragging. Default: false */
+  rowDrag?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string;
   editRenderer?: string;

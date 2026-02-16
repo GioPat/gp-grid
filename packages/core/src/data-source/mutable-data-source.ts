@@ -64,6 +64,8 @@ export interface MutableDataSource<TData = Row> extends DataSource<TData> {
   subscribe(listener: DataChangeListener): () => void;
   /** Clear all data from the data source. */
   clear(): void;
+  /** Move a row from one display position to another. */
+  moveRow(fromIndex: number, toIndex: number): void;
 }
 
 export interface MutableClientDataSourceOptions<TData> {
@@ -332,6 +334,10 @@ export function createMutableClientDataSource<TData extends Row = Row>(
     clear(): void {
       store.clear();
       subscribers.clear();
+    },
+
+    moveRow(fromIndex: number, toIndex: number): void {
+      store.moveRow(fromIndex, toIndex);
     },
   };
 }

@@ -63,4 +63,6 @@ export interface GridState<TData = Row> {
   visibleRowRange: { start: number; end: number } | null;
   /** Currently hovered cell position (for highlighting) */
   hoverPosition: CellPosition | null;
+  /** Columns updated by core (after resize/reorder). Null means use props. */
+  columns: ColumnDefinition[] | null;
 }

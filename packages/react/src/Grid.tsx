@@ -76,6 +76,10 @@ export function Grid<TData extends Row = Row>(
     getRowId,
     onCellValueChanged,
     loadingComponent,
+    rowDragEntireRow = false,
+    onRowDragEnd,
+    onColumnResized,
+    onColumnMoved,
   } = props;
 
   const outerContainerRef = useRef<HTMLDivElement>(null);
@@ -163,18 +167,27 @@ export function Grid<TData extends Row = Row>(
   getRowIdRef.current = getRowId;
   const onCellValueChangedRef = useRef(onCellValueChanged);
   onCellValueChangedRef.current = onCellValueChanged;
+  const onRowDragEndRef = useRef(onRowDragEnd);
+  onRowDragEndRef.current = onRowDragEnd;
+  const onColumnResizedRef = useRef(onColumnResized);
+  onColumnResizedRef.current = onColumnResized;
+  const onColumnMovedRef = useRef(onColumnMoved);
+  onColumnMovedRef.current = onColumnMoved;
 
   // Ref for dataSource so initial core gets the right one without being in the dep array
   const dataSourceRef = useRef(dataSource);
   dataSourceRef.current = dataSource;
 
+  // Effective columns: use core-updated columns (after resize/move) or fall back to props
+  const effectiveColumns = state.columns ?? columns;
+
   // Create visible columns with original index tracking (for hidden column support)
   const visibleColumnsWithIndices = useMemo(
     () =>
-      columns
+      effectiveColumns
         .map((col, index) => ({ column: col, originalIndex: index }))
         .filter(({ column }) => !column.hidden),
-    [columns],
+    [effectiveColumns],
   );
 
   // Compute column positions (scaled to fill container when wider) - only for visible columns
@@ -194,10 +207,12 @@ export function Grid<TData extends Row = Row>(
     handleCellDoubleClick,
     handleFillHandleMouseDown,
     handleHeaderClick,
+    handleHeaderMouseDown,
+    handleHeaderResizeMouseDown,
     handleKeyDown,
     handleWheel,
     dragState,
-  } = useInputHandler(coreRef, containerRef, columns, {
+  } = useInputHandler(coreRef, containerRef, effectiveColumns, {
     activeCell: state.activeCell,
     selectionRange: state.selectionRange,
     editingCell: state.editingCell,
@@ -230,6 +245,10 @@ export function Grid<TData extends Row = Row>(
       onCellValueChanged: onCellValueChangedRef.current
         ? (event) => onCellValueChangedRef.current?.(event)
         : undefined,
+      rowDragEntireRow,
+      onRowDragEnd: (src, tgt) => onRowDragEndRef.current?.(src, tgt),
+      onColumnResized: (col, w) => onColumnResizedRef.current?.(col, w),
+      onColumnMoved: (from, to) => onColumnMovedRef.current?.(from, to),
     });
 
     coreRef.current = core;
@@ -292,6 +311,7 @@ export function Grid<TData extends Row = Row>(
     sortingEnabled,
     gridRef,
     highlighting,
+    rowDragEntireRow,
   ]);
 
   // Handle reactive data source changes without re-creating core
@@ -437,7 +457,7 @@ export function Grid<TData extends Row = Row>(
 
     // Check if ALL columns in the selection are editable (skip hidden columns)
     for (let c = minCol; c <= maxCol; c++) {
-      const column = columns[c];
+      const column = effectiveColumns[c];
       if (!column || column.hidden) continue; // Skip hidden columns
       if (column.editable !== true) {
         return null;
@@ -475,7 +495,7 @@ export function Grid<TData extends Row = Row>(
     rowHeight,
     columnPositions,
     columnWidths,
-    columns,
+    effectiveColumns,
     visibleColumnsWithIndices,
   ]);
 
@@ -527,6 +547,7 @@ export function Grid<TData extends Row = Row>(
         >
           {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
             const headerInfo = state.headers.get(originalIndex);
+            const colW = columnWidths[visibleIndex] ?? 0;
             return (
               <div
                 key={column.colId ?? column.field}
@@ -536,11 +557,13 @@ export function Grid<TData extends Row = Row>(
                   position: "absolute",
                   left: `${columnPositions[visibleIndex]}px`,
                   top: 0,
-                  width: `${columnWidths[visibleIndex]}px`,
+                  width: `${colW}px`,
                   height: `${headerHeight}px`,
                   background: "transparent",
                 }}
-                onClick={(e) => handleHeaderClick(originalIndex, e)}
+                onMouseDown={(e) =>
+                  handleHeaderMouseDown(originalIndex, colW, headerHeight, e)
+                }
               >
                 {renderHeader({
                   column,
@@ -555,6 +578,16 @@ export function Grid<TData extends Row = Row>(
                   headerRenderers,
                   globalHeaderRenderer: headerRenderer,
                 })}
+                {/* Resize handle */}
+                {column.resizable !== false && (
+                  <div
+                    className="gp-grid-header-resize-handle"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleHeaderResizeMouseDown(originalIndex, colW, e);
+                    }}
+                  />
+                )}
               </div>
             );
           })}
@@ -658,7 +691,13 @@ export function Grid<TData extends Row = Row>(
                       slot.rowData,
                     ) ?? [];
 
-                  const cellClasses = [baseCellClasses, ...highlightCellClasses]
+                  const isRowDragHandle = column.rowDrag === true;
+
+                  const cellClasses = [
+                    baseCellClasses,
+                    ...highlightCellClasses,
+                    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
+                  ]
                     .filter(Boolean)
                     .join(" ");
 
@@ -724,6 +763,20 @@ export function Grid<TData extends Row = Row>(
                 zIndex: 200,
               }}
               onMouseDown={handleFillHandleMouseDown}
+            />
+          )}
+
+          {/* Row drop indicator - inside wrapper so it scrolls with rows */}
+          {dragState.dragType === "row-drag" && dragState.rowDrag?.dropTargetIndex !== null && (
+            <div
+              className="gp-grid-row-drop-indicator"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
+                width: `${Math.max(state.contentWidth, totalWidth)}px`,
+              }}
             />
           )}
         </div>
@@ -798,6 +851,75 @@ export function Grid<TData extends Row = Row>(
             onClose={handleFilterPopupClose}
           />
         )}
+
+    {/* Column resize line */}
+    {dragState.dragType === "column-resize" && dragState.columnResize && (() => {
+      const visibleIndex = visibleColumnsWithIndices.findIndex(
+        (v) => v.originalIndex === dragState.columnResize!.colIndex,
+      );
+      if (visibleIndex === -1) return null;
+      const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth;
+      return (
+        <div
+          className="gp-grid-column-resize-line"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: lineLeft,
+            height: "100%",
+          }}
+        />
+      );
+    })()}
+
+    {/* Column move ghost */}
+    {dragState.dragType === "column-move" && dragState.columnMove && (() => {
+      const cm = dragState.columnMove;
+      const visibleIndex = visibleColumnsWithIndices.findIndex(
+        (v) => v.originalIndex === cm.sourceColIndex,
+      );
+      const column = effectiveColumns[cm.sourceColIndex];
+      const headerText = column?.headerName ?? column?.field ?? "";
+      return (
+        <>
+          <div
+            className="gp-grid-column-move-ghost"
+            style={{
+              left: cm.currentX - cm.ghostWidth / 2,
+              top: cm.currentY - cm.ghostHeight / 2,
+              width: cm.ghostWidth,
+              height: cm.ghostHeight,
+            }}
+          >
+            {headerText}
+          </div>
+          {cm.dropTargetIndex !== null && (
+            <div
+              className="gp-grid-column-drop-indicator"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: columnPositions[cm.dropTargetIndex] ?? 0,
+                height: headerHeight,
+              }}
+            />
+          )}
+        </>
+      );
+    })()}
+
+    {/* Row drag ghost (fixed position, follows cursor) */}
+    {dragState.dragType === "row-drag" && dragState.rowDrag && (
+      <div
+        className="gp-grid-row-drag-ghost"
+        style={{
+          left: dragState.rowDrag.currentX + 12,
+          top: dragState.rowDrag.currentY - rowHeight / 2,
+          width: Math.min(300, totalWidth),
+          height: rowHeight,
+        }}
+      />
+    )}
     </div>
   );
 }

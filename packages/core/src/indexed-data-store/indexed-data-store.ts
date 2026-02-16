@@ -195,6 +195,31 @@ export class IndexedDataStore<TData extends Row = Row> {
   }
 
   /**
+   * Move a row from one position to another in the raw data array.
+   * This reorders the underlying data; when no sort is active, the new order
+   * is reflected immediately on the next fetch.
+   */
+  moveRow(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= this.rows.length) return;
+    if (toIndex < 0 || toIndex >= this.rows.length) return;
+
+    const [row] = this.rows.splice(fromIndex, 1);
+    const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    this.rows.splice(adjustedTo, 0, row!);
+
+    // Rebuild index map since positions changed
+    this.rowById.clear();
+    for (let i = 0; i < this.rows.length; i++) {
+      this.rowById.set(this.options.getRowId(this.rows[i]!), i);
+    }
+
+    // Reset sorted indices to identity order and clear sort cache
+    this.sortedIndices = Array.from({ length: this.rows.length }, (_, i) => i);
+    this.rowSortCache.clear();
+  }
+
+  /**
    * Get visible row count (after filtering).
    */
   getVisibleRowCount(): number {

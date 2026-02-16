@@ -139,18 +139,23 @@ export class SlotPoolManager {
 
     // Assign recycled slots to new rows
     const rowsNeedingSlots = Array.from(requiredRows);
+    let recycleIdx = 0;
     for (let i = 0; i < rowsNeedingSlots.length; i++) {
       const rowIndex = rowsNeedingSlots[i]!;
       const rowData = this.options.getRowData(rowIndex);
 
-      if (i < slotsToRecycle.length) {
+      // Skip rows with no data in the cache
+      if (rowData === undefined) continue;
+
+      if (recycleIdx < slotsToRecycle.length) {
         // Recycle existing slot
-        const slotId = slotsToRecycle[i]!;
+        const slotId = slotsToRecycle[recycleIdx]!;
+        recycleIdx++;
         const slot = this.state.slots.get(slotId)!;
         const translateY = this.getRowTranslateY(rowIndex);
 
         slot.rowIndex = rowIndex;
-        slot.rowData = rowData ?? {};
+        slot.rowData = rowData;
         slot.translateY = translateY;
 
         this.state.rowToSlot.set(rowIndex, slotId);
@@ -159,7 +164,7 @@ export class SlotPoolManager {
           type: "ASSIGN_SLOT",
           slotId,
           rowIndex,
-          rowData: rowData ?? {},
+          rowData,
         });
         instructions.push({
           type: "MOVE_SLOT",
@@ -174,7 +179,7 @@ export class SlotPoolManager {
         const newSlot: SlotState = {
           slotId,
           rowIndex,
-          rowData: rowData ?? {},
+          rowData,
           translateY,
         };
 
@@ -186,7 +191,7 @@ export class SlotPoolManager {
           type: "ASSIGN_SLOT",
           slotId,
           rowIndex,
-          rowData: rowData ?? {},
+          rowData,
         });
         instructions.push({
           type: "MOVE_SLOT",
@@ -196,8 +201,8 @@ export class SlotPoolManager {
       }
     }
 
-    // Destroy excess slots
-    for (let i = rowsNeedingSlots.length; i < slotsToRecycle.length; i++) {
+    // Destroy excess recycled slots (those not reused)
+    for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
       const slotId = slotsToRecycle[i]!;
       this.state.slots.delete(slotId);
       instructions.push({ type: "DESTROY_SLOT", slotId });
@@ -255,19 +260,21 @@ export class SlotPoolManager {
     const totalRows = this.options.getTotalRows();
 
     for (const [slotId, slot] of this.state.slots) {
-      // Check if row index is still valid
+      // Check if row index is still valid and data is available
       if (slot.rowIndex >= 0 && slot.rowIndex < totalRows) {
         const rowData = this.options.getRowData(slot.rowIndex);
+        if (rowData === undefined) continue;
+
         const translateY = this.getRowTranslateY(slot.rowIndex);
 
-        slot.rowData = rowData ?? {};
+        slot.rowData = rowData;
         slot.translateY = translateY;
 
         instructions.push({
           type: "ASSIGN_SLOT",
           slotId,
           rowIndex: slot.rowIndex,
-          rowData: rowData ?? {},
+          rowData,
         });
         instructions.push({
           type: "MOVE_SLOT",
@@ -336,6 +343,14 @@ export class SlotPoolManager {
 
     // Row's position relative to first visible row
     return naturalY - firstVisibleRowY;
+  }
+
+  /**
+   * Get the translateY position for a row inside the rows wrapper.
+   * Public accessor for use by input handler (e.g., drop indicator positioning).
+   */
+  getRowTranslateYForIndex(rowIndex: number): number {
+    return this.getRowTranslateY(rowIndex);
   }
 
   /**

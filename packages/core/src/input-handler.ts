@@ -12,6 +12,9 @@ import type {
   DragMoveResult,
   InputHandlerDeps,
   DragState,
+  ColumnResizeDragState,
+  ColumnMoveDragState,
+  RowDragState,
 } from "./types/input";
 import type { Direction } from "./selection";
 import { findColumnAtX } from "./utils";
@@ -22,6 +25,8 @@ import { findColumnAtX } from "./utils";
 
 const AUTO_SCROLL_THRESHOLD = 40;
 const AUTO_SCROLL_SPEED = 10;
+const DRAG_THRESHOLD = 5;
+const DEFAULT_MIN_COLUMN_WIDTH = 50;
 
 // =============================================================================
 // InputHandler Class
@@ -36,6 +41,35 @@ export class InputHandler<TData extends Row = Row> {
   private isDraggingFill = false;
   private fillSourceRange: CellRange | null = null;
   private fillTarget: { row: number; col: number } | null = null;
+
+  // Column resize state
+  private isDraggingColumnResize = false;
+  private resizeColIndex = -1;
+  private resizeStartX = 0;
+  private resizeInitialWidth = 0;
+  private resizeCurrentWidth = 0;
+
+  // Column move state
+  private isDraggingColumnMove = false;
+  private moveSourceColIndex = -1;
+  private moveStartX = 0;
+  private moveStartY = 0;
+  private moveThresholdMet = false;
+  private moveGhostWidth = 0;
+  private moveGhostHeight = 0;
+  private moveCurrentX = 0;
+  private moveCurrentY = 0;
+  private moveDropTargetIndex: number | null = null;
+
+  // Row drag state
+  private isDraggingRow = false;
+  private rowDragSourceIndex = -1;
+  private rowDragStartX = 0;
+  private rowDragStartY = 0;
+  private rowDragThresholdMet = false;
+  private rowDragCurrentX = 0;
+  private rowDragCurrentY = 0;
+  private rowDragDropTargetIndex: number | null = null;
 
   constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
     this.core = core;
@@ -57,15 +91,57 @@ export class InputHandler<TData extends Row = Row> {
    * Get current drag state for UI rendering
    */
   getDragState(): DragState {
+    const isDragging = this.isDraggingSelection || this.isDraggingFill
+      || this.isDraggingColumnResize || (this.isDraggingColumnMove && this.moveThresholdMet)
+      || (this.isDraggingRow && this.rowDragThresholdMet);
+
+    const dragType: DragState["dragType"] = this.isDraggingFill
+      ? "fill"
+      : this.isDraggingColumnResize
+        ? "column-resize"
+        : (this.isDraggingColumnMove && this.moveThresholdMet)
+          ? "column-move"
+          : (this.isDraggingRow && this.rowDragThresholdMet)
+            ? "row-drag"
+            : this.isDraggingSelection
+              ? "selection"
+              : null;
+
+    const columnResize: ColumnResizeDragState | null = this.isDraggingColumnResize
+      ? { colIndex: this.resizeColIndex, initialWidth: this.resizeInitialWidth, currentWidth: this.resizeCurrentWidth }
+      : null;
+
+    const columnMove: ColumnMoveDragState | null = (this.isDraggingColumnMove && this.moveThresholdMet)
+      ? {
+        sourceColIndex: this.moveSourceColIndex,
+        currentX: this.moveCurrentX,
+        currentY: this.moveCurrentY,
+        dropTargetIndex: this.moveDropTargetIndex,
+        ghostWidth: this.moveGhostWidth,
+        ghostHeight: this.moveGhostHeight,
+      }
+      : null;
+
+    const rowDrag: RowDragState | null = (this.isDraggingRow && this.rowDragThresholdMet)
+      ? {
+        sourceRowIndex: this.rowDragSourceIndex,
+        currentX: this.rowDragCurrentX,
+        currentY: this.rowDragCurrentY,
+        dropTargetIndex: this.rowDragDropTargetIndex,
+        dropIndicatorY: this.rowDragDropTargetIndex !== null
+          ? this.core.getRowTranslateY(this.rowDragDropTargetIndex)
+          : 0,
+      }
+      : null;
+
     return {
-      isDragging: this.isDraggingSelection || this.isDraggingFill,
-      dragType: this.isDraggingFill
-        ? "fill"
-        : this.isDraggingSelection
-          ? "selection"
-          : null,
+      isDragging,
+      dragType,
       fillSourceRange: this.fillSourceRange,
       fillTarget: this.fillTarget,
+      columnResize,
+      columnMove,
+      rowDrag,
     };
   }
 
@@ -89,6 +165,35 @@ export class InputHandler<TData extends Row = Row> {
     // Don't start selection while editing
     if (this.core.getEditState() !== null) {
       return { preventDefault: false, stopPropagation: false };
+    }
+
+    // Check if this should start a row drag
+    const column = this.core.getColumns()[colIndex];
+    const isRowDragEntireRow = this.core.isRowDragEntireRow();
+    const isRowDragHandle = column?.rowDrag === true;
+
+    if ((isRowDragHandle || isRowDragEntireRow) && !event.shiftKey) {
+      this.isDraggingRow = true;
+      this.rowDragSourceIndex = rowIndex;
+      this.rowDragStartX = event.clientX;
+      this.rowDragStartY = event.clientY;
+      this.rowDragThresholdMet = false;
+      this.rowDragCurrentX = event.clientX;
+      this.rowDragCurrentY = event.clientY;
+      this.rowDragDropTargetIndex = null;
+
+      // Still set active cell for visual feedback
+      this.core.selection.startSelection(
+        { row: rowIndex, col: colIndex },
+        { shift: false, ctrl: false }
+      );
+
+      return {
+        preventDefault: true,
+        stopPropagation: true,
+        focusContainer: true,
+        startDrag: "row-drag",
+      };
     }
 
     this.core.selection.startSelection(
@@ -191,6 +296,82 @@ export class InputHandler<TData extends Row = Row> {
   }
 
   // ===========================================================================
+  // Column Resize
+  // ===========================================================================
+
+  /**
+   * Handle mousedown on the resize handle of a header cell.
+   * Returns InputResult with startDrag: "column-resize".
+   */
+  handleHeaderResizeMouseDown(
+    colIndex: number,
+    colWidth: number,
+    event: PointerEventData,
+  ): InputResult {
+    if (event.button !== 0) {
+      return { preventDefault: false, stopPropagation: false };
+    }
+
+    const column = this.core.getColumns()[colIndex];
+    if (column?.resizable === false) {
+      return { preventDefault: false, stopPropagation: false };
+    }
+
+    this.isDraggingColumnResize = true;
+    this.resizeColIndex = colIndex;
+    this.resizeStartX = event.clientX;
+    this.resizeInitialWidth = colWidth;
+    this.resizeCurrentWidth = colWidth;
+
+    return {
+      preventDefault: true,
+      stopPropagation: true,
+      startDrag: "column-resize",
+    };
+  }
+
+  // ===========================================================================
+  // Column Move
+  // ===========================================================================
+
+  /**
+   * Handle mousedown on a header cell for potential column move.
+   * Uses a drag threshold to distinguish click (sort) vs drag (move).
+   */
+  handleHeaderMouseDown(
+    colIndex: number,
+    colWidth: number,
+    colHeight: number,
+    event: PointerEventData,
+  ): InputResult {
+    if (event.button !== 0) {
+      return { preventDefault: false, stopPropagation: false };
+    }
+
+    const column = this.core.getColumns()[colIndex];
+    if (column?.movable === false) {
+      return { preventDefault: false, stopPropagation: false };
+    }
+
+    this.isDraggingColumnMove = true;
+    this.moveSourceColIndex = colIndex;
+    this.moveStartX = event.clientX;
+    this.moveStartY = event.clientY;
+    this.moveThresholdMet = false;
+    this.moveGhostWidth = colWidth;
+    this.moveGhostHeight = colHeight;
+    this.moveCurrentX = event.clientX;
+    this.moveCurrentY = event.clientY;
+    this.moveDropTargetIndex = null;
+
+    return {
+      preventDefault: true,
+      stopPropagation: true,
+      startDrag: "column-move",
+    };
+  }
+
+  // ===========================================================================
   // Drag Operations
   // ===========================================================================
 
@@ -202,12 +383,102 @@ export class InputHandler<TData extends Row = Row> {
   }
 
   /**
-   * Handle drag move event (selection or fill)
+   * Handle drag move event (selection, fill, column-resize, column-move, or row-drag)
    */
   handleDragMove(
     event: PointerEventData,
     bounds: ContainerBounds
   ): DragMoveResult | null {
+    // --- Column resize drag ---
+    if (this.isDraggingColumnResize) {
+      const column = this.core.getColumns()[this.resizeColIndex];
+      const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
+      const maxWidth = column?.maxWidth;
+      let newWidth = this.resizeInitialWidth + (event.clientX - this.resizeStartX);
+      newWidth = Math.max(minWidth, newWidth);
+      if (maxWidth !== undefined) {
+        newWidth = Math.min(maxWidth, newWidth);
+      }
+      this.resizeCurrentWidth = newWidth;
+      return { targetRow: 0, targetCol: this.resizeColIndex, autoScroll: null };
+    }
+
+    // --- Column move drag ---
+    if (this.isDraggingColumnMove) {
+      const dx = event.clientX - this.moveStartX;
+      const dy = event.clientY - this.moveStartY;
+
+      if (!this.moveThresholdMet) {
+        if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+          this.moveThresholdMet = true;
+        } else {
+          return null;
+        }
+      }
+
+      this.moveCurrentX = event.clientX;
+      this.moveCurrentY = event.clientY;
+
+      // Compute drop target from mouse X (visible index space)
+      const { left, scrollLeft } = bounds;
+      const mouseX = event.clientX - left + scrollLeft;
+      const columnPositions = this.deps.getColumnPositions();
+      const columnCount = this.deps.getColumnCount();
+      this.moveDropTargetIndex = Math.max(
+        0,
+        Math.min(findColumnAtX(mouseX, columnPositions), columnCount)
+      );
+
+      return { targetRow: 0, targetCol: this.moveDropTargetIndex ?? 0, autoScroll: null };
+    }
+
+    // --- Row drag ---
+    if (this.isDraggingRow) {
+      const dx = event.clientX - this.rowDragStartX;
+      const dy = event.clientY - this.rowDragStartY;
+
+      if (!this.rowDragThresholdMet) {
+        if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+          this.rowDragThresholdMet = true;
+        } else {
+          return null;
+        }
+      }
+
+      this.rowDragCurrentX = event.clientX;
+      this.rowDragCurrentY = event.clientY;
+
+      // Compute drop target from mouse Y
+      // bounds.top is the body container top (already below header), so no headerHeight subtraction
+      const { top, height, width, scrollTop } = bounds;
+      const headerHeight = this.deps.getHeaderHeight();
+      const viewportY = event.clientY - top;
+      const rowCount = this.core.getRowCount();
+
+      const targetRow = Math.max(
+        0,
+        Math.min(
+          this.core.getRowIndexAtDisplayY(viewportY, scrollTop),
+          rowCount
+        )
+      );
+      this.rowDragDropTargetIndex = targetRow;
+
+      // Calculate auto-scroll (vertical only for row drag)
+      const mouseYInContainer = event.clientY - top;
+      const mouseXInContainer = event.clientX - bounds.left;
+      const autoScroll = this.calculateAutoScroll(
+        mouseYInContainer,
+        mouseXInContainer,
+        height,
+        width,
+        headerHeight
+      );
+
+      return { targetRow, targetCol: 0, autoScroll };
+    }
+
+    // --- Selection or fill drag ---
     if (!this.isDraggingSelection && !this.isDraggingFill) {
       return null;
     }
@@ -219,8 +490,8 @@ export class InputHandler<TData extends Row = Row> {
 
     // Calculate mouse position relative to grid content
     const mouseX = event.clientX - left + scrollLeft;
-    // Viewport-relative Y (physical pixels below header, NOT including scroll)
-    const viewportY = event.clientY - top - headerHeight;
+    // Viewport-relative Y: bounds.top is the body container top (already below header)
+    const viewportY = event.clientY - top;
 
     // Find target row (core method handles scroll and scaling)
     const targetRow = Math.max(
@@ -273,6 +544,61 @@ export class InputHandler<TData extends Row = Row> {
    * Handle drag end event
    */
   handleDragEnd(): void {
+    // --- Column resize end ---
+    if (this.isDraggingColumnResize) {
+      this.core.setColumnWidth(this.resizeColIndex, this.resizeCurrentWidth);
+      this.isDraggingColumnResize = false;
+      this.resizeColIndex = -1;
+      return;
+    }
+
+    // --- Column move end ---
+    if (this.isDraggingColumnMove) {
+      if (this.moveThresholdMet && this.moveDropTargetIndex !== null) {
+        // moveSourceColIndex is already an original index (passed from framework layer).
+        // moveDropTargetIndex is a visible index (computed from mouse position), so convert it.
+        const fromOriginal = this.moveSourceColIndex;
+        const toOriginal = this.deps.getOriginalColumnIndex
+          ? this.deps.getOriginalColumnIndex(
+              Math.min(this.moveDropTargetIndex, this.deps.getColumnCount() - 1)
+            )
+          : this.moveDropTargetIndex;
+
+        // Only move if the drop target is different from the source
+        if (fromOriginal !== toOriginal) {
+          this.core.moveColumn(fromOriginal, toOriginal);
+        }
+      } else if (!this.moveThresholdMet) {
+        // Threshold not met — treat as a click (sort).
+        // moveSourceColIndex is already an original index.
+        const column = this.core.getColumns()[this.moveSourceColIndex];
+        if (column) {
+          const colId = column.colId ?? column.field;
+          this.handleHeaderClick(colId, false);
+        }
+      }
+      this.isDraggingColumnMove = false;
+      this.moveSourceColIndex = -1;
+      this.moveThresholdMet = false;
+      this.moveDropTargetIndex = null;
+      return;
+    }
+
+    // --- Row drag end ---
+    if (this.isDraggingRow) {
+      if (this.rowDragThresholdMet && this.rowDragDropTargetIndex !== null) {
+        if (this.rowDragDropTargetIndex !== this.rowDragSourceIndex) {
+          this.core.commitRowDrag(this.rowDragSourceIndex, this.rowDragDropTargetIndex);
+        }
+      }
+      this.isDraggingRow = false;
+      this.rowDragSourceIndex = -1;
+      this.rowDragThresholdMet = false;
+      this.rowDragDropTargetIndex = null;
+      return;
+    }
+
+    // --- Fill drag end ---
     if (this.isDraggingFill) {
       this.core.fill.commitFillDrag();
       this.core.refreshSlotData();

@@ -30,6 +30,7 @@ export function createInitialState<TData = Row>(args?: InitialStateArgs): GridSt
     totalRows: 0,
     visibleRowRange: null,
     hoverPosition: null,
+    columns: null,
   };
 }
 
@@ -161,6 +162,9 @@ export function applyInstruction<TData = Row>(
     case "TRANSACTION_PROCESSED":
       // These don't change state directly - slot updates come via ASSIGN_SLOT
       return null;
+
+    case "COLUMNS_CHANGED":
+      return { columns: instruction.columns };
 
     default:
       return null;

@@ -35,6 +35,7 @@ function createInitialState(args?: InitialStateArgs): GridState {
     totalRows: 0,
     visibleRowRange: null,
     hoverPosition: null,
+    columns: null,
   };
 }
 
@@ -172,6 +173,10 @@ function applyInstruction(
     case "TRANSACTION_PROCESSED":
       // These don't change state directly - slot updates come via ASSIGN_SLOT
       break;
+
+    case "COLUMNS_CHANGED":
+      state.columns = instruction.columns;
+      break;
   }
 }
 
@@ -215,6 +220,7 @@ export function useGridState(args?: InitialStateArgs) {
     state.totalRows = initial.totalRows;
     state.visibleRowRange = initial.visibleRowRange;
     state.hoverPosition = initial.hoverPosition;
+    state.columns = initial.columns;
   }
 
   return {

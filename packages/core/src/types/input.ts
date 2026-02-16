@@ -64,7 +64,7 @@ export interface InputResult {
   /** Whether framework should focus the container element */
   focusContainer?: boolean;
   /** Type of drag operation to start (framework manages global listeners) */
-  startDrag?: "selection" | "fill";
+  startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag";
 }
 
 /** Result from keyboard input handler */
@@ -105,20 +105,55 @@ export interface InputHandlerDeps {
    * If not provided, visible index is used directly (no hidden columns).
    */
   getOriginalColumnIndex?: (visibleIndex: number) => number;
+  /** Get column widths array (indexed by visible column) */
+  getColumnWidths?: () => number[];
 }
 
 // =============================================================================
 // Drag State (exposed for UI rendering)
 // =============================================================================
 
+/** Column resize drag state */
+export interface ColumnResizeDragState {
+  colIndex: number;
+  initialWidth: number;
+  currentWidth: number;
+}
+
+/** Column move drag state */
+export interface ColumnMoveDragState {
+  sourceColIndex: number;
+  currentX: number;
+  currentY: number;
+  dropTargetIndex: number | null;
+  ghostWidth: number;
+  ghostHeight: number;
+}
+
+/** Row drag state */
+export interface RowDragState {
+  sourceRowIndex: number;
+  currentX: number;
+  currentY: number;
+  dropTargetIndex: number | null;
+  /** Pre-computed translateY for the drop indicator inside the rows wrapper */
+  dropIndicatorY: number;
+}
+
 /** Current drag state for UI rendering */
 export interface DragState {
   /** Whether any drag operation is active */
   isDragging: boolean;
   /** Type of active drag operation */
-  dragType: "selection" | "fill" | null;
+  dragType: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | null;
   /** Source range for fill operations */
   fillSourceRange: CellRange | null;
   /** Current fill target position */
   fillTarget: { row: number; col: number } | null;
+  /** Column resize state (when dragType is "column-resize") */
+  columnResize: ColumnResizeDragState | null;
+  /** Column move state (when dragType is "column-move") */
+  columnMove: ColumnMoveDragState | null;
+  /** Row drag state (when dragType is "row-drag") */
+  rowDrag: RowDragState | null;
 }

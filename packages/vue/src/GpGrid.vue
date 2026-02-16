@@ -62,6 +62,14 @@ const props = withDefaults(
     onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
     /** Custom loading component to render instead of default spinner */
     loadingComponent?: Component<{ isLoading: boolean }>;
+    /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
+    rowDragEntireRow?: boolean;
+    /** Called when a row is dropped after dragging. Consumer handles data reordering. */
+    onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+    /** Called when a column is resized. */
+    onColumnResized?: (colIndex: number, newWidth: number) => void;
+    /** Called when a column is moved/reordered. */
+    onColumnMoved?: (fromIndex: number, toIndex: number) => void;
   }>(),
   {
     overscan: 3,
@@ -93,9 +101,12 @@ const { state, applyInstructions, reset: resetState } = useGridState({
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
 
+// Effective columns: use core-updated columns (after resize/move) or fall back to props
+const effectiveColumns = computed(() => state.columns ?? props.columns);
+
 // Create visible columns with original index tracking (for hidden column support)
 const visibleColumnsWithIndices = computed(() =>
-  props.columns
+  effectiveColumns.value
     .map((col, index) => ({ column: col, originalIndex: index }))
     .filter(({ column }) => !column.hidden),
 );
@@ -117,10 +128,12 @@ const {
   handleCellDoubleClick,
   handleFillHandleMouseDown,
   handleHeaderClick,
+  handleHeaderMouseDown,
+  handleHeaderResizeMouseDown,
   handleKeyDown,
   handleWheel,
   dragState,
-} = useInputHandler(coreRef, bodyContainerRef, computed(() => props.columns), {
+} = useInputHandler(coreRef, bodyContainerRef, effectiveColumns, {
   activeCell: computed(() => state.activeCell),
   selectionRange: computed(() => state.selectionRange),
   editingCell: computed(() => state.editingCell),
@@ -137,7 +150,7 @@ const { fillHandlePosition } = useFillHandle({
   activeCell: computed(() => state.activeCell),
   selectionRange: computed(() => state.selectionRange),
   slots: computed(() => state.slots),
-  columns: computed(() => props.columns),
+  columns: effectiveColumns,
   visibleColumnsWithIndices,
   columnPositions,
   columnWidths,
@@ -225,7 +238,13 @@ function getCellClasses(
   const highlightCellClasses =
     coreRef.value?.highlight?.computeCombinedCellClasses(rowIndex, colIndex, column, rowData) ?? [];
 
-  return [baseCellClasses, ...highlightCellClasses].filter(Boolean).join(" ");
+  const isRowDragHandle = column.rowDrag === true;
+
+  return [
+    baseCellClasses,
+    ...highlightCellClasses,
+    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
+  ].filter(Boolean).join(" ");
 }
 
 // Helper to create or get data source
@@ -263,6 +282,10 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onCellValueChanged: props.onCellValueChanged
       ? (event) => props.onCellValueChanged?.(event)
       : undefined,
+    rowDragEntireRow: props.rowDragEntireRow ?? false,
+    onRowDragEnd: (src, tgt) => props.onRowDragEnd?.(src, tgt),
+    onColumnResized: (col, w) => props.onColumnResized?.(col, w),
+    onColumnMoved: (from, to) => props.onColumnMoved?.(from, to),
   });
 
   coreRef.value = core;
@@ -434,7 +457,7 @@ defineExpose({
             height: `${totalHeaderHeight}px`,
             background: 'transparent',
           }"
-          @click="(e) => handleHeaderClick(originalIndex, e)"
+          @mousedown="(e: MouseEvent) => handleHeaderMouseDown(originalIndex, columnWidths[visibleIndex] ?? 0, totalHeaderHeight, e)"
         >
           <component
             :is="renderHeader({
@@ -450,6 +473,12 @@ defineExpose({
               headerRenderers: headerRenderers ?? {},
               globalHeaderRenderer: headerRenderer,
             })"
+          />
+          <!-- Resize handle -->
+          <div
+            v-if="column.resizable !== false"
+            class="gp-grid-header-resize-handle"
+            @mousedown.stop="(e: MouseEvent) => handleHeaderResizeMouseDown(originalIndex, columnWidths[visibleIndex] ?? 0, e)"
           />
         </div>
       </div>
@@ -560,6 +589,19 @@ defineExpose({
           }"
           @mousedown="handleFillHandleMouseDown"
         />
+
+        <!-- Row drop indicator - inside wrapper so it scrolls with rows -->
+        <div
+          v-if="dragState.dragType === 'row-drag' && dragState.rowDrag?.dropTargetIndex !== null"
+          class="gp-grid-row-drop-indicator"
+          :style="{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
+            width: `${Math.max(state.contentWidth, totalWidth)}px`,
+          }"
+        />
       </div>
 
       <!-- Error message -->
@@ -632,6 +674,55 @@ defineExpose({
       :current-filter="state.filterPopup.currentFilter"
       @apply="handleFilterApply"
       @close="handleFilterPopupClose"
+    />
+
+    <!-- Column resize line -->
+    <div
+      v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
+      class="gp-grid-column-resize-line"
+      :style="{
+        position: 'absolute',
+        top: 0,
+        left: `${(columnPositions[visibleColumnsWithIndices.findIndex(v => v.originalIndex === dragState.columnResize!.colIndex)] ?? 0) + dragState.columnResize!.currentWidth}px`,
+        height: '100%',
+      }"
+    />
+
+    <!-- Column move ghost -->
+    <template v-if="dragState.dragType === 'column-move' && dragState.columnMove">
+      <div
+        class="gp-grid-column-move-ghost"
+        :style="{
+          left: `${dragState.columnMove!.currentX - dragState.columnMove!.ghostWidth / 2}px`,
+          top: `${dragState.columnMove!.currentY - dragState.columnMove!.ghostHeight / 2}px`,
+          width: `${dragState.columnMove!.ghostWidth}px`,
+          height: `${dragState.columnMove!.ghostHeight}px`,
+        }"
+      >
+        {{ effectiveColumns[dragState.columnMove!.sourceColIndex]?.headerName ?? effectiveColumns[dragState.columnMove!.sourceColIndex]?.field ?? '' }}
+      </div>
+      <div
+        v-if="dragState.columnMove!.dropTargetIndex !== null"
+        class="gp-grid-column-drop-indicator"
+        :style="{
+          position: 'absolute',
+          top: 0,
+          left: `${columnPositions[dragState.columnMove!.dropTargetIndex!] ?? 0}px`,
+          height: `${totalHeaderHeight}px`,
+        }"
+      />
+    </template>
+
+    <!-- Row drag ghost (fixed position, follows cursor) -->
+    <div
+      v-if="dragState.dragType === 'row-drag' && dragState.rowDrag"
+      class="gp-grid-row-drag-ghost"
+      :style="{
+        left: `${dragState.rowDrag!.currentX + 12}px`,
+        top: `${dragState.rowDrag!.currentY - rowHeight / 2}px`,
+        width: `${Math.min(300, totalWidth)}px`,
+        height: `${rowHeight}px`,
+      }"
     />
   </div>
 </template>

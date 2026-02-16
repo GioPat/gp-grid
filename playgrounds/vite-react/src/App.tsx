@@ -261,6 +261,7 @@ const columns: ColumnDefinition[] = [
     width: 80,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
+    hidden: true,
   },
   {
     field: "name",
@@ -397,6 +398,8 @@ function MainDemo() {
           headerHeight={40}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
+          rowDragEntireRow
+          onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
         />
       </div>
       <div

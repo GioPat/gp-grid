@@ -164,6 +164,19 @@ export type {
   RowsRemovedInstruction,
   RowsUpdatedInstruction,
   TransactionProcessedInstruction,
+  ColumnsChangedInstruction,
+  StartColumnResizeInstruction,
+  UpdateColumnResizeInstruction,
+  CommitColumnResizeInstruction,
+  CancelColumnResizeInstruction,
+  StartColumnMoveInstruction,
+  UpdateColumnMoveInstruction,
+  CommitColumnMoveInstruction,
+  CancelColumnMoveInstruction,
+  StartRowDragInstruction,
+  UpdateRowDragInstruction,
+  CommitRowDragInstruction,
+  CancelRowDragInstruction,
 
   /** Options */
   GridCoreOptions,
@@ -196,6 +209,9 @@ export type {
   DragMoveResult,
   InputHandlerDeps,
   DragState,
+  ColumnResizeDragState,
+  ColumnMoveDragState,
+  RowDragState,
 } from "./types/input";
 
 // =============================================================================
@@ -212,6 +228,7 @@ export {
   statesStyles,
   scrollbarStyles,
   filtersStyles,
+  rowDragStyles,
 } from "./styles";
 
 /** Positioning utilities */

@@ -47,6 +47,10 @@ export class GridCore<TData extends Row = Row> {
   private sortingEnabled: boolean;
   private getRowId?: (row: TData) => RowId;
   private onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  private rowDragEntireRow: boolean;
+  private onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  private onColumnResized?: (colIndex: number, newWidth: number) => void;
+  private onColumnMoved?: (fromIndex: number, toIndex: number) => void;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -56,8 +60,8 @@ export class GridCore<TData extends Row = Row> {
 
   // Data state
   private currentPageIndex: number = 0;
-  // Use large page size to avoid excessive pagination for client-side data sources
-  private pageSize: number = 1000000;
+  // Fetch all rows in a single page for client-side data sources
+  private pageSize: number = Number.MAX_SAFE_INTEGER;
   private cachedRows: Map<number, TData> = new Map();
   private totalRows: number = 0;
 
@@ -95,6 +99,10 @@ export class GridCore<TData extends Row = Row> {
     this.sortingEnabled = options.sortingEnabled ?? true;
     this.getRowId = options.getRowId;
     this.onCellValueChanged = options.onCellValueChanged;
+    this.rowDragEntireRow = options.rowDragEntireRow ?? false;
+    this.onRowDragEnd = options.onRowDragEnd;
+    this.onColumnResized = options.onColumnResized;
+    this.onColumnMoved = options.onColumnMoved;
 
     if (this.onCellValueChanged && !this.getRowId) {
       throw new Error("getRowId is required when onCellValueChanged is provided");
@@ -539,6 +547,65 @@ export class GridCore<TData extends Row = Row> {
   }
 
   // ===========================================================================
+  // Column & Row Interaction
+  // ===========================================================================
+
+  /**
+   * Set the width of a column and recompute layout.
+   */
+  setColumnWidth(colIndex: number, width: number): void {
+    const column = this.columns[colIndex];
+    if (!column) return;
+    column.width = width;
+    this.computeColumnPositions();
+    this.emitContentSize();
+    this.emitHeaders();
+    this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+    this.slotPool.syncSlots();
+    this.onColumnResized?.(colIndex, width);
+  }
+
+  /**
+   * Move a column from one index to another and recompute layout.
+   */
+  moveColumn(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= this.columns.length) return;
+    const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    if (adjustedTo < 0 || adjustedTo >= this.columns.length) return;
+    if (fromIndex === adjustedTo) return;
+
+    const [col] = this.columns.splice(fromIndex, 1);
+    this.columns.splice(adjustedTo, 0, col!);
+
+    this.computeColumnPositions();
+    this.emitContentSize();
+    this.emitHeaders();
+    this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+    this.slotPool.refreshAllSlots();
+    this.onColumnMoved?.(fromIndex, adjustedTo);
+  }
+
+  /**
+   * Commit a row drag operation. Reorders data if the data source supports it,
+   * then invokes the onRowDragEnd callback.
+   */
+  commitRowDrag(sourceIndex: number, targetIndex: number): void {
+    const ds = this.dataSource as { moveRow?: (from: number, to: number) => void };
+    if (ds.moveRow) {
+      ds.moveRow(sourceIndex, targetIndex);
+      void this.refresh();
+    }
+    this.onRowDragEnd?.(sourceIndex, targetIndex);
+  }
+
+  /**
+   * Whether the entire row is draggable.
+   */
+  isRowDragEntireRow(): boolean {
+    return this.rowDragEntireRow;
+  }
+
+  // ===========================================================================
   // Public Accessors
   // ===========================================================================
 
@@ -595,6 +662,14 @@ export class GridCore<TData extends Row = Row> {
       viewportY,
       virtualScrollTop,
     );
+  }
+
+  /**
+   * Get the translateY position for a row inside the rows wrapper.
+   * Accounts for scroll virtualization (compressed coordinates).
+   */
+  getRowTranslateY(rowIndex: number): number {
+    return this.slotPool.getRowTranslateYForIndex(rowIndex);
   }
 
   getRowData(rowIndex: number): TData | undefined {
