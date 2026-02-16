@@ -25,10 +25,8 @@ export {
 } from "./managers";
 
 /** Manager types */
-export type {
-  SlotPoolManagerOptions,
-  BatchInstructionListener as SlotPoolBatchListener,
-} from "./slot-pool";
+export type { SlotPoolManagerOptions } from "./slot-pool";
+export type { BatchInstructionListener as SlotPoolBatchListener } from "./utils";
 export type { EditManagerOptions } from "./edit-manager";
 
 /** Data sources */
@@ -258,4 +256,13 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
+  InitialStateArgs,
 } from "./types/ui-state";
+
+export { createInitialState } from "./types/ui-state";
+
+/** State reducer (shared instruction handler for framework wrappers) */
+export { applyInstruction } from "./state-reducer";
+
+/** Scroll helpers */
+export { findSlotForRow, scrollCellIntoView } from "./utils/scroll-helpers";

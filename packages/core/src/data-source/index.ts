@@ -30,7 +30,7 @@ export {
   compareValues,
   applySort,
   HASH_CHUNK_COUNT,
-} from "./sorting";
+} from "../indexed-data-store/sorting";
 
 // Filtering utilities
 export {
@@ -40,4 +40,4 @@ export {
   evaluateTextCondition,
   evaluateNumberCondition,
   evaluateDateCondition,
-} from "./filtering";
+} from "../filtering";

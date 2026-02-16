@@ -1,38 +1,12 @@
 // packages/vue/src/renderers/cellRenderer.ts
 
-import { h, createTextVNode, type VNode } from "vue";
-import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "@gp-grid/core";
+import { createTextVNode, type VNode } from "vue";
+import { getFieldValue } from "@gp-grid/core";
+import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
+import { toVNode } from "./utils";
 
-/**
- * Ensure we always return a VNode, never a plain string
- */
-function toVNode(value: VNode | string | null | undefined): VNode {
-  if (value == null || value === "") {
-    return createTextVNode("");
-  }
-  if (typeof value === "string") {
-    return createTextVNode(value);
-  }
-  return value;
-}
-
-/**
- * Get cell value from row data, supporting dot-notation for nested fields
- */
-export function getCellValue(rowData: Row, field: string): CellValue {
-  const parts = field.split(".");
-  let value: unknown = rowData;
-
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") {
-      return null;
-    }
-    value = (value as Record<string, unknown>)[part];
-  }
-
-  return (value ?? null) as CellValue;
-}
+export { getFieldValue as getCellValue } from "@gp-grid/core";
 
 export interface RenderCellOptions {
   column: ColumnDefinition;
@@ -62,7 +36,7 @@ export function renderCell(options: RenderCellOptions): VNode {
     globalCellRenderer,
   } = options;
 
-  const value = getCellValue(rowData, column.field);
+  const value = getFieldValue(rowData, column.field);
   const params: CellRendererParams = {
     value,
     rowData,

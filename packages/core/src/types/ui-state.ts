@@ -38,6 +38,35 @@ export interface FilterPopupState {
 }
 
 // =============================================================================
+// Initial State
+// =============================================================================
+
+export interface InitialStateArgs {
+  initialWidth?: number;
+  initialHeight?: number;
+}
+
+export const createInitialState = <TData = Row>(args?: InitialStateArgs): GridState<TData> => ({
+  slots: new Map(),
+  activeCell: null,
+  selectionRange: null,
+  editingCell: null,
+  contentWidth: 0,
+  contentHeight: args?.initialHeight ?? 0,
+  viewportWidth: args?.initialWidth ?? 0,
+  viewportHeight: args?.initialHeight ?? 0,
+  rowsWrapperOffset: 0,
+  headers: new Map(),
+  filterPopup: null,
+  isLoading: false,
+  error: null,
+  totalRows: 0,
+  visibleRowRange: null,
+  hoverPosition: null,
+  columns: null,
+});
+
+// =============================================================================
 // Grid State
 // =============================================================================
 

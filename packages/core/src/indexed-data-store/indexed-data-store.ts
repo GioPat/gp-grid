@@ -15,7 +15,7 @@ import {
   compareRowsByHashes,
   compareRowsDirect,
 } from "./sorting";
-import { rowPassesFilter } from "./filtering";
+import { rowPassesFilter } from "../filtering";
 
 // Re-export RowId for convenience
 export type { RowId };

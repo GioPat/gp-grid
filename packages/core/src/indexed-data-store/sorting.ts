@@ -161,3 +161,84 @@ export function compareRowsDirect<TData extends Row>(
 
   return 0;
 }
+
+/** Number of 10-character chunks for string hashing (30 chars total) */
+export const HASH_CHUNK_COUNT = 3;
+
+/**
+ * Convert a string to multiple sortable hash values (one per 10-char chunk).
+ * This allows correct sorting of strings longer than 10 characters.
+ * Returns HASH_CHUNK_COUNT hashes, each covering 10 characters.
+ */
+export function stringToSortableHashes(str: string): number[] {
+  const s = str.toLowerCase();
+  const hashes: number[] = [];
+
+  for (let chunk = 0; chunk < HASH_CHUNK_COUNT; chunk++) {
+    const start = chunk * 10;
+    let hash = 0;
+
+    for (let i = 0; i < 10; i++) {
+      const charIndex = start + i;
+      const code = charIndex < s.length ? s.charCodeAt(charIndex) : 0;
+      let mapped: number;
+      if (code >= 97 && code <= 122) {
+        mapped = code - 97;
+      } else if (code >= 48 && code <= 57) {
+        mapped = code - 48 + 26;
+      } else {
+        mapped = 0;
+      }
+      hash = hash * 36 + mapped;
+    }
+    hashes.push(hash);
+  }
+
+  return hashes;
+}
+
+/**
+ * Convert any cell value to a sortable number.
+ * Strings are converted using a lexicographic hash of the first 10 characters.
+ */
+export function toSortableNumber(val: CellValue): number {
+  if (val == null) return Number.MAX_VALUE;
+
+  if (Array.isArray(val)) {
+    if (val.length === 0) return Number.MAX_VALUE;
+    return stringToSortableNumber(val.join(", "));
+  }
+
+  if (typeof val === "number") return val;
+
+  if (val instanceof Date) return val.getTime();
+
+  if (typeof val === "string") {
+    return stringToSortableNumber(val);
+  }
+
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Apply sort model to data array
+ */
+export function applySort<TData>(
+  data: TData[],
+  sortModel: SortModel[],
+  getFieldValue: (row: TData, field: string) => CellValue,
+): TData[] {
+  return [...data].sort((a, b) => {
+    for (const { colId, direction } of sortModel) {
+      const aVal = getFieldValue(a, colId);
+      const bVal = getFieldValue(b, colId);
+      const comparison = compareValues(aVal, bVal);
+
+      if (comparison !== 0) {
+        return direction === "asc" ? comparison : -comparison;
+      }
+    }
+    return 0;
+  });
+}

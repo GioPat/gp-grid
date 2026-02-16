@@ -13,8 +13,8 @@ import {
   stringToSortableHashes,
   applySort,
   HASH_CHUNK_COUNT,
-} from "./sorting";
-import { applyFilters } from "./filtering";
+} from "../indexed-data-store/sorting";
+import { applyFilters } from "../filtering";
 
 // =============================================================================
 // Configuration

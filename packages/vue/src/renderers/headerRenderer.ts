@@ -3,19 +3,7 @@
 import { h, Fragment, createTextVNode, type VNode } from "vue";
 import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { VueHeaderRenderer } from "../types";
-
-/**
- * Ensure we always return a VNode, never a plain string
- */
-function toVNode(value: VNode | string | null | undefined): VNode {
-  if (value == null || value === "") {
-    return createTextVNode("");
-  }
-  if (typeof value === "string") {
-    return createTextVNode(value);
-  }
-  return value;
-}
+import { toVNode } from "./utils";
 
 export interface RenderHeaderOptions {
   column: ColumnDefinition;

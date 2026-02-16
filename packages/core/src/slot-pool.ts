@@ -3,9 +3,6 @@
 import type { SlotState, Row, GridInstruction } from "./types";
 import { createBatchInstructionEmitter } from "./utils";
 
-// Re-export for backwards compatibility
-export type { BatchInstructionListener } from "./utils";
-
 // =============================================================================
 // Types
 // =============================================================================

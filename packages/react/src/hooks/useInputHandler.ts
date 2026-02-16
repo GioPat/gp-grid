@@ -10,6 +10,7 @@ import type {
   ContainerBounds,
   DragState,
 } from "@gp-grid/core";
+import { scrollCellIntoView } from "@gp-grid/core";
 import type { SlotData } from "../gridState/types";
 
 // =============================================================================
@@ -53,50 +54,6 @@ export interface UseInputHandlerResult {
 // =============================================================================
 
 const AUTO_SCROLL_INTERVAL = 16; // ~60fps
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Find the slot for a given row index
- */
-function findSlotForRow(slots: Map<string, SlotData>, rowIndex: number): SlotData | null {
-  for (const slot of slots.values()) {
-    if (slot.rowIndex === rowIndex) {
-      return slot;
-    }
-  }
-  return null;
-}
-
-/**
- * Scroll a cell into view if needed
- */
-function scrollCellIntoView<TData extends Row>(
-  core: GridCore<TData>,
-  container: HTMLDivElement,
-  row: number,
-  rowHeight: number,
-  headerHeight: number,
-  slots: Map<string, SlotData>
-): void {
-  const slot = findSlotForRow(slots, row);
-  const cellTranslateY = slot ? slot.translateY : headerHeight + row * rowHeight;
-  const cellViewportTop = cellTranslateY - container.scrollTop;
-  const cellViewportBottom = cellViewportTop + rowHeight;
-  const visibleTop = headerHeight;
-  const visibleBottom = container.clientHeight;
-
-  if (cellViewportTop < visibleTop) {
-    container.scrollTop = core.getScrollTopForRow(row);
-  } else if (cellViewportBottom > visibleBottom) {
-    const visibleDataHeight = container.clientHeight - headerHeight;
-    const rowsInView = Math.floor(visibleDataHeight / rowHeight);
-    const targetRow = Math.max(0, row - rowsInView + 1);
-    container.scrollTop = core.getScrollTopForRow(targetRow);
-  }
-}
 
 // =============================================================================
 // Hook
