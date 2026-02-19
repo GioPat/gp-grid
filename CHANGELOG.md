@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.2...gp-grid-v0.8.3) (2026-02-19)
+
+
+### 🐛 Bug Fixes
+
+* align react-dom version for peer-dependencies ([aebce94](https://github.com/GioPat/gp-grid/commit/aebce942f2fb681ac299ebc154884e88d0fe5636))
+
 ## [0.8.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.1...gp-grid-v0.8.2) (2026-02-14)
 
 
