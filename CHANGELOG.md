@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.3...gp-grid-v0.9.0) (2026-02-22)
+
+
+### ✨ Features
+
+* add compatibility with React 18 ([1ed590d](https://github.com/GioPat/gp-grid/commit/1ed590db861ca66285863b4a290b00fef5eca850))
+* add possibility to target renderer directly by callback ([675ebd6](https://github.com/GioPat/gp-grid/commit/675ebd6d2ab79bb136a1fe5bd4e5876aa360d7e6))
+* **core:** improve batching instruction and export common logic ([6b3f0f8](https://github.com/GioPat/gp-grid/commit/6b3f0f87de55c17358bec78a0ecfe47cc2b845b0))
+* **react:** add GpGrid alias ([fb91115](https://github.com/GioPat/gp-grid/commit/fb911152c00caaef33a328800b3095a4c7636938))
+
+
+### 🐛 Bug Fixes
+
+* move css properties in their respective classes ([a78b8eb](https://github.com/GioPat/gp-grid/commit/a78b8eb6e8a9632b17b638b36d51286a05c94786))
+* order with shift keystroke ([caf49a8](https://github.com/GioPat/gp-grid/commit/caf49a8a36679b5be7c83d2e9bb386446636e412))
+
+
+### ♻️ Refactoring
+
+* split Header and Body components ([cae3851](https://github.com/GioPat/gp-grid/commit/cae38515563b0cf01e2d421e387816aeaabadd91))
+
 ## [0.8.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.2...gp-grid-v0.8.3) (2026-02-19)
 
 
