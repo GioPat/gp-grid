@@ -55,6 +55,7 @@ export class InputHandler<TData extends Row = Row> {
   private moveStartX = 0;
   private moveStartY = 0;
   private moveThresholdMet = false;
+  private moveShiftKey = false;
   private moveGhostWidth = 0;
   private moveGhostHeight = 0;
   private moveCurrentX = 0;
@@ -358,6 +359,7 @@ export class InputHandler<TData extends Row = Row> {
     this.moveStartX = event.clientX;
     this.moveStartY = event.clientY;
     this.moveThresholdMet = false;
+    this.moveShiftKey = event.shiftKey;
     this.moveGhostWidth = colWidth;
     this.moveGhostHeight = colHeight;
     this.moveCurrentX = event.clientX;
@@ -574,12 +576,13 @@ export class InputHandler<TData extends Row = Row> {
         const column = this.core.getColumns()[this.moveSourceColIndex];
         if (column) {
           const colId = column.colId ?? column.field;
-          this.handleHeaderClick(colId, false);
+          this.handleHeaderClick(colId, this.moveShiftKey);
         }
       }
       this.isDraggingColumnMove = false;
       this.moveSourceColIndex = -1;
       this.moveThresholdMet = false;
+      this.moveShiftKey = false;
       this.moveDropTargetIndex = null;
       return;
     }
