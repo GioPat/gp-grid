@@ -14,20 +14,13 @@ import {
   injectStyles,
   calculateScaledColumnPositions,
   getTotalWidth,
-  isCellSelected,
-  isCellActive,
-  isCellEditing,
-  isCellInFillPreview,
-  buildCellClasses,
+  calculateFillHandlePosition,
 } from "@gp-grid/core";
 import type { Row, ColumnFilterModel, DataSource } from "@gp-grid/core";
-import { FilterPopup } from "./components";
+import { FilterPopup, GridHeader, GridBody } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
-import { renderCell } from "./renderers/cellRenderer";
-import { renderEditCell } from "./renderers/editRenderer";
-import { renderHeader } from "./renderers/headerRenderer";
 import type { GridProps } from "./types";
 
 // Re-export types for backwards compatibility
@@ -37,10 +30,6 @@ export type {
   ReactHeaderRenderer,
   GridProps,
 } from "./types";
-
-// =============================================================================
-// Grid Component
-// =============================================================================
 
 /**
  * Grid component
@@ -150,7 +139,7 @@ export function Grid<TData extends Row = Row>(
     }
   }
 
-  const { dataSource, ownsDataSource } = dataSourceCacheRef.current!;
+  const { dataSource } = dataSourceCacheRef.current!;
 
   // Cleanup owned data source on unmount
   useEffect(() => {
@@ -173,6 +162,8 @@ export function Grid<TData extends Row = Row>(
   onColumnResizedRef.current = onColumnResized;
   const onColumnMovedRef = useRef(onColumnMoved);
   onColumnMovedRef.current = onColumnMoved;
+  const highlightingRef = useRef(highlighting);
+  highlightingRef.current = highlighting;
 
   // Ref for dataSource so initial core gets the right one without being in the dep array
   const dataSourceRef = useRef(dataSource);
@@ -206,7 +197,6 @@ export function Grid<TData extends Row = Row>(
     handleCellMouseDown,
     handleCellDoubleClick,
     handleFillHandleMouseDown,
-    handleHeaderClick,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
     handleKeyDown,
@@ -240,7 +230,7 @@ export function Grid<TData extends Row = Row>(
       headerHeight: totalHeaderHeight,
       overscan,
       sortingEnabled,
-      highlighting,
+      highlighting: highlightingRef.current,
       getRowId: getRowIdRef.current,
       onCellValueChanged: onCellValueChangedRef.current
         ? (event) => onCellValueChangedRef.current?.(event)
@@ -310,7 +300,6 @@ export function Grid<TData extends Row = Row>(
     overscan,
     sortingEnabled,
     gridRef,
-    highlighting,
     rowDragEntireRow,
   ]);
 
@@ -339,6 +328,13 @@ export function Grid<TData extends Row = Row>(
       return unsubscribe;
     }
   }, [dataSource]);
+
+  // Handle reactive highlighting changes without re-creating core
+  useEffect(() => {
+    const core = coreRef.current;
+    if (!core?.highlight || !highlighting) return;
+    core.highlight.updateOptions(highlighting);
+  }, [highlighting]);
 
   // Handle scroll - just pass DOM values to core, which emits UPDATE_VISIBLE_RANGE instruction
   const handleScroll = useCallback(() => {
@@ -434,70 +430,29 @@ export function Grid<TData extends Row = Row>(
   );
 
   // Calculate fill handle position (only show for editable columns)
-  const fillHandlePosition = useMemo(() => {
-    const { activeCell, selectionRange, slots } = state;
-    if (!activeCell && !selectionRange) return null;
-
-    let row: number, col: number;
-    let minCol: number, maxCol: number;
-
-    if (selectionRange) {
-      row = Math.max(selectionRange.startRow, selectionRange.endRow);
-      col = Math.max(selectionRange.startCol, selectionRange.endCol);
-      minCol = Math.min(selectionRange.startCol, selectionRange.endCol);
-      maxCol = Math.max(selectionRange.startCol, selectionRange.endCol);
-    } else if (activeCell) {
-      row = activeCell.row;
-      col = activeCell.col;
-      minCol = col;
-      maxCol = col;
-    } else {
-      return null;
-    }
-
-    // Check if ALL columns in the selection are editable (skip hidden columns)
-    for (let c = minCol; c <= maxCol; c++) {
-      const column = effectiveColumns[c];
-      if (!column || column.hidden) continue; // Skip hidden columns
-      if (column.editable !== true) {
-        return null;
-      }
-    }
-
-    // Find the visible index for the target column
-    const visibleIndex = visibleColumnsWithIndices.findIndex(
-      (v) => v.originalIndex === col,
-    );
-    if (visibleIndex === -1) return null; // Column is hidden
-
-    // Find the slot for this row and use its actual translateY
-    let cellTop: number | null = null;
-    for (const slot of slots.values()) {
-      if (slot.rowIndex === row) {
-        cellTop = slot.translateY;
-        break;
-      }
-    }
-
-    if (cellTop === null) return null;
-
-    const cellLeft = columnPositions[visibleIndex] ?? 0;
-    const cellWidth = columnWidths[visibleIndex] ?? 0;
-
-    return {
-      top: cellTop + rowHeight - 5,
-      left: cellLeft + cellWidth - 20,
-    };
-  }, [
-    state.activeCell,
-    state.selectionRange,
-    state.slots,
-    rowHeight,
-    columnPositions,
-    columnWidths,
-    effectiveColumns,
-    visibleColumnsWithIndices,
-  ]);
+  const fillHandlePosition = useMemo(
+    () =>
+      calculateFillHandlePosition({
+        activeCell: state.activeCell,
+        selectionRange: state.selectionRange,
+        slots: state.slots,
+        columns: effectiveColumns,
+        visibleColumnsWithIndices,
+        columnPositions,
+        columnWidths,
+        rowHeight,
+      }),
+    [
+      state.activeCell,
+      state.selectionRange,
+      state.slots,
+      rowHeight,
+      columnPositions,
+      columnWidths,
+      effectiveColumns,
+      visibleColumnsWithIndices,
+    ],
+  );
 
   // Track scroll position for header sync
   const [scrollLeft, setScrollLeft] = React.useState(0);
@@ -524,320 +479,83 @@ export function Grid<TData extends Row = Row>(
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      {/* Header container - fixed height, horizontal scroll synced with body */}
-      <div
-        className={`gp-grid-header${state.isLoading ? " gp-grid-header--loading" : ""}`}
-        style={{
-          flexShrink: 0,
-          height: headerHeight,
-          overflow: "hidden",
-          position: "relative",
-          zIndex: 100,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            transform: `translateX(${-scrollLeft}px)`,
-            width: Math.max(state.contentWidth, totalWidth),
-            height: headerHeight,
-          }}
-        >
-          {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
-            const headerInfo = state.headers.get(originalIndex);
-            const colW = columnWidths[visibleIndex] ?? 0;
-            return (
-              <div
-                key={column.colId ?? column.field}
-                className="gp-grid-header-cell"
-                data-col-index={originalIndex}
-                style={{
-                  position: "absolute",
-                  left: `${columnPositions[visibleIndex]}px`,
-                  top: 0,
-                  width: `${colW}px`,
-                  height: `${headerHeight}px`,
-                  background: "transparent",
-                }}
-                onMouseDown={(e) =>
-                  handleHeaderMouseDown(originalIndex, colW, headerHeight, e)
-                }
-              >
-                {renderHeader({
-                  column,
-                  colIndex: originalIndex,
-                  sortDirection: headerInfo?.sortDirection,
-                  sortIndex: headerInfo?.sortIndex,
-                  sortable: (column.sortable !== false) && sortingEnabled,
-                  filterable: column.filterable !== false,
-                  hasFilter: headerInfo?.hasFilter ?? false,
-                  coreRef,
-                  containerRef: outerContainerRef,
-                  headerRenderers,
-                  globalHeaderRenderer: headerRenderer,
-                })}
-                {/* Resize handle */}
-                {column.resizable !== false && (
-                  <div
-                    className="gp-grid-header-resize-handle"
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      handleHeaderResizeMouseDown(originalIndex, colW, e);
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <GridHeader
+        headerHeight={headerHeight}
+        scrollLeft={scrollLeft}
+        contentWidth={state.contentWidth}
+        totalWidth={totalWidth}
+        isLoading={state.isLoading}
+        visibleColumnsWithIndices={visibleColumnsWithIndices}
+        columnPositions={columnPositions}
+        columnWidths={columnWidths}
+        headers={state.headers}
+        sortingEnabled={sortingEnabled}
+        onHeaderMouseDown={handleHeaderMouseDown}
+        onHeaderResizeMouseDown={handleHeaderResizeMouseDown}
+        coreRef={coreRef}
+        outerContainerRef={outerContainerRef}
+        headerRenderers={headerRenderers}
+        globalHeaderRenderer={headerRenderer}
+      />
 
-      {/* Scrollable body container */}
-      <div
+      <GridBody
         ref={containerRef}
-        style={{
-          flex: 1,
-          overflow: "auto",
-          position: "relative",
-        }}
+        rowHeight={rowHeight}
+        totalHeaderHeight={totalHeaderHeight}
+        contentWidth={state.contentWidth}
+        contentHeight={state.contentHeight}
+        totalWidth={totalWidth}
+        rowsWrapperOffset={state.rowsWrapperOffset}
+        activeCell={state.activeCell}
+        selectionRange={state.selectionRange}
+        editingCell={state.editingCell}
+        error={state.error}
+        isLoading={state.isLoading}
+        totalRows={state.totalRows}
+        slotsArray={slotsArray}
+        visibleColumnsWithIndices={visibleColumnsWithIndices}
+        columnPositions={columnPositions}
+        columnWidths={columnWidths}
+        fillHandlePosition={fillHandlePosition}
+        dragState={dragState}
         onScroll={handleScrollWithHeaderSync}
-      >
-        {/* Content sizer - provides scroll range */}
+        onCellMouseDown={handleCellMouseDown}
+        onCellDoubleClick={handleCellDoubleClick}
+        onCellMouseEnter={handleCellMouseEnter}
+        onCellMouseLeave={handleCellMouseLeave}
+        onFillHandleMouseDown={handleFillHandleMouseDown}
+        coreRef={coreRef}
+        cellRenderers={cellRenderers}
+        editRenderers={editRenderers}
+        globalCellRenderer={cellRenderer}
+        globalEditRenderer={editRenderer}
+      />
+
+      {/* Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues */}
+      {state.isLoading && (
         <div
-          style={{
-            width: Math.max(state.contentWidth, totalWidth),
-            height: Math.max(state.contentHeight - totalHeaderHeight, 0),
-            position: "relative",
-            minWidth: "100%",
-          }}
-        >
-        {/* Rows wrapper - uses transform to position rows with small translateY values */}
-        {/* This prevents browser rendering issues at extreme pixel positions (millions of px) */}
-        <div
-          className="gp-grid-rows-wrapper"
           style={{
             position: "absolute",
-            top: 0,
+            top: headerHeight,
             left: 0,
-            width: `${Math.max(state.contentWidth, totalWidth)}px`,
-            transform: `translateY(${state.rowsWrapperOffset}px)`,
-            willChange: "transform",
+            right: 0,
+            bottom: 0,
+            zIndex: 50,
+            pointerEvents: "none",
           }}
         >
-          {/* Row slots */}
-          {slotsArray.map((slot) => {
-            if (slot.rowIndex < 0) return null;
-
-            // Compute row highlight classes (pass rowData for content-based rules)
-            const highlightRowClasses =
-              coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-            const rowClassName = ["gp-grid-row", ...highlightRowClasses]
-              .filter(Boolean)
-              .join(" ");
-
-            return (
-              <div
-                key={slot.slotId}
-                className={rowClassName}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  transform: `translateY(${slot.translateY}px)`,
-                  width: `${Math.max(state.contentWidth, totalWidth)}px`,
-                  height: `${rowHeight}px`,
-                }}
-              >
-                {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
-                  const isEditing = isCellEditing(
-                    slot.rowIndex,
-                    originalIndex,
-                    state.editingCell,
-                  );
-                  const active = isCellActive(
-                    slot.rowIndex,
-                    originalIndex,
-                    state.activeCell,
-                  );
-                  const selected = isCellSelected(
-                    slot.rowIndex,
-                    originalIndex,
-                    state.selectionRange,
-                  );
-                  const inFillPreview = isCellInFillPreview(
-                    slot.rowIndex,
-                    originalIndex,
-                    dragState.dragType === "fill",
-                    dragState.fillSourceRange,
-                    dragState.fillTarget,
-                  );
-
-                  // Build base cell classes
-                  const baseCellClasses = buildCellClasses(
-                    active,
-                    selected,
-                    isEditing,
-                    inFillPreview,
-                  );
-
-                  // Compute highlight cell classes
-                  const highlightCellClasses =
-                    coreRef.current?.highlight?.computeCombinedCellClasses(
-                      slot.rowIndex,
-                      originalIndex,
-                      column,
-                      slot.rowData,
-                    ) ?? [];
-
-                  const isRowDragHandle = column.rowDrag === true;
-
-                  const cellClasses = [
-                    baseCellClasses,
-                    ...highlightCellClasses,
-                    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-
-                  return (
-                    <div
-                      key={`${slot.slotId}-${originalIndex}`}
-                      className={cellClasses}
-                      style={{
-                        position: "absolute",
-                        left: `${columnPositions[visibleIndex]}px`,
-                        top: 0,
-                        width: `${columnWidths[visibleIndex]}px`,
-                        height: `${rowHeight}px`,
-                      }}
-                      onMouseDown={(e) =>
-                        handleCellMouseDown(slot.rowIndex, originalIndex, e)
-                      }
-                      onDoubleClick={() =>
-                        handleCellDoubleClick(slot.rowIndex, originalIndex)
-                      }
-                      onMouseEnter={() =>
-                        handleCellMouseEnter(slot.rowIndex, originalIndex)
-                      }
-                      onMouseLeave={handleCellMouseLeave}
-                    >
-                      {isEditing && state.editingCell
-                        ? renderEditCell({
-                          column,
-                          rowData: slot.rowData,
-                          rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
-                          initialValue: state.editingCell.initialValue,
-                          coreRef,
-                          editRenderers,
-                          globalEditRenderer: editRenderer,
-                        })
-                        : renderCell({
-                          column,
-                          rowData: slot.rowData,
-                          rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
-                          isActive: active,
-                          isSelected: selected,
-                          isEditing,
-                          cellRenderers,
-                          globalCellRenderer: cellRenderer,
-                        })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-
-          {/* Fill handle (drag to fill) - inside wrapper so it moves with rows */}
-          {fillHandlePosition && !state.editingCell && (
-            <div
-              className="gp-grid-fill-handle"
-              style={{
-                position: "absolute",
-                top: fillHandlePosition.top,
-                left: fillHandlePosition.left,
-                zIndex: 200,
-              }}
-              onMouseDown={handleFillHandleMouseDown}
-            />
-          )}
-
-          {/* Row drop indicator - inside wrapper so it scrolls with rows */}
-          {dragState.dragType === "row-drag" && dragState.rowDrag?.dropTargetIndex !== null && (
-            <div
-              className="gp-grid-row-drop-indicator"
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
-                width: `${Math.max(state.contentWidth, totalWidth)}px`,
-              }}
-            />
+          <div className="gp-grid-loading-overlay" />
+          {loadingComponent ? (
+            React.createElement(loadingComponent, { isLoading: true })
+          ) : (
+            <div className="gp-grid-loading">
+              <div className="gp-grid-loading-spinner" />
+            </div>
           )}
         </div>
+      )}
 
-        {/* Error message */}
-        {state.error && (
-          <div className="gp-grid-error">Error: {state.error}</div>
-        )}
-
-        {/* Empty state */}
-        {!state.isLoading && !state.error && state.totalRows === 0 && (
-          <div className="gp-grid-empty">No data to display</div>
-        )}
-      </div>
-      {/* End content sizer */}
-    </div>
-    {/* End scrollable body container */}
-
-    {/* Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues */}
-    {state.isLoading && (
-      <div
-        style={{
-          position: "absolute",
-          top: headerHeight,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 50,
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          className="gp-grid-loading-overlay"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-          }}
-        />
-        {loadingComponent ? (
-          React.createElement(loadingComponent, { isLoading: true })
-        ) : (
-          <div
-            className="gp-grid-loading"
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              pointerEvents: "auto",
-            }}
-          >
-            <div className="gp-grid-loading-spinner" />
-          </div>
-        )}
-      </div>
-    )}
-
-    {/* Filter Popup */}
+      {/* Filter Popup */}
       {state.filterPopup?.isOpen &&
         state.filterPopup.column &&
         state.filterPopup.anchorRect && (
@@ -852,74 +570,66 @@ export function Grid<TData extends Row = Row>(
           />
         )}
 
-    {/* Column resize line */}
-    {dragState.dragType === "column-resize" && dragState.columnResize && (() => {
-      const visibleIndex = visibleColumnsWithIndices.findIndex(
-        (v) => v.originalIndex === dragState.columnResize!.colIndex,
-      );
-      if (visibleIndex === -1) return null;
-      const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth;
-      return (
+      {/* Column resize line */}
+      {dragState.dragType === "column-resize" && dragState.columnResize && (() => {
+        const visibleIndex = visibleColumnsWithIndices.findIndex(
+          (v) => v.originalIndex === dragState.columnResize!.colIndex,
+        );
+        if (visibleIndex === -1) return null;
+        const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth;
+        return (
+          <div
+            className="gp-grid-column-resize-line"
+            style={{ left: lineLeft }}
+          />
+        );
+      })()}
+
+      {/* Column move ghost */}
+      {dragState.dragType === "column-move" && dragState.columnMove && (() => {
+        const cm = dragState.columnMove;
+        const column = effectiveColumns[cm.sourceColIndex];
+        const headerText = column?.headerName ?? column?.field ?? "";
+        return (
+          <>
+            <div
+              className="gp-grid-column-move-ghost"
+              style={{
+                left: cm.currentX - cm.ghostWidth / 2,
+                top: cm.currentY - cm.ghostHeight / 2,
+                width: cm.ghostWidth,
+                height: cm.ghostHeight,
+              }}
+            >
+              {headerText}
+            </div>
+            {cm.dropTargetIndex !== null && (
+              <div
+                className="gp-grid-column-drop-indicator"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: columnPositions[cm.dropTargetIndex] ?? 0,
+                  height: headerHeight,
+                }}
+              />
+            )}
+          </>
+        );
+      })()}
+
+      {/* Row drag ghost (fixed position, follows cursor) */}
+      {dragState.dragType === "row-drag" && dragState.rowDrag && (
         <div
-          className="gp-grid-column-resize-line"
+          className="gp-grid-row-drag-ghost"
           style={{
-            position: "absolute",
-            top: 0,
-            left: lineLeft,
-            height: "100%",
+            left: dragState.rowDrag.currentX + 12,
+            top: dragState.rowDrag.currentY - rowHeight / 2,
+            width: Math.min(300, totalWidth),
+            height: rowHeight,
           }}
         />
-      );
-    })()}
-
-    {/* Column move ghost */}
-    {dragState.dragType === "column-move" && dragState.columnMove && (() => {
-      const cm = dragState.columnMove;
-      const visibleIndex = visibleColumnsWithIndices.findIndex(
-        (v) => v.originalIndex === cm.sourceColIndex,
-      );
-      const column = effectiveColumns[cm.sourceColIndex];
-      const headerText = column?.headerName ?? column?.field ?? "";
-      return (
-        <>
-          <div
-            className="gp-grid-column-move-ghost"
-            style={{
-              left: cm.currentX - cm.ghostWidth / 2,
-              top: cm.currentY - cm.ghostHeight / 2,
-              width: cm.ghostWidth,
-              height: cm.ghostHeight,
-            }}
-          >
-            {headerText}
-          </div>
-          {cm.dropTargetIndex !== null && (
-            <div
-              className="gp-grid-column-drop-indicator"
-              style={{
-                position: "absolute",
-                top: 0,
-                left: columnPositions[cm.dropTargetIndex] ?? 0,
-                height: headerHeight,
-              }}
-            />
-          )}
-        </>
-      );
-    })()}
-
-    {/* Row drag ghost (fixed position, follows cursor) */}
-    {dragState.dragType === "row-drag" && dragState.rowDrag && (
-      <div
-        className="gp-grid-row-drag-ghost"
-        style={{
-          left: dragState.rowDrag.currentX + 12,
-          top: dragState.rowDrag.currentY - rowHeight / 2,
-          width: Math.min(300, totalWidth),
-          height: rowHeight,
-        }}
-      />
-    )}
+      )}
     </div>
   );
 }

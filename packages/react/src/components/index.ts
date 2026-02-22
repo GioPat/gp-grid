@@ -11,3 +11,9 @@ export type { NumberFilterContentProps } from "./NumberFilterContent";
 
 export { DateFilterContent } from "./DateFilterContent";
 export type { DateFilterContentProps } from "./DateFilterContent";
+
+export { GridHeader } from "./GridHeader";
+export type { GridHeaderProps } from "./GridHeader";
+
+export { GridBody } from "./GridBody";
+export type { GridBodyProps } from "./GridBody";

@@ -14,21 +14,15 @@ import {
   injectStyles,
   calculateScaledColumnPositions,
   getTotalWidth,
-  isCellSelected,
-  isCellActive,
-  isCellEditing,
-  isCellInFillPreview,
-  buildCellClasses,
 } from "@gp-grid/core";
 import type { Row, RowId, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
-import { renderCell } from "./renderers/cellRenderer";
-import { renderEditCell } from "./renderers/editRenderer";
-import { renderHeader } from "./renderers/headerRenderer";
 import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
+import GridHeader from "./components/GridHeader.vue";
+import GridBody from "./components/GridBody.vue";
 
 // Inject styles on first render
 injectStyles();
@@ -84,7 +78,8 @@ const props = withDefaults(
 
 // Refs
 const outerContainerRef = ref<HTMLDivElement | null>(null);
-const bodyContainerRef = ref<HTMLDivElement | null>(null);
+const gridBodyComp = ref<InstanceType<typeof GridBody> | null>(null);
+const bodyContainerRef = computed(() => gridBodyComp.value?.bodyRef ?? null);
 const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
 const coreUnsubscribeRef = shallowRef<(() => void) | null>(null);
@@ -102,7 +97,7 @@ const { state, applyInstructions, reset: resetState } = useGridState({
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
 
 // Effective columns: use core-updated columns (after resize/move) or fall back to props
-const effectiveColumns = computed(() => state.columns ?? props.columns);
+const effectiveColumns = computed(() => state.value.columns ?? props.columns);
 
 // Create visible columns with original index tracking (for hidden column support)
 const visibleColumnsWithIndices = computed(() =>
@@ -114,13 +109,13 @@ const visibleColumnsWithIndices = computed(() =>
 const scaledColumns = computed(() =>
   calculateScaledColumnPositions(
     visibleColumnsWithIndices.value.map((v) => v.column),
-    state.viewportWidth,
+    state.value.viewportWidth,
   ),
 );
 const columnPositions = computed(() => scaledColumns.value.positions);
 const columnWidths = computed(() => scaledColumns.value.widths);
 const totalWidth = computed(() => getTotalWidth(columnPositions.value));
-const slotsArray = computed(() => Array.from(state.slots.values()));
+const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
 // Input handling
 const {
@@ -134,22 +129,22 @@ const {
   handleWheel,
   dragState,
 } = useInputHandler(coreRef, bodyContainerRef, effectiveColumns, {
-  activeCell: computed(() => state.activeCell),
-  selectionRange: computed(() => state.selectionRange),
-  editingCell: computed(() => state.editingCell),
-  filterPopupOpen: computed(() => state.filterPopup?.isOpen ?? false),
+  activeCell: computed(() => state.value.activeCell),
+  selectionRange: computed(() => state.value.selectionRange),
+  editingCell: computed(() => state.value.editingCell),
+  filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
   rowHeight: props.rowHeight,
   headerHeight: totalHeaderHeight.value,
   columnPositions,
   visibleColumnsWithIndices,
-  slots: computed(() => state.slots),
+  slots: computed(() => state.value.slots),
 });
 
 // Fill handle position
 const { fillHandlePosition } = useFillHandle({
-  activeCell: computed(() => state.activeCell),
-  selectionRange: computed(() => state.selectionRange),
-  slots: computed(() => state.slots),
+  activeCell: computed(() => state.value.activeCell),
+  selectionRange: computed(() => state.value.selectionRange),
+  slots: computed(() => state.value.slots),
   columns: effectiveColumns,
   visibleColumnsWithIndices,
   columnPositions,
@@ -204,47 +199,6 @@ function handleCellMouseEnter(rowIndex: number, colIndex: number): void {
 // Handle cell mouse leave (for highlighting)
 function handleCellMouseLeave(): void {
   coreRef.value?.input.handleCellMouseLeave();
-}
-
-// Get row classes including highlight classes (pass rowData for content-based rules)
-function getRowClasses(slot: { rowIndex: number; rowData: Row }): string {
-  const highlightRowClasses =
-    coreRef.value?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
-}
-
-// Get cell classes
-// Note: hoverPosition param establishes Vue reactivity dependency for re-render on hover changes
-function getCellClasses(
-  rowIndex: number,
-  colIndex: number,
-  column: ColumnDefinition,
-  rowData: Row,
-  _hoverPosition: { row: number; col: number } | null,
-): string {
-  const isEditing = isCellEditing(rowIndex, colIndex, state.editingCell);
-  const active = isCellActive(rowIndex, colIndex, state.activeCell);
-  const selected = isCellSelected(rowIndex, colIndex, state.selectionRange);
-  const inFillPreview = isCellInFillPreview(
-    rowIndex,
-    colIndex,
-    dragState.value.dragType === "fill",
-    dragState.value.fillSourceRange,
-    dragState.value.fillTarget,
-  );
-  const baseCellClasses = buildCellClasses(active, selected, isEditing, inFillPreview);
-
-  // Compute highlight cell classes
-  const highlightCellClasses =
-    coreRef.value?.highlight?.computeCombinedCellClasses(rowIndex, colIndex, column, rowData) ?? [];
-
-  const isRowDragHandle = column.rowDrag === true;
-
-  return [
-    baseCellClasses,
-    ...highlightCellClasses,
-    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
-  ].filter(Boolean).join(" ");
 }
 
 // Helper to create or get data source
@@ -423,203 +377,60 @@ defineExpose({
     tabindex="0"
     @keydown="handleKeyDown"
   >
-    <!-- Header container - fixed height, horizontal scroll synced with body -->
-    <div
-      :class="['gp-grid-header', { 'gp-grid-header--loading': state.isLoading }]"
-      :style="{
-        flexShrink: 0,
-        height: `${totalHeaderHeight}px`,
-        overflow: 'hidden',
-        position: 'relative',
-        zIndex: 100,
-      }"
-    >
-      <div
-        :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          transform: `translateX(${-scrollLeft}px)`,
-          width: `${Math.max(state.contentWidth, totalWidth)}px`,
-          height: `${totalHeaderHeight}px`,
-        }"
-      >
-        <div
-          v-for="({ column, originalIndex }, visibleIndex) in visibleColumnsWithIndices"
-          :key="column.colId ?? column.field"
-          class="gp-grid-header-cell"
-          :data-col-index="originalIndex"
-          :style="{
-            position: 'absolute',
-            left: `${columnPositions[visibleIndex]}px`,
-            top: 0,
-            width: `${columnWidths[visibleIndex]}px`,
-            height: `${totalHeaderHeight}px`,
-            background: 'transparent',
-          }"
-          @mousedown="(e: MouseEvent) => handleHeaderMouseDown(originalIndex, columnWidths[visibleIndex] ?? 0, totalHeaderHeight, e)"
-        >
-          <component
-            :is="renderHeader({
-              column,
-              colIndex: originalIndex,
-              sortDirection: state.headers.get(originalIndex)?.sortDirection,
-              sortIndex: state.headers.get(originalIndex)?.sortIndex,
-              sortable: (column.sortable !== false) && sortingEnabled,
-              filterable: column.filterable !== false,
-              hasFilter: state.headers.get(originalIndex)?.hasFilter ?? false,
-              core: coreRef,
-              container: outerContainerRef,
-              headerRenderers: headerRenderers ?? {},
-              globalHeaderRenderer: headerRenderer,
-            })"
-          />
-          <!-- Resize handle -->
-          <div
-            v-if="column.resizable !== false"
-            class="gp-grid-header-resize-handle"
-            @mousedown.stop="(e: MouseEvent) => handleHeaderResizeMouseDown(originalIndex, columnWidths[visibleIndex] ?? 0, e)"
-          />
-        </div>
-      </div>
-    </div>
+    <GridHeader
+      :header-height="totalHeaderHeight"
+      :scroll-left="scrollLeft"
+      :content-width="state.contentWidth"
+      :total-width="totalWidth"
+      :is-loading="state.isLoading"
+      :visible-columns-with-indices="visibleColumnsWithIndices"
+      :column-positions="columnPositions"
+      :column-widths="columnWidths"
+      :headers="state.headers"
+      :sorting-enabled="sortingEnabled"
+      :on-header-mouse-down="handleHeaderMouseDown"
+      :on-header-resize-mouse-down="handleHeaderResizeMouseDown"
+      :core-ref="coreRef"
+      :outer-container-ref="outerContainerRef"
+      :header-renderers="headerRenderers ?? {}"
+      :global-header-renderer="headerRenderer"
+    />
 
-    <!-- Scrollable body container -->
-    <div
-      ref="bodyContainerRef"
-      style="flex: 1; overflow: auto; position: relative"
-      @scroll="handleScrollWithHeaderSync"
-      @wheel="(e) => handleWheel(e, wheelDampening)"
-    >
-      <!-- Content sizer - provides scroll range -->
-      <div
-        :style="{
-          width: `${Math.max(state.contentWidth, totalWidth)}px`,
-          height: `${Math.max(state.contentHeight - totalHeaderHeight, 0)}px`,
-          position: 'relative',
-          minWidth: '100%',
-        }"
-      >
-        <!-- Rows wrapper - uses transform to position rows with small translateY values -->
-        <!-- This prevents browser rendering issues at extreme pixel positions (millions of px) -->
-        <div
-          class="gp-grid-rows-wrapper"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: `${Math.max(state.contentWidth, totalWidth)}px`,
-            transform: `translateY(${state.rowsWrapperOffset}px)`,
-            willChange: 'transform',
-          }"
-        >
-        <!-- Row slots -->
-        <div
-          v-for="slot in slotsArray.filter((s) => s.rowIndex >= 0)"
-          :key="slot.slotId"
-          :class="getRowClasses(slot)"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            transform: `translateY(${slot.translateY}px)`,
-            width: `${Math.max(state.contentWidth, totalWidth)}px`,
-            height: `${rowHeight}px`,
-          }"
-        >
-          <div
-            v-for="({ column, originalIndex }, visibleIndex) in visibleColumnsWithIndices"
-            :key="`${slot.slotId}-${originalIndex}`"
-            :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, state.hoverPosition)"
-            :style="{
-              position: 'absolute',
-              left: `${columnPositions[visibleIndex]}px`,
-              top: 0,
-              width: `${columnWidths[visibleIndex]}px`,
-              height: `${rowHeight}px`,
-            }"
-            @mousedown="(e) => handleCellMouseDown(slot.rowIndex, originalIndex, e)"
-            @dblclick="() => handleCellDoubleClick(slot.rowIndex, originalIndex)"
-            @mouseenter="() => handleCellMouseEnter(slot.rowIndex, originalIndex)"
-            @mouseleave="handleCellMouseLeave"
-          >
-            <!-- Edit mode -->
-            <template v-if="isCellEditing(slot.rowIndex, originalIndex, state.editingCell) && state.editingCell">
-              <component
-                :is="renderEditCell({
-                  column,
-                  rowData: slot.rowData,
-                  rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
-                  initialValue: state.editingCell.initialValue,
-                  core: coreRef,
-                  editRenderers: editRenderers ?? {},
-                  globalEditRenderer: editRenderer,
-                })"
-              />
-            </template>
-            <!-- View mode -->
-            <template v-else>
-              <component
-                :is="renderCell({
-                  column,
-                  rowData: slot.rowData,
-                  rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
-                  isActive: isCellActive(slot.rowIndex, originalIndex, state.activeCell),
-                  isSelected: isCellSelected(slot.rowIndex, originalIndex, state.selectionRange),
-                  isEditing: false,
-                  cellRenderers: cellRenderers ?? {},
-                  globalCellRenderer: cellRenderer,
-                })"
-              />
-            </template>
-          </div>
-        </div>
-
-        <!-- Fill handle - inside wrapper so it moves with rows -->
-        <div
-          v-if="fillHandlePosition && !state.editingCell"
-          class="gp-grid-fill-handle"
-          :style="{
-            position: 'absolute',
-            top: `${fillHandlePosition.top}px`,
-            left: `${fillHandlePosition.left}px`,
-            zIndex: 200,
-          }"
-          @mousedown="handleFillHandleMouseDown"
-        />
-
-        <!-- Row drop indicator - inside wrapper so it scrolls with rows -->
-        <div
-          v-if="dragState.dragType === 'row-drag' && dragState.rowDrag?.dropTargetIndex !== null"
-          class="gp-grid-row-drop-indicator"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
-            width: `${Math.max(state.contentWidth, totalWidth)}px`,
-          }"
-        />
-      </div>
-
-      <!-- Error message -->
-      <div v-if="state.error" class="gp-grid-error">
-        Error: {{ state.error }}
-      </div>
-
-      <!-- Empty state -->
-      <div
-        v-if="!state.isLoading && !state.error && state.totalRows === 0"
-        class="gp-grid-empty"
-      >
-        No data to display
-      </div>
-    </div>
-    <!-- End content sizer -->
-  </div>
-  <!-- End scrollable body container -->
+    <GridBody
+      ref="gridBodyComp"
+      :row-height="rowHeight"
+      :total-header-height="totalHeaderHeight"
+      :content-width="state.contentWidth"
+      :content-height="state.contentHeight"
+      :total-width="totalWidth"
+      :rows-wrapper-offset="state.rowsWrapperOffset"
+      :active-cell="state.activeCell"
+      :selection-range="state.selectionRange"
+      :editing-cell="state.editingCell"
+      :hover-position="state.hoverPosition"
+      :error="state.error"
+      :is-loading="state.isLoading"
+      :total-rows="state.totalRows"
+      :slots-array="slotsArray"
+      :visible-columns-with-indices="visibleColumnsWithIndices"
+      :column-positions="columnPositions"
+      :column-widths="columnWidths"
+      :fill-handle-position="fillHandlePosition"
+      :drag-state="dragState"
+      :on-scroll="handleScrollWithHeaderSync"
+      :on-wheel="handleWheel"
+      :wheel-dampening="wheelDampening"
+      :on-cell-mouse-down="handleCellMouseDown"
+      :on-cell-double-click="handleCellDoubleClick"
+      :on-cell-mouse-enter="handleCellMouseEnter"
+      :on-cell-mouse-leave="handleCellMouseLeave"
+      :on-fill-handle-mouse-down="handleFillHandleMouseDown"
+      :core-ref="coreRef"
+      :cell-renderers="cellRenderers ?? {}"
+      :edit-renderers="editRenderers ?? {}"
+      :global-cell-renderer="cellRenderer"
+      :global-edit-renderer="editRenderer"
+    />
 
   <!-- Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues -->
   <div
@@ -634,16 +445,7 @@ defineExpose({
       pointerEvents: 'none',
     }"
   >
-    <div
-      class="gp-grid-loading-overlay"
-      :style="{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-      }"
-    />
+    <div class="gp-grid-loading-overlay" />
     <component
       v-if="props.loadingComponent"
       :is="props.loadingComponent"
@@ -652,13 +454,6 @@ defineExpose({
     <div
       v-else
       class="gp-grid-loading"
-      :style="{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        pointerEvents: 'auto',
-      }"
     >
       <div class="gp-grid-loading-spinner" />
     </div>
@@ -681,10 +476,7 @@ defineExpose({
       v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
       class="gp-grid-column-resize-line"
       :style="{
-        position: 'absolute',
-        top: 0,
         left: `${(columnPositions[visibleColumnsWithIndices.findIndex(v => v.originalIndex === dragState.columnResize!.colIndex)] ?? 0) + dragState.columnResize!.currentWidth}px`,
-        height: '100%',
       }"
     />
 
@@ -705,8 +497,6 @@ defineExpose({
         v-if="dragState.columnMove!.dropTargetIndex !== null"
         class="gp-grid-column-drop-indicator"
         :style="{
-          position: 'absolute',
-          top: 0,
           left: `${columnPositions[dragState.columnMove!.dropTargetIndex!] ?? 0}px`,
           height: `${totalHeaderHeight}px`,
         }"

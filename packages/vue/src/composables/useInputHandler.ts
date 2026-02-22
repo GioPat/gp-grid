@@ -16,20 +16,14 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
-  ColumnDefinition,
   SlotData,
+  VisibleColumnInfo,
 } from "@gp-grid/core";
 import { scrollCellIntoView } from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-export interface VisibleColumnInfo {
-  column: ColumnDefinition;
-  originalIndex: number;
-}
+// Re-export for backwards compatibility
+export type { VisibleColumnInfo } from "@gp-grid/core";
 
 export interface UseInputHandlerOptions {
   activeCell: ComputedRef<CellPosition | null>;
@@ -98,6 +92,9 @@ export function useInputHandler<TData extends Row = Row>(
 
   // Store last mouse event for re-processing during auto-scroll
   let lastMouseEvent: PointerEventData | null = null;
+
+  // Cleanup function for current global drag listeners (prevents listener leaks)
+  let cleanupGlobalListeners: (() => void) | null = null;
 
   // Auto-scroll helpers — onTick re-processes drag so drop target stays in sync as the grid scrolls
   const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef, () => {
@@ -170,6 +167,9 @@ export function useInputHandler<TData extends Row = Row>(
   // ===========================================================================
 
   function startGlobalDragListeners(): void {
+    // Clean up any stale listeners from a previous drag (e.g., missed mouseup)
+    cleanupGlobalListeners?.();
+
     const handleMouseMove = (e: MouseEvent): void => {
       const core = coreRef.value;
       const bounds = getContainerBounds();
@@ -191,19 +191,40 @@ export function useInputHandler<TData extends Row = Row>(
     };
 
     const handleMouseUp = (): void => {
-      const core = coreRef.value;
-      if (core?.input) {
-        core.input.handleDragEnd();
-        dragState.value = core.input.getDragState();
+      console.log('[gp-grid] handleMouseUp fired');
+      try {
+        const core = coreRef.value;
+        if (core?.input) {
+          core.input.handleDragEnd();
+          console.log('[gp-grid] handleDragEnd completed');
+        }
+      } catch (err) {
+        console.error('[gp-grid] handleDragEnd threw:', err);
+      } finally {
+        // Always reset drag state — even if handleDragEnd throws,
+        // the ghost must disappear and listeners must be cleaned up.
+        const core = coreRef.value;
+        const newState = core?.input
+          ? core.input.getDragState()
+          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, columnMove: null, rowDrag: null };
+        console.log('[gp-grid] resetting dragState, dragType:', newState.dragType);
+        dragState.value = newState;
+        lastMouseEvent = null;
+        stopAutoScroll();
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        cleanupGlobalListeners = null;
       }
-      lastMouseEvent = null;
-      stopAutoScroll();
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
     };
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+
+    // Store cleanup so the next drag can remove stale listeners
+    cleanupGlobalListeners = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
   }
 
   // ===========================================================================
@@ -365,6 +386,8 @@ export function useInputHandler<TData extends Row = Row>(
 
   // Cleanup on unmount
   onUnmounted(() => {
+    cleanupGlobalListeners?.();
+    cleanupGlobalListeners = null;
     stopAutoScroll();
   });
 

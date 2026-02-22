@@ -1,6 +1,6 @@
 // packages/vue/src/composables/useGpGrid.ts
 
-import { ref, computed, onMounted, onUnmounted, watch, type Ref, type ComputedRef } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, type Ref, type ComputedRef, type ShallowRef } from "vue";
 import {
   GridCore,
   createClientDataSource,
@@ -63,7 +63,7 @@ export interface UseGpGridResult<TData extends Row = Row> {
   coreRef: Ref<GridCore<TData> | null>;
 
   // State
-  state: GridState;
+  state: ShallowRef<GridState>;
   slotsArray: ComputedRef<SlotData[]>;
 
   // Computed
@@ -136,13 +136,13 @@ export function useGpGrid<TData extends Row = Row>(
   const scaledColumns = computed(() =>
     calculateScaledColumnPositions(
       visibleColumnsWithIndices.value.map((v) => v.column),
-      state.viewportWidth,
+      state.value.viewportWidth,
     ),
   );
   const columnPositions = computed(() => scaledColumns.value.positions);
   const columnWidths = computed(() => scaledColumns.value.widths);
   const totalWidth = computed(() => getTotalWidth(columnPositions.value));
-  const slotsArray = computed(() => Array.from(state.slots.values()));
+  const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
   // Input handling
   const {
@@ -158,15 +158,15 @@ export function useGpGrid<TData extends Row = Row>(
     containerRef,
     computed(() => options.columns),
     {
-      activeCell: computed(() => state.activeCell),
-      selectionRange: computed(() => state.selectionRange),
-      editingCell: computed(() => state.editingCell),
-      filterPopupOpen: computed(() => state.filterPopup?.isOpen ?? false),
+      activeCell: computed(() => state.value.activeCell),
+      selectionRange: computed(() => state.value.selectionRange),
+      editingCell: computed(() => state.value.editingCell),
+      filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       columnPositions,
       visibleColumnsWithIndices,
-      slots: computed(() => state.slots),
+      slots: computed(() => state.value.slots),
     },
   );
 
@@ -301,9 +301,9 @@ export function useGpGrid<TData extends Row = Row>(
 
   // Calculate fill handle position using composable
   const { fillHandlePosition } = useFillHandle({
-    activeCell: computed(() => state.activeCell),
-    selectionRange: computed(() => state.selectionRange),
-    slots: computed(() => state.slots),
+    activeCell: computed(() => state.value.activeCell),
+    selectionRange: computed(() => state.value.selectionRange),
+    slots: computed(() => state.value.slots),
     columns: computed(() => options.columns),
     visibleColumnsWithIndices,
     columnPositions,
