@@ -3,6 +3,11 @@
 
 import type { CellDataType } from "./basic";
 import type { HighlightContext } from "./highlighting";
+import type {
+  CellRendererParams,
+  EditRendererParams,
+  HeaderRendererParams,
+} from "./renderers";
 
 /** Column definition */
 export interface ColumnDefinition {
@@ -29,9 +34,9 @@ export interface ColumnDefinition {
   /** Whether this column acts as a drag handle for row dragging. Default: false */
   rowDrag?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
-  cellRenderer?: string;
-  editRenderer?: string;
-  headerRenderer?: string;
+  cellRenderer?: string | ((params: CellRendererParams) => unknown);
+  editRenderer?: string | ((params: EditRendererParams) => unknown);
+  headerRenderer?: string | ((params: HeaderRendererParams) => unknown);
 
   /**
    * Per-column override for column-level highlighting.

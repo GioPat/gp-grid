@@ -53,7 +53,10 @@ export function renderEditCell(
   };
 
   // Check for column-specific renderer
-  if (column.editRenderer && typeof column.editRenderer === "string") {
+  if (column.editRenderer) {
+    if (typeof column.editRenderer === "function") {
+      return toVNode(column.editRenderer(params) as VNode | null);
+    }
     const renderer = editRenderers[column.editRenderer];
     if (renderer) {
       return toVNode(renderer(params));

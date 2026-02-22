@@ -48,7 +48,10 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
   };
 
   // Check for column-specific renderer
-  if (column.cellRenderer && typeof column.cellRenderer === "string") {
+  if (column.cellRenderer) {
+    if (typeof column.cellRenderer === "function") {
+      return column.cellRenderer(params) as React.ReactNode;
+    }
     const renderer = cellRenderers[column.cellRenderer];
     if (renderer) {
       return renderer(params);

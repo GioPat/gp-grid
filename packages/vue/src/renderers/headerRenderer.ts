@@ -70,7 +70,10 @@ export function renderHeader(
   };
 
   // Check for column-specific renderer
-  if (column.headerRenderer && typeof column.headerRenderer === "string") {
+  if (column.headerRenderer) {
+    if (typeof column.headerRenderer === "function") {
+      return toVNode(column.headerRenderer(params) as VNode | string | null);
+    }
     const renderer = headerRenderers[column.headerRenderer];
     if (renderer) {
       return toVNode(renderer(params));

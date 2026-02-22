@@ -53,7 +53,10 @@ export function renderEditCell<TData extends Row>(
   };
 
   // Check for column-specific renderer
-  if (column.editRenderer && typeof column.editRenderer === "string") {
+  if (column.editRenderer) {
+    if (typeof column.editRenderer === "function") {
+      return column.editRenderer(params) as React.ReactNode;
+    }
     const renderer = editRenderers[column.editRenderer];
     if (renderer) {
       return renderer(params);

@@ -49,7 +49,10 @@ export function renderCell(options: RenderCellOptions): VNode {
   };
 
   // Check for column-specific renderer
-  if (column.cellRenderer && typeof column.cellRenderer === "string") {
+  if (column.cellRenderer) {
+    if (typeof column.cellRenderer === "function") {
+      return toVNode(column.cellRenderer(params) as VNode | string | null);
+    }
     const renderer = cellRenderers[column.cellRenderer];
     if (renderer) {
       return toVNode(renderer(params));
