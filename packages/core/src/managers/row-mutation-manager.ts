@@ -1,7 +1,7 @@
 // packages/core/src/row-mutation-manager.ts
 
-import type { Row } from "./types";
-import { createInstructionEmitter } from "./utils";
+import type { Row } from "./../types";
+import { createInstructionEmitter } from "./../utils";
 
 // =============================================================================
 // Types

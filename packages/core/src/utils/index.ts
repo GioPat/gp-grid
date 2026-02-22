@@ -22,7 +22,7 @@ export {
 
 export type { NormalizedRange } from "./classNames";
 
-export { getFieldValue, setFieldValue } from "./field-accessor";
+export { getFieldValue, setFieldValue } from "../indexed-data-store/field-helpers";
 
 export {
   createInstructionEmitter,
@@ -34,3 +34,12 @@ export type {
   BatchInstructionEmitter,
   BatchInstructionListener,
 } from "./event-emitter";
+
+export { findSlotForRow, scrollCellIntoView } from "./scroll-helpers";
+
+export { calculateFillHandlePosition } from "./fill-helpers";
+export type {
+  VisibleColumnInfo,
+  CalculateFillHandlePositionParams,
+  FillHandlePosition,
+} from "./fill-helpers";

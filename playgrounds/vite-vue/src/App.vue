@@ -251,6 +251,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
 
   <div class="grid-container">
     <GpGrid
+      :row-drag-entire-row="true"
       :highlighting="highlightingProps"
       :columns="columns"
       :data-source="dataSource"

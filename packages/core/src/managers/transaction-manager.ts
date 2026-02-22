@@ -1,7 +1,7 @@
 // @gp-grid/core/src/transaction-manager.ts
 
-import type { CellValue, Row, RowId } from "./types";
-import type { IndexedDataStore } from "./indexed-data-store";
+import type { CellValue, Row, RowId } from "./../types";
+import type { IndexedDataStore } from "./../indexed-data-store";
 
 // =============================================================================
 // Types
@@ -277,7 +277,7 @@ export class TransactionManager<TData extends Row = Row> {
       // Reject pending promise
       if (this.pendingPromise) {
         this.pendingPromise.reject(
-          error instanceof Error ? error : new Error(String(error))
+          error instanceof Error ? error : new Error(String(error)),
         );
         this.pendingPromise = null;
       }

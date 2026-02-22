@@ -13,10 +13,20 @@ export { FillManager } from "./fill";
 export { SlotPoolManager } from "./slot-pool";
 export { EditManager } from "./edit-manager";
 export { InputHandler } from "./input-handler";
-export { HighlightManager } from "./highlight-manager";
+export {
+  HighlightManager,
+  SortFilterManager,
+  RowMutationManager,
+  ScrollVirtualizationManager,
+  TransactionManager,
+  type RowMutationManagerOptions,
+  type SortFilterManagerOptions,
+  type ScrollVirtualizationManagerOptions,
+} from "./managers";
 
 /** Manager types */
-export type { SlotPoolManagerOptions, BatchInstructionListener as SlotPoolBatchListener } from "./slot-pool";
+export type { SlotPoolManagerOptions } from "./slot-pool";
+export type { BatchInstructionListener as SlotPoolBatchListener } from "./utils";
 export type { EditManagerOptions } from "./edit-manager";
 
 /** Data sources */
@@ -29,11 +39,17 @@ export {
 
 /** Transaction system */
 export { IndexedDataStore } from "./indexed-data-store/index";
-export { TransactionManager } from "./transaction-manager";
 
 /** Data source types */
-export type { MutableDataSource, MutableClientDataSourceOptions, DataChangeListener } from "./data-source";
-export type { IndexedDataStoreOptions, RowSortCache } from "./indexed-data-store/index";
+export type {
+  MutableDataSource,
+  MutableClientDataSourceOptions,
+  DataChangeListener,
+} from "./data-source";
+export type {
+  IndexedDataStoreOptions,
+  RowSortCache,
+} from "./indexed-data-store/index";
 
 /** Sorting utilities (from indexed-data-store) */
 export {
@@ -54,7 +70,11 @@ export {
 
 /** Field helpers (from indexed-data-store) */
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
-export type { Transaction, TransactionResult, TransactionManagerOptions } from "./transaction-manager";
+export type {
+  Transaction,
+  TransactionResult,
+  TransactionManagerOptions,
+} from "./managers";
 
 /** Sorting utilities (worker pool, parallel sorting, k-way merge) */
 export {
@@ -106,7 +126,6 @@ export type {
 
   /** Selection state */
   SelectionState,
-
   EditState,
   FillHandleState,
   CellValueChangedEvent,
@@ -143,6 +162,19 @@ export type {
   RowsRemovedInstruction,
   RowsUpdatedInstruction,
   TransactionProcessedInstruction,
+  ColumnsChangedInstruction,
+  StartColumnResizeInstruction,
+  UpdateColumnResizeInstruction,
+  CommitColumnResizeInstruction,
+  CancelColumnResizeInstruction,
+  StartColumnMoveInstruction,
+  UpdateColumnMoveInstruction,
+  CommitColumnMoveInstruction,
+  CancelColumnMoveInstruction,
+  StartRowDragInstruction,
+  UpdateRowDragInstruction,
+  CommitRowDragInstruction,
+  CancelRowDragInstruction,
 
   /** Options */
   GridCoreOptions,
@@ -175,6 +207,9 @@ export type {
   DragMoveResult,
   InputHandlerDeps,
   DragState,
+  ColumnResizeDragState,
+  ColumnMoveDragState,
+  RowDragState,
 } from "./types/input";
 
 // =============================================================================
@@ -191,6 +226,7 @@ export {
   statesStyles,
   scrollbarStyles,
   filtersStyles,
+  rowDragStyles,
 } from "./styles";
 
 /** Positioning utilities */
@@ -220,4 +256,21 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
+  InitialStateArgs,
 } from "./types/ui-state";
+
+export { createInitialState } from "./types/ui-state";
+
+/** State reducer (shared instruction handler for framework wrappers) */
+export { applyInstruction } from "./state-reducer";
+
+/** Scroll helpers */
+export { findSlotForRow, scrollCellIntoView } from "./utils/scroll-helpers";
+
+/** Fill handle helpers */
+export { calculateFillHandlePosition } from "./utils/fill-helpers";
+export type {
+  VisibleColumnInfo,
+  CalculateFillHandlePositionParams,
+  FillHandlePosition,
+} from "./utils/fill-helpers";

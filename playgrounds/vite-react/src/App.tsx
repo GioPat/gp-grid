@@ -397,6 +397,8 @@ function MainDemo() {
           headerHeight={40}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
+          rowDragEntireRow
+          onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
         />
       </div>
       <div

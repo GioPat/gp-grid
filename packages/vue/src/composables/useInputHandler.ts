@@ -16,19 +16,14 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
-  ColumnDefinition,
   SlotData,
+  VisibleColumnInfo,
 } from "@gp-grid/core";
+import { scrollCellIntoView } from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-export interface VisibleColumnInfo {
-  column: ColumnDefinition;
-  originalIndex: number;
-}
+// Re-export for backwards compatibility
+export type { VisibleColumnInfo } from "@gp-grid/core";
 
 export interface UseInputHandlerOptions {
   activeCell: ComputedRef<CellPosition | null>;
@@ -52,58 +47,11 @@ export interface UseInputHandlerResult {
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   handleFillHandleMouseDown: (e: MouseEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
+  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: MouseEvent) => void;
+  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: MouseEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   dragState: Ref<DragState>;
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Find the slot for a given row index
- */
-function findSlotForRow(
-  slots: Map<string, SlotData>,
-  rowIndex: number,
-): SlotData | null {
-  for (const slot of slots.values()) {
-    if (slot.rowIndex === rowIndex) {
-      return slot;
-    }
-  }
-  return null;
-}
-
-/**
- * Scroll a cell into view if needed
- */
-function scrollCellIntoView<TData extends Row = Row>(
-  core: GridCore<TData>,
-  container: HTMLDivElement,
-  row: number,
-  rowHeight: number,
-  headerHeight: number,
-  slots: Map<string, SlotData>,
-): void {
-  const slot = findSlotForRow(slots, row);
-  const cellTranslateY = slot
-    ? slot.translateY
-    : headerHeight + row * rowHeight;
-  const cellViewportTop = cellTranslateY - container.scrollTop;
-  const cellViewportBottom = cellViewportTop + rowHeight;
-  const visibleTop = headerHeight;
-  const visibleBottom = container.clientHeight;
-
-  if (cellViewportTop < visibleTop) {
-    container.scrollTop = core.getScrollTopForRow(row);
-  } else if (cellViewportBottom > visibleBottom) {
-    const visibleDataHeight = container.clientHeight - headerHeight;
-    const rowsInView = Math.floor(visibleDataHeight / rowHeight);
-    const targetRow = Math.max(0, row - rowsInView + 1);
-    container.scrollTop = core.getScrollTopForRow(targetRow);
-  }
 }
 
 // =============================================================================
@@ -131,15 +79,33 @@ export function useInputHandler<TData extends Row = Row>(
     slots,
   } = options;
 
-  // Auto-scroll helpers
-  const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef);
-
   // Drag state for UI (mirrors core's InputHandler state)
   const dragState = ref<DragState>({
     isDragging: false,
     dragType: null,
     fillSourceRange: null,
     fillTarget: null,
+    columnResize: null,
+    columnMove: null,
+    rowDrag: null,
+  });
+
+  // Store last mouse event for re-processing during auto-scroll
+  let lastMouseEvent: PointerEventData | null = null;
+
+  // Cleanup function for current global drag listeners (prevents listener leaks)
+  let cleanupGlobalListeners: (() => void) | null = null;
+
+  // Auto-scroll helpers — onTick re-processes drag so drop target stays in sync as the grid scrolls
+  const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef, () => {
+    const core = coreRef.value;
+    if (lastMouseEvent && core?.input) {
+      const bounds = getContainerBounds();
+      if (bounds) {
+        core.input.handleDragMove(lastMouseEvent, bounds);
+        dragState.value = core.input.getDragState();
+      }
+    }
   });
 
   // Update InputHandler deps when options change
@@ -201,12 +167,18 @@ export function useInputHandler<TData extends Row = Row>(
   // ===========================================================================
 
   function startGlobalDragListeners(): void {
+    // Clean up any stale listeners from a previous drag (e.g., missed mouseup)
+    cleanupGlobalListeners?.();
+
     const handleMouseMove = (e: MouseEvent): void => {
       const core = coreRef.value;
       const bounds = getContainerBounds();
       if (!core?.input || !bounds) return;
 
-      const result = core.input.handleDragMove(toPointerEventData(e), bounds);
+      const eventData = toPointerEventData(e);
+      lastMouseEvent = eventData;
+
+      const result = core.input.handleDragMove(eventData, bounds);
       if (result) {
         if (result.autoScroll) {
           startAutoScroll(result.autoScroll.dx, result.autoScroll.dy);
@@ -219,18 +191,40 @@ export function useInputHandler<TData extends Row = Row>(
     };
 
     const handleMouseUp = (): void => {
-      const core = coreRef.value;
-      if (core?.input) {
-        core.input.handleDragEnd();
-        dragState.value = core.input.getDragState();
+      console.log('[gp-grid] handleMouseUp fired');
+      try {
+        const core = coreRef.value;
+        if (core?.input) {
+          core.input.handleDragEnd();
+          console.log('[gp-grid] handleDragEnd completed');
+        }
+      } catch (err) {
+        console.error('[gp-grid] handleDragEnd threw:', err);
+      } finally {
+        // Always reset drag state — even if handleDragEnd throws,
+        // the ghost must disappear and listeners must be cleaned up.
+        const core = coreRef.value;
+        const newState = core?.input
+          ? core.input.getDragState()
+          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, columnMove: null, rowDrag: null };
+        console.log('[gp-grid] resetting dragState, dragType:', newState.dragType);
+        dragState.value = newState;
+        lastMouseEvent = null;
+        stopAutoScroll();
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        cleanupGlobalListeners = null;
       }
-      stopAutoScroll();
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
     };
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+
+    // Store cleanup so the next drag can remove stale listeners
+    cleanupGlobalListeners = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
   }
 
   // ===========================================================================
@@ -256,6 +250,9 @@ export function useInputHandler<TData extends Row = Row>(
     }
     if (result.startDrag === "selection") {
       core.input.startSelectionDrag();
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    } else if (result.startDrag === "row-drag") {
       dragState.value = core.input.getDragState();
       startGlobalDragListeners();
     }
@@ -294,6 +291,52 @@ export function useInputHandler<TData extends Row = Row>(
 
     const colId = column.colId ?? column.field;
     core.input.handleHeaderClick(colId, e.shiftKey);
+  }
+
+  function handleHeaderMouseDown(
+    colIndex: number,
+    colWidth: number,
+    colHeight: number,
+    e: MouseEvent,
+  ): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+
+    const result = core.input.handleHeaderMouseDown(
+      colIndex,
+      colWidth,
+      colHeight,
+      toPointerEventData(e),
+    );
+
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-move") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
+  }
+
+  function handleHeaderResizeMouseDown(
+    colIndex: number,
+    colWidth: number,
+    e: MouseEvent,
+  ): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+
+    const result = core.input.handleHeaderResizeMouseDown(
+      colIndex,
+      colWidth,
+      toPointerEventData(e),
+    );
+
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-resize") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
@@ -343,6 +386,8 @@ export function useInputHandler<TData extends Row = Row>(
 
   // Cleanup on unmount
   onUnmounted(() => {
+    cleanupGlobalListeners?.();
+    cleanupGlobalListeners = null;
     stopAutoScroll();
   });
 
@@ -351,6 +396,8 @@ export function useInputHandler<TData extends Row = Row>(
     handleCellDoubleClick,
     handleFillHandleMouseDown,
     handleHeaderClick,
+    handleHeaderMouseDown,
+    handleHeaderResizeMouseDown,
     handleKeyDown,
     handleWheel,
     dragState,

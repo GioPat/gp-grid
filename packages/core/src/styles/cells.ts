@@ -13,6 +13,7 @@ export const cellStyles: string = `
   left: 0;
   /* Keep wrapper below the sticky header (z-index: 10) */
   z-index: 1;
+  will-change: transform; 
 }
 
 .gp-grid-row {

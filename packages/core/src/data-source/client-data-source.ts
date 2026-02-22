@@ -13,8 +13,8 @@ import {
   stringToSortableHashes,
   applySort,
   HASH_CHUNK_COUNT,
-} from "./sorting";
-import { applyFilters } from "./filtering";
+} from "../indexed-data-store/sorting";
+import { applyFilters } from "../filtering";
 
 // =============================================================================
 // Configuration
@@ -213,6 +213,15 @@ export function createClientDataSource<TData extends Row = Row>(
       if (sortManager) {
         sortManager.terminate();
       }
+    },
+
+    moveRow(fromIndex: number, toIndex: number): void {
+      if (!internalData || fromIndex === toIndex) return;
+      if (fromIndex < 0 || fromIndex >= internalData.length) return;
+      if (toIndex < 0 || toIndex >= internalData.length) return;
+      const [row] = internalData.splice(fromIndex, 1);
+      const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+      internalData.splice(adjustedTo, 0, row!);
     },
   };
 }

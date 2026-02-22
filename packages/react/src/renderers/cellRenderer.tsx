@@ -1,25 +1,11 @@
 // packages/react/src/renderers/cellRenderer.tsx
 
 import React from "react";
-import type { ColumnDefinition, Row, CellValue, CellRendererParams } from "@gp-grid/core";
+import { getFieldValue } from "@gp-grid/core";
+import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
 import type { ReactCellRenderer } from "../types";
 
-/**
- * Get cell value from row data, supporting dot-notation for nested fields
- */
-export function getCellValue(rowData: Row, field: string): CellValue {
-  const parts = field.split(".");
-  let value: unknown = rowData;
-
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") {
-      return null;
-    }
-    value = (value as Record<string, unknown>)[part];
-  }
-
-  return (value ?? null) as CellValue;
-}
+export { getFieldValue as getCellValue } from "@gp-grid/core";
 
 export interface RenderCellOptions {
   column: ColumnDefinition;
@@ -49,7 +35,7 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     globalCellRenderer,
   } = options;
 
-  const value = getCellValue(rowData, column.field);
+  const value = getFieldValue(rowData, column.field);
   const params: CellRendererParams = {
     value,
     rowData,
@@ -62,7 +48,10 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
   };
 
   // Check for column-specific renderer
-  if (column.cellRenderer && typeof column.cellRenderer === "string") {
+  if (column.cellRenderer) {
+    if (typeof column.cellRenderer === "function") {
+      return column.cellRenderer(params) as React.ReactNode;
+    }
     const renderer = cellRenderers[column.cellRenderer];
     if (renderer) {
       return renderer(params);

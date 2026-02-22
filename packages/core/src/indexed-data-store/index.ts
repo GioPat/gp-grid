@@ -15,6 +15,10 @@ export {
   computeRowSortHashes,
   compareRowsByHashes,
   compareRowsDirect,
+  HASH_CHUNK_COUNT,
+  stringToSortableHashes,
+  toSortableNumber,
+  applySort,
 } from "./sorting";
 export type { SortHashConfig } from "./sorting";
 
@@ -26,4 +30,4 @@ export {
   evaluateDateCondition,
   evaluateColumnFilter,
   rowPassesFilter,
-} from "./filtering";
+} from "../filtering";

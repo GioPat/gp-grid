@@ -25,8 +25,6 @@ export interface HeaderData {
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
-  sortable: boolean;
-  filterable: boolean;
   hasFilter: boolean;
 }
 
@@ -38,6 +36,35 @@ export interface FilterPopupState {
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
 }
+
+// =============================================================================
+// Initial State
+// =============================================================================
+
+export interface InitialStateArgs {
+  initialWidth?: number;
+  initialHeight?: number;
+}
+
+export const createInitialState = <TData = Row>(args?: InitialStateArgs): GridState<TData> => ({
+  slots: new Map(),
+  activeCell: null,
+  selectionRange: null,
+  editingCell: null,
+  contentWidth: 0,
+  contentHeight: args?.initialHeight ?? 0,
+  viewportWidth: args?.initialWidth ?? 0,
+  viewportHeight: args?.initialHeight ?? 0,
+  rowsWrapperOffset: 0,
+  headers: new Map(),
+  filterPopup: null,
+  isLoading: false,
+  error: null,
+  totalRows: 0,
+  visibleRowRange: null,
+  hoverPosition: null,
+  columns: null,
+});
 
 // =============================================================================
 // Grid State
@@ -65,4 +92,6 @@ export interface GridState<TData = Row> {
   visibleRowRange: { start: number; end: number } | null;
   /** Currently hovered cell position (for highlighting) */
   hoverPosition: CellPosition | null;
+  /** Columns updated by core (after resize/reorder). Null means use props. */
+  columns: ColumnDefinition[] | null;
 }

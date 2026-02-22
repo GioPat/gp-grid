@@ -7,7 +7,10 @@ const AUTO_SCROLL_INTERVAL = 16; // ~60fps
 /**
  * Vue composable for auto-scrolling during drag operations
  */
-export function useAutoScroll(containerRef: Ref<HTMLDivElement | null>) {
+export function useAutoScroll(
+  containerRef: Ref<HTMLDivElement | null>,
+  onTick?: () => void,
+) {
   const autoScrollInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
   /**
@@ -22,6 +25,7 @@ export function useAutoScroll(containerRef: Ref<HTMLDivElement | null>) {
       if (container) {
         container.scrollTop += dy;
         container.scrollLeft += dx;
+        onTick?.();
       }
     }, AUTO_SCROLL_INTERVAL);
   }

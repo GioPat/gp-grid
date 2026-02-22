@@ -8,6 +8,7 @@ import { cellStyles } from "./cells";
 import { statesStyles } from "./states";
 import { scrollbarStyles } from "./scrollbar";
 import { filtersStyles } from "./filters";
+import { rowDragStyles } from "./row-drag";
 
 const STYLE_ID = "gp-grid-styles";
 
@@ -22,6 +23,7 @@ export const gridStyles: string = [
   statesStyles,
   scrollbarStyles,
   filtersStyles,
+  rowDragStyles,
 ].join("\n");
 
 let stylesInjected = false;
@@ -56,3 +58,4 @@ export { cellStyles } from "./cells";
 export { statesStyles } from "./states";
 export { scrollbarStyles } from "./scrollbar";
 export { filtersStyles } from "./filters";
+export { rowDragStyles } from "./row-drag";

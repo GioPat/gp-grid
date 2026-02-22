@@ -2,6 +2,8 @@
 
 import type {
   GridCoreOptions,
+  GridInstruction,
+  BatchInstructionListener,
   ColumnDefinition,
   CellValue,
   CellValueChangedEvent,
@@ -20,23 +22,16 @@ import { FillManager } from "./fill";
 import { SlotPoolManager } from "./slot-pool";
 import { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
-import { HighlightManager } from "./highlight-manager";
-import { SortFilterManager } from "./sort-filter-manager";
-import { RowMutationManager } from "./row-mutation-manager";
 import {
-  createBatchInstructionEmitter,
+  HighlightManager,
+  SortFilterManager,
+  RowMutationManager,
+  ScrollVirtualizationManager,
+} from "./managers";
+import {
   getFieldValue,
   setFieldValue,
-} from "./utils";
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-// Maximum safe scroll height across browsers (conservative value)
-// Chrome/Edge: ~33.5M, Firefox: ~17.9M, Safari: ~33.5M
-// We use 10M to be safe and leave room for other content
-const MAX_SCROLL_HEIGHT = 10_000_000;
+} from "./indexed-data-store/field-helpers";
 
 // =============================================================================
 // GridCore
@@ -52,6 +47,10 @@ export class GridCore<TData extends Row = Row> {
   private sortingEnabled: boolean;
   private getRowId?: (row: TData) => RowId;
   private onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  private rowDragEntireRow: boolean;
+  private onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  private onColumnResized?: (colIndex: number, newWidth: number) => void;
+  private onColumnMoved?: (fromIndex: number, toIndex: number) => void;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -60,11 +59,11 @@ export class GridCore<TData extends Row = Row> {
   private viewportHeight: number = 600;
 
   // Data state
+  private currentPageIndex: number = 0;
+  // Fetch all rows in a single page for client-side data sources
+  private pageSize: number = Number.MAX_SAFE_INTEGER;
   private cachedRows: Map<number, TData> = new Map();
   private totalRows: number = 0;
-  private currentPageIndex: number = 0;
-  // Use large page size to avoid excessive pagination for client-side data sources
-  private pageSize: number = 1000000;
 
   // Managers
   public readonly selection: SelectionManager;
@@ -79,19 +78,12 @@ export class GridCore<TData extends Row = Row> {
   // Column positions (computed)
   private columnPositions: number[] = [];
 
-  // Instruction emitter
-  private emitter = createBatchInstructionEmitter();
+  // Instruction listeners
+  private batchListeners: BatchInstructionListener[] = [];
+  private instructionBuffer: GridInstruction[] | null = null;
 
-  // Public API delegates to emitter
-  onInstruction = this.emitter.onInstruction;
-  onBatchInstruction = this.emitter.onBatchInstruction;
-  private emit = this.emitter.emit;
-  private emitBatch = this.emitter.emitBatch;
-
-  // Scroll virtualization state
-  private naturalContentHeight: number = 0;
-  private virtualContentHeight: number = 0;
-  private scrollRatio: number = 1;
+  // Scroll virtualization
+  private readonly scrollVirtualization: ScrollVirtualizationManager;
 
   // Lifecycle state
   private isDestroyed: boolean = false;
@@ -108,6 +100,10 @@ export class GridCore<TData extends Row = Row> {
     this.sortingEnabled = options.sortingEnabled ?? true;
     this.getRowId = options.getRowId;
     this.onCellValueChanged = options.onCellValueChanged;
+    this.rowDragEntireRow = options.rowDragEntireRow ?? false;
+    this.onRowDragEnd = options.onRowDragEnd;
+    this.onColumnResized = options.onColumnResized;
+    this.onColumnMoved = options.onColumnMoved;
 
     if (this.onCellValueChanged && !this.getRowId) {
       throw new Error("getRowId is required when onCellValueChanged is provided");
@@ -160,6 +156,15 @@ export class GridCore<TData extends Row = Row> {
     // Forward fill instructions
     this.fill.onInstruction((instruction) => this.emit(instruction));
 
+    // Initialize scroll virtualization manager
+    this.scrollVirtualization = new ScrollVirtualizationManager({
+      getRowHeight: () => this.rowHeight,
+      getHeaderHeight: () => this.headerHeight,
+      getTotalRows: () => this.totalRows,
+      getScrollTop: () => this.scrollTop,
+      getViewportHeight: () => this.viewportHeight,
+    });
+
     // Initialize slot pool manager
     this.slotPool = new SlotPoolManager({
       getRowHeight: () => this.rowHeight,
@@ -168,13 +173,16 @@ export class GridCore<TData extends Row = Row> {
       getScrollTop: () => this.scrollTop,
       getViewportHeight: () => this.viewportHeight,
       getTotalRows: () => this.totalRows,
-      getScrollRatio: () => this.scrollRatio,
-      getVirtualContentHeight: () => this.virtualContentHeight,
+      getScrollRatio: () => this.scrollVirtualization.getScrollRatio(),
+      getVirtualContentHeight: () =>
+        this.scrollVirtualization.getVirtualContentHeight(),
       getRowData: (rowIndex) => this.cachedRows.get(rowIndex),
     });
 
     // Forward slot pool instructions (use batch listener for performance)
-    this.slotPool.onBatchInstruction((instructions) => this.emitBatch(instructions));
+    this.slotPool.onBatchInstruction((instructions) =>
+      this.emitBatch(instructions),
+    );
 
     // Initialize edit manager
     this.editManager = new EditManager({
@@ -212,9 +220,13 @@ export class GridCore<TData extends Row = Row> {
     // Initialize row mutation manager
     this.rowMutation = new RowMutationManager<TData>({
       getCachedRows: () => this.cachedRows,
-      setCachedRows: (rows) => { this.cachedRows = rows; },
+      setCachedRows: (rows) => {
+        this.cachedRows = rows;
+      },
       getTotalRows: () => this.totalRows,
-      setTotalRows: (count) => { this.totalRows = count; },
+      setTotalRows: (count) => {
+        this.totalRows = count;
+      },
       updateSlot: (rowIndex) => this.slotPool.updateSlot(rowIndex),
       refreshAllSlots: () => this.slotPool.refreshAllSlots(),
       emitContentSize: () => this.emitContentSize(),
@@ -231,6 +243,62 @@ export class GridCore<TData extends Row = Row> {
       getColumnPositions: () => this.columnPositions,
       getColumnCount: () => this.columns.length,
     });
+  }
+
+  // ===========================================================================
+  // Instruction System
+  // ===========================================================================
+
+  /**
+   * Subscribe to batched instructions for efficient React/Vue state updates.
+   * Batch listeners receive arrays of instructions instead of individual ones.
+   */
+  onBatchInstruction(listener: BatchInstructionListener): () => void {
+    this.batchListeners.push(listener);
+    return () => {
+      this.batchListeners = this.batchListeners.filter((l) => l !== listener);
+    };
+  }
+
+  /**
+   * Start buffering instructions. All emit/emitBatch calls will accumulate
+   * into an internal buffer until flushBatch() is called.
+   */
+  private startBatch(): void {
+    this.instructionBuffer = [];
+  }
+
+  /**
+   * Flush buffered instructions to listeners as a single batch, then
+   * stop buffering.
+   */
+  private flushBatch(): void {
+    const buffer = this.instructionBuffer;
+    this.instructionBuffer = null;
+    if (buffer && buffer.length > 0) {
+      for (const listener of this.batchListeners) {
+        listener(buffer);
+      }
+    }
+  }
+
+  private emit(instruction: GridInstruction): void {
+    if (this.instructionBuffer) {
+      this.instructionBuffer.push(instruction);
+    } else {
+      this.emitBatch([instruction]);
+    }
+  }
+
+  private emitBatch(instructions: GridInstruction[]): void {
+    if (instructions.length === 0) return;
+    if (this.instructionBuffer) {
+      this.instructionBuffer.push(...instructions);
+      return;
+    }
+    for (const listener of this.batchListeners) {
+      listener(instructions);
+    }
   }
 
   // ===========================================================================
@@ -259,18 +327,17 @@ export class GridCore<TData extends Row = Row> {
     scrollTop: number,
     scrollLeft: number,
     width: number,
-    height: number
+    height: number,
   ): void {
     // When scroll ratio < 1, map the visual scroll position to actual content position
     // scrollTop is the browser's reported scroll position within the virtual container
     // We need to convert this to determine which row should be at the top of the viewport
-    const effectiveScrollTop = this.scrollRatio < 1
-      ? scrollTop / this.scrollRatio
-      : scrollTop;
+    const scrollRatio = this.scrollVirtualization.getScrollRatio();
+    const effectiveScrollTop =
+      scrollRatio < 1 ? scrollTop / scrollRatio : scrollTop;
 
     const viewportSizeChanged =
-      this.viewportWidth !== width ||
-      this.viewportHeight !== height;
+      this.viewportWidth !== width || this.viewportHeight !== height;
 
     const changed =
       this.scrollTop !== effectiveScrollTop ||
@@ -326,18 +393,11 @@ export class GridCore<TData extends Row = Row> {
 
       // Cache the fetched rows
       this.cachedRows.clear();
-      response.rows.forEach((row, index) => {
-        this.cachedRows.set(this.currentPageIndex * this.pageSize + index, row);
+      const startIndex = this.currentPageIndex * this.pageSize;
+      response.rows.forEach((row, i) => {
+        this.cachedRows.set(startIndex + i, row);
       });
-
       this.totalRows = response.totalRows;
-
-      // For client-side data source, fetch all data for simplicity
-      // (the client data source handles filtering/sorting internally)
-      if (response.totalRows > response.rows.length && this.currentPageIndex === 0) {
-        // Fetch all remaining pages for client-side mode
-        await this.fetchAllData();
-      }
 
       this.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
     } catch (error) {
@@ -350,37 +410,14 @@ export class GridCore<TData extends Row = Row> {
     }
   }
 
-  private async fetchAllData(): Promise<void> {
-    // Fetch all data in chunks for client-side data source
-    const totalPages = Math.ceil(this.totalRows / this.pageSize);
-    const sortModel = this.sortFilter.getSortModel();
-    const filterModel = this.sortFilter.getFilterModel();
-
-    for (let page = 1; page < totalPages; page++) {
-      const request: DataSourceRequest = {
-        pagination: {
-          pageIndex: page,
-          pageSize: this.pageSize,
-        },
-        sort: sortModel.length > 0 ? sortModel : undefined,
-        filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
-      };
-
-      const response = await this.dataSource.fetch(request);
-      response.rows.forEach((row, index) => {
-        this.cachedRows.set(page * this.pageSize + index, row);
-      });
-    }
-  }
-
   // ===========================================================================
-  // Sort & Filter (delegates to SortFilterManager)
+  // Sort & Filter (facade methods delegating to SortFilterManager)
   // ===========================================================================
 
   async setSort(
     colId: string,
     direction: SortDirection | null,
-    addToExisting: boolean = false
+    addToExisting: boolean = false,
   ): Promise<void> {
     if (this._isDataLoading) return;
     return this.sortFilter.setSort(colId, direction, addToExisting);
@@ -395,15 +432,10 @@ export class GridCore<TData extends Row = Row> {
     return this.sortFilter.hasActiveFilter(colId);
   }
 
-  isColumnSortable(colIndex: number): boolean {
-    return this.sortFilter.isColumnSortable(colIndex);
-  }
-
-  isColumnFilterable(colIndex: number): boolean {
-    return this.sortFilter.isColumnFilterable(colIndex);
-  }
-
-  getDistinctValuesForColumn(colId: string, maxValues: number = 500): CellValue[] {
+  getDistinctValuesForColumn(
+    colId: string,
+    maxValues: number = 500,
+  ): CellValue[] {
     return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
@@ -513,22 +545,13 @@ export class GridCore<TData extends Row = Row> {
   private emitContentSize(): void {
     const width = this.columnPositions[this.columnPositions.length - 1] ?? 0;
 
-    // Calculate natural (real) content height
-    this.naturalContentHeight = this.totalRows * this.rowHeight + this.headerHeight;
-
-    // Apply scroll virtualization if content exceeds browser limits
-    if (this.naturalContentHeight > MAX_SCROLL_HEIGHT) {
-      this.virtualContentHeight = MAX_SCROLL_HEIGHT;
-      this.scrollRatio = MAX_SCROLL_HEIGHT / this.naturalContentHeight;
-    } else {
-      this.virtualContentHeight = this.naturalContentHeight;
-      this.scrollRatio = 1;
-    }
+    // Update scroll virtualization calculations
+    this.scrollVirtualization.updateContentSize();
 
     this.emit({
       type: "SET_CONTENT_SIZE",
       width,
-      height: this.virtualContentHeight,
+      height: this.scrollVirtualization.getVirtualHeight(),
       viewportWidth: this.viewportWidth,
       viewportHeight: this.viewportHeight,
       rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
@@ -549,11 +572,117 @@ export class GridCore<TData extends Row = Row> {
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
-        sortable: this.sortFilter.isColumnSortable(i),
-        filterable: this.sortFilter.isColumnFilterable(i),
         hasFilter: this.sortFilter.hasActiveFilter(colId),
       });
     }
+  }
+
+  // ===========================================================================
+  // Column & Row Interaction
+  // ===========================================================================
+
+  /**
+   * Set the width of a column and recompute layout.
+   */
+  setColumnWidth(colIndex: number, width: number): void {
+    const column = this.columns[colIndex];
+    if (!column) return;
+    column.width = width;
+    this.computeColumnPositions();
+    this.startBatch();
+    try {
+      this.emitContentSize();
+      this.emitHeaders();
+      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+      this.slotPool.syncSlots();
+    } finally {
+      this.flushBatch();
+    }
+    this.onColumnResized?.(colIndex, width);
+  }
+
+  /**
+   * Move a column from one index to another and recompute layout.
+   */
+  moveColumn(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= this.columns.length) return;
+    const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    if (adjustedTo < 0 || adjustedTo >= this.columns.length) return;
+    if (fromIndex === adjustedTo) return;
+
+    console.log('[gp-grid] moveColumn', fromIndex, '->', adjustedTo, 'batching:', this.instructionBuffer !== null);
+
+    const [col] = this.columns.splice(fromIndex, 1);
+    this.columns.splice(adjustedTo, 0, col!);
+
+    this.computeColumnPositions();
+    this.startBatch();
+    try {
+      this.emitContentSize();
+      this.emitHeaders();
+      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+      this.slotPool.refreshAllSlots();
+      console.log('[gp-grid] moveColumn batch size:', this.instructionBuffer?.length);
+    } finally {
+      this.flushBatch();
+      console.log('[gp-grid] moveColumn batch flushed');
+    }
+    this.onColumnMoved?.(fromIndex, adjustedTo);
+  }
+
+  /**
+   * Commit a row drag operation. Reorders data if the data source supports it,
+   * then invokes the onRowDragEnd callback.
+   *
+   * Optimized: instead of a full refresh (fetchData + rebuild all slots), we
+   * update the cachedRows map in-place to mirror the splice the data source
+   * performed, then only update the affected slots.
+   */
+  commitRowDrag(sourceIndex: number, targetIndex: number): void {
+    const ds = this.dataSource as { moveRow?: (from: number, to: number) => void };
+    if (ds.moveRow) {
+      ds.moveRow(sourceIndex, targetIndex);
+
+      // Update cachedRows in-place to match the data source reorder.
+      // The data source does: splice(from, 1) then splice(adjustedTo, 0, row)
+      const movedRow = this.cachedRows.get(sourceIndex);
+      if (movedRow !== undefined) {
+        if (sourceIndex < targetIndex) {
+          // Moving down: rows [source+1 .. target-1] shift up by one
+          const adjustedTarget = targetIndex - 1;
+          for (let i = sourceIndex; i < adjustedTarget; i++) {
+            const next = this.cachedRows.get(i + 1);
+            if (next !== undefined) this.cachedRows.set(i, next);
+            else this.cachedRows.delete(i);
+          }
+          this.cachedRows.set(adjustedTarget, movedRow);
+        } else {
+          // Moving up: rows [target .. source-1] shift down by one
+          for (let i = sourceIndex; i > targetIndex; i--) {
+            const prev = this.cachedRows.get(i - 1);
+            if (prev !== undefined) this.cachedRows.set(i, prev);
+            else this.cachedRows.delete(i);
+          }
+          this.cachedRows.set(targetIndex, movedRow);
+        }
+      }
+
+      // Only update the affected slots (no refetch needed)
+      this.highlight?.clearAllCaches();
+      const lo = Math.min(sourceIndex, targetIndex);
+      const hi = Math.max(sourceIndex, targetIndex);
+      for (let i = lo; i <= hi; i++) {
+        this.slotPool.updateSlot(i);
+      }
+    }
+    this.onRowDragEnd?.(sourceIndex, targetIndex);
+  }
+
+  /**
+   * Whether the entire row is draggable.
+   */
+  isRowDragEntireRow(): boolean {
+    return this.rowDragEntireRow;
   }
 
   // ===========================================================================
@@ -585,76 +714,42 @@ export class GridCore<TData extends Row = Row> {
   }
 
   getTotalHeight(): number {
-    // Return the virtual (capped) height for external use
-    return this.virtualContentHeight || (this.totalRows * this.rowHeight + this.headerHeight);
+    return this.scrollVirtualization.getVirtualHeight();
   }
 
-  /**
-   * Check if scroll scaling is active (large datasets exceeding browser scroll limits).
-   * When scaling is active, scrollRatio < 1 and scroll positions are compressed.
-   */
   isScalingActive(): boolean {
-    return this.scrollRatio < 1;
+    return this.scrollVirtualization.isScalingActive();
   }
 
-  /**
-   * Get the natural (uncapped) content height.
-   * Useful for debugging or displaying actual content size.
-   */
   getNaturalHeight(): number {
-    return this.naturalContentHeight || (this.totalRows * this.rowHeight + this.headerHeight);
+    return this.scrollVirtualization.getNaturalHeight();
   }
 
-  /**
-   * Get the scroll ratio used for scroll virtualization.
-   * Returns 1 when no virtualization is needed, < 1 when content exceeds browser limits.
-   */
   getScrollRatio(): number {
-    return this.scrollRatio;
+    return this.scrollVirtualization.getScrollRatio();
   }
 
-  /**
-   * Get the visible row range (excluding overscan).
-   * Returns the first and last row indices that are actually visible in the viewport.
-   * Includes partially visible rows to avoid false positives when clicking on edge rows.
-   */
   getVisibleRowRange(): { start: number; end: number } {
-    // viewportHeight includes header, so subtract it to get content area
-    const contentHeight = this.viewportHeight - this.headerHeight;
-    const firstVisibleRow = Math.max(0, Math.floor(this.scrollTop / this.rowHeight));
-    // Use ceil and subtract 1 to include any partially visible row at the bottom
-    const lastVisibleRow = Math.min(
-      this.totalRows - 1,
-      Math.ceil((this.scrollTop + contentHeight) / this.rowHeight) - 1
-    );
-    return { start: firstVisibleRow, end: Math.max(firstVisibleRow, lastVisibleRow) };
+    return this.scrollVirtualization.getVisibleRowRange();
   }
 
-  /**
-   * Get the scroll position needed to bring a row into view.
-   * Accounts for scroll scaling when active.
-   */
   getScrollTopForRow(rowIndex: number): number {
-    const naturalScrollTop = rowIndex * this.rowHeight;
-    // Apply scroll ratio to convert natural position to virtual scroll position
-    return naturalScrollTop * this.scrollRatio;
+    return this.scrollVirtualization.getScrollTopForRow(rowIndex);
+  }
+
+  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
+    return this.scrollVirtualization.getRowIndexAtDisplayY(
+      viewportY,
+      virtualScrollTop,
+    );
   }
 
   /**
-   * Get the row index at a given viewport Y position.
-   * Accounts for scroll scaling when active.
-   * @param viewportY Y position in viewport (physical pixels below header, NOT including scroll)
-   * @param virtualScrollTop Current scroll position from container.scrollTop (virtual/scaled)
+   * Get the translateY position for a row inside the rows wrapper.
+   * Accounts for scroll virtualization (compressed coordinates).
    */
-  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
-    // Convert virtual scroll position to natural position
-    const naturalScrollTop = this.scrollRatio < 1
-      ? virtualScrollTop / this.scrollRatio
-      : virtualScrollTop;
-
-    // Natural Y = viewport offset + natural scroll position
-    const naturalY = viewportY + naturalScrollTop;
-    return Math.floor(naturalY / this.rowHeight);
+  getRowTranslateY(rowIndex: number): number {
+    return this.slotPool.getRowTranslateYForIndex(rowIndex);
   }
 
   getRowData(rowIndex: number): TData | undefined {
@@ -741,7 +836,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   // ===========================================================================
-  // Row Mutation API (delegates to RowMutationManager)
+  // Row Mutation API (facade methods delegating to RowMutationManager)
   // ===========================================================================
 
   /**
@@ -825,10 +920,9 @@ export class GridCore<TData extends Row = Row> {
     this.cachedRows.clear();
 
     // Clear listeners
-    this.emitter.clearListeners();
+    this.batchListeners = [];
 
     // Reset state
     this.totalRows = 0;
   }
 }
-

@@ -71,7 +71,10 @@ export function renderHeader<TData extends Row>(
   };
 
   // Check for column-specific renderer
-  if (column.headerRenderer && typeof column.headerRenderer === "string") {
+  if (column.headerRenderer) {
+    if (typeof column.headerRenderer === "function") {
+      return column.headerRenderer(params) as React.ReactNode;
+    }
     const renderer = headerRenderers[column.headerRenderer];
     if (renderer) {
       return renderer(params);
