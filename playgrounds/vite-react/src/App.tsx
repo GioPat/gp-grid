@@ -261,7 +261,6 @@ const columns: ColumnDefinition[] = [
     width: 80,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
-    hidden: true,
   },
   {
     field: "name",
