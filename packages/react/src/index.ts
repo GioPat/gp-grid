@@ -1,6 +1,6 @@
 // packages/react/src/index.ts
 
-export { Grid } from "./Grid";
+export { Grid, Grid as GpGrid } from "./Grid";
 export { useGridData } from "./useGridData";
 export type { UseGridDataOptions, UseGridDataResult } from "./useGridData";
 
