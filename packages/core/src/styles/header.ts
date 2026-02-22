@@ -13,6 +13,9 @@ export const headerStyles: string = `
   /* z-index set inline (100) to ensure header stays above rows wrapper */
   background-color: var(--gp-grid-header-bg);
   border-bottom: 1px solid var(--gp-grid-border);
+  flex-shrink: 0;
+  z-index: 100;
+  overflow: hidden;
 }
 
 .gp-grid-container .gp-grid-header-cell {
@@ -31,6 +34,8 @@ export const headerStyles: string = `
   padding: 0 12px;
   background-color: transparent;
   transition: background-color 0.1s ease;
+  top: 0;
+  background: transparent;
 }
 
 .gp-grid-container .gp-grid-header-cell:hover {
@@ -183,6 +188,7 @@ export const headerStyles: string = `
 .gp-grid-column-drop-indicator {
   position: absolute;
   top: 0;
+  left: 0;
   width: 3px;
   height: 100%;
   background-color: var(--gp-grid-primary);

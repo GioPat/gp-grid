@@ -22,6 +22,8 @@ export const statesStyles: string = `
   position: absolute;
   top: 0;
   left: 0;
+  width: 100%;
+  height: 100%; 
   pointer-events: none;
   background-color: var(--gp-grid-loading-overlay-bg, rgba(255, 255, 255, 0.4));
 }
@@ -33,6 +35,7 @@ export const statesStyles: string = `
 /* Loading indicator centered in the visible viewport */
 .gp-grid-loading {
   position: absolute;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 12px 20px;
