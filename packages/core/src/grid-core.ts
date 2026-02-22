@@ -80,6 +80,7 @@ export class GridCore<TData extends Row = Row> {
 
   // Instruction listeners
   private batchListeners: BatchInstructionListener[] = [];
+  private instructionBuffer: GridInstruction[] | null = null;
 
   // Scroll virtualization
   private readonly scrollVirtualization: ScrollVirtualizationManager;
@@ -259,12 +260,42 @@ export class GridCore<TData extends Row = Row> {
     };
   }
 
+  /**
+   * Start buffering instructions. All emit/emitBatch calls will accumulate
+   * into an internal buffer until flushBatch() is called.
+   */
+  private startBatch(): void {
+    this.instructionBuffer = [];
+  }
+
+  /**
+   * Flush buffered instructions to listeners as a single batch, then
+   * stop buffering.
+   */
+  private flushBatch(): void {
+    const buffer = this.instructionBuffer;
+    this.instructionBuffer = null;
+    if (buffer && buffer.length > 0) {
+      for (const listener of this.batchListeners) {
+        listener(buffer);
+      }
+    }
+  }
+
   private emit(instruction: GridInstruction): void {
-    this.emitBatch([instruction]);
+    if (this.instructionBuffer) {
+      this.instructionBuffer.push(instruction);
+    } else {
+      this.emitBatch([instruction]);
+    }
   }
 
   private emitBatch(instructions: GridInstruction[]): void {
     if (instructions.length === 0) return;
+    if (this.instructionBuffer) {
+      this.instructionBuffer.push(...instructions);
+      return;
+    }
     for (const listener of this.batchListeners) {
       listener(instructions);
     }
@@ -558,10 +589,15 @@ export class GridCore<TData extends Row = Row> {
     if (!column) return;
     column.width = width;
     this.computeColumnPositions();
-    this.emitContentSize();
-    this.emitHeaders();
-    this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
-    this.slotPool.syncSlots();
+    this.startBatch();
+    try {
+      this.emitContentSize();
+      this.emitHeaders();
+      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+      this.slotPool.syncSlots();
+    } finally {
+      this.flushBatch();
+    }
     this.onColumnResized?.(colIndex, width);
   }
 
@@ -574,26 +610,70 @@ export class GridCore<TData extends Row = Row> {
     if (adjustedTo < 0 || adjustedTo >= this.columns.length) return;
     if (fromIndex === adjustedTo) return;
 
+    console.log('[gp-grid] moveColumn', fromIndex, '->', adjustedTo, 'batching:', this.instructionBuffer !== null);
+
     const [col] = this.columns.splice(fromIndex, 1);
     this.columns.splice(adjustedTo, 0, col!);
 
     this.computeColumnPositions();
-    this.emitContentSize();
-    this.emitHeaders();
-    this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
-    this.slotPool.refreshAllSlots();
+    this.startBatch();
+    try {
+      this.emitContentSize();
+      this.emitHeaders();
+      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
+      this.slotPool.refreshAllSlots();
+      console.log('[gp-grid] moveColumn batch size:', this.instructionBuffer?.length);
+    } finally {
+      this.flushBatch();
+      console.log('[gp-grid] moveColumn batch flushed');
+    }
     this.onColumnMoved?.(fromIndex, adjustedTo);
   }
 
   /**
    * Commit a row drag operation. Reorders data if the data source supports it,
    * then invokes the onRowDragEnd callback.
+   *
+   * Optimized: instead of a full refresh (fetchData + rebuild all slots), we
+   * update the cachedRows map in-place to mirror the splice the data source
+   * performed, then only update the affected slots.
    */
   commitRowDrag(sourceIndex: number, targetIndex: number): void {
     const ds = this.dataSource as { moveRow?: (from: number, to: number) => void };
     if (ds.moveRow) {
       ds.moveRow(sourceIndex, targetIndex);
-      void this.refresh();
+
+      // Update cachedRows in-place to match the data source reorder.
+      // The data source does: splice(from, 1) then splice(adjustedTo, 0, row)
+      const movedRow = this.cachedRows.get(sourceIndex);
+      if (movedRow !== undefined) {
+        if (sourceIndex < targetIndex) {
+          // Moving down: rows [source+1 .. target-1] shift up by one
+          const adjustedTarget = targetIndex - 1;
+          for (let i = sourceIndex; i < adjustedTarget; i++) {
+            const next = this.cachedRows.get(i + 1);
+            if (next !== undefined) this.cachedRows.set(i, next);
+            else this.cachedRows.delete(i);
+          }
+          this.cachedRows.set(adjustedTarget, movedRow);
+        } else {
+          // Moving up: rows [target .. source-1] shift down by one
+          for (let i = sourceIndex; i > targetIndex; i--) {
+            const prev = this.cachedRows.get(i - 1);
+            if (prev !== undefined) this.cachedRows.set(i, prev);
+            else this.cachedRows.delete(i);
+          }
+          this.cachedRows.set(targetIndex, movedRow);
+        }
+      }
+
+      // Only update the affected slots (no refetch needed)
+      this.highlight?.clearAllCaches();
+      const lo = Math.min(sourceIndex, targetIndex);
+      const hi = Math.max(sourceIndex, targetIndex);
+      for (let i = lo; i <= hi; i++) {
+        this.slotPool.updateSlot(i);
+      }
     }
     this.onRowDragEnd?.(sourceIndex, targetIndex);
   }

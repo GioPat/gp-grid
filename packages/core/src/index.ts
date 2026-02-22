@@ -266,3 +266,11 @@ export { applyInstruction } from "./state-reducer";
 
 /** Scroll helpers */
 export { findSlotForRow, scrollCellIntoView } from "./utils/scroll-helpers";
+
+/** Fill handle helpers */
+export { calculateFillHandlePosition } from "./utils/fill-helpers";
+export type {
+  VisibleColumnInfo,
+  CalculateFillHandlePositionParams,
+  FillHandlePosition,
+} from "./utils/fill-helpers";

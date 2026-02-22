@@ -36,3 +36,10 @@ export type {
 } from "./event-emitter";
 
 export { findSlotForRow, scrollCellIntoView } from "./scroll-helpers";
+
+export { calculateFillHandlePosition } from "./fill-helpers";
+export type {
+  VisibleColumnInfo,
+  CalculateFillHandlePositionParams,
+  FillHandlePosition,
+} from "./fill-helpers";
