@@ -118,13 +118,13 @@ export class ScrollVirtualizationManager {
    */
   getVisibleRowRange(): { start: number; end: number } {
     const viewportHeight = this.options.getViewportHeight();
-    const headerHeight = this.options.getHeaderHeight();
     const scrollTop = this.options.getScrollTop();
     const rowHeight = this.options.getRowHeight();
     const totalRows = this.options.getTotalRows();
 
-    // viewportHeight includes header, so subtract it to get content area
-    const contentHeight = viewportHeight - headerHeight;
+    // The header is rendered outside the scroll container, so viewportHeight
+    // already represents only the body content area
+    const contentHeight = viewportHeight;
     const firstVisibleRow = Math.max(0, Math.floor(scrollTop / rowHeight));
     // Use ceil and subtract 1 to include any partially visible row at the bottom
     const lastVisibleRow = Math.min(

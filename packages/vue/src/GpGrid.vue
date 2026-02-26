@@ -138,6 +138,7 @@ const {
   columnPositions,
   visibleColumnsWithIndices,
   slots: computed(() => state.value.slots),
+  rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
 });
 
 // Fill handle position

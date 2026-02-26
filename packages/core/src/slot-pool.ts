@@ -93,13 +93,13 @@ export class SlotPoolManager {
   syncSlots(): void {
     const scrollTop = this.options.getScrollTop();
     const rowHeight = this.options.getRowHeight();
-    const headerHeight = this.options.getHeaderHeight();
     const viewportHeight = this.options.getViewportHeight();
     const totalRows = this.options.getTotalRows();
     const overscan = this.options.getOverscan();
 
-    // Visible content area excludes the sticky header
-    const contentHeight = viewportHeight - headerHeight;
+    // The header is rendered outside the scroll container, so viewportHeight
+    // already represents only the body content area
+    const contentHeight = viewportHeight;
 
     const visibleStartRow = Math.max(
       0,

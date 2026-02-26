@@ -33,6 +33,7 @@ export interface UseInputHandlerOptions {
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: VisibleColumnInfo[];
   slots: Map<string, SlotData>;
+  rowsWrapperOffset: number;
 }
 
 export interface UseInputHandlerResult {
@@ -78,6 +79,7 @@ export function useInputHandler<TData extends Row>(
     columnPositions,
     visibleColumnsWithIndices,
     slots,
+    rowsWrapperOffset,
   } = options;
 
   // Auto-scroll interval ref
@@ -355,12 +357,12 @@ export function useInputHandler<TData extends Row>(
           container,
           result.scrollToCell.row,
           rowHeight,
-          headerHeight,
-          slots
+          slots,
+          rowsWrapperOffset
         );
       }
     },
-    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, headerHeight, slots]
+    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset]
   );
 
   const handleWheel = useCallback(

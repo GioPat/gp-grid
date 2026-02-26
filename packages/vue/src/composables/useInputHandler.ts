@@ -36,6 +36,7 @@ export interface UseInputHandlerOptions {
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
   slots: ComputedRef<Map<string, SlotData>>;
+  rowsWrapperOffset: ComputedRef<number>;
 }
 
 export interface UseInputHandlerResult {
@@ -77,6 +78,7 @@ export function useInputHandler<TData extends Row = Row>(
     columnPositions,
     visibleColumnsWithIndices,
     slots,
+    rowsWrapperOffset,
   } = options;
 
   // Drag state for UI (mirrors core's InputHandler state)
@@ -365,8 +367,8 @@ export function useInputHandler<TData extends Row = Row>(
         container,
         result.scrollToCell.row,
         rowHeight,
-        headerHeight,
         slots.value,
+        rowsWrapperOffset.value,
       );
     }
   }

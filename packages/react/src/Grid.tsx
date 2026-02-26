@@ -212,6 +212,7 @@ export function Grid<TData extends Row = Row>(
     columnPositions,
     visibleColumnsWithIndices,
     slots: state.slots,
+    rowsWrapperOffset: state.rowsWrapperOffset,
   });
 
   // Initialize GridCore
