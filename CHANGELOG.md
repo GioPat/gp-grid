@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.1...gp-grid-v0.9.2) (2026-02-26)
+
+
+### 🐛 Bug Fixes
+
+* reset scroll when filtering ([d7d6b4e](https://github.com/GioPat/gp-grid/commit/d7d6b4ee3e8338d62ad966799cf5d3e1b7820fe2))
+
 ## [0.9.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.0...gp-grid-v0.9.1) (2026-02-26)
 
 
