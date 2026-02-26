@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.0...gp-grid-v0.9.1) (2026-02-26)
+
+
+### 🐛 Bug Fixes
+
+* keyboard navigation ([508ea14](https://github.com/GioPat/gp-grid/commit/508ea14f125107a84b06edbc5410cca213f1ae23))
+
 ## [0.9.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.8.3...gp-grid-v0.9.0) (2026-02-22)
 
 
