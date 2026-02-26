@@ -52,6 +52,9 @@ export const applyInstruction = <TData = Row>(
       return null;
     }
 
+    case "SCROLL_TO":
+      return { pendingScrollTop: instruction.scrollTop };
+
     case "SET_ACTIVE_CELL":
       return { activeCell: instruction.position };
 

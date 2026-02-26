@@ -55,6 +55,7 @@ export type {
   DestroySlotInstruction,
   AssignSlotInstruction,
   MoveSlotInstruction,
+  ScrollToInstruction,
   SetActiveCellInstruction,
   SetSelectionRangeInstruction,
   UpdateVisibleRangeInstruction,

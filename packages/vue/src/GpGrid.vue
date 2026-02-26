@@ -354,6 +354,21 @@ watch(
   { immediate: true },
 );
 
+// Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
+// flush: 'post' ensures the DOM has been updated before we set scrollTop.
+watch(
+  () => state.value.pendingScrollTop,
+  (scrollTop) => {
+    if (scrollTop !== null) {
+      const container = bodyContainerRef.value;
+      if (container) {
+        container.scrollTop = scrollTop;
+      }
+    }
+  },
+  { flush: "post" },
+);
+
 // Watch for highlighting prop changes
 watch(
   () => props.highlighting,

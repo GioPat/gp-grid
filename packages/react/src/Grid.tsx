@@ -2,6 +2,7 @@
 
 import React, {
   useEffect,
+  useLayoutEffect,
   useRef,
   useReducer,
   useCallback,
@@ -391,6 +392,18 @@ export function Grid<TData extends Row = Row>(
     container.addEventListener("wheel", wheelHandler, { passive: false });
     return () => container.removeEventListener("wheel", wheelHandler);
   }, [handleWheel, wheelDampening]);
+
+  // Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
+  // useLayoutEffect runs before paint, ensuring container.scrollTop matches
+  // the core's expectation before the browser renders the frame.
+  useLayoutEffect(() => {
+    if (state.pendingScrollTop !== null) {
+      const container = containerRef.current;
+      if (container) {
+        container.scrollTop = state.pendingScrollTop;
+      }
+    }
+  }, [state.pendingScrollTop]);
 
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(

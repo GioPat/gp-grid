@@ -206,11 +206,23 @@ export class GridCore<TData extends Row = Row> {
       onSortFilterChange: async () => {
         await this.fetchData();
         this.highlight?.clearAllCaches();
-        this.slotPool.refreshAllSlots();
+        // Reset scroll to top — filtered/sorted results are a new view.
+        // Both internal state and framework container must agree on scrollTop,
+        // otherwise slots are positioned for a stale offset.
+        this.scrollTop = 0;
+        this.startBatch();
+        try {
+          this.emit({ type: "SCROLL_TO", scrollTop: 0 });
+          this.emitContentSize();
+          this.emitHeaders();
+          this.slotPool.refreshAllSlots();
+        } finally {
+          this.flushBatch();
+        }
       },
       onDataRefreshed: () => {
-        this.emitContentSize();
-        this.emitHeaders();
+        // Handled in onSortFilterChange via startBatch/flushBatch
+        // so all UI updates arrive as a single atomic batch.
       },
     });
 

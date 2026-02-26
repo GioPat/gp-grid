@@ -105,6 +105,16 @@ export interface CommitEditInstruction {
 }
 
 // =============================================================================
+// Scroll Instructions
+// =============================================================================
+
+/** Programmatic scroll instruction — tells the framework to set container.scrollTop */
+export interface ScrollToInstruction {
+  type: "SCROLL_TO";
+  scrollTop: number;
+}
+
+// =============================================================================
 // Layout Instructions
 // =============================================================================
 
@@ -346,6 +356,8 @@ export type GridInstruction =
   | DestroySlotInstruction
   | AssignSlotInstruction
   | MoveSlotInstruction
+  /** Scroll */
+  | ScrollToInstruction
   /** Selection */
   | SetActiveCellInstruction
   | SetSelectionRangeInstruction

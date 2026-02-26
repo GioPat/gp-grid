@@ -25,7 +25,8 @@ export function gridReducer<TData = Row>(state: GridState<TData>, action: GridAc
   // Create mutable copies of Maps to batch updates
   const newSlots = new Map(state.slots);
   const newHeaders = new Map(state.headers);
-  let stateChanges: Partial<GridState<TData>> = {};
+  // Reset pendingScrollTop each batch — only set when SCROLL_TO is in this batch
+  let stateChanges: Partial<GridState<TData>> = { pendingScrollTop: null };
 
   // Apply all instructions
   for (const instruction of instructions) {

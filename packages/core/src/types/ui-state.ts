@@ -64,6 +64,7 @@ export const createInitialState = <TData = Row>(args?: InitialStateArgs): GridSt
   visibleRowRange: null,
   hoverPosition: null,
   columns: null,
+  pendingScrollTop: null,
 });
 
 // =============================================================================
@@ -94,4 +95,6 @@ export interface GridState<TData = Row> {
   hoverPosition: CellPosition | null;
   /** Columns updated by core (after resize/reorder). Null means use props. */
   columns: ColumnDefinition[] | null;
+  /** Pending programmatic scroll — framework should apply to container and clear */
+  pendingScrollTop: number | null;
 }

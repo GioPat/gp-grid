@@ -270,6 +270,21 @@ export function useGpGrid<TData extends Row = Row>(
     }
   });
 
+  // Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
+  // flush: 'post' ensures the DOM has been updated before we set scrollTop.
+  watch(
+    () => state.value.pendingScrollTop,
+    (scrollTop) => {
+      if (scrollTop !== null) {
+        const container = containerRef.value;
+        if (container) {
+          container.scrollTop = scrollTop;
+        }
+      }
+    },
+    { flush: "post" },
+  );
+
   // Subscribe to data source changes
   watch(
     () => options.dataSource,

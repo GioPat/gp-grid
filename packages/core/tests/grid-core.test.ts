@@ -312,6 +312,109 @@ describe("GridCore", () => {
       // "Alice" has name containing 'a' and age 30
       expect(grid.getRowCount()).toBe(1);
     });
+
+    it("should deliver SET_CONTENT_SIZE and slot instructions in the same batch when filtering", async () => {
+      // Create grid with 100 rows to exercise slot pool recycling
+      const largeData = Array.from({ length: 100 }, (_, i) => ({
+        id: i,
+        name: `Name ${i}`,
+        age: 20 + (i % 50),
+        email: `email${i}@example.com`,
+      }));
+
+      grid = createTestGrid(largeData, { rowHeight: 32, overscan: 2 });
+      grid.onBatchInstruction((batch) => {
+        emittedInstructions.push(...batch);
+        batchedInstructions.push(batch);
+      });
+
+      await grid.initialize();
+      grid.setViewport(0, 0, 800, 600);
+
+      // --- Test applying a filter ---
+      emittedInstructions = [];
+      batchedInstructions = [];
+      await grid.setFilter("name", "Name 0");
+      expect(grid.getRowCount()).toBe(1);
+
+      // SET_CONTENT_SIZE and slot ops must be in the same batch (atomic update)
+      const applyBatch = batchedInstructions.find((batch) =>
+        batch.some((i) => i.type === "SET_CONTENT_SIZE")
+      );
+      expect(applyBatch).toBeDefined();
+      expect(applyBatch!.some((i) => i.type === "DESTROY_SLOT" || i.type === "ASSIGN_SLOT")).toBe(true);
+
+      // --- Test clearing the filter ---
+      emittedInstructions = [];
+      batchedInstructions = [];
+      await grid.setFilter("name", "");
+
+      // Row count should return to 100
+      expect(grid.getRowCount()).toBe(100);
+
+      // SET_CONTENT_SIZE and slot creation must be in the same batch
+      const clearBatch = batchedInstructions.find((batch) =>
+        batch.some((i) => i.type === "SET_CONTENT_SIZE")
+      );
+      expect(clearBatch).toBeDefined();
+      expect(clearBatch!.some((i) => i.type === "CREATE_SLOT" || i.type === "ASSIGN_SLOT")).toBe(true);
+
+      // Slots should be created for the restored rows
+      const createSlots = emittedInstructions.filter(
+        (i) => i.type === "CREATE_SLOT"
+      );
+      expect(createSlots.length).toBeGreaterThan(0);
+    });
+
+    it("should create visible slots when clearing a filter while scrolled down", async () => {
+      // Regression: scrolled down → filter → clear → blank table because
+      // scrollTop was stale (still at old position) when slots were synced.
+      const largeData = Array.from({ length: 200 }, (_, i) => ({
+        id: i,
+        name: `Name ${i}`,
+        age: 20 + (i % 50),
+        email: `email${i}@example.com`,
+      }));
+
+      grid = createTestGrid(largeData, { rowHeight: 32, overscan: 2 });
+      grid.onBatchInstruction((batch) => {
+        emittedInstructions.push(...batch);
+        batchedInstructions.push(batch);
+      });
+
+      await grid.initialize();
+      // Set viewport and scroll down to row ~50
+      grid.setViewport(0, 0, 800, 320);
+      grid.setViewport(1600, 0, 800, 320); // scrollTop=1600 → row 50
+
+      // Apply a filter that reduces to 1 row
+      emittedInstructions = [];
+      await grid.setFilter("name", "Name 0");
+      expect(grid.getRowCount()).toBe(1);
+
+      // Don't call setViewport(0, ...) — simulating the browser scroll event
+      // not having fired yet (the core still has scrollTop from before)
+
+      // Clear the filter
+      emittedInstructions = [];
+      batchedInstructions = [];
+      await grid.setFilter("name", "");
+      expect(grid.getRowCount()).toBe(200);
+
+      // Slots should be created for rows near the TOP (row 0),
+      // not near the old scroll position (row 50)
+      const assignSlots = emittedInstructions.filter(
+        (i) => i.type === "ASSIGN_SLOT"
+      );
+      expect(assignSlots.length).toBeGreaterThan(0);
+
+      // All assigned row indices should be near the top of the grid
+      for (const instruction of assignSlots) {
+        if (instruction.type === "ASSIGN_SLOT") {
+          expect(instruction.rowIndex).toBeLessThan(15);
+        }
+      }
+    });
   });
 
   describe("editing", () => {
@@ -689,10 +792,13 @@ describe("GridCore", () => {
       const moveSlots = instructions.filter((i) => i.type === "MOVE_SLOT");
       expect(moveSlots.length).toBeGreaterThan(0);
 
-      // Verify all translateY values are within safe bounds
+      // Verify all translateY values are within safe bounds.
+      // With virtualization active, translateY is relative to the first visible row.
+      // Overscan rows above the viewport have small negative values (-overscan * rowHeight).
+      const overscan = 3;
       for (const instruction of moveSlots) {
         if (instruction.type === "MOVE_SLOT") {
-          expect(instruction.translateY).toBeGreaterThanOrEqual(0);
+          expect(instruction.translateY).toBeGreaterThanOrEqual(-overscan * rowHeight);
           expect(instruction.translateY).toBeLessThanOrEqual(virtualContentHeight);
         }
       }
