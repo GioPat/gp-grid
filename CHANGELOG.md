@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.2...gp-grid-v0.9.3) (2026-02-28)
+
+
+### 🐛 Bug Fixes
+
+* reduce z-indexes from 100 to 11 ([6b1a637](https://github.com/GioPat/gp-grid/commit/6b1a637ab61529fd620628cdcc4d4ee07c7bce71))
+
 ## [0.9.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.1...gp-grid-v0.9.2) (2026-02-26)
 
 
