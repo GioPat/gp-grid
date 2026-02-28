@@ -88,7 +88,7 @@ export const cellStyles: string = `
   background-color: var(--gp-grid-primary);
   border: 2px solid var(--gp-grid-bg);
   cursor: crosshair;
-  z-index: 100;
+  z-index: 11;
   pointer-events: auto;
   box-sizing: border-box;
   border-radius: 1px;

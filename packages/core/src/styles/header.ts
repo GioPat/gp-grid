@@ -14,7 +14,7 @@ export const headerStyles: string = `
   background-color: var(--gp-grid-header-bg);
   border-bottom: 1px solid var(--gp-grid-border);
   flex-shrink: 0;
-  z-index: 100;
+  z-index: 11;
   overflow: hidden;
 }
 
