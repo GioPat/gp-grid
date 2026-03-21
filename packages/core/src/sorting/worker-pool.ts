@@ -211,6 +211,7 @@ export class WorkerPool {
     // (they can queue multiple requests)
     const leastBusy = this.workers.reduce((min, w) =>
       w.pendingRequests.size < min.pendingRequests.size ? w : min,
+      this.workers[0],
     );
     return leastBusy;
   }

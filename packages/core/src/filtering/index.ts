@@ -116,7 +116,7 @@ export function evaluateNumberCondition(
 
   const numValue =
     typeof cellValue === "number" ? cellValue : Number(cellValue);
-  if (isNaN(numValue)) return false;
+  if (Number.isNaN(numValue)) return false;
 
   const filterValue = condition.value ?? 0;
   const filterValueTo = condition.valueTo ?? 0;
@@ -160,7 +160,7 @@ export function evaluateDateCondition(
 
   const dateValue =
     cellValue instanceof Date ? cellValue : new Date(String(cellValue));
-  if (isNaN(dateValue.getTime())) return false;
+  if (Number.isNaN(dateValue.getTime())) return false;
 
   const filterDate =
     condition.value instanceof Date

@@ -202,7 +202,7 @@ export class FillManager {
 
     // Check for numeric sequence
     const numbers = values.map((v) => (typeof v === "number" ? v : Number(v)));
-    if (numbers.every((n) => !isNaN(n))) {
+    if (numbers.every((n) => !Number.isNaN(n))) {
       // Check for arithmetic sequence
       const diffs: number[] = [];
       for (let i = 1; i < numbers.length; i++) {

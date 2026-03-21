@@ -150,7 +150,7 @@ function compareValues(a: CellValue, b: CellValue): number {
   // Numeric comparison
   const aNum = Number(a);
   const bNum = Number(b);
-  if (!isNaN(aNum) && !isNaN(bNum)) {
+  if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
     return aNum - bNum;
   }
 
