@@ -23,6 +23,7 @@
     "bench": "vitest bench"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "3.2.4",
     "@vitest/ui": "^3.2.4",
     "happy-dom": "^20.0.11",
     "typescript": "^5.9.3",

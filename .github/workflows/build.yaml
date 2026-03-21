@@ -1,0 +1,60 @@
+name: Build
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+      - run: pnpm install
+      - run: pnpm --filter @gp-grid/core build
+      - run: pnpm test:coverage
+      - name: SonarQube Scan - Core
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_CORE }}
+        with:
+          args: >
+            -Dsonar.organization=giopat
+            -Dsonar.projectKey=giopat_gp-grid_core
+            -Dsonar.sources=packages/core/src
+            -Dsonar.exclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+      - name: SonarQube Scan - React
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_REACT }}
+        with:
+          args: >
+            -Dsonar.organization=giopat
+            -Dsonar.projectKey=giopat_gp-grid_react
+            -Dsonar.sources=packages/react/src
+            -Dsonar.exclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+      - name: SonarQube Scan - Vue
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_VUE }}
+        with:
+          args: >
+            -Dsonar.organization=giopat
+            -Dsonar.projectKey=giopat_gp-grid_vue
+            -Dsonar.sources=packages/vue/src
+            -Dsonar.exclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
