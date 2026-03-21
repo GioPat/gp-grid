@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.3...gp-grid-v0.9.4) (2026-03-21)
+
+
+### 🐛 Bug Fixes
+
+* testing settings ([f53a2f2](https://github.com/GioPat/gp-grid/commit/f53a2f20c1159ab7549a9eea3e3ce95c48053069))
+
 ## [0.9.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.2...gp-grid-v0.9.3) (2026-02-28)
 
 
