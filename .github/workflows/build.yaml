@@ -41,7 +41,7 @@ jobs:
         with:
           args: >
             -Dsonar.organization=giopat
-            -Dsonar.projectKeygiopat_gp-grid_react
+            -Dsonar.projectKey=giopat_gp-grid_react
             -Dsonar.sources=packages/react/src
             -Dsonar.exclusions=**/*.test.ts,**/*.spec.ts
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
@@ -53,7 +53,7 @@ jobs:
         with:
           args: >
             -Dsonar.organization=giopat
-            -Dsonar.projectKeygiopat_gp-grid_vue
+            -Dsonar.projectKey=giopat_gp-grid_vue
             -Dsonar.sources=packages/vue/src
             -Dsonar.exclusions=**/*.test.ts,**/*.spec.ts
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
