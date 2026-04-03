@@ -58,12 +58,13 @@ export function evaluateTextCondition(
 
     // Handle array values (e.g., tags column) - convert to sorted string for comparison
     if (Array.isArray(cellValue)) {
-      const sortedArray = [...cellValue].sort((a, b) =>
-        String(a).localeCompare(String(b), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
+      // Must use the same simple lexicographic sort as getDistinctValuesForColumn
+      // so that the generated key matches what was stored in condition.selectedValues.
+      const sortedArray = [...cellValue].sort((a, b) => {
+        const sa = String(a);
+        const sb = String(b);
+        return sa < sb ? -1 : sa > sb ? 1 : 0;
+      });
       const arrayStr = sortedArray.join(", ");
       return condition.selectedValues.has(arrayStr) || includesBlank;
     }

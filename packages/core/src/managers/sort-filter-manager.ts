@@ -170,11 +170,14 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * Get distinct values for a column (for filter dropdowns)
    * For array-type columns (like tags), each unique array combination is returned.
    * Arrays are sorted internally for consistent comparison.
-   * Limited to maxValues to avoid performance issues with large datasets.
+   * Limited to maxValues distinct results and maxScanRows rows scanned.
+   * The row scan cap prevents hangs on low-cardinality columns (e.g. a tags column
+   * with only ~100 distinct combinations in 1.5M rows would otherwise scan every row).
    */
   getDistinctValuesForColumn(
     colId: string,
     maxValues: number = 500,
+    maxScanRows: number = 100000,
   ): CellValue[] {
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
@@ -182,18 +185,22 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
     const cachedRows = this.options.getCachedRows();
     const valuesMap = new Map<string, CellValue>();
+    let rowsScanned = 0;
 
     for (const row of cachedRows.values()) {
+      if (++rowsScanned > maxScanRows) break;
       const value = getFieldValue(row, column.field);
 
       if (Array.isArray(value)) {
-        // Sort array items internally for consistent comparison
-        const sortedArray = [...value].sort((a, b) =>
-          String(a).localeCompare(String(b), undefined, {
-            numeric: true,
-            sensitivity: "base",
-          }),
-        );
+        // Sort array items with a simple lexicographic comparison for consistent
+        // key generation. Locale-aware sort here would call localeCompare for
+        // every row in potentially-large datasets (O(n) rows × O(k) comparisons)
+        // which is ~100x slower than basic string comparison.
+        const sortedArray = [...value].sort((a, b) => {
+          const sa = String(a);
+          const sb = String(b);
+          return sa < sb ? -1 : sa > sb ? 1 : 0;
+        });
         const key = JSON.stringify(sortedArray);
         if (!valuesMap.has(key)) {
           valuesMap.set(key, sortedArray);
