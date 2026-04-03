@@ -21,12 +21,12 @@ export interface FillManagerOptions {
  */
 export class FillManager {
   private state: FillHandleState | null = null;
-  private options: FillManagerOptions;
-  private emitter = createInstructionEmitter();
+  private readonly options: FillManagerOptions;
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: FillManagerOptions) {
     this.options = options;

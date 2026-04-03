@@ -27,12 +27,12 @@ export interface EditManagerOptions {
  */
 export class EditManager {
   private editState: EditState | null = null;
-  private options: EditManagerOptions;
-  private emitter = createInstructionEmitter();
+  private readonly options: EditManagerOptions;
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: EditManagerOptions) {
     this.options = options;
@@ -77,7 +77,7 @@ export class EditManager {
    */
   startEdit(row: number, col: number): boolean {
     const column = this.options.getColumn(col);
-    if (!column || column.editable !== true) {
+    if (!column?.editable) {
       return false;
     }
 
