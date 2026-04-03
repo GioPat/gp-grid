@@ -1,7 +1,7 @@
 // packages/core/src/types/columns.ts
 // Column definition types
 
-import type { CellDataType } from "./basic";
+import type { CellDataType, CellValue } from "./basic";
 import type { HighlightContext } from "./highlighting";
 import type {
   CellRendererParams,
@@ -37,6 +37,12 @@ export interface ColumnDefinition {
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);
   headerRenderer?: string | ((params: HeaderRendererParams) => unknown);
+  /**
+   * Converts a cell value to its display string. Used by the default cell renderer
+   * when no `cellRenderer` is provided. Useful for `object`-type columns where the
+   * default JSON.stringify may not be suitable (e.g., display a single field of an object).
+   */
+  valueFormatter?: (value: CellValue) => string;
 
   /**
    * Per-column override for column-level highlighting.

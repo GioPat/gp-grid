@@ -141,6 +141,13 @@ function getFieldValue(row: unknown, field: string): CellValue {
   return (value ?? null) as CellValue;
 }
 
+const toDisplayString = (v: CellValue): string => {
+  if (v == null) return "";
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "object" && !(v instanceof Date)) return JSON.stringify(v);
+  return String(v);
+};
+
 function compareValues(a: CellValue, b: CellValue): number {
   // Null handling
   if (a == null && b == null) return 0;
@@ -159,8 +166,8 @@ function compareValues(a: CellValue, b: CellValue): number {
     return a.getTime() - b.getTime();
   }
 
-  // String comparison
-  return String(a).localeCompare(String(b));
+  // String comparison (handles plain objects via JSON.stringify)
+  return toDisplayString(a).localeCompare(toDisplayString(b));
 }
 
 function sortData<T>(data: T[], sortModel: SortModel[]): T[] {
@@ -202,6 +209,13 @@ function getFieldValue(row, field) {
   return value ?? null;
 }
 
+function toDisplayString(v) {
+  if (v == null) return "";
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "object" && !(v instanceof Date)) return JSON.stringify(v);
+  return String(v);
+}
+
 function compareValues(a, b) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -217,7 +231,7 @@ function compareValues(a, b) {
     return a.getTime() - b.getTime();
   }
 
-  return String(a).localeCompare(String(b));
+  return toDisplayString(a).localeCompare(toDisplayString(b));
 }
 
 function sortData(data, sortModel) {

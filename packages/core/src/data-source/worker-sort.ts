@@ -7,6 +7,7 @@ import {
   stringToSortableHashes,
   HASH_CHUNK_COUNT,
 } from "../indexed-data-store/sorting";
+import { formatCellValue } from "../utils/format-helpers";
 
 // =============================================================================
 // Types
@@ -40,9 +41,11 @@ export const detectColumnType = <TData extends Row>(
   for (const row of data) {
     const val = getFieldValue(row, colId);
     if (val != null) {
-      return typeof val === "string" || Array.isArray(val)
-        ? "string"
-        : "numeric";
+      const isStringLike =
+        typeof val === "string" ||
+        Array.isArray(val) ||
+        (typeof val === "object" && !(val instanceof Date));
+      return isStringLike ? "string" : "numeric";
     }
   }
   return "numeric";
@@ -65,7 +68,7 @@ const buildStringHashData = <TData extends Row>(
 
   for (const row of data) {
     const val = getFieldValue(row, colId);
-    const str = val == null ? "" : Array.isArray(val) ? val.join(", ") : String(val);
+    const str = formatCellValue(val);
     originalStrings.push(str);
     const hashes = stringToSortableHashes(str);
     for (let c = 0; c < HASH_CHUNK_COUNT; c++) {

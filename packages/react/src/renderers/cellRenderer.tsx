@@ -1,7 +1,7 @@
 // packages/react/src/renderers/cellRenderer.tsx
 
 import React from "react";
-import { getFieldValue } from "@gp-grid/core";
+import { getFieldValue, formatCellValue } from "@gp-grid/core";
 import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
 import type { ReactCellRenderer } from "../types";
 
@@ -64,5 +64,5 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
   }
 
   // Default text rendering
-  return value == null ? "" : String(value);
+  return formatCellValue(value, column.valueFormatter);
 }

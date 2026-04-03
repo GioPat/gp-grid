@@ -1,6 +1,7 @@
 // packages/core/src/indexed-data-store/sorting.ts
 
 import type { CellValue, SortModel, Row } from "../types";
+import { formatCellValue } from "../utils/format-helpers";
 
 /**
  * Convert a string to a sortable number using first 10 characters.
@@ -66,8 +67,8 @@ export function compareValues(a: CellValue, b: CellValue): number {
     return a.getTime() - b.getTime();
   }
 
-  // Fall back to string comparison
-  return String(a).localeCompare(String(b));
+  // Fall back to string comparison (handles plain objects via JSON.stringify)
+  return formatCellValue(a).localeCompare(formatCellValue(b));
 }
 
 /**
@@ -83,6 +84,14 @@ export function computeValueHash(value: CellValue): number {
 
   if (typeof value === "string") {
     return stringToSortableNumber(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0 ? Number.MAX_VALUE : stringToSortableNumber(value.join(", "));
+  }
+
+  if (typeof value === "object") {
+    return stringToSortableNumber(JSON.stringify(value));
   }
 
   const num = Number(value);
@@ -215,6 +224,10 @@ export function toSortableNumber(val: CellValue): number {
 
   if (typeof val === "string") {
     return stringToSortableNumber(val);
+  }
+
+  if (typeof val === "object") {
+    return stringToSortableNumber(JSON.stringify(val));
   }
 
   const num = Number(val);

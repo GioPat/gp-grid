@@ -337,6 +337,63 @@ describe("createClientDataSource", () => {
       ]);
     });
   });
+  describe("sorting with object-type cell values", () => {
+    interface ObjectRow {
+      id: number;
+      meta: { label: string } | null;
+    }
+
+    const objectData: ObjectRow[] = [
+      { id: 1, meta: { label: "Charlie" } },
+      { id: 2, meta: { label: "Alice" } },
+      { id: 3, meta: null },
+      { id: 4, meta: { label: "Bob" } },
+    ];
+
+    it("sorts object column ascending by JSON string representation", async () => {
+      const ds = createClientDataSource(objectData, { useWorker: false });
+      const result = await ds.fetch({
+        pagination: { pageIndex: 0, pageSize: 10 },
+        sort: [{ colId: "meta", direction: "asc" }],
+      });
+
+      // null sorts last; remaining sorted by JSON: {"label":"Alice"} < {"label":"Bob"} < {"label":"Charlie"}
+      expect(result.rows[0]!.id).toBe(2); // Alice
+      expect(result.rows[1]!.id).toBe(4); // Bob
+      expect(result.rows[2]!.id).toBe(1); // Charlie
+      expect(result.rows[3]!.id).toBe(3); // null → last
+    });
+
+    it("sorts object column descending", async () => {
+      const ds = createClientDataSource(objectData, { useWorker: false });
+      const result = await ds.fetch({
+        pagination: { pageIndex: 0, pageSize: 10 },
+        sort: [{ colId: "meta", direction: "desc" }],
+      });
+
+      // null sorts first in desc (negated comparison places nulls before non-null values)
+      expect(result.rows[0]!.id).toBe(3); // null → first
+      expect(result.rows[1]!.id).toBe(1); // Charlie
+      expect(result.rows[2]!.id).toBe(4); // Bob
+      expect(result.rows[3]!.id).toBe(2); // Alice
+    });
+
+    it("filters object column with text 'contains'", async () => {
+      const ds = createClientDataSource(objectData, { useWorker: false });
+      const result = await ds.fetch({
+        pagination: { pageIndex: 0, pageSize: 10 },
+        filter: {
+          meta: {
+            conditions: [{ type: "text", operator: "contains", value: "Alice" }],
+            combination: "and",
+          },
+        },
+      });
+
+      expect(result.totalRows).toBe(1);
+      expect(result.rows[0]!.id).toBe(2);
+    });
+  });
 });
 
 describe("createServerDataSource", () => {

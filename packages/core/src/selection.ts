@@ -8,7 +8,7 @@ import type {
   ColumnDefinition,
   Row,
 } from "./types";
-import { createInstructionEmitter, normalizeRange } from "./utils";
+import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -275,7 +275,7 @@ export class SelectionManager {
     // Convert to tab-separated values (Excel-compatible)
     const tsv = data
       .map((row) =>
-        row.map((cell) => (cell == null ? "" : String(cell))).join("\t")
+        row.map((cell) => formatCellValue(cell)).join("\t")
       )
       .join("\n");
 

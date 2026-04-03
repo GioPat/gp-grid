@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/cellRenderer.ts
 
 import { createTextVNode, type VNode } from "vue";
-import { getFieldValue } from "@gp-grid/core";
+import { getFieldValue, formatCellValue } from "@gp-grid/core";
 import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
 import { toVNode } from "./utils";
@@ -65,5 +65,5 @@ export function renderCell(options: RenderCellOptions): VNode {
   }
 
   // Default text rendering
-  return createTextVNode(value == null ? "" : String(value));
+  return createTextVNode(formatCellValue(value, column.valueFormatter));
 }

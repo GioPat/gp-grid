@@ -6,7 +6,7 @@ import type {
   FilterModel,
   ColumnFilterModel,
 } from "./../types";
-import { createInstructionEmitter, getFieldValue } from "./../utils";
+import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
 
 // =============================================================================
 // Types
@@ -211,8 +211,8 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     // Sort the results
     const results = Array.from(valuesMap.values());
     results.sort((a, b) => {
-      const strA = Array.isArray(a) ? a.join(", ") : String(a ?? "");
-      const strB = Array.isArray(b) ? b.join(", ") : String(b ?? "");
+      const strA = formatCellValue(a);
+      const strB = formatCellValue(b);
       return strA.localeCompare(strB, undefined, {
         numeric: true,
         sensitivity: "base",

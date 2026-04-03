@@ -11,6 +11,7 @@ import type {
   FilterModel,
   Row,
 } from "../types";
+import { formatCellValue } from "../utils/format-helpers";
 
 // =============================================================================
 // Helper Functions
@@ -67,12 +68,12 @@ export function evaluateTextCondition(
       return condition.selectedValues.has(arrayStr) || includesBlank;
     }
 
-    const cellStr = String(cellValue ?? "");
+    const cellStr = formatCellValue(cellValue);
     return condition.selectedValues.has(cellStr) || includesBlank;
   }
 
   // Handle operator-based conditions
-  const strValue = String(cellValue ?? "").toLowerCase();
+  const strValue = formatCellValue(cellValue).toLowerCase();
   const filterValue = String(condition.value ?? "").toLowerCase();
 
   switch (condition.operator) {
@@ -315,7 +316,7 @@ export function applyFilters<TData>(
 
       // Handle old string format (backwards compatibility)
       if (typeof filter === "string") {
-        const strValue = String(cellValue ?? "").toLowerCase();
+        const strValue = formatCellValue(cellValue).toLowerCase();
         if (!strValue.includes(filter.toLowerCase())) {
           return false;
         }
