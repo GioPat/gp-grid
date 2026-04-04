@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.6](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.5...gp-grid-v0.9.6) (2026-04-04)
+
+
+### 🐛 Bug Fixes
+
+* no data available display position ([bfef9ba](https://github.com/GioPat/gp-grid/commit/bfef9ba1018a9843ddea0244b64f082631ab5526))
+
+
+### ♻️ Refactoring
+
+* fix last issues in the core ([597d463](https://github.com/GioPat/gp-grid/commit/597d46374b41d133b45299a998a67ae4ad59350c))
+
 ## [0.9.5](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.4...gp-grid-v0.9.5) (2026-04-04)
 
 
