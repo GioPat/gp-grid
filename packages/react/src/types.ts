@@ -1,7 +1,6 @@
 // packages/react/src/types.ts
 
 import type {
-  Row,
   RowId,
   ColumnDefinition,
   DataSource,
@@ -18,7 +17,7 @@ import type {
 // =============================================================================
 
 /** Ref handle exposed by the Grid component */
-export interface GridRef<TData extends Row = Row> {
+export interface GridRef<TData = unknown> {
   /** Access to the underlying GridCore instance */
   core: GridCore<TData> | null;
 }
@@ -43,7 +42,7 @@ export type ReactHeaderRenderer = (
 // =============================================================================
 
 /** Grid component props */
-export interface GridProps<TData extends Row = Row> {
+export interface GridProps<TData = unknown> {
   /** Column definitions */
   columns: ColumnDefinition[];
   /** Data source for the grid */

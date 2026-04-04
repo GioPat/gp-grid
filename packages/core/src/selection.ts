@@ -6,7 +6,6 @@ import type {
   SelectionState,
   CellValue,
   ColumnDefinition,
-  Row,
 } from "./types";
 import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
 
@@ -16,7 +15,7 @@ export interface SelectionManagerOptions {
   getRowCount: () => number;
   getColumnCount: () => number;
   getCellValue: (row: number, col: number) => CellValue;
-  getRowData: (row: number) => Row | undefined;
+  getRowData: (row: number) => unknown | undefined;
   getColumn: (col: number) => ColumnDefinition | undefined;
 }
 

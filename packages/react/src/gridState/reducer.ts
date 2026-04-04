@@ -1,6 +1,5 @@
 // packages/react/src/gridState/reducer.ts
 
-import type { Row } from "@gp-grid/core";
 import { createInitialState, applyInstruction } from "@gp-grid/core";
 import type { GridState, GridAction } from "./types";
 
@@ -11,7 +10,7 @@ export { createInitialState } from "@gp-grid/core";
 // Reducer
 // =============================================================================
 
-export function gridReducer<TData = Row>(state: GridState<TData>, action: GridAction): GridState<TData> {
+export function gridReducer<TData = unknown>(state: GridState<TData>, action: GridAction): GridState<TData> {
   if (action.type === "RESET") {
     return createInitialState<TData>();
   }

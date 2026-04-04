@@ -2,15 +2,13 @@
 
 import type { GridInstruction } from "./types";
 import type { SlotData, HeaderData, GridState } from "./types/ui-state";
-import type { Row } from "./types";
-
 /**
  * Apply a single instruction to mutable slot/header Maps and return
  * other state changes as a partial object.
  *
  * Returns `null` when only the Maps were mutated (no primitive field changes).
  */
-export const applyInstruction = <TData = Row>(
+export const applyInstruction = <TData = unknown>(
   instruction: GridInstruction,
   slots: Map<string, SlotData<TData>>,
   headers: Map<number, HeaderData>,

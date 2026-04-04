@@ -1,6 +1,6 @@
 // @gp-grid/core/src/transaction-manager.ts
 
-import type { CellValue, Row, RowId } from "./../types";
+import type { CellValue, RowId } from "./../types";
 import type { IndexedDataStore } from "./../indexed-data-store";
 
 // =============================================================================
@@ -42,7 +42,7 @@ export interface TransactionResult {
   updated: number;
 }
 
-export interface TransactionManagerOptions<TData extends Row> {
+export interface TransactionManagerOptions<TData> {
   /** Debounce time in milliseconds. Default 50. Set to 0 for sync. */
   debounceMs: number;
   /** The indexed data store to apply transactions to */
@@ -59,7 +59,7 @@ export interface TransactionManagerOptions<TData extends Row> {
  * Manages a queue of data mutations with debounced batch processing.
  * Supports ADD, REMOVE, UPDATE_CELL, and UPDATE_ROW operations.
  */
-export class TransactionManager<TData extends Row = Row> {
+export class TransactionManager<TData = unknown> {
   private queue: Transaction<TData>[] = [];
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingPromise: {

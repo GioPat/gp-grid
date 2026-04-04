@@ -2,7 +2,6 @@
 // Grid instruction types (declarative commands)
 
 import type {
-  Row,
   CellValue,
   CellPosition,
   CellRange,
@@ -34,7 +33,7 @@ export interface AssignSlotInstruction {
   type: "ASSIGN_SLOT";
   slotId: string;
   rowIndex: number;
-  rowData: Row;
+  rowData: unknown;
 }
 
 /** Move slot instruction */

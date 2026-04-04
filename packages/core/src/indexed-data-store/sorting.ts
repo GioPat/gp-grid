@@ -1,6 +1,6 @@
 // packages/core/src/indexed-data-store/sorting.ts
 
-import type { CellValue, SortModel, Row } from "../types";
+import type { CellValue, SortModel } from "../types";
 import { formatCellValue } from "../utils/format-helpers";
 
 /**
@@ -50,8 +50,8 @@ export function compareValues(a: CellValue, b: CellValue): number {
 
   // Handle arrays - join as comma-separated string
   if (Array.isArray(a) || Array.isArray(b)) {
-    const strA = Array.isArray(a) ? a.join(", ") : String(a ?? "");
-    const strB = Array.isArray(b) ? b.join(", ") : String(b ?? "");
+    const strA = Array.isArray(a) ? a.join(", ") : formatCellValue(a);
+    const strB = Array.isArray(b) ? b.join(", ") : formatCellValue(b);
     return strA.localeCompare(strB);
   }
 
@@ -101,7 +101,7 @@ export function computeValueHash(value: CellValue): number {
 /**
  * Configuration for sort hash computation
  */
-export interface SortHashConfig<TData extends Row> {
+export interface SortHashConfig<TData> {
   sortModel: SortModel[];
   sortModelHash: string;
   getFieldValue: (row: TData, field: string) => CellValue;
@@ -111,7 +111,7 @@ export interface SortHashConfig<TData extends Row> {
  * Compute sort hashes for a row based on sort model.
  * Returns array of hashes, one for each sort column.
  */
-export function computeRowSortHashes<TData extends Row>(
+export function computeRowSortHashes<TData>(
   row: TData,
   config: SortHashConfig<TData>
 ): number[] {
@@ -152,7 +152,7 @@ export function compareRowsByHashes(
 /**
  * Compare two rows directly without hash cache.
  */
-export function compareRowsDirect<TData extends Row>(
+export function compareRowsDirect<TData>(
   rowA: TData,
   rowB: TData,
   sortModel: SortModel[],

@@ -21,7 +21,7 @@ export const calculateColumnPositions = (columns: ColumnDefinition[]): number[] 
  * Get total width from column positions
  */
 export const getTotalWidth = (columnPositions: number[]): number =>
-  columnPositions[columnPositions.length - 1] ?? 0;
+  columnPositions.at(-1) ?? 0;
 
 /**
  * Calculate scaled column positions when container is wider than total column widths.
@@ -73,7 +73,7 @@ export const findColumnAtX = (x: number, columnPositions: number[]): number => {
     }
   }
   // If beyond last column, return last column
-  if (x >= columnPositions[columnPositions.length - 1]!) {
+  if (x >= columnPositions.at(- 1)!) {
     return columnPositions.length - 2;
   }
   return 0;

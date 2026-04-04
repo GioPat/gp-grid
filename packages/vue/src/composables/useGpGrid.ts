@@ -15,7 +15,6 @@ import {
   buildCellClasses,
 } from "@gp-grid/core";
 import type {
-  Row,
   RowId,
   ColumnDefinition,
   ColumnFilterModel,
@@ -34,7 +33,7 @@ import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "../typ
 // Types
 // =============================================================================
 
-export interface UseGpGridOptions<TData extends Row = Row> {
+export interface UseGpGridOptions<TData = unknown> {
   columns: ColumnDefinition[];
   dataSource?: DataSource<TData>;
   rowData?: TData[];
@@ -57,7 +56,7 @@ export interface UseGpGridOptions<TData extends Row = Row> {
   headerRenderer?: VueHeaderRenderer;
 }
 
-export interface UseGpGridResult<TData extends Row = Row> {
+export interface UseGpGridResult<TData = unknown> {
   // Refs
   containerRef: Ref<HTMLDivElement | null>;
   coreRef: Ref<GridCore<TData> | null>;
@@ -110,7 +109,7 @@ export interface UseGpGridResult<TData extends Row = Row> {
  * Nuxt-friendly composable for using gp-grid.
  * Returns all the pieces needed to build a custom grid component.
  */
-export function useGpGrid<TData extends Row = Row>(
+export function useGpGrid<TData = unknown>(
   options: UseGpGridOptions<TData>,
 ): UseGpGridResult<TData> {
   // Inject styles on first use

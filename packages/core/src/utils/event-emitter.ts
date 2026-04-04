@@ -56,15 +56,8 @@ export const createInstructionEmitter = (): InstructionEmitter => {
  * Used by GridCore and SlotPoolManager for efficient updates
  */
 export const createBatchInstructionEmitter = (): BatchInstructionEmitter => {
-  let listeners: InstructionListener[] = [];
+  const base = createInstructionEmitter();
   let batchListeners: BatchInstructionListener[] = [];
-
-  const onInstruction = (listener: InstructionListener): (() => void) => {
-    listeners.push(listener);
-    return () => {
-      listeners = listeners.filter((l) => l !== listener);
-    };
-  };
 
   const onBatchInstruction = (listener: BatchInstructionListener): (() => void) => {
     batchListeners.push(listener);
@@ -74,10 +67,7 @@ export const createBatchInstructionEmitter = (): BatchInstructionEmitter => {
   };
 
   const emit = (instruction: GridInstruction): void => {
-    // Emit to individual listeners
-    for (const listener of listeners) {
-      listener(instruction);
-    }
+    base.emit(instruction);
     // Also emit as a single-item batch
     for (const listener of batchListeners) {
       listener([instruction]);
@@ -92,16 +82,14 @@ export const createBatchInstructionEmitter = (): BatchInstructionEmitter => {
     }
     // Also emit to individual listeners for backwards compatibility
     for (const instruction of instructions) {
-      for (const listener of listeners) {
-        listener(instruction);
-      }
+      base.emit(instruction);
     }
   };
 
   const clearListeners = (): void => {
-    listeners = [];
+    base.clearListeners();
     batchListeners = [];
   };
 
-  return { onInstruction, onBatchInstruction, emit, emitBatch, clearListeners };
+  return { onInstruction: base.onInstruction, onBatchInstruction, emit, emitBatch, clearListeners };
 };

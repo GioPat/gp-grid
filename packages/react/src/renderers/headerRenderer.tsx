@@ -1,10 +1,10 @@
 // packages/react/src/renderers/headerRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, Row, SortDirection, HeaderRendererParams } from "@gp-grid/core";
+import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { ReactHeaderRenderer } from "../types";
 
-export interface RenderHeaderOptions<TData extends Row> {
+export interface RenderHeaderOptions<TData> {
   column: ColumnDefinition;
   colIndex: number;
   sortDirection?: SortDirection;
@@ -21,7 +21,7 @@ export interface RenderHeaderOptions<TData extends Row> {
 /**
  * Render header content based on column configuration and renderer registries
  */
-export function renderHeader<TData extends Row>(
+export function renderHeader<TData>(
   options: RenderHeaderOptions<TData>,
 ): React.ReactNode {
   const {

@@ -1,11 +1,11 @@
 // packages/react/src/components/GridHeader.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, Row, SortDirection, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
+import type { GridCore, ColumnDefinition, SortDirection, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { ReactHeaderRenderer } from "../types";
 
-export interface GridHeaderProps<TData extends Row = Row> {
+export interface GridHeaderProps<TData = unknown> {
   headerHeight: number;
   scrollLeft: number;
   contentWidth: number;
@@ -24,7 +24,7 @@ export interface GridHeaderProps<TData extends Row = Row> {
   globalHeaderRenderer?: ReactHeaderRenderer;
 }
 
-export const GridHeader = <TData extends Row = Row>(
+export const GridHeader = <TData = unknown>(
   props: GridHeaderProps<TData>,
 ): React.ReactNode => {
   const {

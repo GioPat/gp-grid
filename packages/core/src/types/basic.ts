@@ -15,14 +15,11 @@ export type CellDataType =
 /** Cell value type */
 export type CellValue = string | number | boolean | Date | object | null;
 
-/** Row type */
-export type Row = unknown;
-
 /** Row ID type for transaction operations */
 export type RowId = string | number;
 
 /** Sort direction type */
-export type SortDirection = "asc" | "desc";
+export type SortDirection = "asc" | "desc" | null;
 
 /** Sort model type */
 export type SortModel = { colId: string; direction: SortDirection };
@@ -76,7 +73,7 @@ export interface FillHandleState {
 }
 
 /** Event emitted when a cell value is changed via editing or fill drag */
-export interface CellValueChangedEvent<TData = Row> {
+export interface CellValueChangedEvent<TData = unknown> {
   /** Stable row ID (from getRowId) */
   rowId: RowId;
   /** Column index */
@@ -98,7 +95,7 @@ export interface SlotState {
   /** Row index */
   rowIndex: number;
   /** Row data */
-  rowData: Row;
+  rowData: unknown;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
 }

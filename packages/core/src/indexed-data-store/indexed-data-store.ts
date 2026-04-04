@@ -2,7 +2,6 @@
 
 import type {
   CellValue,
-  Row,
   RowId,
   SortModel,
   FilterModel,
@@ -49,7 +48,7 @@ export interface RowSortCache {
  * - Filter state caching with distinct values
  * - Hash caching for fast sorted comparisons
  */
-export class IndexedDataStore<TData extends Row = Row> {
+export class IndexedDataStore<TData = unknown> {
   // Core storage
   private rows: TData[] = [];
   private readonly rowById: Map<RowId, number> = new Map(); // ID -> index in rows[]
@@ -638,7 +637,7 @@ export class IndexedDataStore<TData extends Row = Row> {
    */
   private getVisibleIndices(): number[] {
     const hasFilters =
-      Object.entries(this.filterModel).filter(([, v]) => v != null).length > 0;
+      Object.entries(this.filterModel).some(([, v]) => v != null);
 
     if (!hasFilters) {
       return this.sortedIndices;
@@ -670,34 +669,17 @@ export class IndexedDataStore<TData extends Row = Row> {
     row: TData,
     operation: "add" | "remove",
   ): void {
-    // For now, we track all fields
-    // Could be optimized to only track fields we care about
     if (typeof row !== "object" || row === null) return;
+    // Note: For "remove", we'd need reference counting to know if value is still used.
+    // For simplicity, we don't remove from distinct values on row removal.
+    if (operation !== "add") return;
 
     for (const [field, value] of Object.entries(
       row as Record<string, unknown>,
     )) {
-      if (value == null) continue;
-
-      if (operation === "add") {
-        let values = this.distinctValues.get(field);
-        if (!values) {
-          values = new Set();
-          this.distinctValues.set(field, values);
-        }
-        // Handle arrays by adding individual elements (e.g., tags column)
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (item != null) {
-              values.add(item as CellValue);
-            }
-          }
-        } else {
-          values.add(value as CellValue);
-        }
+      if (value != null) {
+        this.addToDistinctValues(field, value);
       }
-      // Note: For "remove", we'd need reference counting to know if value is still used
-      // For simplicity, we don't remove from distinct values on row removal
     }
   }
 
@@ -711,21 +693,28 @@ export class IndexedDataStore<TData extends Row = Row> {
   ): void {
     // Add new value (old value stays since other rows might use it)
     if (newValue != null) {
-      let values = this.distinctValues.get(field);
-      if (!values) {
-        values = new Set();
-        this.distinctValues.set(field, values);
-      }
-      // Handle arrays by adding individual elements (e.g., tags column)
-      if (Array.isArray(newValue)) {
-        for (const item of newValue) {
-          if (item != null) {
-            values.add(item as CellValue);
-          }
+      this.addToDistinctValues(field, newValue);
+    }
+  }
+
+  /**
+   * Add a value (scalar or array) to the distinct values set for a field.
+   * Creates the set if it doesn't exist. For arrays, adds each non-null item individually.
+   */
+  private addToDistinctValues(field: string, value: unknown): void {
+    let values = this.distinctValues.get(field);
+    if (!values) {
+      values = new Set();
+      this.distinctValues.set(field, values);
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item != null) {
+          values.add(item as CellValue);
         }
-      } else {
-        values.add(newValue);
       }
+    } else {
+      values.add(value as CellValue);
     }
   }
 }

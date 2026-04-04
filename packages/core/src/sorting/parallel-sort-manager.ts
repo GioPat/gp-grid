@@ -1,7 +1,6 @@
 // packages/core/src/sorting/parallel-sort-manager.ts
 // Orchestrates parallel sorting using worker pool and k-way merge
 
-import type { SortDirection } from '../types';
 import { WorkerPool } from './worker-pool';
 import { SORT_WORKER_CODE } from './sort-worker';
 import type {
@@ -52,9 +51,9 @@ export interface ParallelSortOptions {
  * Automatically decides between single-worker and parallel sorting based on data size.
  */
 export class ParallelSortManager {
-  private pool: WorkerPool;
-  private parallelThreshold: number;
-  private minChunkSize: number;
+  private readonly pool: WorkerPool;
+  private readonly parallelThreshold: number;
+  private readonly minChunkSize: number;
   private isTerminated = false;
 
   constructor(options: ParallelSortOptions = {}) {
@@ -70,7 +69,8 @@ export class ParallelSortManager {
    * Check if the manager is available for use.
    */
   isAvailable(): boolean {
-    return !this.isTerminated && this.pool.isAvailable();
+    if (this.isTerminated) return false;
+    return this.pool.isAvailable();
   }
 
   /**
@@ -87,7 +87,7 @@ export class ParallelSortManager {
    */
   async sortIndices(
     values: number[],
-    direction: SortDirection
+    direction: "asc" | "desc"
   ): Promise<Uint32Array> {
     if (this.isTerminated) {
       throw new Error('ParallelSortManager has been terminated');
@@ -109,7 +109,7 @@ export class ParallelSortManager {
    */
   async sortStringHashes(
     hashChunks: Float64Array[],
-    direction: SortDirection,
+    direction: "asc" | "desc",
     originalStrings: string[]
   ): Promise<Uint32Array> {
     if (this.isTerminated) {
@@ -132,7 +132,7 @@ export class ParallelSortManager {
    */
   async sortMultiColumn(
     columns: number[][],
-    directions: SortDirection[]
+    directions: ("asc" | "desc")[]
   ): Promise<Uint32Array> {
     if (this.isTerminated) {
       throw new Error('ParallelSortManager has been terminated');
@@ -154,7 +154,7 @@ export class ParallelSortManager {
 
   private async sortIndicesSingle(
     values: number[],
-    direction: SortDirection
+    direction: "asc" | "desc"
   ): Promise<Uint32Array> {
     const valuesArray = new Float64Array(values);
     const request: SortIndicesRequest = {
@@ -174,7 +174,7 @@ export class ParallelSortManager {
 
   private async sortStringHashesSingle(
     hashChunks: Float64Array[],
-    direction: SortDirection,
+    direction: "asc" | "desc",
     originalStrings: string[]
   ): Promise<Uint32Array> {
     const request: SortStringHashesRequest = {
@@ -200,7 +200,7 @@ export class ParallelSortManager {
 
   private async sortMultiColumnSingle(
     columns: number[][],
-    directions: SortDirection[]
+    directions: ("asc" | "desc")[]
   ): Promise<Uint32Array> {
     const columnArrays = columns.map(col => new Float64Array(col));
     const directionArray = new Int8Array(directions.map(d => d === 'asc' ? 1 : -1));
@@ -227,7 +227,7 @@ export class ParallelSortManager {
 
   private async sortIndicesParallel(
     values: number[],
-    direction: SortDirection
+    direction: "asc" | "desc"
   ): Promise<Uint32Array> {
     const chunks = this.splitIntoChunks(values);
 
@@ -263,7 +263,7 @@ export class ParallelSortManager {
 
   private async sortStringHashesParallel(
     hashChunks: Float64Array[],
-    direction: SortDirection,
+    direction: "asc" | "desc",
     originalStrings: string[]
   ): Promise<Uint32Array> {
     const length = hashChunks[0]!.length;
@@ -339,7 +339,7 @@ export class ParallelSortManager {
 
   private async sortMultiColumnParallel(
     columns: number[][],
-    directions: SortDirection[]
+    directions: ("asc" | "desc")[]
   ): Promise<Uint32Array> {
     const length = columns[0]!.length;
     const chunkBoundaries = this.calculateChunkBoundaries(length);
@@ -436,7 +436,7 @@ export class ParallelSortManager {
    */
   private detectBoundaryCollisionsForStrings(
     chunks: SortedChunk[],
-    _direction: SortDirection
+    _direction: "asc" | "desc"
   ): number[] {
     if (chunks.length <= 1) return [];
 
@@ -487,7 +487,7 @@ export class ParallelSortManager {
     indices: Uint32Array,
     collisionRuns: Uint32Array,
     originalStrings: string[],
-    direction: SortDirection
+    direction: "asc" | "desc"
   ): void {
     const mult = direction === 'asc' ? 1 : -1;
 

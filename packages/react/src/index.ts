@@ -17,7 +17,6 @@ export type {
   // Basic types
   CellDataType,
   CellValue,
-  Row,
   SortDirection,
   SortModel,
   FilterModel,

@@ -10,7 +10,6 @@ import {
 } from "vue";
 import type {
   GridCore,
-  Row,
   CellPosition,
   CellRange,
   PointerEventData,
@@ -62,7 +61,7 @@ export interface UseInputHandlerResult {
 /**
  * Vue composable for handling all input interactions
  */
-export function useInputHandler<TData extends Row = Row>(
+export function useInputHandler<TData = unknown>(
   coreRef: ShallowRef<GridCore<TData> | null>,
   containerRef: Ref<HTMLDivElement | null>,
   columns: ComputedRef<ColumnDefinition[]>,

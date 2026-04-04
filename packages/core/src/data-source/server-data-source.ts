@@ -4,7 +4,6 @@ import type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
-  Row,
 } from "../types";
 
 // =============================================================================
@@ -19,7 +18,7 @@ export type ServerFetchFunction<TData> = (
  * Creates a server-side data source that delegates all operations to the server.
  * The fetch function receives sort/filter/pagination params to pass to the API.
  */
-export function createServerDataSource<TData extends Row = Row>(
+export function createServerDataSource<TData = unknown>(
   fetchFn: ServerFetchFunction<TData>,
 ): DataSource<TData> {
   return {

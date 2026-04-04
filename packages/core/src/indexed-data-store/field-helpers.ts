@@ -1,13 +1,13 @@
 // packages/core/src/indexed-data-store/field-helpers.ts
 
-import type { CellValue, Row } from "../types";
+import type { CellValue } from "../types";
 
 /**
  * Default field value accessor supporting dot notation.
  * @example
  * getFieldValue({ user: { name: "John" } }, "user.name") // "John"
  */
-export function getFieldValue<TData extends Row>(
+export function getFieldValue<TData>(
   row: TData,
   field: string
 ): CellValue {
@@ -32,7 +32,7 @@ export function getFieldValue<TData extends Row>(
  * setFieldValue(obj, "user.name", "John");
  * // obj is now { user: { name: "John" } }
  */
-export function setFieldValue<TData extends Row>(
+export function setFieldValue<TData>(
   row: TData,
   field: string,
   value: CellValue

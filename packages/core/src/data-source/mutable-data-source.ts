@@ -4,7 +4,6 @@ import type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
-  Row,
   RowId,
   CellValue,
 } from "../types";
@@ -38,7 +37,7 @@ export type DataChangeListener = (result: TransactionResult) => void;
  * Data source with mutation capabilities.
  * Extends DataSource with add, remove, and update operations.
  */
-export interface MutableDataSource<TData = Row> extends DataSource<TData> {
+export interface MutableDataSource<TData = unknown> extends DataSource<TData> {
   /** Add rows to the data source. Queued and processed after debounce. */
   addRows(rows: TData[]): void;
   /** Remove rows by ID. Queued and processed after debounce. */
@@ -89,7 +88,7 @@ export interface MutableClientDataSourceOptions<TData> {
  * Uses IndexedDataStore for efficient incremental operations.
  * For large datasets, sorting is automatically offloaded to a Web Worker.
  */
-export function createMutableClientDataSource<TData extends Row = Row>(
+export function createMutableClientDataSource<TData = unknown>(
   data: TData[],
   options: MutableClientDataSourceOptions<TData>,
 ): MutableDataSource<TData> {

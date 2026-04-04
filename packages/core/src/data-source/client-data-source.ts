@@ -4,7 +4,6 @@ import type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
-  Row,
   CellValue,
 } from "../types";
 import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
@@ -58,7 +57,7 @@ export interface ClientDataSourceOptions<TData> {
  * Sorting and filtering are performed client-side.
  * For large datasets, sorting is automatically offloaded to a Web Worker.
  */
-export function createClientDataSource<TData extends Row = Row>(
+export function createClientDataSource<TData = unknown>(
   data: TData[],
   options: ClientDataSourceOptions<TData> = {},
 ): DataSource<TData> {
@@ -72,9 +71,8 @@ export function createClientDataSource<TData extends Row = Row>(
 
   // Create parallel sort manager only if useWorker is enabled
   // parallelSort: false disables parallel sorting, undefined or object enables it
-  const sortManager = useWorker
-    ? new ParallelSortManager(parallelSort === false ? { maxWorkers: 1 } : parallelSort)
-    : null;
+  const sortOptions = parallelSort === false ? { maxWorkers: 1 } : parallelSort;
+  const sortManager = useWorker ? new ParallelSortManager(sortOptions) : null;
 
   return {
     async fetch(
@@ -147,7 +145,7 @@ export function createClientDataSource<TData extends Row = Row>(
  * Convenience function to create a data source from an array.
  * This provides backwards compatibility with the old `rowData` prop.
  */
-export function createDataSourceFromArray<TData extends Row = Row>(
+export function createDataSourceFromArray<TData = unknown>(
   data: TData[],
 ): DataSource<TData> {
   return createClientDataSource(data);

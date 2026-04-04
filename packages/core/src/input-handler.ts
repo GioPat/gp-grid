@@ -2,7 +2,7 @@
 // Framework-agnostic input handler containing all input business logic
 
 import type { GridCore } from "./grid-core";
-import type { Row, CellPosition, CellRange } from "./types";
+import type { CellPosition, CellRange, SortDirection } from "./types";
 import type {
   PointerEventData,
   KeyEventData,
@@ -32,7 +32,7 @@ const DEFAULT_MIN_COLUMN_WIDTH = 50;
 // InputHandler Class
 // =============================================================================
 
-export class InputHandler<TData extends Row = Row> {
+export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
   private deps: InputHandlerDeps;
 
@@ -115,9 +115,8 @@ export class InputHandler<TData extends Row = Row> {
         currentX: this.rowDragCurrentX,
         currentY: this.rowDragCurrentY,
         dropTargetIndex: this.rowDragDropTargetIndex,
-        dropIndicatorY: this.rowDragDropTargetIndex !== null
-          ? this.core.getRowTranslateY(this.rowDragDropTargetIndex)
-          : 0,
+        dropIndicatorY: this.rowDragDropTargetIndex === null
+          ? 0 : this.core.getRowTranslateY(this.rowDragDropTargetIndex),
       }
       : null;
 
@@ -281,13 +280,7 @@ export class InputHandler<TData extends Row = Row> {
       .getSortModel()
       .find((s) => s.colId === colId)?.direction;
 
-    const nextDirection =
-      currentDirection === undefined || currentDirection === null
-        ? "asc"
-        : currentDirection === "asc"
-          ? "desc"
-          : null;
-
+    const nextDirection = this.cycleSortDirection(currentDirection);
     this.core.setSort(colId, nextDirection, addToExisting);
   }
 
@@ -696,6 +689,20 @@ export class InputHandler<TData extends Row = Row> {
         selection.moveFocus(isShift ? "left" : "right", false);
         return { preventDefault: true };
 
+      default:
+        return this.handleNonEditingKey(event.key, activeCell, editingCell, isCtrl);
+    }
+  }
+
+  private handleNonEditingKey(
+    key: string,
+    activeCell: CellPosition | null,
+    editingCell: { row: number; col: number } | null,
+    isCtrl: boolean,
+  ): KeyboardResult {
+    const { selection } = this.core;
+
+    switch (key) {
       case "a":
         if (isCtrl) {
           selection.selectAll();
@@ -725,7 +732,7 @@ export class InputHandler<TData extends Row = Row> {
         break;
 
       default:
-        if (activeCell && !editingCell && !isCtrl && event.key.length === 1) {
+        if (activeCell && !editingCell && !isCtrl && key.length === 1) {
           this.core.startEdit(activeCell.row, activeCell.col);
         }
         break;
@@ -747,6 +754,15 @@ export class InputHandler<TData extends Row = Row> {
   // ===========================================================================
   // Helper Methods
   // ===========================================================================
+
+  /**
+   * Cycle sort direction: undefined/null → asc → desc → null
+   */
+  private cycleSortDirection(current: SortDirection | null | undefined): SortDirection | null {
+    if (current == null) return "asc";
+    if (current === "asc") return "desc";
+    return null;
+  }
 
   /**
    * Calculate auto-scroll deltas based on mouse position

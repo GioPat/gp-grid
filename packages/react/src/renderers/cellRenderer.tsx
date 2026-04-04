@@ -2,14 +2,14 @@
 
 import React from "react";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
-import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
+import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
 import type { ReactCellRenderer } from "../types";
 
 export { getFieldValue as getCellValue } from "@gp-grid/core";
 
 export interface RenderCellOptions {
   column: ColumnDefinition;
-  rowData: Row;
+  rowData: unknown;
   rowIndex: number;
   colIndex: number;
   isActive: boolean;
