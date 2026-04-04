@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.9.5](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.4...gp-grid-v0.9.5) (2026-04-04)
+
+
+### 🐛 Bug Fixes
+
+* handle Object rendering, allow to define valueFormatter ([76c3115](https://github.com/GioPat/gp-grid/commit/76c31159d1f96244cac86ef999ac37cd42442c19))
+
+
+### ⚡Performance
+
+* optimize low cardinality column distinct values ([9561b36](https://github.com/GioPat/gp-grid/commit/9561b366caa4a7f2280364137ace625e2d2f010e))
+
+
+### ♻️ Refactoring
+
+* code improvements ([0b700ba](https://github.com/GioPat/gp-grid/commit/0b700ba8f5e0351ef149483e9dc9ee4fe64f0111))
+* reduce cognitive complexity of functions ([c238fdb](https://github.com/GioPat/gp-grid/commit/c238fdbceb8bce0cac83d2fbe6ed3b9b7e6299fb))
+* reduce cyclomatic complexity of moveRow ([56abe2b](https://github.com/GioPat/gp-grid/commit/56abe2b51344a1cb529e7a198e4965c00d638b9f))
+
 ## [0.9.4](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.3...gp-grid-v0.9.4) (2026-03-21)
 
 
