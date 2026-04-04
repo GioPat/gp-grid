@@ -269,16 +269,17 @@ const GridBodyInner = <TData = unknown>(
           )}
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="gp-grid-error">Error: {error}</div>
-        )}
-
-        {/* Empty state */}
-        {!isLoading && !error && totalRows === 0 && (
-          <div className="gp-grid-empty">No data to display</div>
-        )}
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="gp-grid-error">Error: {error}</div>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && !error && totalRows === 0 && (
+        <div className="gp-grid-empty">No data to display</div>
+      )}
     </div>
   );
 };
