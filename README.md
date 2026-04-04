@@ -10,11 +10,17 @@
     </a>
     <div align="center">
      Logo by <a href="https://github.com/camillo18tre">camillo18tre ❤️</a>
-      <h4><a href="https://www.gp-grid.io/">🎮 Demo</a> • <a href="https://www.gp-grid.io/docs">📖 Documentation</a>
+      <h4><a href="https://www.gp-grid.io/">🎮 Demo</a> • <a href="https://www.gp-grid.io/docs">📖 Documentation</a> • <a href="https://deepwiki.com/GioPat/gp-grid"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"/></a></h4>
     </div>
 </div>
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GioPat/gp-grid)
+<div align="center">
+
+### `@gp-grid/core` quality
+
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=giopat_gp-grid_core&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=giopat_gp-grid_core) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=giopat_gp-grid_core&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=giopat_gp-grid_core) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=giopat_gp-grid_core&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=giopat_gp-grid_core) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=giopat_gp-grid_core&metric=coverage)](https://sonarcloud.io/summary/new_code?id=giopat_gp-grid_core) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=giopat_gp-grid_core&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=giopat_gp-grid_core)
+
+</div>
 
 A high-performance, TypeScript-first data grid library designed to handle massive datasets (millions of rows) with ease. Built with a modular architecture that separates core logic from framework implementations.
 
@@ -121,24 +127,4 @@ Keeping this library requires effort and passion, I'm a full time engineer emplo
 
 If you think this project helped you achieve your goals, it's hopefully worth a beer! 🍻
 
-<div align="center">
-
-### Paypal
-
-[![Paypal QR Code](./public/images/donazione_paypal.png "Paypal QR Code donation")](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)
-
-[https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY](https://www.paypal.com/donate/?hosted_button_id=XCNMG6BR4ZMLY)
-
-### Bitcoin
-
-[![Bitcoin QR Donation](./public/images/bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m.png "Bitcoin QR Donation")](bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m)
-
-bitcoin:bc1qcukwmzver59eyqq442xyzscmxavqjt568kkc9m
-
-### Lightning Network
-
-[![Lightning Network QR Donation](./public/images/lightning.png "Lightning Network QR Donation")](lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7)
-
-lnurl1dp68gurn8ghj7ampd3kx2ar0veekzar0wd5xjtnrdakj7tnhv4kxctttdehhwm30d3h82unvwqhhx6rpvanhjetdvfjhyvf4xs0xu5p7
-
-</div>
+[Support the project](https://www.gp-grid.io/support)
