@@ -22,9 +22,9 @@ describe("TransactionManager", () => {
 
   beforeEach(() => {
     processedResults = [];
-    store = new IndexedDataStore([...initialData], {
+    store = new IndexedDataStore({
       getRowId: (row) => row.id,
-    });
+    }, [...initialData]);
     manager = new TransactionManager({
       debounceMs: 0, // Sync mode for tests
       store,

@@ -44,21 +44,21 @@ interface SlotPoolState {
  * Handles slot creation, recycling, positioning, and destruction.
  */
 export class SlotPoolManager {
-  private state: SlotPoolState = {
+  private readonly state: SlotPoolState = {
     slots: new Map(),
     rowToSlot: new Map(),
     nextSlotId: 0,
   };
 
-  private options: SlotPoolManagerOptions;
-  private emitter = createBatchInstructionEmitter();
+  private readonly options: SlotPoolManagerOptions;
+  private readonly emitter = createBatchInstructionEmitter();
   private isDestroyed: boolean = false;
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
   onBatchInstruction = this.emitter.onBatchInstruction;
-  private emit = this.emitter.emit;
-  private emitBatch = this.emitter.emitBatch;
+  private readonly emit = this.emitter.emit;
+  private readonly emitBatch = this.emitter.emitBatch;
 
   constructor(options: SlotPoolManagerOptions) {
     this.options = options;
@@ -123,7 +123,34 @@ export class SlotPoolManager {
 
     const instructions: GridInstruction[] = [];
 
-    // Find slots that are no longer needed
+    const slotsToRecycle = this.partitionSlots(requiredRows);
+
+    let recycleIdx = 0;
+    for (const rowIndex of requiredRows) {
+      const rowData = this.options.getRowData(rowIndex);
+      if (rowData === undefined) continue;
+      const recycledSlotId = recycleIdx < slotsToRecycle.length
+        ? slotsToRecycle[recycleIdx++]
+        : undefined;
+      this.assignSlotToRow(rowIndex, rowData, recycledSlotId, instructions);
+    }
+
+    for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
+      const slotId = slotsToRecycle[i]!;
+      this.state.slots.delete(slotId);
+      instructions.push({ type: "DESTROY_SLOT", slotId });
+    }
+
+    this.updateSlotPositions(instructions);
+
+    this.emitBatch(instructions);
+  }
+
+  /**
+   * Partition existing slots into recyclable and still-needed.
+   * Mutates requiredRows: rows that already have a slot are removed.
+   */
+  private partitionSlots(requiredRows: Set<number>): string[] {
     const slotsToRecycle: string[] = [];
     for (const [slotId, slot] of this.state.slots) {
       if (!requiredRows.has(slot.rowIndex)) {
@@ -133,92 +160,57 @@ export class SlotPoolManager {
         requiredRows.delete(slot.rowIndex);
       }
     }
+    return slotsToRecycle;
+  }
 
-    // Assign recycled slots to new rows
-    const rowsNeedingSlots = Array.from(requiredRows);
-    let recycleIdx = 0;
-    for (let i = 0; i < rowsNeedingSlots.length; i++) {
-      const rowIndex = rowsNeedingSlots[i]!;
-      const rowData = this.options.getRowData(rowIndex);
+  /**
+   * Assign a row to a recycled or newly created slot.
+   */
+  private assignSlotToRow(
+    rowIndex: number,
+    rowData: Row,
+    recycledSlotId: string | undefined,
+    instructions: GridInstruction[],
+  ): void {
+    let slotId: string;
 
-      // Skip rows with no data in the cache
-      if (rowData === undefined) continue;
-
-      if (recycleIdx < slotsToRecycle.length) {
-        // Recycle existing slot
-        const slotId = slotsToRecycle[recycleIdx]!;
-        recycleIdx++;
-        const slot = this.state.slots.get(slotId)!;
-        const translateY = this.getRowTranslateY(rowIndex);
-
-        slot.rowIndex = rowIndex;
-        slot.rowData = rowData;
-        slot.translateY = translateY;
-
-        this.state.rowToSlot.set(rowIndex, slotId);
-
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData,
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
-      } else {
-        // Create new slot
-        const slotId = `slot-${this.state.nextSlotId++}`;
-        const translateY = this.getRowTranslateY(rowIndex);
-
-        const newSlot: SlotState = {
-          slotId,
-          rowIndex,
-          rowData,
-          translateY,
-        };
-
-        this.state.slots.set(slotId, newSlot);
-        this.state.rowToSlot.set(rowIndex, slotId);
-
-        instructions.push({ type: "CREATE_SLOT", slotId });
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData,
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
-      }
+    if (recycledSlotId !== undefined) {
+      slotId = recycledSlotId;
+      const slot = this.state.slots.get(slotId)!;
+      slot.rowIndex = rowIndex;
+      slot.rowData = rowData;
+      slot.translateY = this.getRowTranslateY(rowIndex);
+    } else {
+      slotId = `slot-${this.state.nextSlotId++}`;
+      this.state.slots.set(slotId, {
+        slotId,
+        rowIndex,
+        rowData,
+        translateY: this.getRowTranslateY(rowIndex),
+      });
+      instructions.push({ type: "CREATE_SLOT", slotId });
     }
 
-    // Destroy excess recycled slots (those not reused)
-    for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
-      const slotId = slotsToRecycle[i]!;
-      this.state.slots.delete(slotId);
-      instructions.push({ type: "DESTROY_SLOT", slotId });
-    }
+    this.state.rowToSlot.set(rowIndex, slotId);
+    instructions.push({ type: "ASSIGN_SLOT", slotId, rowIndex, rowData });
+    instructions.push({
+      type: "MOVE_SLOT",
+      slotId,
+      translateY: this.getRowTranslateY(rowIndex),
+    });
+  }
 
-    // Update positions of existing slots that haven't moved
+  /**
+   * Push MOVE_SLOT instructions for slots whose position has drifted.
+   */
+  private updateSlotPositions(instructions: GridInstruction[]): void {
     for (const [slotId, slot] of this.state.slots) {
       const expectedY = this.getRowTranslateY(slot.rowIndex);
       if (slot.translateY !== expectedY) {
         slot.translateY = expectedY;
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY: expectedY,
-        });
+        instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY });
       }
     }
-
-    this.emitBatch(instructions);
   }
 
   /**

@@ -59,9 +59,9 @@ export class GridCore<TData extends Row = Row> {
   private viewportHeight: number = 600;
 
   // Data state
-  private currentPageIndex: number = 0;
+  private readonly currentPageIndex: number = 0;
   // Fetch all rows in a single page for client-side data sources
-  private pageSize: number = Number.MAX_SAFE_INTEGER;
+  private readonly pageSize: number = Number.MAX_SAFE_INTEGER;
   private cachedRows: Map<number, TData> = new Map();
   private totalRows: number = 0;
 

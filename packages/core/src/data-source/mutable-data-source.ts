@@ -103,10 +103,10 @@ export function createMutableClientDataSource<TData extends Row = Row>(
   } = options;
 
   // Create the indexed data store
-  const store = new IndexedDataStore(data, {
+  const store = new IndexedDataStore({
     getRowId,
     getFieldValue: getFieldValue ?? defaultGetFieldValue,
-  });
+  }, data);
 
   // Subscribers for data change notifications
   const subscribers = new Set<DataChangeListener>();

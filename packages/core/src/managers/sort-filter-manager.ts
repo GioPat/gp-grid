@@ -33,8 +33,8 @@ export interface SortFilterManagerOptions<TData> {
  * Manages sorting and filtering state and operations.
  */
 export class SortFilterManager<TData = Record<string, unknown>> {
-  private options: SortFilterManagerOptions<TData>;
-  private emitter = createInstructionEmitter();
+  private readonly options: SortFilterManagerOptions<TData>;
+  private readonly emitter = createInstructionEmitter();
 
   // Sort & Filter state
   private sortModel: SortModel[] = [];
@@ -43,7 +43,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: SortFilterManagerOptions<TData>) {
     this.options = options;
@@ -190,28 +190,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     for (const row of cachedRows.values()) {
       if (++rowsScanned > maxScanRows) break;
       const value = getFieldValue(row, column.field);
-
-      if (Array.isArray(value)) {
-        // Sort array items with a simple lexicographic comparison for consistent
-        // key generation. Locale-aware sort here would call localeCompare for
-        // every row in potentially-large datasets (O(n) rows × O(k) comparisons)
-        // which is ~100x slower than basic string comparison.
-        const sortedArray = [...value].sort((a, b) => {
-          const sa = String(a);
-          const sb = String(b);
-          return sa < sb ? -1 : sa > sb ? 1 : 0;
-        });
-        const key = JSON.stringify(sortedArray);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, sortedArray);
-          if (valuesMap.size >= maxValues) break;
-        }
-      } else {
-        const key = JSON.stringify(value);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, value);
-          if (valuesMap.size >= maxValues) break;
-        }
+      const [key, normalized] = this.normalizeDistinctValue(value);
+      if (!valuesMap.has(key)) {
+        valuesMap.set(key, normalized);
+        if (valuesMap.size >= maxValues) break;
       }
     }
 
@@ -227,6 +209,22 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     });
 
     return results;
+  }
+
+  /**
+   * Normalize a cell value into a dedup key and display value.
+   * Arrays are sorted lexicographically so different orderings produce the same key.
+   */
+  private normalizeDistinctValue(value: CellValue): [string, CellValue] {
+    if (Array.isArray(value)) {
+      const sorted = [...value].sort((a, b) => {
+        const sa = String(a);
+        const sb = String(b);
+        return sa < sb ? -1 : sa > sb ? 1 : 0;
+      });
+      return [JSON.stringify(sorted), sorted];
+    }
+    return [JSON.stringify(value), value];
   }
 
   // ===========================================================================

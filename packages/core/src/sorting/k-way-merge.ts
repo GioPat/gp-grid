@@ -223,6 +223,25 @@ class MultiColumnMinHeap {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Extract the comparison values for all sort columns at a given position in a chunk.
+ */
+const getColumnValuesAt = (
+  chunk: MultiColumnSortedChunk,
+  position: number,
+  numColumns: number,
+): number[] => {
+  const values: number[] = [];
+  for (let c = 0; c < numColumns; c++) {
+    values.push(chunk.columns[c]![position]!);
+  }
+  return values;
+};
+
+// =============================================================================
 // K-Way Merge Functions
 // =============================================================================
 
@@ -339,15 +358,10 @@ export function kWayMergeMultiColumn(
     const chunk = chunks[i]!;
     if (chunk.indices.length > 0) {
       const localIndex = chunk.indices[0]!;
-      const values: number[] = [];
-      for (let c = 0; c < numColumns; c++) {
-        values.push(chunk.columns[c]![0]!);
-      }
-
       heap.push({
         chunkIndex: i,
         positionInChunk: 0,
-        values,
+        values: getColumnValuesAt(chunk, 0, numColumns),
         globalIndex: localIndex + chunk.offset,
       });
     }
@@ -364,15 +378,10 @@ export function kWayMergeMultiColumn(
 
     if (nextPosition < chunk.indices.length) {
       const localIndex = chunk.indices[nextPosition]!;
-      const values: number[] = [];
-      for (let c = 0; c < numColumns; c++) {
-        values.push(chunk.columns[c]![nextPosition]!);
-      }
-
       heap.push({
         chunkIndex: entry.chunkIndex,
         positionInChunk: nextPosition,
-        values,
+        values: getColumnValuesAt(chunk, nextPosition, numColumns),
         globalIndex: localIndex + chunk.offset,
       });
     }

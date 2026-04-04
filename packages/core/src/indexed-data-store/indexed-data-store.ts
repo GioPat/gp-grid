@@ -18,7 +18,7 @@ import {
 import { rowPassesFilter } from "../filtering";
 
 // Re-export RowId for convenience
-export type { RowId };
+export type { RowId } from "../types";
 
 // =============================================================================
 // Types
@@ -52,7 +52,7 @@ export interface RowSortCache {
 export class IndexedDataStore<TData extends Row = Row> {
   // Core storage
   private rows: TData[] = [];
-  private rowById: Map<RowId, number> = new Map(); // ID -> index in rows[]
+  private readonly rowById: Map<RowId, number> = new Map(); // ID -> index in rows[]
 
   // Sort state
   private sortedIndices: number[] = []; // Indices into rows[] in sorted order
@@ -62,17 +62,17 @@ export class IndexedDataStore<TData extends Row = Row> {
   // Filter state
   private filterModel: FilterModel = {};
   private filteredIndices: Set<number> = new Set(); // Indices that pass filter
-  private distinctValues: Map<string, Set<CellValue>> = new Map(); // field -> unique values
+  private readonly distinctValues: Map<string, Set<CellValue>> = new Map(); // field -> unique values
 
   // Hash cache for sorted comparisons
   private rowSortCache: Map<number, RowSortCache> = new Map();
 
   // Options
-  private options: Required<IndexedDataStoreOptions<TData>>;
+  private readonly options: Required<IndexedDataStoreOptions<TData>>;
 
   constructor(
-    initialData: TData[] = [],
     options: IndexedDataStoreOptions<TData>,
+    initialData: TData[] = [],
   ) {
     this.options = {
       getRowId: options.getRowId,
@@ -169,7 +169,7 @@ export class IndexedDataStore<TData extends Row = Row> {
    */
   getRowById(id: RowId): TData | undefined {
     const index = this.rowById.get(id);
-    return index !== undefined ? this.rows[index] : undefined;
+    return index === undefined ? undefined : this.rows[index];
   }
 
   /**
@@ -610,11 +610,11 @@ export class IndexedDataStore<TData extends Row = Row> {
   private rebuildFilteredIndices(): void {
     this.filteredIndices.clear();
 
-    const filterEntries = Object.entries(this.filterModel).filter(
+    const hasFilters = Object.entries(this.filterModel).some(
       ([, value]) => value != null,
     );
 
-    if (filterEntries.length === 0) {
+    if (!hasFilters) {
       // No filters, all rows visible
       return;
     }

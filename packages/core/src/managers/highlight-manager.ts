@@ -33,19 +33,19 @@ export interface HighlightManagerOptions {
  * Emits SET_HOVER_POSITION instructions when hover position changes.
  */
 export class HighlightManager<TData = Record<string, unknown>> {
-  private options: HighlightManagerOptions;
+  private readonly options: HighlightManagerOptions;
   private highlightingOptions: HighlightingOptions<TData>;
   private hoverPosition: CellPosition | null = null;
-  private emitter = createInstructionEmitter();
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   // Caches (cleared on state change: hover or selection)
-  private rowClassCache: Map<number, string[]> = new Map();
-  private columnClassCache: Map<number, string[]> = new Map();
-  private cellClassCache: Map<string, string[]> = new Map();
+  private readonly rowClassCache: Map<number, string[]> = new Map();
+  private readonly columnClassCache: Map<number, string[]> = new Map();
+  private readonly cellClassCache: Map<string, string[]> = new Map();
 
   constructor(
     options: HighlightManagerOptions,
@@ -123,9 +123,7 @@ export class HighlightManager<TData = Record<string, unknown>> {
    * Called when selection changes. Clears all caches.
    */
   onSelectionChange(): void {
-    this.rowClassCache.clear();
-    this.columnClassCache.clear();
-    this.cellClassCache.clear();
+    this.clearAllCaches();
   }
 
   // ===========================================================================

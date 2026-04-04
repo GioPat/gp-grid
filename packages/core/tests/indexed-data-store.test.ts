@@ -20,9 +20,9 @@ describe("IndexedDataStore", () => {
 
   beforeEach(() => {
     // Deep clone to avoid mutation between tests
-    store = new IndexedDataStore(createInitialData(), {
+    store = new IndexedDataStore({
       getRowId: (row) => row.id,
-    });
+    }, createInitialData());
   });
 
   describe("initialization", () => {
