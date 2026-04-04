@@ -41,16 +41,16 @@ export class GridCore<TData extends Row = Row> {
   // Configuration
   private columns: ColumnDefinition[];
   private dataSource: DataSource<TData>;
-  private rowHeight: number;
-  private headerHeight: number;
-  private overscan: number;
-  private sortingEnabled: boolean;
-  private getRowId?: (row: TData) => RowId;
-  private onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
-  private rowDragEntireRow: boolean;
-  private onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
-  private onColumnResized?: (colIndex: number, newWidth: number) => void;
-  private onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  private readonly rowHeight: number;
+  private readonly headerHeight: number;
+  private readonly overscan: number;
+  private readonly sortingEnabled: boolean;
+  private readonly getRowId?: (row: TData) => RowId;
+  private readonly onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  private readonly rowDragEntireRow: boolean;
+  private readonly onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  private readonly onColumnResized?: (colIndex: number, newWidth: number) => void;
+  private readonly onColumnMoved?: (fromIndex: number, toIndex: number) => void;
 
   // Viewport state
   private scrollTop: number = 0;
@@ -59,9 +59,9 @@ export class GridCore<TData extends Row = Row> {
   private viewportHeight: number = 600;
 
   // Data state
-  private currentPageIndex: number = 0;
+  private readonly currentPageIndex: number = 0;
   // Fetch all rows in a single page for client-side data sources
-  private pageSize: number = Number.MAX_SAFE_INTEGER;
+  private readonly pageSize: number = Number.MAX_SAFE_INTEGER;
   private cachedRows: Map<number, TData> = new Map();
   private totalRows: number = 0;
 
@@ -555,7 +555,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   private emitContentSize(): void {
-    const width = this.columnPositions[this.columnPositions.length - 1] ?? 0;
+    const width = this.columnPositions.at(this.columnPositions.length - 1) ?? 0;
 
     // Update scroll virtualization calculations
     this.scrollVirtualization.updateContentSize();
@@ -654,30 +654,7 @@ export class GridCore<TData extends Row = Row> {
     const ds = this.dataSource as { moveRow?: (from: number, to: number) => void };
     if (ds.moveRow) {
       ds.moveRow(sourceIndex, targetIndex);
-
-      // Update cachedRows in-place to match the data source reorder.
-      // The data source does: splice(from, 1) then splice(adjustedTo, 0, row)
-      const movedRow = this.cachedRows.get(sourceIndex);
-      if (movedRow !== undefined) {
-        if (sourceIndex < targetIndex) {
-          // Moving down: rows [source+1 .. target-1] shift up by one
-          const adjustedTarget = targetIndex - 1;
-          for (let i = sourceIndex; i < adjustedTarget; i++) {
-            const next = this.cachedRows.get(i + 1);
-            if (next !== undefined) this.cachedRows.set(i, next);
-            else this.cachedRows.delete(i);
-          }
-          this.cachedRows.set(adjustedTarget, movedRow);
-        } else {
-          // Moving up: rows [target .. source-1] shift down by one
-          for (let i = sourceIndex; i > targetIndex; i--) {
-            const prev = this.cachedRows.get(i - 1);
-            if (prev !== undefined) this.cachedRows.set(i, prev);
-            else this.cachedRows.delete(i);
-          }
-          this.cachedRows.set(targetIndex, movedRow);
-        }
-      }
+      this.reorderCachedRows(sourceIndex, targetIndex);
 
       // Only update the affected slots (no refetch needed)
       this.highlight?.clearAllCaches();
@@ -688,6 +665,27 @@ export class GridCore<TData extends Row = Row> {
       }
     }
     this.onRowDragEnd?.(sourceIndex, targetIndex);
+  }
+
+  /**
+   * Update cachedRows in-place to mirror the splice the data source performed.
+   * The data source does: splice(from, 1) then splice(adjustedTo, 0, row).
+   * Uses a unified loop with step direction instead of two separate branch loops.
+   */
+  private reorderCachedRows(sourceIndex: number, targetIndex: number): void {
+    const movedRow = this.cachedRows.get(sourceIndex);
+    if (movedRow === undefined) return;
+
+    const step = sourceIndex < targetIndex ? 1 : -1;
+    const placementIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+
+    for (let i = sourceIndex; i !== placementIndex; i += step) {
+      const neighbor = this.cachedRows.get(i + step);
+      if (neighbor !== undefined) this.cachedRows.set(i, neighbor);
+      else this.cachedRows.delete(i);
+    }
+
+    this.cachedRows.set(placementIndex, movedRow);
   }
 
   /**

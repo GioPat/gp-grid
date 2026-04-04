@@ -6,7 +6,7 @@ import type {
   FilterModel,
   ColumnFilterModel,
 } from "./../types";
-import { createInstructionEmitter, getFieldValue } from "./../utils";
+import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
 
 // =============================================================================
 // Types
@@ -33,8 +33,8 @@ export interface SortFilterManagerOptions<TData> {
  * Manages sorting and filtering state and operations.
  */
 export class SortFilterManager<TData = Record<string, unknown>> {
-  private options: SortFilterManagerOptions<TData>;
-  private emitter = createInstructionEmitter();
+  private readonly options: SortFilterManagerOptions<TData>;
+  private readonly emitter = createInstructionEmitter();
 
   // Sort & Filter state
   private sortModel: SortModel[] = [];
@@ -43,7 +43,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: SortFilterManagerOptions<TData>) {
     this.options = options;
@@ -170,11 +170,14 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * Get distinct values for a column (for filter dropdowns)
    * For array-type columns (like tags), each unique array combination is returned.
    * Arrays are sorted internally for consistent comparison.
-   * Limited to maxValues to avoid performance issues with large datasets.
+   * Limited to maxValues distinct results and maxScanRows rows scanned.
+   * The row scan cap prevents hangs on low-cardinality columns (e.g. a tags column
+   * with only ~100 distinct combinations in 1.5M rows would otherwise scan every row).
    */
   getDistinctValuesForColumn(
     colId: string,
     maxValues: number = 500,
+    maxScanRows: number = 100000,
   ): CellValue[] {
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
@@ -182,37 +185,23 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
     const cachedRows = this.options.getCachedRows();
     const valuesMap = new Map<string, CellValue>();
+    let rowsScanned = 0;
 
     for (const row of cachedRows.values()) {
+      if (++rowsScanned > maxScanRows) break;
       const value = getFieldValue(row, column.field);
-
-      if (Array.isArray(value)) {
-        // Sort array items internally for consistent comparison
-        const sortedArray = [...value].sort((a, b) =>
-          String(a).localeCompare(String(b), undefined, {
-            numeric: true,
-            sensitivity: "base",
-          }),
-        );
-        const key = JSON.stringify(sortedArray);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, sortedArray);
-          if (valuesMap.size >= maxValues) break;
-        }
-      } else {
-        const key = JSON.stringify(value);
-        if (!valuesMap.has(key)) {
-          valuesMap.set(key, value);
-          if (valuesMap.size >= maxValues) break;
-        }
+      const [key, normalized] = this.normalizeDistinctValue(value);
+      if (!valuesMap.has(key)) {
+        valuesMap.set(key, normalized);
+        if (valuesMap.size >= maxValues) break;
       }
     }
 
     // Sort the results
     const results = Array.from(valuesMap.values());
     results.sort((a, b) => {
-      const strA = Array.isArray(a) ? a.join(", ") : String(a ?? "");
-      const strB = Array.isArray(b) ? b.join(", ") : String(b ?? "");
+      const strA = formatCellValue(a);
+      const strB = formatCellValue(b);
       return strA.localeCompare(strB, undefined, {
         numeric: true,
         sensitivity: "base",
@@ -220,6 +209,22 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     });
 
     return results;
+  }
+
+  /**
+   * Normalize a cell value into a dedup key and display value.
+   * Arrays are sorted lexicographically so different orderings produce the same key.
+   */
+  private normalizeDistinctValue(value: CellValue): [string, CellValue] {
+    if (Array.isArray(value)) {
+      const sorted = [...value].sort((a, b) => {
+        const sa = String(a);
+        const sb = String(b);
+        return sa < sb ? -1 : sa > sb ? 1 : 0;
+      });
+      return [JSON.stringify(sorted), sorted];
+    }
+    return [JSON.stringify(value), value];
   }
 
   // ===========================================================================

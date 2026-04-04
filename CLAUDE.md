@@ -10,6 +10,8 @@ High cardinality Grid library for web pages with wrappers in the most common fra
 
 - Avoid using `any`
 - Prefer function definitions as constants
+- Avoid nested ternary operators and in general value human readability
+- Keep the cognitive complexity of function to a maximum of 15
 
 ## Architecture
 

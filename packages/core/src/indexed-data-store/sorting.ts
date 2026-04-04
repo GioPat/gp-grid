@@ -1,6 +1,7 @@
 // packages/core/src/indexed-data-store/sorting.ts
 
 import type { CellValue, SortModel, Row } from "../types";
+import { formatCellValue } from "../utils/format-helpers";
 
 /**
  * Convert a string to a sortable number using first 10 characters.
@@ -12,7 +13,7 @@ export function stringToSortableNumber(str: string): number {
   let hash = 0;
 
   for (let i = 0; i < len; i++) {
-    const code = s.charCodeAt(i);
+    const code = s.codePointAt(i) ?? 200;
     let mapped: number;
     if (code >= 97 && code <= 122) {
       // a-z
@@ -57,7 +58,7 @@ export function compareValues(a: CellValue, b: CellValue): number {
   // Try numeric comparison
   const aNum = Number(a);
   const bNum = Number(b);
-  if (!isNaN(aNum) && !isNaN(bNum)) {
+  if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
     return aNum - bNum;
   }
 
@@ -66,8 +67,8 @@ export function compareValues(a: CellValue, b: CellValue): number {
     return a.getTime() - b.getTime();
   }
 
-  // Fall back to string comparison
-  return String(a).localeCompare(String(b));
+  // Fall back to string comparison (handles plain objects via JSON.stringify)
+  return formatCellValue(a).localeCompare(formatCellValue(b));
 }
 
 /**
@@ -85,8 +86,16 @@ export function computeValueHash(value: CellValue): number {
     return stringToSortableNumber(value);
   }
 
+  if (Array.isArray(value)) {
+    return value.length === 0 ? Number.MAX_VALUE : stringToSortableNumber(value.join(", "));
+  }
+
+  if (typeof value === "object") {
+    return stringToSortableNumber(JSON.stringify(value));
+  }
+
   const num = Number(value);
-  return isNaN(num) ? 0 : num;
+  return Number.isNaN(num) ? 0 : num;
 }
 
 /**
@@ -180,7 +189,7 @@ export function stringToSortableHashes(str: string): number[] {
 
     for (let i = 0; i < 10; i++) {
       const charIndex = start + i;
-      const code = charIndex < s.length ? s.charCodeAt(charIndex) : 0;
+      const code = charIndex < s.length ? (s.codePointAt(charIndex) ?? 200) : 0;
       let mapped: number;
       if (code >= 97 && code <= 122) {
         mapped = code - 97;
@@ -217,8 +226,12 @@ export function toSortableNumber(val: CellValue): number {
     return stringToSortableNumber(val);
   }
 
+  if (typeof val === "object") {
+    return stringToSortableNumber(JSON.stringify(val));
+  }
+
   const num = Number(val);
-  return isNaN(num) ? 0 : num;
+  return Number.isNaN(num) ? 0 : num;
 }
 
 /**

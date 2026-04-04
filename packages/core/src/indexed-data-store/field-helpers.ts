@@ -49,6 +49,6 @@ export function setFieldValue<TData extends Row>(
   }
 
   if (current != null && typeof current === "object") {
-    (current as Record<string, unknown>)[parts[parts.length - 1]!] = value;
+    (current as Record<string, unknown>)[parts.at(-1)!] = value;
   }
 }

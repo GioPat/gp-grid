@@ -8,7 +8,7 @@ import type {
   ColumnDefinition,
   Row,
 } from "./types";
-import { createInstructionEmitter, normalizeRange } from "./utils";
+import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -31,12 +31,12 @@ export class SelectionManager {
     selectionMode: false,
   };
 
-  private options: SelectionManagerOptions;
-  private emitter = createInstructionEmitter();
+  private readonly options: SelectionManagerOptions;
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: SelectionManagerOptions) {
     this.options = options;
@@ -141,9 +141,7 @@ export class SelectionManager {
 
     if (extend) {
       // Extend selection (Shift+Arrow)
-      if (!this.state.anchor) {
-        this.state.anchor = { row, col };
-      }
+      this.state.anchor ??= { row, col };
 
       this.state.range = {
         startRow: this.state.anchor.row,
@@ -275,23 +273,11 @@ export class SelectionManager {
     // Convert to tab-separated values (Excel-compatible)
     const tsv = data
       .map((row) =>
-        row.map((cell) => (cell == null ? "" : String(cell))).join("\t")
+        row.map((cell) => formatCellValue(cell)).join("\t")
       )
       .join("\n");
 
-    try {
-      await navigator.clipboard.writeText(tsv);
-    } catch (err) {
-      // Fallback for older browsers
-      const textarea = document.createElement("textarea");
-      textarea.value = tsv;
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
+    await navigator.clipboard.writeText(tsv);
   }
 
   // ===========================================================================

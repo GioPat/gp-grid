@@ -67,7 +67,7 @@ export class TransactionManager<TData extends Row = Row> {
     reject: (error: Error) => void;
   } | null = null;
 
-  private options: TransactionManagerOptions<TData>;
+  private readonly options: TransactionManagerOptions<TData>;
 
   constructor(options: TransactionManagerOptions<TData>) {
     this.options = options;

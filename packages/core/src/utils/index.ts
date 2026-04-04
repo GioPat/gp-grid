@@ -37,6 +37,8 @@ export type {
 
 export { findSlotForRow, scrollCellIntoView } from "./scroll-helpers";
 
+export { formatCellValue } from "./format-helpers";
+
 export { calculateFillHandlePosition } from "./fill-helpers";
 export type {
   VisibleColumnInfo,

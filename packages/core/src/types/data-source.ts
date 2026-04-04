@@ -29,7 +29,10 @@ export interface DataSourceResponse<TData = Row> {
 
 /** Data source interface */
 export interface DataSource<TData = Row> {
+  /** Fetch data based on the request */
   fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
   /** Optional cleanup method to release resources */
   destroy?: () => void;
+  /** Move a row */
+  moveRow?: (fromIndex: number, toIndex: number) => void;
 }

@@ -1,33 +1,20 @@
-import { HighlightManager } from "./highlight-manager";
-import {
+export { HighlightManager } from "./highlight-manager";
+export {
   RowMutationManager,
   type RowMutationManagerOptions,
 } from "./row-mutation-manager";
-import {
+export {
   ScrollVirtualizationManager,
   type ScrollVirtualizationManagerOptions,
 } from "./scroll-virtualization-manager";
-import {
+export {
   SortFilterManager,
   type SortFilterManagerOptions,
 } from "./sort-filter-manager";
-import {
+export {
   TransactionManager,
   type Transaction,
   type TransactionResult,
   type TransactionManagerOptions,
 } from "./transaction-manager";
 
-export {
-  HighlightManager,
-  RowMutationManager,
-  ScrollVirtualizationManager,
-  SortFilterManager,
-  TransactionManager,
-  type SortFilterManagerOptions,
-  type RowMutationManagerOptions,
-  type ScrollVirtualizationManagerOptions,
-  type Transaction,
-  type TransactionResult,
-  type TransactionManagerOptions,
-};

@@ -21,12 +21,12 @@ export interface FillManagerOptions {
  */
 export class FillManager {
   private state: FillHandleState | null = null;
-  private options: FillManagerOptions;
-  private emitter = createInstructionEmitter();
+  private readonly options: FillManagerOptions;
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: FillManagerOptions) {
     this.options = options;
@@ -202,7 +202,7 @@ export class FillManager {
 
     // Check for numeric sequence
     const numbers = values.map((v) => (typeof v === "number" ? v : Number(v)));
-    if (numbers.every((n) => !isNaN(n))) {
+    if (numbers.every((n) => !Number.isNaN(n))) {
       // Check for arithmetic sequence
       const diffs: number[] = [];
       for (let i = 1; i < numbers.length; i++) {

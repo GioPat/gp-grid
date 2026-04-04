@@ -11,6 +11,7 @@ import type {
   FilterModel,
   Row,
 } from "../types";
+import { formatCellValue } from "../utils/format-helpers";
 
 // =============================================================================
 // Helper Functions
@@ -57,22 +58,23 @@ export function evaluateTextCondition(
 
     // Handle array values (e.g., tags column) - convert to sorted string for comparison
     if (Array.isArray(cellValue)) {
-      const sortedArray = [...cellValue].sort((a, b) =>
-        String(a).localeCompare(String(b), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
+      // Must use the same simple lexicographic sort as getDistinctValuesForColumn
+      // so that the generated key matches what was stored in condition.selectedValues.
+      const sortedArray = [...cellValue].sort((a, b) => {
+        const sa = String(a);
+        const sb = String(b);
+        return sa < sb ? -1 : sa > sb ? 1 : 0;
+      });
       const arrayStr = sortedArray.join(", ");
       return condition.selectedValues.has(arrayStr) || includesBlank;
     }
 
-    const cellStr = String(cellValue ?? "");
+    const cellStr = formatCellValue(cellValue);
     return condition.selectedValues.has(cellStr) || includesBlank;
   }
 
   // Handle operator-based conditions
-  const strValue = String(cellValue ?? "").toLowerCase();
+  const strValue = formatCellValue(cellValue).toLowerCase();
   const filterValue = String(condition.value ?? "").toLowerCase();
 
   switch (condition.operator) {
@@ -116,7 +118,7 @@ export function evaluateNumberCondition(
 
   const numValue =
     typeof cellValue === "number" ? cellValue : Number(cellValue);
-  if (isNaN(numValue)) return false;
+  if (Number.isNaN(numValue)) return false;
 
   const filterValue = condition.value ?? 0;
   const filterValueTo = condition.valueTo ?? 0;
@@ -160,7 +162,7 @@ export function evaluateDateCondition(
 
   const dateValue =
     cellValue instanceof Date ? cellValue : new Date(String(cellValue));
-  if (isNaN(dateValue.getTime())) return false;
+  if (Number.isNaN(dateValue.getTime())) return false;
 
   const filterDate =
     condition.value instanceof Date
@@ -315,7 +317,7 @@ export function applyFilters<TData>(
 
       // Handle old string format (backwards compatibility)
       if (typeof filter === "string") {
-        const strValue = String(cellValue ?? "").toLowerCase();
+        const strValue = formatCellValue(cellValue).toLowerCase();
         if (!strValue.includes(filter.toLowerCase())) {
           return false;
         }

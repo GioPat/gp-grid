@@ -41,10 +41,9 @@ export class WorkerPool {
 
   constructor(workerCode: string, options: WorkerPoolOptions = {}) {
     this.workerCode = workerCode;
-    this.maxWorkers =
-      options.maxWorkers ??
-      (typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4) ??
-      4;
+    const defaultConcurrency =
+      typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4;
+    this.maxWorkers = Math.max(1, options.maxWorkers ?? defaultConcurrency ?? 4);
 
     if (options.preWarm) {
       this.preWarmWorkers();
@@ -209,8 +208,10 @@ export class WorkerPool {
 
     // Otherwise, use round-robin on existing workers
     // (they can queue multiple requests)
+    // Safe: maxWorkers is clamped to >= 1 at construction, so workers is non-empty here
     const leastBusy = this.workers.reduce((min, w) =>
       w.pendingRequests.size < min.pendingRequests.size ? w : min,
+      this.workers[0]!,
     );
     return leastBusy;
   }

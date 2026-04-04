@@ -34,12 +34,12 @@ export interface RowMutationManagerOptions<TData> {
  * Manages row CRUD operations and cache management.
  */
 export class RowMutationManager<TData extends Row = Row> {
-  private options: RowMutationManagerOptions<TData>;
-  private emitter = createInstructionEmitter();
+  private readonly options: RowMutationManagerOptions<TData>;
+  private readonly emitter = createInstructionEmitter();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
-  private emit = this.emitter.emit;
+  private readonly emit = this.emitter.emit;
 
   constructor(options: RowMutationManagerOptions<TData>) {
     this.options = options;
