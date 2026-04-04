@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.7](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.6...gp-grid-v0.9.7) (2026-04-04)
+
+
+### 📝 Documentation
+
+* add sonarqube badges and remove support icons ([4da2030](https://github.com/GioPat/gp-grid/commit/4da2030292254ae6e979a90f2453771844dff9f1))
+
 ## [0.9.6](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.5...gp-grid-v0.9.6) (2026-04-04)
 
 
