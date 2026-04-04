@@ -68,18 +68,16 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
     const existingIndex = this.sortModel.findIndex((s) => s.colId === colId);
 
-    if (!addToExisting) {
-      this.sortModel = direction === null ? [] : [{ colId, direction }];
-    } else {
-      if (direction === null) {
-        if (existingIndex >= 0) {
-          this.sortModel.splice(existingIndex, 1);
-        }
+    if (addToExisting) {
+      if (direction === null && existingIndex >= 0) {
+        this.sortModel.splice(existingIndex, 1);
       } else if (existingIndex >= 0) {
         this.sortModel[existingIndex]!.direction = direction;
       } else {
         this.sortModel.push({ colId, direction });
       }
+    } else {
+      this.sortModel = direction === null ? [] : [{ colId, direction }];
     }
 
     await this.options.onSortFilterChange();
@@ -107,8 +105,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       filter === null ||
       (typeof filter === "string" && filter.trim() === "") ||
       (typeof filter === "object" &&
-        filter.conditions &&
-        filter.conditions.length === 0);
+        filter.conditions?.length === 0);
 
     if (isEmpty) {
       delete this.filterModel[colId];
@@ -220,7 +217,8 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       const sorted = [...value].sort((a, b) => {
         const sa = String(a);
         const sb = String(b);
-        return sa < sb ? -1 : sa > sb ? 1 : 0;
+        if (sa === sb) return 0;
+        return sa < sb ? -1 : 1;
       });
       return [JSON.stringify(sorted), sorted];
     }

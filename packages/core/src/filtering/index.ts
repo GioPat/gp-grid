@@ -9,7 +9,6 @@ import type {
   DateFilterCondition,
   ColumnFilterModel,
   FilterModel,
-  Row,
 } from "../types";
 import { formatCellValue } from "../utils/format-helpers";
 
@@ -63,7 +62,8 @@ export function evaluateTextCondition(
       const sortedArray = [...cellValue].sort((a, b) => {
         const sa = String(a);
         const sb = String(b);
-        return sa < sb ? -1 : sa > sb ? 1 : 0;
+        if (sa === sb) return 0;
+        return sa < sb ? -1 : 1;
       });
       const arrayStr = sortedArray.join(", ");
       return condition.selectedValues.has(arrayStr) || includesBlank;
@@ -161,7 +161,7 @@ export function evaluateDateCondition(
   if (isBlank) return false;
 
   const dateValue =
-    cellValue instanceof Date ? cellValue : new Date(String(cellValue));
+    cellValue instanceof Date ? cellValue : new Date(formatCellValue(cellValue));
   if (Number.isNaN(dateValue.getTime())) return false;
 
   const filterDate =
@@ -261,7 +261,7 @@ export function evaluateColumnFilter(
 /**
  * Check if a row passes all filters in a filter model.
  */
-export function rowPassesFilter<TData extends Row>(
+export function rowPassesFilter<TData>(
   row: TData,
   filterModel: FilterModel,
   getFieldValue: (row: TData, field: string) => CellValue,

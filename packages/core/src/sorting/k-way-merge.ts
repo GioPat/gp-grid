@@ -58,29 +58,27 @@ interface MultiColumnHeapEntry {
 }
 
 // =============================================================================
-// Min Heap Implementation
+// Binary Heap Implementation
 // =============================================================================
 
 /**
- * Binary min-heap for k-way merge.
+ * Generic binary min-heap.
  * Time complexity: O(log k) for push/pop where k is heap size.
  */
-class MinHeap {
-  private heap: HeapEntry[] = [];
-  private multiplier: number;
+class BinaryHeap<T> {
+  private heap: T[] = [];
+  private readonly compare: (a: T, b: T) => number;
 
-  constructor(direction: SortDirection) {
-    // For ascending, smaller values have priority (multiplier = 1)
-    // For descending, larger values have priority (multiplier = -1)
-    this.multiplier = direction === 'asc' ? 1 : -1;
+  constructor(compare: (a: T, b: T) => number) {
+    this.compare = compare;
   }
 
-  push(entry: HeapEntry): void {
+  push(entry: T): void {
     this.heap.push(entry);
     this.bubbleUp(this.heap.length - 1);
   }
 
-  pop(): HeapEntry | undefined {
+  pop(): T | undefined {
     if (this.heap.length === 0) return undefined;
 
     const result = this.heap[0];
@@ -128,91 +126,6 @@ class MinHeap {
       this.swap(index, smallest);
       index = smallest;
     }
-  }
-
-  private compare(a: HeapEntry, b: HeapEntry): number {
-    return (a.value - b.value) * this.multiplier;
-  }
-
-  private swap(i: number, j: number): void {
-    const temp = this.heap[i]!;
-    this.heap[i] = this.heap[j]!;
-    this.heap[j] = temp;
-  }
-}
-
-/**
- * Binary heap for multi-column k-way merge.
- */
-class MultiColumnMinHeap {
-  private heap: MultiColumnHeapEntry[] = [];
-  private directions: Int8Array;
-
-  constructor(directions: Int8Array) {
-    this.directions = directions;
-  }
-
-  push(entry: MultiColumnHeapEntry): void {
-    this.heap.push(entry);
-    this.bubbleUp(this.heap.length - 1);
-  }
-
-  pop(): MultiColumnHeapEntry | undefined {
-    if (this.heap.length === 0) return undefined;
-
-    const result = this.heap[0];
-    const last = this.heap.pop();
-
-    if (this.heap.length > 0 && last) {
-      this.heap[0] = last;
-      this.bubbleDown(0);
-    }
-
-    return result;
-  }
-
-  size(): number {
-    return this.heap.length;
-  }
-
-  private bubbleUp(index: number): void {
-    while (index > 0) {
-      const parentIndex = Math.floor((index - 1) / 2);
-      if (this.compare(this.heap[index]!, this.heap[parentIndex]!) >= 0) {
-        break;
-      }
-      this.swap(index, parentIndex);
-      index = parentIndex;
-    }
-  }
-
-  private bubbleDown(index: number): void {
-    const length = this.heap.length;
-    while (true) {
-      const leftChild = 2 * index + 1;
-      const rightChild = 2 * index + 2;
-      let smallest = index;
-
-      if (leftChild < length && this.compare(this.heap[leftChild]!, this.heap[smallest]!) < 0) {
-        smallest = leftChild;
-      }
-      if (rightChild < length && this.compare(this.heap[rightChild]!, this.heap[smallest]!) < 0) {
-        smallest = rightChild;
-      }
-
-      if (smallest === index) break;
-
-      this.swap(index, smallest);
-      index = smallest;
-    }
-  }
-
-  private compare(a: MultiColumnHeapEntry, b: MultiColumnHeapEntry): number {
-    for (let i = 0; i < this.directions.length; i++) {
-      const diff = (a.values[i]! - b.values[i]!) * this.directions[i]!;
-      if (diff !== 0) return diff;
-    }
-    return 0;
   }
 
   private swap(i: number, j: number): void {
@@ -278,7 +191,8 @@ export function kWayMerge(
   }
 
   const result = new Uint32Array(totalLength);
-  const heap = new MinHeap(direction);
+  const multiplier = direction === 'asc' ? 1 : -1;
+  const heap = new BinaryHeap<HeapEntry>((a, b) => (a.value - b.value) * multiplier);
 
   // Initialize heap with first element from each non-empty chunk
   for (let i = 0; i < chunks.length; i++) {
@@ -351,7 +265,13 @@ export function kWayMergeMultiColumn(
   }
 
   const result = new Uint32Array(totalLength);
-  const heap = new MultiColumnMinHeap(directions);
+  const heap = new BinaryHeap<MultiColumnHeapEntry>((a, b) => {
+    for (let i = 0; i < directions.length; i++) {
+      const diff = (a.values[i]! - b.values[i]!) * directions[i]!;
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  });
 
   // Initialize heap with first element from each non-empty chunk
   for (let i = 0; i < chunks.length; i++) {

@@ -3,7 +3,6 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import type {
   GridCore,
-  Row,
   CellPosition,
   CellRange,
   PointerEventData,
@@ -63,7 +62,7 @@ const AUTO_SCROLL_INTERVAL = 16; // ~60fps
 /**
  * Hook for managing all input handling using core's InputHandler
  */
-export function useInputHandler<TData extends Row>(
+export function useInputHandler<TData>(
   coreRef: React.RefObject<GridCore<TData> | null>,
   containerRef: React.RefObject<HTMLDivElement | null>,
   columns: { colId?: string; field: string }[],

@@ -32,8 +32,8 @@ interface WorkerState {
  * Workers are created lazily and reused across operations.
  */
 export class WorkerPool {
-  private workerCode: string;
-  private maxWorkers: number;
+  private readonly workerCode: string;
+  private readonly maxWorkers: number;
   private workers: WorkerState[] = [];
   private workerUrl: string | null = null;
   private nextRequestId = 0;
@@ -42,7 +42,7 @@ export class WorkerPool {
   constructor(workerCode: string, options: WorkerPoolOptions = {}) {
     this.workerCode = workerCode;
     const defaultConcurrency =
-      typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4;
+      typeof navigator === "undefined" ? 4 : navigator.hardwareConcurrency;
     this.maxWorkers = Math.max(1, options.maxWorkers ?? defaultConcurrency ?? 4);
 
     if (options.preWarm) {
@@ -84,7 +84,7 @@ export class WorkerPool {
     }
 
     if (typeof Worker === "undefined") {
-      throw new Error("Web Workers are not available in this environment");
+      throw new TypeError("Web Workers are not available in this environment");
     }
 
     const worker = this.getAvailableWorker();

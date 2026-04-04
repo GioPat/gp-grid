@@ -1,13 +1,13 @@
 // packages/react/src/renderers/editRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "@gp-grid/core";
+import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
 import type { ReactEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 
-export interface RenderEditCellOptions<TData extends Row> {
+export interface RenderEditCellOptions<TData> {
   column: ColumnDefinition;
-  rowData: Row;
+  rowData: unknown;
   rowIndex: number;
   colIndex: number;
   initialValue: CellValue;
@@ -19,7 +19,7 @@ export interface RenderEditCellOptions<TData extends Row> {
 /**
  * Render edit cell content based on column configuration and renderer registries
  */
-export function renderEditCell<TData extends Row>(
+export function renderEditCell<TData>(
   options: RenderEditCellOptions<TData>,
 ): React.ReactNode {
   const {

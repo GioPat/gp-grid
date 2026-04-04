@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { createMutableClientDataSource } from "@gp-grid/core";
-import type { Row, RowId, CellValue, MutableDataSource, ParallelSortOptions } from "@gp-grid/core";
+import type { RowId, CellValue, MutableDataSource, ParallelSortOptions } from "@gp-grid/core";
 
 export interface UseGridDataOptions<TData> {
   /** Function to extract a unique ID from each row. Required. */
@@ -51,7 +51,7 @@ export interface UseGridDataResult<TData> {
  * return <Grid dataSource={dataSource} columns={columns} rowHeight={36} />;
  * ```
  */
-export const useGridData = <TData extends Row = Row>(
+export const useGridData = <TData = unknown>(
   initialData: TData[],
   options: UseGridDataOptions<TData>,
 ): UseGridDataResult<TData> => {

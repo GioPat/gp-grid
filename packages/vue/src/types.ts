@@ -2,7 +2,6 @@
 
 import type { VNode, Component } from "vue";
 import type {
-  Row,
   RowId,
   ColumnDefinition,
   CellRendererParams,
@@ -19,14 +18,14 @@ import type {
 /**
  * Vue cell renderer - can return a VNode or a string
  */
-export type VueCellRenderer<TData extends Row = Row> = (
+export type VueCellRenderer<TData = unknown> = (
   params: CellRendererParams<TData>,
 ) => VNode | string | null;
 
 /**
  * Vue edit renderer - returns a VNode for the edit input
  */
-export type VueEditRenderer<TData extends Row = Row> = (
+export type VueEditRenderer<TData = unknown> = (
   params: EditRendererParams<TData>,
 ) => VNode | null;
 
@@ -41,7 +40,7 @@ export type VueHeaderRenderer = (
 // Component Props Types
 // =============================================================================
 
-export interface GpGridProps<TData extends Row = Row> {
+export interface GpGridProps<TData = unknown> {
   columns: ColumnDefinition[];
   dataSource?: DataSource<TData>;
   rowData?: TData[];

@@ -533,7 +533,7 @@ interface WorkerGlobalScopeMinimal {
 }
 declare const self: WorkerGlobalScopeMinimal;
 
-if (typeof self !== "undefined" && typeof self.onmessage !== "undefined") {
+if (self?.onmessage !== undefined) {
   self.onmessage = (e: MessageEvent<SortWorkerRequest>) => {
     const { type, id, data, sortModel } = e.data;
 

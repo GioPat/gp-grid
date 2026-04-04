@@ -1,6 +1,6 @@
 // packages/core/src/slot-pool.ts
 
-import type { SlotState, Row, GridInstruction } from "./types";
+import type { SlotState, GridInstruction } from "./types";
 import { createBatchInstructionEmitter } from "./utils";
 
 // =============================================================================
@@ -25,7 +25,7 @@ export interface SlotPoolManagerOptions {
   /** Get virtual content height */
   getVirtualContentHeight: () => number;
   /** Get row data by index */
-  getRowData: (rowIndex: number) => Row | undefined;
+  getRowData: (rowIndex: number) => unknown | undefined;
 }
 
 interface SlotPoolState {
@@ -153,11 +153,11 @@ export class SlotPoolManager {
   private partitionSlots(requiredRows: Set<number>): string[] {
     const slotsToRecycle: string[] = [];
     for (const [slotId, slot] of this.state.slots) {
-      if (!requiredRows.has(slot.rowIndex)) {
+      if (requiredRows.has(slot.rowIndex)) {
+        requiredRows.delete(slot.rowIndex);
+      } else {
         slotsToRecycle.push(slotId);
         this.state.rowToSlot.delete(slot.rowIndex);
-      } else {
-        requiredRows.delete(slot.rowIndex);
       }
     }
     return slotsToRecycle;
@@ -168,7 +168,7 @@ export class SlotPoolManager {
    */
   private assignSlotToRow(
     rowIndex: number,
-    rowData: Row,
+    rowData: unknown,
     recycledSlotId: string | undefined,
     instructions: GridInstruction[],
   ): void {
@@ -192,12 +192,10 @@ export class SlotPoolManager {
     }
 
     this.state.rowToSlot.set(rowIndex, slotId);
-    instructions.push({ type: "ASSIGN_SLOT", slotId, rowIndex, rowData });
-    instructions.push({
-      type: "MOVE_SLOT",
-      slotId,
-      translateY: this.getRowTranslateY(rowIndex),
-    });
+    instructions.push(
+      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData },
+      { type: "MOVE_SLOT", slotId, translateY: this.getRowTranslateY(rowIndex) },
+    );
   }
 
   /**
@@ -259,17 +257,10 @@ export class SlotPoolManager {
         slot.rowData = rowData;
         slot.translateY = translateY;
 
-        instructions.push({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex: slot.rowIndex,
-          rowData,
-        });
-        instructions.push({
-          type: "MOVE_SLOT",
-          slotId,
-          translateY,
-        });
+        instructions.push(
+          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData },
+          { type: "MOVE_SLOT", slotId, translateY },
+        );
       }
     }
 

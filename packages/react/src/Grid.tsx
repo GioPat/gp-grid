@@ -17,7 +17,7 @@ import {
   getTotalWidth,
   calculateFillHandlePosition,
 } from "@gp-grid/core";
-import type { Row, ColumnFilterModel, DataSource } from "@gp-grid/core";
+import type { ColumnFilterModel, DataSource } from "@gp-grid/core";
 import { FilterPopup, GridHeader, GridBody } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
@@ -37,7 +37,7 @@ export type {
  * @param props - Grid component props
  * @returns Grid React component
  */
-export function Grid<TData extends Row = Row>(
+export function Grid<TData = unknown>(
   props: GridProps<TData>,
 ): React.ReactNode {
   // Inject styles on first render (safe to call multiple times)

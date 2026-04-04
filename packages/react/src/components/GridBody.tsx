@@ -4,7 +4,6 @@ import React from "react";
 import type {
   GridCore,
   ColumnDefinition,
-  Row,
   CellPosition,
   CellRange,
   CellValue,
@@ -24,7 +23,7 @@ import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
-export interface GridBodyProps<TData extends Row = Row> {
+export interface GridBodyProps<TData = unknown> {
   rowHeight: number;
   totalHeaderHeight: number;
   contentWidth: number;
@@ -56,7 +55,7 @@ export interface GridBodyProps<TData extends Row = Row> {
   globalEditRenderer?: ReactEditRenderer;
 }
 
-const GridBodyInner = <TData extends Row = Row>(
+const GridBodyInner = <TData = unknown>(
   props: GridBodyProps<TData>,
   ref: React.ForwardedRef<HTMLDivElement>,
 ): React.ReactNode => {
@@ -270,20 +269,21 @@ const GridBodyInner = <TData extends Row = Row>(
           )}
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="gp-grid-error">Error: {error}</div>
-        )}
-
-        {/* Empty state */}
-        {!isLoading && !error && totalRows === 0 && (
-          <div className="gp-grid-empty">No data to display</div>
-        )}
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="gp-grid-error">Error: {error}</div>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && !error && totalRows === 0 && (
+        <div className="gp-grid-empty">No data to display</div>
+      )}
     </div>
   );
 };
 
-export const GridBody = React.forwardRef(GridBodyInner) as <TData extends Row = Row>(
+export const GridBody = React.forwardRef(GridBodyInner) as <TData = unknown>(
   props: GridBodyProps<TData> & { ref?: React.Ref<HTMLDivElement> },
 ) => React.ReactNode;

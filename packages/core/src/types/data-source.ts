@@ -1,7 +1,7 @@
 // packages/core/src/types/data-source.ts
 // Data source types
 
-import type { Row, SortModel } from "./basic";
+import type { SortModel } from "./basic";
 import type { FilterModel } from "./filters";
 
 /** Data source request */
@@ -20,7 +20,7 @@ export interface DataSourceRequest {
 }
 
 /** Data source response */
-export interface DataSourceResponse<TData = Row> {
+export interface DataSourceResponse<TData = unknown> {
   /** Rows */
   rows: TData[];
   /** Total rows */
@@ -28,7 +28,7 @@ export interface DataSourceResponse<TData = Row> {
 }
 
 /** Data source interface */
-export interface DataSource<TData = Row> {
+export interface DataSource<TData = unknown> {
   /** Fetch data based on the request */
   fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
   /** Optional cleanup method to release resources */

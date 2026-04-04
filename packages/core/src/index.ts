@@ -99,7 +99,6 @@ export type {
 export type {
   CellDataType,
   CellValue,
-  Row,
   RowId,
   SortDirection,
   SortModel,

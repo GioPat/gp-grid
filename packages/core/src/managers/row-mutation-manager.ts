@@ -1,6 +1,5 @@
 // packages/core/src/row-mutation-manager.ts
 
-import type { Row } from "./../types";
 import { createInstructionEmitter } from "./../utils";
 
 // =============================================================================
@@ -33,7 +32,7 @@ export interface RowMutationManagerOptions<TData> {
 /**
  * Manages row CRUD operations and cache management.
  */
-export class RowMutationManager<TData extends Row = Row> {
+export class RowMutationManager<TData = unknown> {
   private readonly options: RowMutationManagerOptions<TData>;
   private readonly emitter = createInstructionEmitter();
 

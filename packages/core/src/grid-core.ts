@@ -9,7 +9,6 @@ import type {
   CellValueChangedEvent,
   DataSource,
   DataSourceRequest,
-  Row,
   RowId,
   SortModel,
   SortDirection,
@@ -37,7 +36,7 @@ import {
 // GridCore
 // =============================================================================
 
-export class GridCore<TData extends Row = Row> {
+export class GridCore<TData = unknown> {
   // Configuration
   private columns: ColumnDefinition[];
   private dataSource: DataSource<TData>;
@@ -555,7 +554,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   private emitContentSize(): void {
-    const width = this.columnPositions.at(this.columnPositions.length - 1) ?? 0;
+    const width = this.columnPositions.at(- 1) ?? 0;
 
     // Update scroll virtualization calculations
     this.scrollVirtualization.updateContentSize();
@@ -676,16 +675,22 @@ export class GridCore<TData extends Row = Row> {
     const movedRow = this.cachedRows.get(sourceIndex);
     if (movedRow === undefined) return;
 
-    const step = sourceIndex < targetIndex ? 1 : -1;
-    const placementIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-
-    for (let i = sourceIndex; i !== placementIndex; i += step) {
-      const neighbor = this.cachedRows.get(i + step);
-      if (neighbor !== undefined) this.cachedRows.set(i, neighbor);
-      else this.cachedRows.delete(i);
+    if (sourceIndex < targetIndex) {
+      const placementIndex = targetIndex - 1;
+      for (let i = sourceIndex; i < placementIndex; i++) {
+        const neighbor = this.cachedRows.get(i + 1);
+        if (neighbor === undefined) this.cachedRows.delete(i);
+        else this.cachedRows.set(i, neighbor);
+      }
+      this.cachedRows.set(placementIndex, movedRow);
+    } else {
+      for (let i = sourceIndex; i > targetIndex; i--) {
+        const neighbor = this.cachedRows.get(i - 1);
+        if (neighbor === undefined) this.cachedRows.delete(i);
+        else this.cachedRows.set(i, neighbor);
+      }
+      this.cachedRows.set(targetIndex, movedRow);
     }
-
-    this.cachedRows.set(placementIndex, movedRow);
   }
 
   /**
@@ -720,7 +725,7 @@ export class GridCore<TData extends Row = Row> {
   }
 
   getTotalWidth(): number {
-    return this.columnPositions[this.columnPositions.length - 1] ?? 0;
+    return this.columnPositions.at(- 1) ?? 0;
   }
 
   getTotalHeight(): number {

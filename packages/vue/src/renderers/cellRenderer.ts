@@ -2,7 +2,7 @@
 
 import { createTextVNode, type VNode } from "vue";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
-import type { ColumnDefinition, Row, CellRendererParams } from "@gp-grid/core";
+import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
 import { toVNode } from "./utils";
 
@@ -10,7 +10,7 @@ export { getFieldValue as getCellValue } from "@gp-grid/core";
 
 export interface RenderCellOptions {
   column: ColumnDefinition;
-  rowData: Row;
+  rowData: unknown;
   rowIndex: number;
   colIndex: number;
   isActive: boolean;

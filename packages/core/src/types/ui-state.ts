@@ -1,7 +1,6 @@
 // packages/core/src/types/ui-state.ts
 
 import type {
-  Row,
   ColumnDefinition,
   CellPosition,
   CellRange,
@@ -14,7 +13,7 @@ import type {
 // Slot & Header Data Types
 // =============================================================================
 
-export interface SlotData<TData = Row> {
+export interface SlotData<TData = unknown> {
   slotId: string;
   rowIndex: number;
   rowData: TData;
@@ -46,7 +45,7 @@ export interface InitialStateArgs {
   initialHeight?: number;
 }
 
-export const createInitialState = <TData = Row>(args?: InitialStateArgs): GridState<TData> => ({
+export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => ({
   slots: new Map(),
   activeCell: null,
   selectionRange: null,
@@ -71,7 +70,7 @@ export const createInitialState = <TData = Row>(args?: InitialStateArgs): GridSt
 // Grid State
 // =============================================================================
 
-export interface GridState<TData = Row> {
+export interface GridState<TData = unknown> {
   slots: Map<string, SlotData<TData>>;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;

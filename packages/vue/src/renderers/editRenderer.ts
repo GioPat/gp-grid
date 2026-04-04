@@ -1,14 +1,14 @@
 // packages/vue/src/renderers/editRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, Row, CellValue, EditRendererParams } from "@gp-grid/core";
+import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 import { toVNode } from "./utils";
 
 export interface RenderEditCellOptions {
   column: ColumnDefinition;
-  rowData: Row;
+  rowData: unknown;
   rowIndex: number;
   colIndex: number;
   initialValue: CellValue;

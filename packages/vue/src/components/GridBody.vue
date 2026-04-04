@@ -212,18 +212,19 @@ defineExpose({ bodyRef });
         />
       </div>
 
-      <!-- Error message -->
-      <div v-if="props.error" class="gp-grid-error">
-        Error: {{ props.error }}
-      </div>
+    </div>
 
-      <!-- Empty state -->
-      <div
-        v-if="!props.isLoading && !props.error && props.totalRows === 0"
-        class="gp-grid-empty"
-      >
-        No data to display
-      </div>
+    <!-- Error message -->
+    <div v-if="props.error" class="gp-grid-error">
+      Error: {{ props.error }}
+    </div>
+
+    <!-- Empty state -->
+    <div
+      v-if="!props.isLoading && !props.error && props.totalRows === 0"
+      class="gp-grid-empty"
+    >
+      No data to display
     </div>
   </div>
 </template>

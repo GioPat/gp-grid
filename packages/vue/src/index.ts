@@ -97,7 +97,6 @@ export type {
   // Basic types
   CellDataType,
   CellValue,
-  Row,
   RowId,
   SortDirection,
   SortModel,

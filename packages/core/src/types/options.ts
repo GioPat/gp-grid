@@ -1,13 +1,13 @@
 // packages/core/src/types/options.ts
 // Grid options types
 
-import type { Row, RowId, CellValueChangedEvent } from "./basic";
+import type { RowId, CellValueChangedEvent } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { DataSource } from "./data-source";
 import type { HighlightingOptions } from "./highlighting";
 
 /** Grid core options */
-export interface GridCoreOptions<TData = Row> {
+export interface GridCoreOptions<TData = unknown> {
   /** Column definitions */
   columns: ColumnDefinition[];
   /** Data source */

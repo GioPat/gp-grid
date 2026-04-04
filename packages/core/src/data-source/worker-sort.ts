@@ -1,6 +1,6 @@
 // packages/core/src/data-source/worker-sort.ts
 
-import type { CellValue, Row, SortModel } from "../types";
+import type { CellValue, SortModel } from "../types";
 import type { ParallelSortManager } from "../sorting";
 import {
   toSortableNumber,
@@ -33,7 +33,7 @@ interface MultiColumnSortData {
  * Detects whether a column contains string/array values by sampling
  * the first non-null value.
  */
-export const detectColumnType = <TData extends Row>(
+export const detectColumnType = <TData>(
   data: TData[],
   colId: string,
   getFieldValue: FieldAccessor<TData>,
@@ -55,7 +55,7 @@ export const detectColumnType = <TData extends Row>(
 // Sort Data Builders
 // =============================================================================
 
-const buildStringHashData = <TData extends Row>(
+const buildStringHashData = <TData>(
   data: TData[],
   colId: string,
   getFieldValue: FieldAccessor<TData>,
@@ -83,14 +83,14 @@ const buildStringHashData = <TData extends Row>(
   return { originalStrings, hashChunkArrays };
 };
 
-const buildNumericSortData = <TData extends Row>(
+const buildNumericSortData = <TData>(
   data: TData[],
   colId: string,
   getFieldValue: FieldAccessor<TData>,
 ): number[] =>
   data.map((row) => toSortableNumber(getFieldValue(row, colId)));
 
-const buildMultiColumnSortData = <TData extends Row>(
+const buildMultiColumnSortData = <TData>(
   data: TData[],
   sortModel: SortModel[],
   getFieldValue: FieldAccessor<TData>,
@@ -102,7 +102,7 @@ const buildMultiColumnSortData = <TData extends Row>(
     columnValues.push(
       data.map((row) => toSortableNumber(getFieldValue(row, colId))),
     );
-    directions.push(direction);
+    directions.push(direction ?? "asc");
   }
 
   return { columnValues, directions };
@@ -127,13 +127,14 @@ export const reorderByIndices = <TData>(
 // Worker Sort Orchestration
 // =============================================================================
 
-const performSingleColumnWorkerSort = async <TData extends Row>(
+const performSingleColumnWorkerSort = async <TData>(
   data: TData[],
   sort: SortModel,
   sortManager: ParallelSortManager,
   getFieldValue: FieldAccessor<TData>,
 ): Promise<Uint32Array> => {
-  const { colId, direction } = sort;
+  const { colId, direction: rawDirection } = sort;
+  const direction = rawDirection ?? "asc";
   const columnType = detectColumnType(data, colId, getFieldValue);
 
   if (columnType === "string") {
@@ -145,7 +146,7 @@ const performSingleColumnWorkerSort = async <TData extends Row>(
   return sortManager.sortIndices(values, direction);
 };
 
-const performMultiColumnWorkerSort = async <TData extends Row>(
+const performMultiColumnWorkerSort = async <TData>(
   data: TData[],
   sortModel: SortModel[],
   sortManager: ParallelSortManager,
@@ -160,7 +161,7 @@ const performMultiColumnWorkerSort = async <TData extends Row>(
  * Dispatches to single-column (string or numeric) or multi-column sort
  * based on the sort model.
  */
-export const performWorkerSort = async <TData extends Row>(
+export const performWorkerSort = async <TData>(
   data: TData[],
   sortModel: SortModel[],
   sortManager: ParallelSortManager,

@@ -1,11 +1,11 @@
 // packages/core/src/types/renderers.ts
 // Renderer parameter types
 
-import type { Row, CellValue, SortDirection } from "./basic";
+import type { CellValue, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
 
 /** Cell renderer params */
-export interface CellRendererParams<TData extends Row = Row> {
+export interface CellRendererParams<TData = unknown> {
   /** Cell value */
   value: CellValue;
   /** Row data */
@@ -25,7 +25,7 @@ export interface CellRendererParams<TData extends Row = Row> {
 }
 
 /** Edit renderer params */
-export interface EditRendererParams<TData extends Row = Row>
+export interface EditRendererParams<TData = unknown>
   extends CellRendererParams<TData> {
   /** Initial value */
   initialValue: CellValue;
