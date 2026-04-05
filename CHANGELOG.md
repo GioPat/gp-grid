@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.1...gp-grid-v0.10.2) (2026-04-05)
+
+
+### 🐛 Bug Fixes
+
+* manage self not defined when doing SSR ([a5dcb0e](https://github.com/GioPat/gp-grid/commit/a5dcb0e642724bdd0074f0f7285a4d117a7243ab))
+
 ## [0.10.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.0...gp-grid-v0.10.1) (2026-04-05)
 
 
