@@ -36,6 +36,7 @@ export const headerStyles: string = `
   transition: background-color 0.1s ease;
   top: 0;
   background: transparent;
+  touch-action: none;
 }
 
 .gp-grid-container .gp-grid-header-cell:hover {
@@ -121,6 +122,22 @@ export const headerStyles: string = `
   background-color: var(--gp-grid-primary-light);
 }
 
+/* Touch device: larger tap target for filter icon */
+@media (pointer: coarse) {
+  .gp-grid-filter-icon {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    margin-left: 0;
+  }
+
+  .gp-grid-filter-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
 /* Disabled header state during data loading */
 .gp-grid-header--loading .gp-grid-header-cell {
   pointer-events: none;
@@ -140,12 +157,21 @@ export const headerStyles: string = `
   height: 100%;
   cursor: col-resize;
   z-index: 10;
+  touch-action: none;
 }
 
 .gp-grid-header-resize-handle:hover,
 .gp-grid-header-resize-handle--active {
   background-color: var(--gp-grid-primary);
   opacity: 0.4;
+}
+
+/* Touch device: wider resize handle hit area */
+@media (pointer: coarse) {
+  .gp-grid-header-resize-handle {
+    width: 24px;
+    right: -12px;
+  }
 }
 
 .gp-grid-column-resize-line {

@@ -15,8 +15,8 @@ const props = defineProps<{
   columnWidths: number[];
   headers: Map<number, HeaderData>;
   sortingEnabled: boolean;
-  onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: MouseEvent) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: MouseEvent) => void;
+  onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
+  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
   coreRef: GridCore<Row> | null;
   outerContainerRef: HTMLDivElement | null;
   headerRenderers: Record<string, VueHeaderRenderer>;
@@ -49,7 +49,7 @@ const props = defineProps<{
           width: `${props.columnWidths[visibleIndex]}px`,
           height: `${props.headerHeight}px`,
         }"
-        @mousedown="(e: MouseEvent) => props.onHeaderMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, props.headerHeight, e)"
+        @pointerdown="(e: PointerEvent) => props.onHeaderMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, props.headerHeight, e)"
       >
         <component
           :is="renderHeader({
@@ -69,7 +69,7 @@ const props = defineProps<{
         <div
           v-if="column.resizable !== false"
           class="gp-grid-header-resize-handle"
-          @mousedown.stop="(e: MouseEvent) => props.onHeaderResizeMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, e)"
+          @pointerdown.stop="(e: PointerEvent) => props.onHeaderResizeMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, e)"
         />
       </div>
     </div>

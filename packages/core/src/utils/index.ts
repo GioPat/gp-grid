@@ -45,3 +45,6 @@ export type {
   CalculateFillHandlePositionParams,
   FillHandlePosition,
 } from "./fill-helpers";
+
+export { calculateFilterPopupPosition } from "./popup-position";
+export type { PopupPosition } from "./popup-position";

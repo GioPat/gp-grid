@@ -133,7 +133,7 @@ export function renderHeader(
         "span",
         {
           class: `gp-grid-filter-icon${hasFilter ? " active" : ""}`,
-          onMousedown: (e: MouseEvent) => {
+          onPointerdown: (e: PointerEvent) => {
             e.stopPropagation();
             e.preventDefault();
             params.onFilterClick();

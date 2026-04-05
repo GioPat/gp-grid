@@ -7,6 +7,7 @@ export const rowDragStyles: string = `
 
 .gp-grid-cell--row-drag-handle {
   cursor: grab;
+  touch-action: none;
 }
 
 .gp-grid-cell--row-drag-handle:active {

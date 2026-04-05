@@ -46,11 +46,11 @@ const props = defineProps<{
   onScroll: () => void;
   onWheel: (e: WheelEvent, dampening: number) => void;
   wheelDampening: number;
-  onCellMouseDown: (rowIndex: number, colIndex: number, e: MouseEvent) => void;
+  onCellMouseDown: (rowIndex: number, colIndex: number, e: PointerEvent) => void;
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   onCellMouseLeave: () => void;
-  onFillHandleMouseDown: (e: MouseEvent) => void;
+  onFillHandleMouseDown: (e: PointerEvent) => void;
   coreRef: GridCore<Row> | null;
   cellRenderers: Record<string, VueCellRenderer>;
   editRenderers: Record<string, VueEditRenderer>;
@@ -151,7 +151,7 @@ defineExpose({ bodyRef });
               width: `${props.columnWidths[visibleIndex]}px`,
               height: `${props.rowHeight}px`,
             }"
-            @mousedown="(e) => props.onCellMouseDown(slot.rowIndex, originalIndex, e)"
+            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, originalIndex, e)"
             @dblclick="() => props.onCellDoubleClick(slot.rowIndex, originalIndex)"
             @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, originalIndex)"
             @mouseleave="props.onCellMouseLeave"
@@ -198,7 +198,7 @@ defineExpose({ bodyRef });
             top: `${props.fillHandlePosition.top}px`,
             left: `${props.fillHandlePosition.left}px`,
           }"
-          @mousedown="props.onFillHandleMouseDown"
+          @pointerdown="props.onFillHandleMouseDown"
         />
 
         <!-- Row drop indicator -->

@@ -477,10 +477,10 @@ defineExpose({
 
   <!-- Filter Popup -->
     <FilterPopup
-      v-if="state.filterPopup?.isOpen && state.filterPopup.column && state.filterPopup.anchorRect"
+      v-if="state.filterPopup?.isOpen && state.filterPopup.column"
       :column="state.filterPopup.column"
       :col-index="state.filterPopup.colIndex"
-      :anchor-rect="state.filterPopup.anchorRect"
+      :container-ref="outerContainerRef"
       :distinct-values="state.filterPopup.distinctValues"
       :current-filter="state.filterPopup.currentFilter"
       @apply="handleFilterApply"
@@ -492,7 +492,7 @@ defineExpose({
       v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
       class="gp-grid-column-resize-line"
       :style="{
-        left: `${(columnPositions[visibleColumnsWithIndices.findIndex(v => v.originalIndex === dragState.columnResize!.colIndex)] ?? 0) + dragState.columnResize!.currentWidth}px`,
+        left: `${(columnPositions[visibleColumnsWithIndices.findIndex(v => v.originalIndex === dragState.columnResize!.colIndex)] ?? 0) + dragState.columnResize!.currentWidth - scrollLeft}px`,
       }"
     />
 
@@ -513,7 +513,7 @@ defineExpose({
         v-if="dragState.columnMove!.dropTargetIndex !== null"
         class="gp-grid-column-drop-indicator"
         :style="{
-          left: `${columnPositions[dragState.columnMove!.dropTargetIndex!] ?? 0}px`,
+          left: `${(columnPositions[dragState.columnMove!.dropTargetIndex!] ?? 0) - scrollLeft}px`,
           height: `${totalHeaderHeight}px`,
         }"
       />

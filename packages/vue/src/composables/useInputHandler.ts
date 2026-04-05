@@ -42,13 +42,13 @@ export interface UseInputHandlerResult {
   handleCellMouseDown: (
     rowIndex: number,
     colIndex: number,
-    e: MouseEvent,
+    e: PointerEvent,
   ) => void;
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
-  handleFillHandleMouseDown: (e: MouseEvent) => void;
+  handleFillHandleMouseDown: (e: PointerEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
-  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: MouseEvent) => void;
-  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: MouseEvent) => void;
+  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
+  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   dragState: Ref<DragState>;
@@ -96,6 +96,15 @@ export function useInputHandler<TData = unknown>(
 
   // Cleanup function for current global drag listeners (prevents listener leaks)
   let cleanupGlobalListeners: (() => void) | null = null;
+
+  // Pending row drag timer (touch long-press)
+  let rowDragTimer: ReturnType<typeof setTimeout> | null = null;
+  // Pending row drag capture info (for setPointerCapture on confirmation)
+  let rowDragCapture: { pointerId: number; target: Element } | null = null;
+  // Scroll-lock: saved container overflow so we can restore it after row drag ends
+  let savedContainerOverflow: string | null = null;
+  // Touchmove blocker — prevents in-flight iOS scroll gestures during row drag
+  const blockTouchMove = (e: TouchEvent): void => { e.preventDefault(); };
 
   // Auto-scroll helpers — onTick re-processes drag so drop target stays in sync as the grid scrolls
   const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef, () => {
@@ -151,8 +160,8 @@ export function useInputHandler<TData = unknown>(
     };
   }
 
-  // Convert mouse event to PointerEventData
-  function toPointerEventData(e: MouseEvent): PointerEventData {
+  // Convert pointer event to PointerEventData
+  function toPointerEventData(e: PointerEvent): PointerEventData {
     return {
       clientX: e.clientX,
       clientY: e.clientY,
@@ -160,6 +169,8 @@ export function useInputHandler<TData = unknown>(
       shiftKey: e.shiftKey,
       ctrlKey: e.ctrlKey,
       metaKey: e.metaKey,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
     };
   }
 
@@ -168,10 +179,13 @@ export function useInputHandler<TData = unknown>(
   // ===========================================================================
 
   function startGlobalDragListeners(): void {
-    // Clean up any stale listeners from a previous drag (e.g., missed mouseup)
+    // Clean up any stale listeners from a previous drag (e.g., missed pointerup)
     cleanupGlobalListeners?.();
 
-    const handleMouseMove = (e: MouseEvent): void => {
+    const handlePointerMove = (e: PointerEvent): void => {
+      // Prevent browser scroll/pan during any active drag
+      e.preventDefault();
+
       const core = coreRef.value;
       const bounds = getContainerBounds();
       if (!core?.input || !bounds) return;
@@ -191,16 +205,12 @@ export function useInputHandler<TData = unknown>(
       }
     };
 
-    const handleMouseUp = (): void => {
-      console.log('[gp-grid] handleMouseUp fired');
+    const handlePointerUp = (): void => {
       try {
         const core = coreRef.value;
         if (core?.input) {
           core.input.handleDragEnd();
-          console.log('[gp-grid] handleDragEnd completed');
         }
-      } catch (err) {
-        console.error('[gp-grid] handleDragEnd threw:', err);
       } finally {
         // Always reset drag state — even if handleDragEnd throws,
         // the ghost must disappear and listeners must be cleaned up.
@@ -208,23 +218,32 @@ export function useInputHandler<TData = unknown>(
         const newState = core?.input
           ? core.input.getDragState()
           : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, columnMove: null, rowDrag: null };
-        console.log('[gp-grid] resetting dragState, dragType:', newState.dragType);
         dragState.value = newState;
         lastMouseEvent = null;
         stopAutoScroll();
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        // Restore scroll locks after row drag ends
+        document.removeEventListener("touchmove", blockTouchMove);
+        if (savedContainerOverflow !== null && containerRef.value) {
+          containerRef.value.style.overflow = savedContainerOverflow;
+          savedContainerOverflow = null;
+        }
+        document.removeEventListener("pointermove", handlePointerMove);
+        document.removeEventListener("pointerup", handlePointerUp);
+        document.removeEventListener("pointercancel", handlePointerUp);
         cleanupGlobalListeners = null;
       }
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    // { passive: false } is required so that preventDefault() works in handlePointerMove
+    document.addEventListener("pointermove", handlePointerMove, { passive: false });
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", handlePointerUp);
 
     // Store cleanup so the next drag can remove stale listeners
     cleanupGlobalListeners = () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", handlePointerUp);
     };
   }
 
@@ -232,10 +251,19 @@ export function useInputHandler<TData = unknown>(
   // Event Handlers
   // ===========================================================================
 
+  function cancelPendingRowDrag(): void {
+    if (rowDragTimer !== null) {
+      clearTimeout(rowDragTimer);
+      rowDragTimer = null;
+      coreRef.value?.input?.cancelPendingRowDrag();
+    }
+    rowDragCapture = null;
+  }
+
   function handleCellMouseDown(
     rowIndex: number,
     colIndex: number,
-    e: MouseEvent,
+    e: PointerEvent,
   ): void {
     const core = coreRef.value;
     if (!core?.input) return;
@@ -256,6 +284,62 @@ export function useInputHandler<TData = unknown>(
     } else if (result.startDrag === "row-drag") {
       dragState.value = core.input.getDragState();
       startGlobalDragListeners();
+    } else if (result.startDrag === "row-drag-pending") {
+      // Touch long-press: wait 300ms before activating row drag.
+      cancelPendingRowDrag();
+
+      // Store capture info so we can setPointerCapture on confirmation
+      rowDragCapture = { pointerId: e.pointerId, target: (e.currentTarget ?? e.target) as Element };
+
+      const handlePendingMove = (): void => {
+        cancelPendingRowDrag();
+        document.removeEventListener("pointermove", handlePendingMove);
+        document.removeEventListener("pointerup", handlePendingUp);
+        document.removeEventListener("pointercancel", handlePendingUp);
+      };
+      const handlePendingUp = (): void => {
+        cancelPendingRowDrag();
+        document.removeEventListener("pointermove", handlePendingMove);
+        document.removeEventListener("pointerup", handlePendingUp);
+        document.removeEventListener("pointercancel", handlePendingUp);
+      };
+
+      document.addEventListener("pointermove", handlePendingMove, { once: true });
+      document.addEventListener("pointerup", handlePendingUp, { once: true });
+      document.addEventListener("pointercancel", handlePendingUp, { once: true });
+
+      rowDragTimer = setTimeout(() => {
+        rowDragTimer = null;
+        document.removeEventListener("pointermove", handlePendingMove);
+        document.removeEventListener("pointerup", handlePendingUp);
+        document.removeEventListener("pointercancel", handlePendingUp);
+
+        const capture = rowDragCapture;
+        rowDragCapture = null;
+
+        if (core.input.confirmPendingRowDrag()) {
+          // Lock both container and body so neither can momentum-scroll
+          // while the row drag is active
+          if (containerRef.value) {
+            savedContainerOverflow = containerRef.value.style.overflow;
+            containerRef.value.style.overflow = "hidden";
+          }
+          // Also block touchmove at document level — on iOS this stops
+          // any in-flight scroll gesture that started during the hold window
+          document.addEventListener("touchmove", blockTouchMove, { passive: false });
+          // Capture the pointer so the browser stops scrolling and routes
+          // all future pointer events through our drag handler
+          if (capture) {
+            try {
+              capture.target.setPointerCapture(capture.pointerId);
+            } catch (_) {
+              // Pointer may have already been released
+            }
+          }
+          dragState.value = core.input.getDragState();
+          startGlobalDragListeners();
+        }
+      }, 300);
     }
   }
 
@@ -265,7 +349,7 @@ export function useInputHandler<TData = unknown>(
     core.input.handleCellDoubleClick(rowIndex, colIndex);
   }
 
-  function handleFillHandleMouseDown(e: MouseEvent): void {
+  function handleFillHandleMouseDown(e: PointerEvent): void {
     const core = coreRef.value;
     if (!core?.input) return;
 
@@ -298,7 +382,7 @@ export function useInputHandler<TData = unknown>(
     colIndex: number,
     colWidth: number,
     colHeight: number,
-    e: MouseEvent,
+    e: PointerEvent,
   ): void {
     const core = coreRef.value;
     if (!core?.input) return;
@@ -321,7 +405,7 @@ export function useInputHandler<TData = unknown>(
   function handleHeaderResizeMouseDown(
     colIndex: number,
     colWidth: number,
-    e: MouseEvent,
+    e: PointerEvent,
   ): void {
     const core = coreRef.value;
     if (!core?.input) return;
@@ -389,7 +473,14 @@ export function useInputHandler<TData = unknown>(
   onUnmounted(() => {
     cleanupGlobalListeners?.();
     cleanupGlobalListeners = null;
+    cancelPendingRowDrag();
     stopAutoScroll();
+    // Release any lingering scroll locks
+    document.removeEventListener("touchmove", blockTouchMove);
+    if (savedContainerOverflow !== null && containerRef.value) {
+      containerRef.value.style.overflow = savedContainerOverflow;
+      savedContainerOverflow = null;
+    }
   });
 
   return {

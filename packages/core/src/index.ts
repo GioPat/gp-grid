@@ -276,3 +276,7 @@ export type {
   CalculateFillHandlePositionParams,
   FillHandlePosition,
 } from "./utils/fill-helpers";
+
+/** Popup positioning helpers */
+export { calculateFilterPopupPosition } from "./utils/popup-position";
+export type { PopupPosition } from "./utils/popup-position";

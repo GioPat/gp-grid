@@ -16,8 +16,8 @@ export interface GridHeaderProps<TData = unknown> {
   columnWidths: number[];
   headers: Map<number, HeaderData>;
   sortingEnabled: boolean;
-  onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.MouseEvent) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.MouseEvent) => void;
+  onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
+  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
@@ -74,7 +74,7 @@ export const GridHeader = <TData = unknown>(
                 width: `${colW}px`,
                 height: `${headerHeight}px`,
               }}
-              onMouseDown={(e) =>
+              onPointerDown={(e) =>
                 onHeaderMouseDown(originalIndex, colW, headerHeight, e)
               }
             >
@@ -94,7 +94,7 @@ export const GridHeader = <TData = unknown>(
               {column.resizable !== false && (
                 <div
                   className="gp-grid-header-resize-handle"
-                  onMouseDown={(e) => {
+                  onPointerDown={(e) => {
                     e.stopPropagation();
                     onHeaderResizeMouseDown(originalIndex, colW, e);
                   }}

@@ -123,7 +123,7 @@ export function renderHeader<TData>(
         {filterable && (
           <span
             className={`gp-grid-filter-icon${hasFilter ? " active" : ""}`}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
               params.onFilterClick();

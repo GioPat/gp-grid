@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
+import { calculateFilterPopupPosition } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
 import TextFilterContent from "./TextFilterContent.vue";
 import NumberFilterContent from "./NumberFilterContent.vue";
@@ -9,7 +10,7 @@ import DateFilterContent from "./DateFilterContent.vue";
 const props = defineProps<{
   column: ColumnDefinition;
   colIndex: number;
-  anchorRect: { top: number; left: number; width: number; height: number };
+  containerRef: HTMLDivElement | null;
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
 }>();
@@ -20,6 +21,12 @@ const emit = defineEmits<{
 }>();
 
 const popupRef = ref<HTMLDivElement | null>(null);
+
+// Dynamic popup position state
+const popupTop = ref(0);
+const popupLeft = ref(0);
+const popupMinWidth = ref(200);
+const isPositioned = ref(false);
 
 // Use the filter popup composable for click-outside and escape key handling
 useFilterPopup(popupRef, {
@@ -52,13 +59,62 @@ const isDateType = computed(() =>
   dataType.value === "dateTimeString"
 );
 
+// Dynamic positioning
+let rafId: number | null = null;
+
+const updatePosition = (): void => {
+  const container = props.containerRef;
+  const popup = popupRef.value;
+  if (!container || !popup) return;
+
+  const headerCell = container.querySelector(
+    `[data-col-index="${props.colIndex}"]`,
+  ) as HTMLElement | null;
+  if (!headerCell) return;
+
+  const pos = calculateFilterPopupPosition(headerCell, popup);
+  popupTop.value = pos.top;
+  popupLeft.value = pos.left;
+  popupMinWidth.value = pos.minWidth;
+  isPositioned.value = true;
+};
+
+const handleScrollOrResize = (): void => {
+  if (rafId !== null) return;
+  rafId = requestAnimationFrame(() => {
+    rafId = null;
+    updatePosition();
+  });
+};
+
+onMounted(() => {
+  // Initial position after first render
+  requestAnimationFrame(updatePosition);
+
+  const container = props.containerRef;
+  if (container) {
+    container.addEventListener("scroll", handleScrollOrResize, { passive: true });
+  }
+  window.addEventListener("resize", handleScrollOrResize);
+});
+
+onUnmounted(() => {
+  const container = props.containerRef;
+  if (container) {
+    container.removeEventListener("scroll", handleScrollOrResize);
+  }
+  window.removeEventListener("resize", handleScrollOrResize);
+  if (rafId !== null) cancelAnimationFrame(rafId);
+});
+
 // Position popup below the header
 const popupStyle = computed(() => ({
   position: "fixed" as const,
-  top: `${props.anchorRect.top + props.anchorRect.height + 4}px`,
-  left: `${props.anchorRect.left}px`,
-  minWidth: `${Math.max(200, props.anchorRect.width)}px`,
+  top: `${popupTop.value}px`,
+  left: `${popupLeft.value}px`,
+  minWidth: `${popupMinWidth.value}px`,
   zIndex: 10000,
+  visibility: isPositioned.value ? ("visible" as const) : ("hidden" as const),
 }));
 </script>
 
