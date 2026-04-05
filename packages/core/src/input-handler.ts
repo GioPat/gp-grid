@@ -462,12 +462,10 @@ export class InputHandler<TData = unknown> {
     const dx = event.clientX - this.moveStartX;
     const dy = event.clientY - this.moveStartY;
 
-    if (!this.moveThresholdMet) {
-      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-        this.moveThresholdMet = true;
-      } else {
-        return null;
-      }
+    if (this.moveThresholdMet === false) {
+      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
+      if (thresholdCrossed === false) return null;
+      this.moveThresholdMet = true;
     }
 
     this.moveCurrentX = event.clientX;
@@ -502,12 +500,10 @@ export class InputHandler<TData = unknown> {
     const dx = event.clientX - this.rowDragStartX;
     const dy = event.clientY - this.rowDragStartY;
 
-    if (!this.rowDragThresholdMet) {
-      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-        this.rowDragThresholdMet = true;
-      } else {
-        return null;
-      }
+    if (this.rowDragThresholdMet === false) {
+      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
+      if (thresholdCrossed === false) return null;
+      this.rowDragThresholdMet = true;
     }
 
     this.rowDragCurrentX = event.clientX;
@@ -544,9 +540,8 @@ export class InputHandler<TData = unknown> {
     event: PointerEventData,
     bounds: ContainerBounds,
   ): DragMoveResult | null {
-    if (!this.isDraggingSelection && !this.isDraggingFill) {
-      return null;
-    }
+    const isActiveDrag = this.isDraggingSelection || this.isDraggingFill;
+    if (isActiveDrag === false) return null;
 
     const { top, left, width, height, scrollTop, scrollLeft } = bounds;
     const headerHeight = this.deps.getHeaderHeight();
@@ -614,18 +609,20 @@ export class InputHandler<TData = unknown> {
   }
 
   private endColumnMoveDrag(): void {
-    if (this.moveThresholdMet && this.moveDropTargetIndex !== null) {
-      const fromOriginal = this.moveSourceColIndex;
-      const toOriginal = this.deps.getOriginalColumnIndex
-        ? this.deps.getOriginalColumnIndex(
-          Math.min(this.moveDropTargetIndex, this.deps.getColumnCount() - 1)
-        )
-        : this.moveDropTargetIndex;
+    if (this.moveThresholdMet) {
+      if (this.moveDropTargetIndex !== null) {
+        const fromOriginal = this.moveSourceColIndex;
+        const toOriginal = this.deps.getOriginalColumnIndex
+          ? this.deps.getOriginalColumnIndex(
+            Math.min(this.moveDropTargetIndex, this.deps.getColumnCount() - 1)
+          )
+          : this.moveDropTargetIndex;
 
-      if (fromOriginal !== toOriginal) {
-        this.core.moveColumn(fromOriginal, toOriginal);
+        if (fromOriginal !== toOriginal) {
+          this.core.moveColumn(fromOriginal, toOriginal);
+        }
       }
-    } else if (!this.moveThresholdMet) {
+    } else {
       // Threshold not met — treat as a click (sort).
       const column = this.core.getColumns()[this.moveSourceColIndex];
       if (column) {
