@@ -21,6 +21,10 @@ export interface PointerEventData {
   ctrlKey: boolean;
   /** Whether Meta/Command key is pressed */
   metaKey: boolean;
+  /** Pointer ID for setPointerCapture — only used by framework wrappers */
+  pointerId?: number;
+  /** Pointer type (mouse, touch, pen) — used to adapt drag behavior for touch */
+  pointerType?: string;
 }
 
 /** Framework-agnostic keyboard event data */
@@ -64,7 +68,7 @@ export interface InputResult {
   /** Whether framework should focus the container element */
   focusContainer?: boolean;
   /** Type of drag operation to start (framework manages global listeners) */
-  startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag";
+  startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | "row-drag-pending";
 }
 
 /** Result from keyboard input handler */

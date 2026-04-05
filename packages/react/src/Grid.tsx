@@ -571,12 +571,11 @@ export function Grid<TData = unknown>(
 
       {/* Filter Popup */}
       {state.filterPopup?.isOpen &&
-        state.filterPopup.column &&
-        state.filterPopup.anchorRect && (
+        state.filterPopup.column && (
           <FilterPopup
             column={state.filterPopup.column}
             colIndex={state.filterPopup.colIndex}
-            anchorRect={state.filterPopup.anchorRect}
+            containerRef={outerContainerRef}
             distinctValues={state.filterPopup.distinctValues}
             currentFilter={state.filterPopup.currentFilter}
             onApply={handleFilterApply}
@@ -590,7 +589,7 @@ export function Grid<TData = unknown>(
           (v) => v.originalIndex === dragState.columnResize!.colIndex,
         );
         if (visibleIndex === -1) return null;
-        const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth;
+        const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth - scrollLeft;
         return (
           <div
             className="gp-grid-column-resize-line"
@@ -623,7 +622,7 @@ export function Grid<TData = unknown>(
                 style={{
                   position: "absolute",
                   top: 0,
-                  left: columnPositions[cm.dropTargetIndex] ?? 0,
+                  left: (columnPositions[cm.dropTargetIndex] ?? 0) - scrollLeft,
                   height: headerHeight,
                 }}
               />

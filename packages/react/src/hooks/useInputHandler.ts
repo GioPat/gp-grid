@@ -37,12 +37,12 @@ export interface UseInputHandlerOptions {
 
 export interface UseInputHandlerResult {
   // Event handlers
-  handleCellMouseDown: (rowIndex: number, colIndex: number, e: React.MouseEvent) => void;
+  handleCellMouseDown: (rowIndex: number, colIndex: number, e: React.PointerEvent) => void;
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
-  handleFillHandleMouseDown: (e: React.MouseEvent) => void;
+  handleFillHandleMouseDown: (e: React.PointerEvent) => void;
   handleHeaderClick: (colIndex: number, e: React.MouseEvent) => void;
-  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.MouseEvent) => void;
-  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.MouseEvent) => void;
+  handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
+  handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleWheel: (e: React.WheelEvent, wheelDampening: number) => void;
   // Drag state for UI rendering
@@ -85,6 +85,14 @@ export function useInputHandler<TData>(
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Store last mouse event for re-processing during auto-scroll
   const lastMouseEventRef = useRef<PointerEventData | null>(null);
+  // Pending row drag timer (touch long-press)
+  const rowDragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Pending row drag capture info (for setPointerCapture on confirmation)
+  const rowDragCaptureRef = useRef<{ pointerId: number; target: Element } | null>(null);
+  // Scroll-lock: saved container overflow so we can restore it after row drag ends
+  const savedContainerOverflowRef = useRef<string | null>(null);
+  // Touchmove blocker — stable ref so addEventListener/removeEventListener use the same reference
+  const blockTouchMove = useCallback((e: TouchEvent): void => { e.preventDefault(); }, []);
 
   // Drag state for UI (mirrors core's InputHandler state)
   const [dragState, setDragState] = useState<DragState>({
@@ -162,14 +170,16 @@ export function useInputHandler<TData>(
     }
   }, []);
 
-  // Convert React mouse event to PointerEventData
-  const toPointerEventData = (e: React.MouseEvent | MouseEvent): PointerEventData => ({
+  // Convert pointer event to PointerEventData
+  const toPointerEventData = (e: React.PointerEvent | PointerEvent): PointerEventData => ({
     clientX: e.clientX,
     clientY: e.clientY,
     button: e.button,
     shiftKey: e.shiftKey,
     ctrlKey: e.ctrlKey,
     metaKey: e.metaKey,
+    pointerId: e.pointerId,
+    pointerType: e.pointerType,
   });
 
   // ===========================================================================
@@ -177,7 +187,10 @@ export function useInputHandler<TData>(
   // ===========================================================================
 
   const startGlobalDragListeners = useCallback(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
+      // Prevent browser scroll/pan during any active drag
+      e.preventDefault();
+
       const core = coreRef.current;
       const bounds = getContainerBounds();
       if (!core?.input || !bounds) return;
@@ -196,7 +209,7 @@ export function useInputHandler<TData>(
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       const core = coreRef.current;
       if (core?.input) {
         core.input.handleDragEnd();
@@ -204,20 +217,38 @@ export function useInputHandler<TData>(
       }
       lastMouseEventRef.current = null;
       stopAutoScroll();
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      // Restore scroll locks after row drag ends
+      document.removeEventListener("touchmove", blockTouchMove);
+      if (savedContainerOverflowRef.current !== null && containerRef.current) {
+        containerRef.current.style.overflow = savedContainerOverflowRef.current;
+        savedContainerOverflowRef.current = null;
+      }
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", handlePointerUp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    // { passive: false } is required so that preventDefault() works in handlePointerMove
+    document.addEventListener("pointermove", handlePointerMove, { passive: false });
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", handlePointerUp);
   }, [coreRef, getContainerBounds, startAutoScroll, stopAutoScroll]);
 
   // ===========================================================================
   // Event Handlers
   // ===========================================================================
 
+  const cancelPendingRowDrag = useCallback(() => {
+    if (rowDragTimerRef.current !== null) {
+      clearTimeout(rowDragTimerRef.current);
+      rowDragTimerRef.current = null;
+      coreRef.current?.input?.cancelPendingRowDrag();
+    }
+    rowDragCaptureRef.current = null;
+  }, [coreRef]);
+
   const handleCellMouseDown = useCallback(
-    (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
+    (rowIndex: number, colIndex: number, e: React.PointerEvent) => {
       const core = coreRef.current;
       if (!core?.input) return;
 
@@ -237,9 +268,69 @@ export function useInputHandler<TData>(
       } else if (result.startDrag === "row-drag") {
         setDragState(core.input.getDragState());
         startGlobalDragListeners();
+      } else if (result.startDrag === "row-drag-pending") {
+        // Touch long-press: wait 300ms before activating row drag.
+        // If the pointer moves (scroll), the pointermove handler cancels the timer.
+        cancelPendingRowDrag();
+
+        // Store capture info so we can setPointerCapture on confirmation
+        rowDragCaptureRef.current = {
+          pointerId: e.pointerId,
+          target: e.currentTarget as Element,
+        };
+
+        const handlePendingMove = () => {
+          cancelPendingRowDrag();
+          document.removeEventListener("pointermove", handlePendingMove);
+          document.removeEventListener("pointerup", handlePendingUp);
+          document.removeEventListener("pointercancel", handlePendingUp);
+        };
+        const handlePendingUp = () => {
+          cancelPendingRowDrag();
+          document.removeEventListener("pointermove", handlePendingMove);
+          document.removeEventListener("pointerup", handlePendingUp);
+          document.removeEventListener("pointercancel", handlePendingUp);
+        };
+
+        document.addEventListener("pointermove", handlePendingMove, { once: true });
+        document.addEventListener("pointerup", handlePendingUp, { once: true });
+        document.addEventListener("pointercancel", handlePendingUp, { once: true });
+
+        rowDragTimerRef.current = setTimeout(() => {
+          rowDragTimerRef.current = null;
+          document.removeEventListener("pointermove", handlePendingMove);
+          document.removeEventListener("pointerup", handlePendingUp);
+          document.removeEventListener("pointercancel", handlePendingUp);
+
+          const capture = rowDragCaptureRef.current;
+          rowDragCaptureRef.current = null;
+
+          if (core.input.confirmPendingRowDrag()) {
+            // Lock both container and body so neither can momentum-scroll
+            // while the row drag is active
+            if (containerRef.current) {
+              savedContainerOverflowRef.current = containerRef.current.style.overflow;
+              containerRef.current.style.overflow = "hidden";
+            }
+            // Also block touchmove at document level — on iOS this stops
+            // any in-flight scroll gesture that started during the hold window
+            document.addEventListener("touchmove", blockTouchMove, { passive: false });
+            // Capture the pointer so the browser stops scrolling and routes
+            // all future pointer events through our drag handler
+            if (capture) {
+              try {
+                capture.target.setPointerCapture(capture.pointerId);
+              } catch (_) {
+                // Pointer may have already been released
+              }
+            }
+            setDragState(core.input.getDragState());
+            startGlobalDragListeners();
+          }
+        }, 300);
       }
     },
-    [coreRef, containerRef, startGlobalDragListeners]
+    [coreRef, containerRef, startGlobalDragListeners, cancelPendingRowDrag]
   );
 
   const handleCellDoubleClick = useCallback(
@@ -252,7 +343,7 @@ export function useInputHandler<TData>(
   );
 
   const handleFillHandleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.PointerEvent) => {
       const core = coreRef.current;
       if (!core?.input) return;
 
@@ -287,7 +378,7 @@ export function useInputHandler<TData>(
   );
 
   const handleHeaderMouseDown = useCallback(
-    (colIndex: number, colWidth: number, colHeight: number, e: React.MouseEvent) => {
+    (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => {
       const core = coreRef.current;
       if (!core?.input) return;
 
@@ -309,7 +400,7 @@ export function useInputHandler<TData>(
   );
 
   const handleHeaderResizeMouseDown = useCallback(
-    (colIndex: number, colWidth: number, e: React.MouseEvent) => {
+    (colIndex: number, colWidth: number, e: React.PointerEvent) => {
       const core = coreRef.current;
       if (!core?.input) return;
 
@@ -380,12 +471,19 @@ export function useInputHandler<TData>(
     [coreRef, containerRef]
   );
 
-  // Cleanup auto-scroll on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopAutoScroll();
+      cancelPendingRowDrag();
+      // Release any lingering scroll locks
+      document.removeEventListener("touchmove", blockTouchMove);
+      if (savedContainerOverflowRef.current !== null && containerRef.current) {
+        containerRef.current.style.overflow = savedContainerOverflowRef.current;
+        savedContainerOverflowRef.current = null;
+      }
     };
-  }, [stopAutoScroll]);
+  }, [stopAutoScroll, cancelPendingRowDrag, blockTouchMove, containerRef]);
 
   return {
     handleCellMouseDown,

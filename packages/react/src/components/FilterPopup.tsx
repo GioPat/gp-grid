@@ -1,7 +1,8 @@
 // packages/react/src/components/FilterPopup.tsx
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
+import { calculateFilterPopupPosition } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";
@@ -9,7 +10,7 @@ import { DateFilterContent } from "./DateFilterContent";
 export interface FilterPopupProps {
   column: ColumnDefinition;
   colIndex: number;
-  anchorRect: { top: number; left: number; width: number; height: number };
+  containerRef: React.RefObject<HTMLDivElement | null>;
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
   onApply: (colId: string, filter: ColumnFilterModel | null) => void;
@@ -19,17 +20,69 @@ export interface FilterPopupProps {
 export function FilterPopup({
   column,
   colIndex,
-  anchorRect,
+  containerRef,
   distinctValues,
   currentFilter,
   onApply,
   onClose,
 }: FilterPopupProps): React.ReactNode {
   const popupRef = useRef<HTMLDivElement>(null);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({
+    position: "fixed",
+    zIndex: 10000,
+    visibility: "hidden",
+  });
+
+  // Dynamic positioning: recalculate on scroll/resize
+  useEffect(() => {
+    const container = containerRef.current;
+    const popup = popupRef.current;
+    if (!container || !popup) return;
+
+    let rafId: number | null = null;
+
+    const updatePosition = (): void => {
+      const headerCell = container.querySelector(
+        `[data-col-index="${colIndex}"]`,
+      ) as HTMLElement | null;
+      if (!headerCell || !popupRef.current) return;
+
+      const pos = calculateFilterPopupPosition(headerCell, popupRef.current);
+      setPopupStyle({
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        minWidth: pos.minWidth,
+        zIndex: 10000,
+        visibility: "visible",
+      });
+    };
+
+    const handleScrollOrResize = (): void => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updatePosition();
+      });
+    };
+
+    // Initial position (after first render so popup has dimensions)
+    requestAnimationFrame(updatePosition);
+
+    // Listen for scroll on the grid container (captures body scroll)
+    container.addEventListener("scroll", handleScrollOrResize, { passive: true });
+    window.addEventListener("resize", handleScrollOrResize);
+
+    return () => {
+      container.removeEventListener("scroll", handleScrollOrResize);
+      window.removeEventListener("resize", handleScrollOrResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [containerRef, colIndex]);
 
   // Close on click outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: PointerEvent) => {
       const target = e.target as HTMLElement;
       // Ignore clicks on filter icons - let them handle their own toggle logic
       if (target.closest(".gp-grid-filter-icon")) {
@@ -48,12 +101,12 @@ export function FilterPopup({
 
     // Add listeners after a frame to avoid immediate close from the click that opened the popup
     requestAnimationFrame(() => {
-      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("pointerdown", handleClickOutside);
       document.addEventListener("keydown", handleKeyDown);
     });
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
@@ -66,15 +119,6 @@ export function FilterPopup({
     },
     [column, onApply, onClose],
   );
-
-  // Position popup below the header
-  const popupStyle: React.CSSProperties = {
-    position: "fixed",
-    top: anchorRect.top + anchorRect.height + 4,
-    left: anchorRect.left,
-    minWidth: Math.max(200, anchorRect.width),
-    zIndex: 10000,
-  };
 
   // Determine filter type based on column data type
   const dataType = column.cellDataType;

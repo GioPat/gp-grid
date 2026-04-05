@@ -17,11 +17,11 @@ export function useFilterPopup(
 ): void {
   const { onClose, ignoreSelector = ".gp-grid-filter-icon" } = options;
 
-  let handleClickOutside: ((e: MouseEvent) => void) | null = null;
+  let handleClickOutside: ((e: PointerEvent) => void) | null = null;
   let handleKeyDown: ((e: KeyboardEvent) => void) | null = null;
 
   onMounted(() => {
-    handleClickOutside = (e: MouseEvent): void => {
+    handleClickOutside = (e: PointerEvent): void => {
       const target = e.target as HTMLElement;
       // Ignore clicks on filter icons
       if (ignoreSelector && target.closest(ignoreSelector)) {
@@ -41,7 +41,7 @@ export function useFilterPopup(
     // Add listeners after a frame to avoid immediate close
     requestAnimationFrame(() => {
       if (handleClickOutside) {
-        document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener("pointerdown", handleClickOutside);
       }
       if (handleKeyDown) {
         document.addEventListener("keydown", handleKeyDown);
@@ -51,7 +51,7 @@ export function useFilterPopup(
 
   onUnmounted(() => {
     if (handleClickOutside) {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside);
     }
     if (handleKeyDown) {
       document.removeEventListener("keydown", handleKeyDown);

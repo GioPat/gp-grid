@@ -43,11 +43,11 @@ export interface GridBodyProps<TData = unknown> {
   fillHandlePosition: FillHandlePosition | null;
   dragState: DragState;
   onScroll: () => void;
-  onCellMouseDown: (rowIndex: number, colIndex: number, e: React.MouseEvent) => void;
+  onCellMouseDown: (rowIndex: number, colIndex: number, e: React.PointerEvent) => void;
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   onCellMouseLeave: () => void;
-  onFillHandleMouseDown: (e: React.MouseEvent) => void;
+  onFillHandleMouseDown: (e: React.PointerEvent) => void;
   coreRef: React.RefObject<GridCore<TData> | null>;
   cellRenderers: Record<string, ReactCellRenderer>;
   editRenderers: Record<string, ReactEditRenderer>;
@@ -205,7 +205,7 @@ const GridBodyInner = <TData = unknown>(
                         width: `${columnWidths[visibleIndex]}px`,
                         height: `${rowHeight}px`,
                       }}
-                      onMouseDown={(e) =>
+                      onPointerDown={(e) =>
                         onCellMouseDown(slot.rowIndex, originalIndex, e)
                       }
                       onDoubleClick={() =>
@@ -253,7 +253,7 @@ const GridBodyInner = <TData = unknown>(
                 top: fillHandlePosition.top,
                 left: fillHandlePosition.left,
               }}
-              onMouseDown={onFillHandleMouseDown}
+              onPointerDown={onFillHandleMouseDown}
             />
           )}
 

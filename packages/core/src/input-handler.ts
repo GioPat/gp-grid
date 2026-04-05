@@ -72,6 +72,9 @@ export class InputHandler<TData = unknown> {
   private rowDragCurrentY = 0;
   private rowDragDropTargetIndex: number | null = null;
 
+  // Pending row drag (touch long-press)
+  private pendingRowDrag: { rowIndex: number; colIndex: number; clientX: number; clientY: number } | null = null;
+
   constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
     this.core = core;
     this.deps = deps;
@@ -168,6 +171,24 @@ export class InputHandler<TData = unknown> {
     const isRowDragHandle = column?.rowDrag === true;
 
     if ((isRowDragHandle || isRowDragEntireRow) && !event.shiftKey) {
+      const isTouch = event.pointerType === "touch";
+
+      // For touch: require a long-press before activating row drag.
+      // The framework handles the delay and calls confirmRowDrag() after hold time.
+      if (isTouch) {
+        this.pendingRowDrag = { rowIndex, colIndex, clientX: event.clientX, clientY: event.clientY };
+        this.core.selection.startSelection(
+          { row: rowIndex, col: colIndex },
+          { shift: false, ctrl: false }
+        );
+        return {
+          preventDefault: false,
+          stopPropagation: false,
+          focusContainer: true,
+          startDrag: "row-drag-pending",
+        };
+      }
+
       this.isDraggingRow = true;
       this.rowDragSourceIndex = rowIndex;
       this.rowDragStartX = event.clientX;
@@ -373,19 +394,46 @@ export class InputHandler<TData = unknown> {
   }
 
   /**
+   * Confirm a pending row drag (called by framework after long-press timer fires).
+   * Returns true if the row drag was activated, false if the pending drag was already cancelled.
+   */
+  confirmPendingRowDrag(): boolean {
+    const pending = this.pendingRowDrag;
+    if (!pending) return false;
+
+    this.pendingRowDrag = null;
+    this.isDraggingRow = true;
+    this.rowDragSourceIndex = pending.rowIndex;
+    this.rowDragStartX = pending.clientX;
+    this.rowDragStartY = pending.clientY;
+    this.rowDragThresholdMet = false;
+    this.rowDragCurrentX = pending.clientX;
+    this.rowDragCurrentY = pending.clientY;
+    this.rowDragDropTargetIndex = null;
+    return true;
+  }
+
+  /**
+   * Cancel a pending row drag (called when the pointer moves before the hold timer fires).
+   */
+  cancelPendingRowDrag(): void {
+    this.pendingRowDrag = null;
+  }
+
+  /**
    * Handle drag move event (selection, fill, column-resize, column-move, or row-drag)
    */
   handleDragMove(
     event: PointerEventData,
     bounds: ContainerBounds
   ): DragMoveResult | null {
-    if (this.isDraggingColumnResize) return this.handleColumnResizeDragMove(event);
+    if (this.isDraggingColumnResize) return this.handleColumnResizeDragMove(event, bounds);
     if (this.isDraggingColumnMove) return this.handleColumnMoveDragMove(event, bounds);
     if (this.isDraggingRow) return this.handleRowDragDragMove(event, bounds);
     return this.handleSelectionFillDragMove(event, bounds);
   }
 
-  private handleColumnResizeDragMove(event: PointerEventData): DragMoveResult {
+  private handleColumnResizeDragMove(event: PointerEventData, bounds: ContainerBounds): DragMoveResult {
     const column = this.core.getColumns()[this.resizeColIndex];
     const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
     const maxWidth = column?.maxWidth;
@@ -395,7 +443,16 @@ export class InputHandler<TData = unknown> {
       newWidth = Math.min(maxWidth, newWidth);
     }
     this.resizeCurrentWidth = newWidth;
-    return { targetRow: 0, targetCol: this.resizeColIndex, autoScroll: null };
+
+    // Auto-scroll horizontally when resizing near container edges
+    const mouseXInContainer = event.clientX - bounds.left;
+    let scrollDx = 0;
+    if (mouseXInContainer > bounds.width - AUTO_SCROLL_THRESHOLD) {
+      scrollDx = AUTO_SCROLL_SPEED;
+    }
+    const autoScroll = scrollDx !== 0 ? { dx: scrollDx, dy: 0 } : null;
+
+    return { targetRow: 0, targetCol: this.resizeColIndex, autoScroll };
   }
 
   private handleColumnMoveDragMove(
@@ -416,7 +473,7 @@ export class InputHandler<TData = unknown> {
     this.moveCurrentX = event.clientX;
     this.moveCurrentY = event.clientY;
 
-    const { left, scrollLeft } = bounds;
+    const { left, width, scrollLeft } = bounds;
     const mouseX = event.clientX - left + scrollLeft;
     const columnPositions = this.deps.getColumnPositions();
     const columnCount = this.deps.getColumnCount();
@@ -425,7 +482,17 @@ export class InputHandler<TData = unknown> {
       Math.min(findColumnAtX(mouseX, columnPositions), columnCount)
     );
 
-    return { targetRow: 0, targetCol: this.moveDropTargetIndex ?? 0, autoScroll: null };
+    // Auto-scroll horizontally when dragging near container edges
+    const mouseXInContainer = event.clientX - left;
+    let scrollDx = 0;
+    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
+      scrollDx = -AUTO_SCROLL_SPEED;
+    } else if (mouseXInContainer > width - AUTO_SCROLL_THRESHOLD) {
+      scrollDx = AUTO_SCROLL_SPEED;
+    }
+    const autoScroll = scrollDx !== 0 ? { dx: scrollDx, dy: 0 } : null;
+
+    return { targetRow: 0, targetCol: this.moveDropTargetIndex ?? 0, autoScroll };
   }
 
   private handleRowDragDragMove(
