@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.7...gp-grid-v0.10.0) (2026-04-05)
+
+
+### ✨ Features
+
+* enable column dragging, filtering and resizing for mobile ([7f02c2f](https://github.com/GioPat/gp-grid/commit/7f02c2fa185e288ded80eb8fc443bfbe81f02ccd))
+* enable column dragging, filtering and resizing for mobile ([1fd6b30](https://github.com/GioPat/gp-grid/commit/1fd6b30ac35fc248d79e2fc01c6b2207fbd3cb0a))
+
 ## [0.9.7](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.6...gp-grid-v0.9.7) (2026-04-04)
 
 
