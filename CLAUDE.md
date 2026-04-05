@@ -6,6 +6,10 @@ High cardinality Grid library for web pages with wrappers in the most common fra
 
 - Use `pnpm` always
 
+## Constraints
+
+- The library should work also for Server Side Rendering
+
 ## Code style
 
 - Avoid negated conditions
