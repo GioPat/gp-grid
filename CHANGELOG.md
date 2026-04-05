@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.0...gp-grid-v0.10.1) (2026-04-05)
+
+
+### ♻️ Refactoring
+
+* code enhancements ([9295d93](https://github.com/GioPat/gp-grid/commit/9295d9386e37e55e1a1f8b93161490ada1151a2c))
+
 ## [0.10.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.9.7...gp-grid-v0.10.0) (2026-04-05)
 
 
