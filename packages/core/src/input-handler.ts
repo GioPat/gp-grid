@@ -450,7 +450,7 @@ export class InputHandler<TData = unknown> {
     if (mouseXInContainer > bounds.width - AUTO_SCROLL_THRESHOLD) {
       scrollDx = AUTO_SCROLL_SPEED;
     }
-    const autoScroll = scrollDx !== 0 ? { dx: scrollDx, dy: 0 } : null;
+    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
 
     return { targetRow: 0, targetCol: this.resizeColIndex, autoScroll };
   }
@@ -488,7 +488,7 @@ export class InputHandler<TData = unknown> {
     } else if (mouseXInContainer > width - AUTO_SCROLL_THRESHOLD) {
       scrollDx = AUTO_SCROLL_SPEED;
     }
-    const autoScroll = scrollDx !== 0 ? { dx: scrollDx, dy: 0 } : null;
+    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
 
     return { targetRow: 0, targetCol: this.moveDropTargetIndex ?? 0, autoScroll };
   }

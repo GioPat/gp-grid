@@ -58,7 +58,7 @@ export class ParallelSortManager {
 
   constructor(options: ParallelSortOptions = {}) {
     const maxWorkers = options.maxWorkers ??
-      (typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 4) ?? 4;
+      (navigator === undefined ? 4 : navigator.hardwareConcurrency) ?? 4;
 
     this.pool = new WorkerPool(SORT_WORKER_CODE, { maxWorkers });
     this.parallelThreshold = options.parallelThreshold ?? PARALLEL_THRESHOLD;

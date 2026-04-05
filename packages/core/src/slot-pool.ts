@@ -25,7 +25,7 @@ export interface SlotPoolManagerOptions {
   /** Get virtual content height */
   getVirtualContentHeight: () => number;
   /** Get row data by index */
-  getRowData: (rowIndex: number) => unknown | undefined;
+  getRowData: (rowIndex: number) => unknown;
 }
 
 interface SlotPoolState {
@@ -174,13 +174,7 @@ export class SlotPoolManager {
   ): void {
     let slotId: string;
 
-    if (recycledSlotId !== undefined) {
-      slotId = recycledSlotId;
-      const slot = this.state.slots.get(slotId)!;
-      slot.rowIndex = rowIndex;
-      slot.rowData = rowData;
-      slot.translateY = this.getRowTranslateY(rowIndex);
-    } else {
+    if (recycledSlotId === undefined) {
       slotId = `slot-${this.state.nextSlotId++}`;
       this.state.slots.set(slotId, {
         slotId,
@@ -189,6 +183,12 @@ export class SlotPoolManager {
         translateY: this.getRowTranslateY(rowIndex),
       });
       instructions.push({ type: "CREATE_SLOT", slotId });
+    } else {
+      slotId = recycledSlotId;
+      const slot = this.state.slots.get(slotId)!;
+      slot.rowIndex = rowIndex;
+      slot.rowData = rowData;
+      slot.translateY = this.getRowTranslateY(rowIndex);
     }
 
     this.state.rowToSlot.set(rowIndex, slotId);

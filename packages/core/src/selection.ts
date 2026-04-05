@@ -15,7 +15,7 @@ export interface SelectionManagerOptions {
   getRowCount: () => number;
   getColumnCount: () => number;
   getCellValue: (row: number, col: number) => CellValue;
-  getRowData: (row: number) => unknown | undefined;
+  getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
 }
 
