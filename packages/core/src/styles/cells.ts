@@ -92,10 +92,20 @@ export const cellStyles: string = `
   pointer-events: auto;
   box-sizing: border-box;
   border-radius: 1px;
+  touch-action: none;
 }
 
 .gp-grid-fill-handle:hover {
   transform: scale(1.2);
+}
+
+@media (pointer: coarse) {
+  .gp-grid-fill-handle {
+    width: 24px;
+    height: 24px;
+    border-width: 3px;
+    border-radius: 3px;
+  }
 }
 
 /* Fill preview (cells being filled) */

@@ -279,28 +279,38 @@ export function useInputHandler<TData>(
           target: e.currentTarget as Element,
         };
 
-        const handlePendingMove = () => {
-          cancelPendingRowDrag();
-          document.removeEventListener("pointermove", handlePendingMove);
-          document.removeEventListener("pointerup", handlePendingUp);
-          document.removeEventListener("pointercancel", handlePendingUp);
+        const startX = e.clientX;
+        const startY = e.clientY;
+
+        // handlePendingMove and handlePendingUp call cleanup, which is declared
+        // below. cleanup is initialized before these listeners ever fire.
+        const handlePendingMove = (moveE: PointerEvent) => {
+          const dx = moveE.clientX - startX;
+          const dy = moveE.clientY - startY;
+          // Allow up to 10px jitter — touch screens naturally move slightly
+          // during a hold. Only cancel if the finger clearly moved to scroll.
+          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+            cancelPendingRowDrag();
+            cleanup();
+          }
         };
         const handlePendingUp = () => {
           cancelPendingRowDrag();
+          cleanup();
+        };
+        const cleanup = () => {
           document.removeEventListener("pointermove", handlePendingMove);
           document.removeEventListener("pointerup", handlePendingUp);
           document.removeEventListener("pointercancel", handlePendingUp);
         };
 
-        document.addEventListener("pointermove", handlePendingMove, { once: true });
+        document.addEventListener("pointermove", handlePendingMove);
         document.addEventListener("pointerup", handlePendingUp, { once: true });
         document.addEventListener("pointercancel", handlePendingUp, { once: true });
 
         rowDragTimerRef.current = setTimeout(() => {
           rowDragTimerRef.current = null;
-          document.removeEventListener("pointermove", handlePendingMove);
-          document.removeEventListener("pointerup", handlePendingUp);
-          document.removeEventListener("pointercancel", handlePendingUp);
+          cleanup();
 
           const capture = rowDragCaptureRef.current;
           rowDragCaptureRef.current = null;
@@ -356,6 +366,7 @@ export function useInputHandler<TData>(
       if (result.preventDefault) e.preventDefault();
       if (result.stopPropagation) e.stopPropagation();
       if (result.startDrag === "fill") {
+        try { (e.target as Element).setPointerCapture(e.pointerId); } catch (_) { /* pointer may have been released */ }
         setDragState(core.input.getDragState());
         startGlobalDragListeners();
       }
@@ -392,6 +403,7 @@ export function useInputHandler<TData>(
       if (result.preventDefault) e.preventDefault();
       if (result.stopPropagation) e.stopPropagation();
       if (result.startDrag === "column-move") {
+        try { (e.target as Element).setPointerCapture(e.pointerId); } catch (_) { /* pointer may have been released */ }
         setDragState(core.input.getDragState());
         startGlobalDragListeners();
       }
