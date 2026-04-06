@@ -16,5 +16,6 @@ export default defineConfig({
   // Ensure source maps work in dev mode
   server: {
     sourcemapIgnoreList: false, // Don't ignore any sources
+    allowedHosts: true,
   },
 });
