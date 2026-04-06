@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.2...gp-grid-v0.10.3) (2026-04-06)
+
+
+### 🐛 Bug Fixes
+
+* enhance handling for mobile ([9d45952](https://github.com/GioPat/gp-grid/commit/9d45952db4be8601ef1d3595ae7bc39cdbdb7d6d))
+
 ## [0.10.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.1...gp-grid-v0.10.2) (2026-04-05)
 
 
