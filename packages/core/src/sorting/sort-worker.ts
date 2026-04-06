@@ -531,18 +531,18 @@ interface WorkerGlobalScopeMinimal {
   onmessage: ((e: MessageEvent) => void) | null;
   postMessage(message: unknown): void;
 }
-declare const self: WorkerGlobalScopeMinimal;
 
-if (typeof self !== "undefined" && self.onmessage !== undefined) {
-  self.onmessage = (e: MessageEvent<SortWorkerRequest>) => {
+const workerScope = globalThis as unknown as Partial<WorkerGlobalScopeMinimal>;
+if (workerScope.onmessage !== undefined) {
+  workerScope.onmessage = (e: MessageEvent<SortWorkerRequest>) => {
     const { type, id, data, sortModel } = e.data;
 
     if (type === "sort") {
       try {
         const sorted = sortData(data, sortModel);
-        self.postMessage({ type: "sorted", id, data: sorted } as SortWorkerResponse);
+        workerScope.postMessage?.({ type: "sorted", id, data: sorted } as SortWorkerResponse);
       } catch (error) {
-        self.postMessage({ type: "error", id, error: String(error) });
+        workerScope.postMessage?.({ type: "error", id, error: String(error) });
       }
     }
   };
