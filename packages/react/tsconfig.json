@@ -16,7 +16,6 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
       "@gp-grid/core": [
         "../core/src"

@@ -5,7 +5,6 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  injectStyles,
   calculateScaledColumnPositions,
   getTotalWidth,
   isCellSelected,
@@ -112,9 +111,6 @@ export interface UseGpGridResult<TData = unknown> {
 export function useGpGrid<TData = unknown>(
   options: UseGpGridOptions<TData>,
 ): UseGpGridResult<TData> {
-  // Inject styles on first use
-  injectStyles();
-
   // Refs
   const containerRef = ref<HTMLDivElement | null>(null);
   const coreRef = ref<GridCore<TData> | null>(null);

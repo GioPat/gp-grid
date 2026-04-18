@@ -1,5 +1,5 @@
 // packages/core/src/styles/index.ts
-// Combines all style modules and exports injectStyles
+// Combines all style modules and exports gridStyles
 
 import { variablesStyles } from "./variables";
 import { containerStyles } from "./container";
@@ -10,10 +10,9 @@ import { scrollbarStyles } from "./scrollbar";
 import { filtersStyles } from "./filters";
 import { rowDragStyles } from "./row-drag";
 
-const STYLE_ID = "gp-grid-styles";
-
 /**
- * Combined grid styles from all modules
+ * Combined grid styles from all modules.
+ * Use `@gp-grid/core/dist/styles.css` in your app instead of consuming this directly.
  */
 export const gridStyles: string = [
   variablesStyles,
@@ -25,30 +24,6 @@ export const gridStyles: string = [
   filtersStyles,
   rowDragStyles,
 ].join("\n");
-
-let stylesInjected = false;
-
-/**
- * Inject grid styles into the document head.
- * This is called automatically when the Grid component mounts.
- * Styles are only injected once, even if multiple Grid instances exist.
- */
-export function injectStyles(): void {
-  if (stylesInjected) return;
-  if (typeof document === "undefined") return; // SSR safety
-
-  // Check if styles already exist (e.g., from a previous mount)
-  if (document.getElementById(STYLE_ID)) {
-    stylesInjected = true;
-    return;
-  }
-
-  const styleElement = document.createElement("style");
-  styleElement.id = STYLE_ID;
-  styleElement.textContent = gridStyles;
-  document.head.appendChild(styleElement);
-  stylesInjected = true;
-}
 
 // Re-export individual style modules for advanced usage
 export { variablesStyles } from "./variables";

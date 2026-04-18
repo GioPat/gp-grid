@@ -77,7 +77,6 @@ export {
   createDataSourceFromArray,
   createMutableClientDataSource,
   // Styles
-  injectStyles,
   gridStyles,
   // Utils
   calculateColumnPositions,

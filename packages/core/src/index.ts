@@ -216,7 +216,7 @@ export type {
 // =============================================================================
 
 /** Styles */
-export { injectStyles, gridStyles } from "./styles";
+export { gridStyles } from "./styles";
 export {
   variablesStyles,
   containerStyles,

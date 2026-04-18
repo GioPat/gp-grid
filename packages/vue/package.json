@@ -6,6 +6,13 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./dist/styles.css": "./dist/styles.css"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GioPat/gp-grid.git",
@@ -55,7 +62,7 @@
   },
   "devDependencies": {
     "tsdown": "^0.20.3",
-    "typescript": "^5.9.3",
+    "typescript": "~5.9.0",
     "unplugin-vue": "^7.1.0",
     "vue": "^3.5.13",
     "vue-tsc": "~3.2.2"

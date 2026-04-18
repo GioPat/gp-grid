@@ -103,7 +103,6 @@ export class GridCore<TData = unknown> {
     this.onRowDragEnd = options.onRowDragEnd;
     this.onColumnResized = options.onColumnResized;
     this.onColumnMoved = options.onColumnMoved;
-
     if (this.onCellValueChanged && !this.getRowId) {
       throw new Error("getRowId is required when onCellValueChanged is provided");
     }

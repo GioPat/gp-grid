@@ -99,7 +99,7 @@ export const cellStyles: string = `
   transform: scale(1.2);
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse) and (hover: none) and (max-width: 768px) {
   .gp-grid-fill-handle {
     width: 24px;
     height: 24px;
