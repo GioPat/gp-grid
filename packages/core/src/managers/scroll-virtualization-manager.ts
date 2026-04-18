@@ -50,14 +50,27 @@ export class ScrollVirtualizationManager {
     const totalRows = this.options.getTotalRows();
     const rowHeight = this.options.getRowHeight();
     const headerHeight = this.options.getHeaderHeight();
+    const viewportHeight = this.options.getViewportHeight();
 
-    // Calculate natural (real) content height
-    this.naturalContentHeight = totalRows * rowHeight + headerHeight;
+    const naturalRowHeight = totalRows * rowHeight;
+    this.naturalContentHeight = naturalRowHeight + headerHeight;
 
-    // Apply scroll virtualization if content exceeds browser limits
     if (this.naturalContentHeight > MAX_SCROLL_HEIGHT) {
       this.virtualContentHeight = MAX_SCROLL_HEIGHT;
-      this.scrollRatio = MAX_SCROLL_HEIGHT / this.naturalContentHeight;
+
+      // The body sizer is (virtualContentHeight - headerHeight).
+      // The actual scrollable range in the DOM is (sizer - viewportHeight).
+      // We want that range to map exactly to the natural row scroll range
+      // (naturalRowHeight - viewportHeight), so the user can always drag
+      // the scrollbar to reach the last row.
+      const virtualScrollRange = this.virtualContentHeight - headerHeight - viewportHeight;
+      // Round up to the nearest row boundary so that at max scrollTop the last row
+      // is always fully visible (not partially clipped by a fractional viewport height).
+      const naturalScrollRange = Math.ceil((naturalRowHeight - viewportHeight) / rowHeight) * rowHeight;
+
+      this.scrollRatio = naturalScrollRange > 0
+        ? virtualScrollRange / naturalScrollRange
+        : 1;
     } else {
       this.virtualContentHeight = this.naturalContentHeight;
       this.scrollRatio = 1;
