@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "declaration": true,
+    "strict": true,
+    "lib": [
+      "ES2022",
+      "dom"
+    ],
+    "outDir": "../../dist/angular",
+    "paths": {
+      "@gp-grid/core": ["../core/src"]
+    }
+  },
+  "angularCompilerOptions": {
+    "compilationMode": "partial"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@gp-grid/angular",
+  "version": "0.10.3",
+  "module": "dist/angular/fesm2022/gp-grid-angular.mjs",
+  "typings": "dist/angular/types/gp-grid-angular.d.ts",
+  "exports": {
+    "./package.json": {
+      "default": "./package.json"
+    },
+    ".": {
+      "types": "./dist/angular/types/gp-grid-angular.d.ts",
+      "default": "./dist/angular/fesm2022/gp-grid-angular.mjs"
+    },
+    "./dist/styles.css": "./dist/styles.css"
+  },
+  "scripts": {
+    "build": "ng-packagr -p ng-package.json",
+    "postbuild": "node -e \"require('fs').copyFileSync('../core/dist/styles.css', 'dist/styles.css')\" && echo '✓ dist/styles.css copied'"
+  },
+  "peerDependencies": {
+    "@angular/common": ">=18.0.0",
+    "@angular/core": ">=18.0.0",
+    "@gp-grid/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@angular/common": "^18.0.0",
+    "@angular/compiler": "^18.0.0",
+    "@angular/compiler-cli": "^18.0.0",
+    "@angular/core": "^18.0.0",
+    "ng-packagr": "^18.0.0",
+    "typescript": "~5.9.0"
+  },
+  "dependencies": {
+    "tslib": "^2.8.1"
+  }
+}

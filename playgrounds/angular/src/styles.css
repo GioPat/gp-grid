@@ -1,0 +1,67 @@
+@import "@gp-grid/angular/dist/styles.css";
+
+:root {
+  --pg-bg: #f8fafc;
+  --pg-surface: #ffffff;
+  --pg-text: #0f172a;
+  --pg-text-muted: #64748b;
+  --pg-border: #e2e8f0;
+  --pg-accent: #dd0031;
+}
+
+:root.dark {
+  --pg-bg: #0f1115;
+  --pg-surface: #181a1f;
+  --pg-text: #e2e8f0;
+  --pg-text-muted: #94a3b8;
+  --pg-border: #2a2d34;
+  --pg-accent: #ff3151;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--pg-bg);
+  color: var(--pg-text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+app-root {
+  display: block;
+  min-height: 100%;
+}
+
+/* Make the embedded grid pick up the page font and remove its outer border
+   (the surrounding .grid-card already provides one) */
+.gp-grid-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Crosshair highlighting */
+.gp-grid-row.pg-row--hover .gp-grid-cell {
+  background-color: rgba(221, 0, 49, 0.06);
+}
+
+.gp-grid-cell.pg-col--hover {
+  background-color: rgba(221, 0, 49, 0.06);
+}
+
+.gp-grid-row.pg-row--hover .gp-grid-cell.pg-col--hover {
+  background-color: rgba(221, 0, 49, 0.14);
+}
+
+:root.dark .gp-grid-row.pg-row--hover .gp-grid-cell {
+  background-color: rgba(255, 82, 109, 0.10);
+}
+
+:root.dark .gp-grid-cell.pg-col--hover {
+  background-color: rgba(255, 82, 109, 0.10);
+}
+
+:root.dark .gp-grid-row.pg-row--hover .gp-grid-cell.pg-col--hover {
+  background-color: rgba(255, 82, 109, 0.20);
+}
