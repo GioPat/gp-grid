@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.11.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.3...gp-grid-v0.11.0) (2026-04-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove injectStyle and expose styles.
+
+### ✨ Features
+
+* angular wrapper ([7b9d06b](https://github.com/GioPat/gp-grid/commit/7b9d06b2046aa57e841e3fc02748f9776bd0641e))
+
+
+### 🐛 Bug Fixes
+
+* **angular:** move core in deps ([51a3184](https://github.com/GioPat/gp-grid/commit/51a3184bebcbb86267d1812f9743a7234de9fa17))
+* **core:** small typing issue ([c039d18](https://github.com/GioPat/gp-grid/commit/c039d18b26cbcc68fb5a6e2c6ea8c822c7df351c))
+* distinct values counters ([11e633a](https://github.com/GioPat/gp-grid/commit/11e633ab875d5b79df9b10c6dc8d924bf388fd52))
+* refresh regardless of the pagination ([c4abfcd](https://github.com/GioPat/gp-grid/commit/c4abfcd5af8bd3795cbc73a8e6767694189b5c5e))
+* remove injectStyle and expose styles. ([7708442](https://github.com/GioPat/gp-grid/commit/7708442c4815f009ae0228b1d47267bc6654be06))
+* scrolling mechanism ([cdf5bdf](https://github.com/GioPat/gp-grid/commit/cdf5bdfef7184ec58b2b102f3e836b4378312b03))
+
+
+### ♻️ Refactoring
+
+* **angular:** improve code ([4ab5460](https://github.com/GioPat/gp-grid/commit/4ab546006e095a31ff7b3521e2bc720758e3c043))
+* avoid empty catches ([4bcb1bf](https://github.com/GioPat/gp-grid/commit/4bcb1bf28b3d16c64d5a4d582b3fe041090ff974))
+* **core:** code quality imprvements ([ef09d74](https://github.com/GioPat/gp-grid/commit/ef09d7440e960b944bd0f4274a219f0428c25145))
+
+
+### 📝 Documentation
+
+* **angular:** add README and licenses ([c27381e](https://github.com/GioPat/gp-grid/commit/c27381e6b1d86b093ac9082136334370eddf30cd))
+
 ## [0.10.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.2...gp-grid-v0.10.3) (2026-04-06)
 
 
