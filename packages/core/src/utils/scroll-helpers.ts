@@ -29,7 +29,7 @@ export const findSlotForRow = (
  */
 export const scrollCellIntoView = (
   core: { getScrollTopForRow(row: number): number },
-  container: HTMLDivElement,
+  container: HTMLElement,
   row: number,
   rowHeight: number,
   slots: Map<string, SlotData>,

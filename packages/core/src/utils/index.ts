@@ -48,3 +48,13 @@ export type {
 
 export { calculateFilterPopupPosition } from "./popup-position";
 export type { PopupPosition } from "./popup-position";
+
+export { buildDataSourceRequest } from "./data-source-request";
+export type { BuildRequestOptions } from "./data-source-request";
+
+export { reorderCachedRows } from "./cached-rows";
+
+export { computeColumnPositions } from "./column-positions";
+
+export { readCell, writeCell } from "./cell-access";
+export type { WriteCellDeps } from "./cell-access";

@@ -17,4 +17,6 @@ export {
   type TransactionResult,
   type TransactionManagerOptions,
 } from "./transaction-manager";
+export { InstructionBatcher } from "./instruction-batcher";
+export { ViewportState, type ViewportUpdateResult } from "./viewport-state";
 

@@ -1,0 +1,16 @@
+{
+  "output_limit": 250,
+  "score_cap": 90,
+  "exclude_directories": [
+    "__fixtures__",
+    "tests"
+  ],
+  "exclude_filenames": [
+    "*test.{ts,tsx}"
+  ],
+  "extensions": [
+    ".cjs"
+  ],
+  "include_comments": false,
+  "exclude_under": 10
+}

@@ -280,3 +280,26 @@ export type {
 /** Popup positioning helpers */
 export { calculateFilterPopupPosition } from "./utils/popup-position";
 export type { PopupPosition } from "./utils/popup-position";
+
+/**
+ * Framework-adapter kit. Reactivity-agnostic primitives shared by the
+ * react/vue/angular wrappers so pointer-event serialization, batch state
+ * fan-out, the auto-scroll loop, and the pending row-drag FSM live in one
+ * place instead of being duplicated per framework.
+ */
+export {
+  toPointerEventData,
+  AutoScrollDriver,
+  PendingRowDragController,
+  applyBatchInstructions,
+  DataSourceOwner,
+  InputEventAdapter,
+} from "./adapter";
+export type {
+  PendingRowDragDeps,
+  BatchChangeSetters,
+  InputEventAdapterDeps,
+  CellPointerAction,
+  FillPointerAction,
+  DragEndResult,
+} from "./adapter";
