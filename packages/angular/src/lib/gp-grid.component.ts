@@ -10,43 +10,24 @@ import {
   inject,
   input,
   output,
-  signal,
-  computed,
   effect,
 } from '@angular/core';
 import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate, HeaderSortEvent } from './components';
 import type { AngularColumnDefinition } from './types';
 import { isPlatformBrowser } from '@angular/common';
-import {
-  GridCore,
-  calculateScaledColumnPositions,
-  calculateFillHandlePosition,
-  getTotalWidth,
-  createDataSourceFromArray,
-  scrollCellIntoView,
-} from '@gp-grid/core';
 import type {
-  ColumnDefinition,
-  HeaderData,
-  VisibleColumnInfo,
-  DataSource,
   CellValueChangedEvent,
+  ColumnDefinition,
   ColumnFilterModel,
-  DragState,
-  CellPosition,
-  CellRange,
-  FillHandlePosition,
+  DataSource,
   HighlightingOptions,
   RowId,
-  SlotData,
-  FilterPopupState,
 } from '@gp-grid/core';
 import {
   GridHeaderComponent,
   GridBodyComponent,
   GridOverlaysComponent,
 } from './components';
-import type { ActiveFilterPopup } from './components';
 import type {
   HeaderPointerDownEvent,
   FilterPointerDownEvent,
@@ -54,14 +35,12 @@ import type {
   CellPointerDownEvent,
   CellPointerEnterEvent,
   CellDoubleClickEvent,
-  EditingCellState,
   FillHandlePointerDownEvent,
 } from './components';
-import { toPointerEventData } from './utils/pointer-event';
-import { AutoScrollDriver } from './helpers/auto-scroll';
-import { PendingRowDragController } from './helpers/pending-row-drag';
-import { applyBatchInstructions } from './helpers/apply-batch-changes';
 import { GP_GRID_TEMPLATE } from './gp-grid.template';
+import { GpGridViewModel } from './gp-grid-view-model';
+import { GpGridBindings } from './gp-grid-bindings';
+import { buildGridCore } from './gp-grid.factory';
 
 @Component({
   selector: 'gp-grid',
@@ -100,147 +79,63 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
 
-  private coreRef: GridCore<unknown> | null = null;
-  private ownedDataSource: DataSource<unknown> | null = null;
-  private resizeObserver: ResizeObserver | null = null;
-  private unsubscribe: (() => void) | null = null;
-  private filterAnchorEl: HTMLElement | null = null;
-  private lastAppliedColumns: AngularColumnDefinition[] | null = null;
-  private lastAppliedRows: unknown[] | null = null;
-  private readonly autoScroll = new AutoScrollDriver(
-    () => this.body?.scrollContainer?.nativeElement ?? null,
-    (event) => this.processDragMove(event),
-  );
-  private readonly pendingRowDrag = new PendingRowDragController({
-    getCore: () => this.coreRef,
-    getContainer: () => this.container?.nativeElement ?? null,
+  protected readonly vm = new GpGridViewModel({
+    getColumns: () => this.columns(),
+    getRows: () => this.rows(),
+    getRowHeight: () => this.rowHeight(),
+  });
+
+  private readonly bindings = new GpGridBindings<unknown>({
+    vm: this.vm,
     isBrowser: this.isBrowser,
-    onDragConfirmed: (state) => this.dragState.set(state),
+    getContainer: () => this.container?.nativeElement ?? null,
+    getBody: () => this.body?.scrollContainer?.nativeElement ?? null,
+    getRowHeight: () => this.rowHeight(),
+    getHeaderHeight: () => this.headerHeight(),
   });
-
-  protected headerState = signal<Map<number, HeaderData>>(new Map());
-  protected viewportWidth = signal<number>(0);
-  protected scrollLeft = signal<number>(0);
-  protected isLoading = signal<boolean>(false);
-  protected errorMessage = signal<string | null>(null);
-  protected filterPopup = signal<ActiveFilterPopup | null>(null);
-  protected pendingScrollTop = signal<number | null>(null);
-  protected activeCell = signal<CellPosition | null>(null);
-  protected selectionRange = signal<CellRange | null>(null);
-  protected editingCell = signal<EditingCellState | null>(null);
-  protected hoverPosition = signal<CellPosition | null>(null);
-  private columnsOverride = signal<ColumnDefinition[] | null>(null);
-  protected dragState = signal<DragState>({
-    isDragging: false,
-    dragType: null,
-    fillSourceRange: null,
-    fillTarget: null,
-    columnResize: null,
-    columnMove: null,
-    rowDrag: null,
-  });
-
-  protected effectiveColumns = computed<ColumnDefinition[]>(() =>
-    this.columnsOverride() ?? (this.columns() as unknown as ColumnDefinition[])
-  );
-
-  protected visibleColumnWithIndices = computed<VisibleColumnInfo[]>(() =>
-    this.effectiveColumns()
-      .map((col, index) => ({ column: col, originalIndex: index }))
-      .filter(({ column }) => !column.hidden)
-  );
-
-  private columnLayout = computed(() =>
-    calculateScaledColumnPositions(
-      this.visibleColumnWithIndices().map(v => v.column),
-      this.viewportWidth(),
-    )
-  );
-
-  protected columnPositions = computed(() => this.columnLayout().positions);
-  protected columnWidths = computed(() => this.columnLayout().widths);
-  protected totalWidth = computed(() => getTotalWidth(this.columnPositions()));
-  protected contentWidth = signal<number>(0);
-
-  protected fillHandlePosition = computed<FillHandlePosition | null>(() =>
-    calculateFillHandlePosition({
-      activeCell: this.activeCell(),
-      selectionRange: this.selectionRange(),
-      slots: this.slots(),
-      columns: this.effectiveColumns(),
-      visibleColumnsWithIndices: this.visibleColumnWithIndices(),
-      columnPositions: this.columnPositions(),
-      columnWidths: this.columnWidths(),
-      rowHeight: this.rowHeight(),
-    })
-  );
-
-  protected slots = signal<Map<string, SlotData>>(new Map());
-  protected slotsArray = computed(() => [...this.slots().values()]);
-  protected contentHeight = signal<number>(0);
-  protected rowsWrapperOffset = signal<number>(0);
-  protected totalRows = computed(() => this.rows().length);
 
   constructor() {
-    effect(() => this.applyPendingScroll());
-    effect(() => this.syncHighlightingToCore());
-    effect(() => this.syncColumnsToCore());
-    effect(() => this.syncRowsToCore());
+    effect(() => this.bindings.applyPendingScroll());
+    effect(() => this.bindings.syncHighlighting(this.highlighting()));
+    effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]));
+    effect(() => this.bindings.syncRows(this.rows(), this.dataSource()));
   }
 
   ngOnInit(): void {
-    this.coreRef = this.buildGridCore();
-    this.unsubscribe = this.coreRef.onBatchInstruction((instructions) => {
-      const maps = applyBatchInstructions(
-        instructions,
-        this.slots(),
-        this.headerState(),
-        this.batchSetters,
-      );
-      this.slots.set(new Map(maps.slots));
-      this.headerState.set(new Map(maps.headers));
-    });
-
-    this.coreRef.initialize();
-
-    this.coreRef.input.updateDeps({
-      getHeaderHeight: () => this.headerHeight(),
-      getRowHeight: () => this.rowHeight(),
-      getColumnPositions: () => this.columnPositions(),
-      getColumnCount: () => this.visibleColumnWithIndices().length,
-      getOriginalColumnIndex: (visibleIndex: number) =>
-        this.visibleColumnWithIndices()[visibleIndex]?.originalIndex ?? visibleIndex,
-    });
+    const core = buildGridCore<unknown>(
+      {
+        columns: this.columns() as unknown as ColumnDefinition[],
+        dataSource: this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows()),
+        rowHeight: this.rowHeight(),
+        headerHeight: this.headerHeight(),
+        overscan: this.overscan(),
+        sortingEnabled: this.sortingEnabled(),
+        highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,
+        getRowId: this.getRowId() ?? undefined,
+        rowDragEntireRow: this.rowDragEntireRow(),
+      },
+      {
+        onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
+        onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
+        onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
+        onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
+      },
+    );
+    this.bindings.attach(core);
   }
 
   ngAfterViewInit(): void {
     if (this.isBrowser === false) return;
-
-    const element = this.container.nativeElement;
-    const bodyEl = this.body.scrollContainer.nativeElement;
-    this.viewportWidth.set(element.clientWidth);
-    this.resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) this.viewportWidth.set(entry.contentRect.width);
-    });
-    this.resizeObserver.observe(element);
-    this.coreRef?.setViewport(0, 0, element.clientWidth, bodyEl.clientHeight);
-
+    this.bindings.observeViewport(
+      this.container.nativeElement,
+      this.body.scrollContainer.nativeElement,
+    );
     document.addEventListener('pointermove', this.onDocumentPointerMove, { passive: false });
     document.addEventListener('pointerup', this.onDocumentPointerUp);
   }
 
   ngOnDestroy(): void {
-    this.autoScroll.stop();
-    this.pendingRowDrag.cancel();
-    this.pendingRowDrag.releaseLocks();
-    this.unsubscribe?.();
-    this.resizeObserver?.disconnect();
-    this.coreRef?.destroy();
-    this.ownedDataSource?.destroy?.();
-    this.coreRef = null;
-    this.ownedDataSource = null;
-
+    this.bindings.destroy();
     if (this.isBrowser) {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
       document.removeEventListener('pointerup', this.onDocumentPointerUp);
@@ -248,25 +143,21 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onBodyScroll(scrollLeft: number): void {
-    this.scrollLeft.set(scrollLeft);
+    this.vm.scrollLeft.set(scrollLeft);
     const el = this.body.scrollContainer.nativeElement;
-    this.coreRef?.setViewport(el.scrollTop, scrollLeft, el.clientWidth, el.clientHeight);
+    this.bindings.coreRef?.setViewport(el.scrollTop, scrollLeft, el.clientWidth, el.clientHeight);
   }
 
   protected onHeaderPointerDown(evt: HeaderPointerDownEvent): void {
-    const result = this.coreRef?.input.handleHeaderMouseDown(
-      evt.colIndex,
-      evt.colWidth,
-      evt.colHeight,
-      toPointerEventData(evt.event),
-    );
-    if (result?.preventDefault) evt.event.preventDefault();
+    if (this.bindings.input.headerPointerDown(evt.colIndex, evt.colWidth, evt.colHeight, evt.event)) {
+      evt.event.preventDefault();
+    }
   }
 
   protected onFilterPointerDown(evt: FilterPointerDownEvent): void {
-    this.filterAnchorEl = evt.anchorEl;
+    this.vm.setFilterAnchor(evt.anchorEl);
     const rect = evt.anchorEl.getBoundingClientRect();
-    this.coreRef?.openFilterPopup(evt.colIndex, {
+    this.bindings.coreRef?.openFilterPopup(evt.colIndex, {
       top: rect.top,
       left: rect.left,
       width: rect.width,
@@ -275,62 +166,33 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onCellPointerDown(evt: CellPointerDownEvent): void {
-    const core = this.coreRef;
-    if (core === null) return;
-    const result = core.input.handleCellMouseDown(
-      evt.rowIndex,
-      evt.colIndex,
-      toPointerEventData(evt.event),
-    );
-    if (result.preventDefault) evt.event.preventDefault();
-    if (result.focusContainer) {
+    const action = this.bindings.input.cellPointerDown(evt.rowIndex, evt.colIndex, evt.event);
+    if (action.preventDefault) evt.event.preventDefault();
+    if (action.focusContainer) {
       this.container.nativeElement.focus({ preventScroll: true });
-    }
-    this.handleCellDragStart(result.startDrag, evt.event);
-  }
-
-  private handleCellDragStart(
-    startDrag: string | null | undefined,
-    event: PointerEvent,
-  ): void {
-    const core = this.coreRef;
-    if (core === null || !startDrag) return;
-    if (startDrag === 'selection') {
-      core.input.startSelectionDrag();
-      this.dragState.set(core.input.getDragState());
-    } else if (startDrag === 'row-drag') {
-      this.dragState.set(core.input.getDragState());
-    } else if (startDrag === 'row-drag-pending') {
-      this.pendingRowDrag.start(event);
     }
   }
 
   protected onCellPointerEnter(evt: CellPointerEnterEvent): void {
-    this.coreRef?.input.handleCellMouseEnter(evt.rowIndex, evt.colIndex);
+    this.bindings.input.cellPointerEnter(evt.rowIndex, evt.colIndex);
   }
 
   protected onFillHandlePointerDown(evt: FillHandlePointerDownEvent): void {
-    const core = this.coreRef;
-    if (core === null) return;
-    const result = core.input.handleFillHandleMouseDown(
-      this.activeCell(),
-      this.selectionRange(),
-      toPointerEventData(evt.event),
+    const action = this.bindings.input.fillHandlePointerDown(
+      this.vm.activeCell(),
+      this.vm.selectionRange(),
+      evt.event,
     );
-    if (result.preventDefault) evt.event.preventDefault();
-    if (result.stopPropagation) evt.event.stopPropagation();
-    if (result.startDrag === 'fill') {
-      capturePointer(evt.event);
-      this.dragState.set(core.input.getDragState());
-    }
+    if (action.preventDefault) evt.event.preventDefault();
+    if (action.stopPropagation) evt.event.stopPropagation();
   }
 
   protected onCellPointerLeave(): void {
-    this.coreRef?.input.handleCellMouseLeave();
+    this.bindings.input.cellPointerLeave();
   }
 
   protected computeRowClassesFn = (rowIndex: number, rowData: unknown): string[] => {
-    return this.coreRef?.highlight?.computeRowClasses(rowIndex, rowData) ?? [];
+    return this.bindings.coreRef?.highlight?.computeRowClasses(rowIndex, rowData) ?? [];
   };
 
   protected computeCellClassesFn = (
@@ -339,7 +201,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     column: ColumnDefinition,
     rowData: unknown,
   ): string[] => {
-    return this.coreRef?.highlight?.computeCombinedCellClasses(
+    return this.bindings.coreRef?.highlight?.computeCombinedCellClasses(
       rowIndex,
       colIndex,
       column,
@@ -348,30 +210,29 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   };
 
   protected onCellDoubleClick(evt: CellDoubleClickEvent): void {
-    this.coreRef?.startEdit(evt.rowIndex, evt.colIndex);
+    this.bindings.coreRef?.startEdit(evt.rowIndex, evt.colIndex);
   }
 
   protected onEditValueChange(value: string): void {
-    this.coreRef?.updateEditValue(value);
+    this.bindings.coreRef?.updateEditValue(value);
   }
 
   protected onEditCommit(): void {
-    this.coreRef?.commitEdit();
+    this.bindings.coreRef?.commitEdit();
   }
 
   protected onEditCancel(): void {
-    this.coreRef?.cancelEdit();
+    this.bindings.coreRef?.cancelEdit();
   }
 
   protected onHeaderSort(evt: HeaderSortEvent): void {
-    this.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
+    this.bindings.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
   }
 
   protected onWheel(event: WheelEvent): void {
-    const core = this.coreRef;
     const bodyEl = this.body?.scrollContainer?.nativeElement;
-    if (core === null || !bodyEl) return;
-    const dampened = core.input.handleWheel(event.deltaY, event.deltaX, this.wheelDampening());
+    if (!bodyEl) return;
+    const dampened = this.bindings.input.wheel(event.deltaY, event.deltaX, this.wheelDampening());
     if (dampened) {
       event.preventDefault();
       bodyEl.scrollTop += dampened.dy;
@@ -380,205 +241,39 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onKeyDown(event: KeyboardEvent): void {
-    const core = this.coreRef;
-    if (core === null) return;
-    const editing = this.editingCell();
-    const result = core.input.handleKeyDown(
-      {
-        key: event.key,
-        shiftKey: event.shiftKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-      },
-      this.activeCell(),
+    const editing = this.vm.editingCell();
+    const result = this.bindings.input.keyDown(
+      event,
+      this.vm.activeCell(),
       editing === null ? null : { row: editing.row, col: editing.col },
-      this.filterPopup() !== null,
+      this.vm.filterPopup() !== null,
     );
     if (result.preventDefault) event.preventDefault();
-    if (result.scrollToCell) this.scrollToRow(result.scrollToCell.row);
-  }
-
-  private scrollToRow(row: number): void {
-    const core = this.coreRef;
-    const container = this.body?.scrollContainer?.nativeElement;
-    if (core === null || !container) return;
-    scrollCellIntoView(
-      core,
-      container,
-      row,
-      this.rowHeight(),
-      this.slots(),
-      this.rowsWrapperOffset(),
-    );
+    if (result.scrollToCell) this.bindings.scrollToRow(result.scrollToCell.row);
   }
 
   protected onResizePointerDown(evt: ResizePointerDownEvent): void {
-    const result = this.coreRef?.input.handleHeaderResizeMouseDown(
-      evt.colIndex,
-      evt.colWidth,
-      toPointerEventData(evt.event),
-    );
-    if (result?.preventDefault) evt.event.preventDefault();
+    if (this.bindings.input.resizePointerDown(evt.colIndex, evt.colWidth, evt.event)) {
+      evt.event.preventDefault();
+    }
   }
 
   protected onFilterApply(event: { colId: string; filter: ColumnFilterModel | null }): void {
-    this.coreRef?.setFilter(event.colId, event.filter);
-    this.filterPopup.set(null);
+    this.bindings.coreRef?.setFilter(event.colId, event.filter);
+    this.vm.filterPopup.set(null);
   }
 
   protected onFilterClose(): void {
-    this.coreRef?.closeFilterPopup();
-    this.filterPopup.set(null);
-  }
-
-  private processDragMove(event: PointerEvent): void {
-    const core = this.coreRef;
-    const bodyEl = this.body?.scrollContainer?.nativeElement;
-    if (core === null || !bodyEl) return;
-    const rect = bodyEl.getBoundingClientRect();
-    const result = core.input.handleDragMove(toPointerEventData(event), {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: bodyEl.scrollTop,
-      scrollLeft: bodyEl.scrollLeft,
-    });
-    this.dragState.set(core.input.getDragState());
-    if (result?.autoScroll) {
-      this.autoScroll.start(result.autoScroll.dx, result.autoScroll.dy);
-    } else {
-      this.autoScroll.stop();
-    }
+    this.bindings.coreRef?.closeFilterPopup();
+    this.vm.filterPopup.set(null);
   }
 
   private onDocumentPointerMove = (event: PointerEvent): void => {
-    const core = this.coreRef;
-    if (core === null) return;
-    if (core.input.getDragState().isDragging) event.preventDefault();
-    this.autoScroll.recordPointer(event);
-    this.processDragMove(event);
+    if (this.bindings.input.documentPointerMove(event)) event.preventDefault();
   };
 
   private onDocumentPointerUp = (_event: PointerEvent): void => {
-    const core = this.coreRef;
-    if (core === null) return;
-    const wasRowDrag = core.input.getDragState().dragType === 'row-drag';
-    this.autoScroll.stop();
-    this.autoScroll.clearPointer();
-    core.input.handleDragEnd();
-    this.dragState.set(core.input.getDragState());
-    if (wasRowDrag) this.pendingRowDrag.releaseLocks();
+    const { wasRowDrag } = this.bindings.input.documentPointerUp();
+    if (wasRowDrag) this.bindings.pendingRowDrag.releaseLocks();
   };
-
-  private applyPendingScroll(): void {
-    const top = this.pendingScrollTop();
-    if (top !== null && this.body?.scrollContainer) {
-      this.body.scrollContainer.nativeElement.scrollTop = top;
-      this.pendingScrollTop.set(null);
-    }
-  }
-
-  private syncHighlightingToCore(): void {
-    const opts = this.highlighting();
-    const core = this.coreRef;
-    if (core?.highlight && opts) {
-      core.highlight.updateOptions(opts as HighlightingOptions<unknown>);
-    }
-  }
-
-  private syncColumnsToCore(): void {
-    const cols = this.columns();
-    const core = this.coreRef;
-    if (core === null || cols.length === 0) return;
-    if (this.lastAppliedColumns === cols) return;
-    this.lastAppliedColumns = cols;
-    core.setColumns(cols as unknown as ColumnDefinition[]);
-  }
-
-  private syncRowsToCore(): void {
-    const rows = this.rows();
-    const provided = this.dataSource();
-    const core = this.coreRef;
-    if (core === null || provided !== null) return;
-    if (this.lastAppliedRows === rows) return;
-    this.lastAppliedRows = rows;
-    if (rows.length > 10_000) {
-      console.warn(
-        `[gp-grid] rows input changed with ${rows.length} rows — this triggers a full rebuild. Use createGridData() for efficient updates.`,
-      );
-    }
-    this.ownedDataSource?.destroy?.();
-    this.ownedDataSource = createDataSourceFromArray(rows);
-    core.setDataSource(this.ownedDataSource);
-  }
-
-  private buildGridCore(): GridCore<unknown> {
-    const provided = this.dataSource();
-    const initialRows = this.rows();
-    if (provided === null) {
-      this.ownedDataSource = createDataSourceFromArray(initialRows);
-      this.lastAppliedRows = initialRows;
-    }
-    const activeDataSource = provided ?? this.ownedDataSource!;
-    const getRowId = this.getRowId() ?? undefined;
-    return new GridCore<unknown>({
-      columns: this.columns() as unknown as ColumnDefinition[],
-      dataSource: activeDataSource,
-      rowHeight: this.rowHeight(),
-      headerHeight: this.headerHeight(),
-      overscan: this.overscan(),
-      sortingEnabled: this.sortingEnabled(),
-      highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,
-      getRowId,
-      rowDragEntireRow: this.rowDragEntireRow(),
-      onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
-      onCellValueChanged: getRowId === undefined
-        ? undefined
-        : (event) => this.onCellValueChanged.emit(event as CellValueChangedEvent<unknown>),
-      onColumnResized: (colIndex, newWidth) =>
-        this.onColumnResized.emit({ colIndex, newWidth }),
-      onColumnMoved: (fromIndex, toIndex) =>
-        this.onColumnMoved.emit({ fromIndex, toIndex }),
-    });
-  }
-
-  private readonly batchSetters = {
-    setContentWidth: (v: number) => this.contentWidth.set(v),
-    setContentHeight: (v: number) => this.contentHeight.set(v),
-    setRowsWrapperOffset: (v: number) => this.rowsWrapperOffset.set(v),
-    setIsLoading: (v: boolean) => this.isLoading.set(v),
-    setErrorMessage: (v: string | null) => this.errorMessage.set(v),
-    setPendingScrollTop: (v: number | null) => this.pendingScrollTop.set(v),
-    setActiveCell: (v: CellPosition | null) => this.activeCell.set(v),
-    setSelectionRange: (v: CellRange | null) => this.selectionRange.set(v),
-    setEditingCell: (v: EditingCellState | null) => this.editingCell.set(v),
-    setHoverPosition: (v: CellPosition | null) => this.hoverPosition.set(v),
-    setColumnsOverride: (v: ColumnDefinition[]) => this.columnsOverride.set(v),
-    onFilterPopupChange: (v: FilterPopupState | null) => this.handleFilterPopupChange(v),
-  };
-
-  private handleFilterPopupChange(filterPopup: FilterPopupState | null): void {
-    if (filterPopup === null) {
-      this.filterPopup.set(null);
-      return;
-    }
-    if (filterPopup.isOpen && filterPopup.column) {
-      this.filterPopup.set({
-        colIndex: filterPopup.colIndex,
-        column: filterPopup.column,
-        distinctValues: filterPopup.distinctValues,
-        currentFilter: filterPopup.currentFilter,
-        anchorEl: this.filterAnchorEl,
-      });
-    }
-  }
 }
-
-const capturePointer = (event: PointerEvent): void => {
-  try {
-    (event.target as Element).setPointerCapture(event.pointerId);
-  } catch (_) {
-    /* pointer may have been released */
-  }
-};

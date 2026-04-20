@@ -42,7 +42,7 @@ import {
   selector: 'gp-grid-filter-popup',
   standalone: true,
   imports: [],
-  changeDetection: ChangeDetectionStrategy.Default,
+  changeDetection: ChangeDetectionStrategy.Eager,
   template: FILTER_POPUP_TEMPLATE,
 })
 export class FilterPopupComponent implements AfterViewInit, OnDestroy {
