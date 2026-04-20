@@ -4,7 +4,6 @@ import type {
   DragState,
   InputResult,
   KeyboardResult,
-  PointerEventData,
 } from "../types/input";
 import { toPointerEventData } from "./pointer-event";
 import type { AutoScrollDriver } from "./auto-scroll";
@@ -216,11 +215,7 @@ export class InputEventAdapter<TData = unknown> {
 }
 
 const capturePointer = (event: PointerEvent): void => {
-  try {
-    (event.target as Element).setPointerCapture(event.pointerId);
-  } catch (_) {
-    /* pointer may have been released */
-  }
+  (event.target as Element).setPointerCapture(event.pointerId);
 };
 
-export type { PointerEventData };
+export type { PointerEventData } from "../types";

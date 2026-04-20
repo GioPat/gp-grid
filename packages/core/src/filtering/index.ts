@@ -49,14 +49,14 @@ const TEXT_OPERATORS: Record<
   TextFilterOperator,
   (s: string, f: string, isBlank: boolean) => boolean
 > = {
-  contains:    (s, f) => s.includes(f),
+  contains: (s, f) => s.includes(f),
   notContains: (s, f) => !s.includes(f),
-  equals:      (s, f) => s === f,
-  notEquals:   (s, f) => s !== f,
-  startsWith:  (s, f) => s.startsWith(f),
-  endsWith:    (s, f) => s.endsWith(f),
-  blank:       (_s, _f, b) => b,
-  notBlank:    (_s, _f, b) => !b,
+  equals: (s, f) => s === f,
+  notEquals: (s, f) => s !== f,
+  startsWith: (s, f) => s.startsWith(f),
+  endsWith: (s, f) => s.endsWith(f),
+  blank: (_s, _f, b) => b,
+  notBlank: (_s, _f, b) => !b,
 };
 
 /**
@@ -103,12 +103,12 @@ const NUMBER_OPERATORS: Record<
   Exclude<NumberFilterOperator, "blank" | "notBlank">,
   (v: number, f: number, fTo: number) => boolean
 > = {
-  "=":     (v, f) => v === f,
-  "!=":    (v, f) => v !== f,
-  ">":     (v, f) => v > f,
-  "<":     (v, f) => v < f,
-  ">=":    (v, f) => v >= f,
-  "<=":    (v, f) => v <= f,
+  "=": (v, f) => v === f,
+  "!=": (v, f) => v !== f,
+  ">": (v, f) => v > f,
+  "<": (v, f) => v < f,
+  ">=": (v, f) => v >= f,
+  "<=": (v, f) => v <= f,
   between: (v, f, fTo) => v >= f && v <= fTo,
 };
 
@@ -141,10 +141,10 @@ const DATE_OPERATORS: Record<
   Exclude<DateFilterOperator, "blank" | "notBlank">,
   (d: Date, f: Date, fTo: Date) => boolean
 > = {
-  "=":     (d, f) => isSameDay(d, f),
-  "!=":    (d, f) => !isSameDay(d, f),
-  ">":     (d, f) => d.getTime() > f.getTime(),
-  "<":     (d, f) => d.getTime() < f.getTime(),
+  "=": (d, f) => isSameDay(d, f),
+  "!=": (d, f) => !isSameDay(d, f),
+  ">": (d, f) => d.getTime() > f.getTime(),
+  "<": (d, f) => d.getTime() < f.getTime(),
   between: (d, f, fTo) => {
     const t = d.getTime();
     return t >= f.getTime() && t <= fTo.getTime();

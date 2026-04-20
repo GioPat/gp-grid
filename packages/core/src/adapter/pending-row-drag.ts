@@ -115,10 +115,6 @@ export class PendingRowDragController<TData = unknown> {
 
   private applyPointerCapture(capture: { pointerId: number; target: Element } | null): void {
     if (!capture) return;
-    try {
-      capture.target.setPointerCapture(capture.pointerId);
-    } catch (_) {
-      /* pointer may have been released */
-    }
+    capture.target.setPointerCapture(capture.pointerId);
   }
 }
