@@ -48,9 +48,9 @@
   ],
   "scripts": {
     "build": "ng-packagr -p ng-package.json",
-    "postbuild": "node -e \"require('fs').copyFileSync('../core/dist/styles.css', 'dist/styles.css')\" && echo '✓ dist/styles.css copied'",
+    "postbuild": "node scripts/postbuild.mjs",
     "build:production": "ng-packagr -p ng-package.json",
-    "postbuild:production": "node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('../core/dist/styles.css','dist/styles.css');const d='dist/angular/fesm2022';for(const f of fs.readdirSync(d))if(f.endsWith('.map'))fs.rmSync(p.join(d,f));\" && echo '✓ dist/styles.css copied, sourcemaps stripped'"
+    "postbuild:production": "node scripts/postbuild.mjs --strip-sourcemaps"
   },
   "peerDependencies": {
     "@angular/common": ">=18.0.0",

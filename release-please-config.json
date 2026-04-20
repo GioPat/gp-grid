@@ -35,6 +35,11 @@
         },
         {
           "type": "json",
+          "path": "packages/angular/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/core/jsr.json",
           "jsonpath": "$.version"
         },

@@ -33,7 +33,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [core, vue, react]
+        include:
+          - package: core
+            publish_dir: packages/core
+          - package: vue
+            publish_dir: packages/vue
+          - package: react
+            publish_dir: packages/react
+          - package: angular
+            publish_dir: packages/angular/dist/angular
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +62,7 @@ jobs:
 
       - name: Check if version exists on npm
         id: check-npm
-        working-directory: packages/${{ matrix.package }}
+        working-directory: ${{ matrix.publish_dir }}
         run: |
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
@@ -66,9 +74,9 @@ jobs:
       - name: Publish to NPM
         if: steps.check-npm.outputs.exists == 'false'
         run: pnpm publish --access public --provenance --no-git-checks
-        working-directory: packages/${{ matrix.package }}
+        working-directory: ${{ matrix.publish_dir }}
 
       - name: Publish to JSR
         if: matrix.package == 'core'
         run: npx jsr publish --allow-dirty
-        working-directory: packages/${{ matrix.package }}
+        working-directory: packages/core
