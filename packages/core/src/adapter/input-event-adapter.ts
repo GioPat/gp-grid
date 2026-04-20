@@ -14,7 +14,7 @@ export interface InputEventAdapterDeps<TData = unknown> {
   getCore: () => GridCore<TData> | null;
   getBodyEl: () => HTMLElement | null;
   autoScroll: AutoScrollDriver;
-  pendingRowDrag: PendingRowDragController;
+  pendingRowDrag: PendingRowDragController<TData>;
   onDragStateChange: (state: DragState) => void;
 }
 

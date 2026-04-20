@@ -1,8 +1,8 @@
 import type { GridCore } from "../grid-core";
 import type { DragState } from "../types/input";
 
-export interface PendingRowDragDeps {
-  getCore: () => GridCore<unknown> | null;
+export interface PendingRowDragDeps<TData = unknown> {
+  getCore: () => GridCore<TData> | null;
   getContainer: () => HTMLElement | null;
   isBrowser: boolean;
   onDragConfirmed: (state: DragState) => void;
@@ -25,14 +25,14 @@ const DRAG_HOLD_MS = 300;
  * Framework-agnostic: accepts plain getter/callback deps and touches only
  * the document/element DOM APIs. Wrappers gate construction on browser.
  */
-export class PendingRowDragController {
+export class PendingRowDragController<TData = unknown> {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private capture: { pointerId: number; target: Element } | null = null;
   private savedContainerOverflow: string | null = null;
   private readonly blockTouchMove = (e: TouchEvent): void => e.preventDefault();
-  private readonly deps: PendingRowDragDeps;
+  private readonly deps: PendingRowDragDeps<TData>;
 
-  constructor(deps: PendingRowDragDeps) {
+  constructor(deps: PendingRowDragDeps<TData>) {
     this.deps = deps;
   }
 
