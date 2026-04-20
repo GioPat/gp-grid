@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.1...gp-grid-v0.11.2) (2026-04-20)
+
+
+### 📝 Documentation
+
+* **angular:** remove gp-core as peer dependency ([6361574](https://github.com/GioPat/gp-grid/commit/63615746950e9bface4713b86288b0ecb359ac40))
+
 ## [0.11.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.0...gp-grid-v0.11.1) (2026-04-20)
 
 
