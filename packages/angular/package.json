@@ -1,6 +1,8 @@
 {
   "name": "@gp-grid/angular",
+  "description": "A high-performance Angular data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
   "version": "0.10.3",
+  "license": "Apache-2.0",
   "module": "dist/angular/fesm2022/gp-grid-angular.mjs",
   "typings": "dist/angular/types/gp-grid-angular.d.ts",
   "exports": {
@@ -13,9 +15,42 @@
     },
     "./dist/styles.css": "./dist/styles.css"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GioPat/gp-grid.git",
+    "directory": "packages/angular"
+  },
+  "bugs": {
+    "url": "https://github.com/GioPat/gp-grid/issues"
+  },
+  "homepage": "https://github.com/GioPat/gp-grid/tree/master/packages/angular#readme",
+  "keywords": [
+    "angular",
+    "grid",
+    "data-grid",
+    "datagrid",
+    "angular-grid",
+    "angular-table",
+    "table",
+    "data-table",
+    "datatable",
+    "virtual-scroll",
+    "virtualization",
+    "typescript",
+    "high-performance",
+    "spreadsheet",
+    "excel",
+    "lightweight",
+    "cell-selection",
+    "sorting",
+    "filtering",
+    "editable"
+  ],
   "scripts": {
     "build": "ng-packagr -p ng-package.json",
-    "postbuild": "node -e \"require('fs').copyFileSync('../core/dist/styles.css', 'dist/styles.css')\" && echo '✓ dist/styles.css copied'"
+    "postbuild": "node -e \"require('fs').copyFileSync('../core/dist/styles.css', 'dist/styles.css')\" && echo '✓ dist/styles.css copied'",
+    "build:production": "ng-packagr -p ng-package.json",
+    "postbuild:production": "node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('../core/dist/styles.css','dist/styles.css');const d='dist/angular/fesm2022';for(const f of fs.readdirSync(d))if(f.endsWith('.map'))fs.rmSync(p.join(d,f));\" && echo '✓ dist/styles.css copied, sourcemaps stripped'"
   },
   "peerDependencies": {
     "@angular/common": ">=18.0.0",
