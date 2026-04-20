@@ -19,7 +19,7 @@ A high-performance, feature-lean Angular data grid built to handle millions of r
 ## Installation
 
 ```bash
-pnpm add @gp-grid/angular @gp-grid/core
+pnpm add @gp-grid/angular
 ```
 
 Peer requirements: `@angular/common` and `@angular/core` `>=18.0.0`.
