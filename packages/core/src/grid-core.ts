@@ -43,7 +43,7 @@ import {
   applyColumnMove,
   applyColumnResize,
   applyRowDragCommit,
-  refreshVisibleWindow,
+  refreshTransactionData,
 } from "./grid-core-operations";
 
 // =============================================================================
@@ -528,15 +528,11 @@ export class GridCore<TData = unknown> {
    * Use this when data was mutated via MutableDataSource transactions.
    */
   async refreshFromTransaction(): Promise<void> {
-    const visibleRange = this.getVisibleRowRange();
-    await refreshVisibleWindow({
+    await refreshTransactionData({
       dataSource: this.dataSource,
       sortFilter: this.sortFilter,
       cachedRows: this.cachedRows,
       setTotalRows: (n) => { this.totalRows = n; },
-      visibleStart: visibleRange.start,
-      visibleEnd: visibleRange.end,
-      overscan: this.overscan,
     });
     this.highlight?.clearAllCaches();
     this.slotPool.refreshAllSlots();

@@ -230,8 +230,13 @@ export function createMutableClientDataSource<TData = unknown>(
     },
 
     clear(): void {
+      const removed = store.getTotalRowCount();
       store.clear();
-      subscribers.clear();
+      const result: TransactionResult = { added: 0, removed, updated: 0 };
+      onTransactionProcessed?.(result);
+      for (const listener of subscribers) {
+        listener(result);
+      }
     },
 
     moveRow(fromIndex: number, toIndex: number): void {

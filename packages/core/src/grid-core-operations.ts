@@ -96,34 +96,36 @@ export interface RefreshTransactionDeps<TData> {
   sortFilter: SortFilterManager<TData>;
   cachedRows: Map<number, TData>;
   setTotalRows: (n: number) => void;
-  visibleStart: number;
-  visibleEnd: number;
-  overscan: number;
 }
 
 export interface RefreshTransactionResult {
   totalRows: number;
 }
 
-export const refreshVisibleWindow = async <TData>(
+/**
+ * Re-fetch all rows from the data source and replace the cache. Unlike
+ * `fetchData`, this does not emit DATA_LOADING/DATA_LOADED, so it can be used
+ * on every transaction without causing UI flicker. Fetching the full range is
+ * necessary so rows added beyond the current visible window are cached and
+ * become available when the user scrolls to them.
+ */
+export const refreshTransactionData = async <TData>(
   deps: RefreshTransactionDeps<TData>,
 ): Promise<RefreshTransactionResult> => {
-  const start = Math.max(0, deps.visibleStart - deps.overscan);
-  const end = deps.visibleEnd + deps.overscan;
-
   const response = await deps.dataSource.fetch(
     buildDataSourceRequest({
       pageIndex: 0,
-      pageSize: end + 1,
+      pageSize: Number.MAX_SAFE_INTEGER,
       sortModel: deps.sortFilter.getSortModel(),
       filterModel: deps.sortFilter.getFilterModel(),
     }),
   );
 
-  deps.setTotalRows(response.totalRows);
-  for (let i = start; i < Math.min(end + 1, response.rows.length); i++) {
+  deps.cachedRows.clear();
+  for (let i = 0; i < response.rows.length; i++) {
     const row = response.rows[i];
     if (row !== undefined) deps.cachedRows.set(i, row);
   }
+  deps.setTotalRows(response.totalRows);
   return { totalRows: response.totalRows };
 };
