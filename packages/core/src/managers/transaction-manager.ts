@@ -247,8 +247,7 @@ export class TransactionManager<TData = unknown> {
             break;
 
           case "REMOVE":
-            this.options.store.removeRows(tx.rowIds);
-            result.removed += tx.rowIds.length;
+            result.removed += this.options.store.removeRows(tx.rowIds);
             break;
 
           case "UPDATE_CELL":

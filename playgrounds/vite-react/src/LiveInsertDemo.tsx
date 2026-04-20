@@ -37,21 +37,18 @@ function getRandomVolume(): number {
   return Math.floor(Math.random() * 1000000) + 10000;
 }
 
-let nextId = 1;
-
-function generateTick(): StockTick {
-  return {
+// Id counter lives per data-source instance so StrictMode's double-invoked
+// useMemo doesn't leak ids between mounts.
+function createTickFactory(): () => StockTick {
+  let nextId = 1;
+  return () => ({
     id: nextId++,
     symbol: symbols[Math.floor(Math.random() * symbols.length)],
     price: getRandomPrice(),
     change: getRandomChange(),
     volume: getRandomVolume(),
     timestamp: new Date().toISOString().slice(11, 23),
-  };
-}
-
-function generateInitialData(count: number): StockTick[] {
-  return Array.from({ length: count }, () => generateTick());
+  });
 }
 
 const columns: ColumnDefinition[] = [
@@ -70,28 +67,27 @@ export function LiveInsertDemo() {
   const [batchSize, setBatchSize] = useState(10);
   const streamingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const dataSource = useMemo(() => {
-    const ds = createMutableClientDataSource<StockTick>(
-      generateInitialData(10),
-      {
-        getRowId: (row) => row.id,
-        debounceMs: 50,
-        onTransactionProcessed: (result) => {
-          setRowCount((prev) => prev + result.added - result.removed);
-        },
+  const { dataSource, generateTick } = useMemo(() => {
+    const generateTick = createTickFactory();
+    const initialData = Array.from({ length: 10 }, generateTick);
+    const ds = createMutableClientDataSource<StockTick>(initialData, {
+      getRowId: (row) => row.id,
+      debounceMs: 50,
+      onTransactionProcessed: (result) => {
+        setRowCount((prev) => prev + result.added - result.removed);
       },
-    );
-    return ds;
+    });
+    return { dataSource: ds, generateTick };
   }, []);
 
   const handleAddRow = useCallback(() => {
     dataSource.addRows([generateTick()]);
-  }, [dataSource]);
+  }, [dataSource, generateTick]);
 
   const handleAddBatch = useCallback(() => {
-    const batch = Array.from({ length: batchSize }, () => generateTick());
+    const batch = Array.from({ length: batchSize }, generateTick);
     dataSource.addRows(batch);
-  }, [dataSource, batchSize]);
+  }, [dataSource, batchSize, generateTick]);
 
   const handleRemoveFirst = useCallback(async () => {
     await dataSource.flushTransactions();
@@ -114,9 +110,7 @@ export function LiveInsertDemo() {
 
   const handleClearAll = useCallback(async () => {
     await dataSource.flushTransactions();
-    const count = dataSource.getTotalRowCount();
-    const ids = Array.from({ length: count }, (_, i) => i + 1);
-    dataSource.removeRows(ids);
+    dataSource.clear();
   }, [dataSource]);
 
   const toggleStreaming = useCallback(() => {
@@ -132,7 +126,7 @@ export function LiveInsertDemo() {
       }, streamInterval);
       setIsStreaming(true);
     }
-  }, [isStreaming, streamInterval, dataSource]);
+  }, [isStreaming, streamInterval, dataSource, generateTick]);
 
   return (
     <div style={{ padding: "20px" }}>

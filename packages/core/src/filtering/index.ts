@@ -5,8 +5,11 @@ import type {
   CellValue,
   FilterCondition,
   TextFilterCondition,
+  TextFilterOperator,
   NumberFilterCondition,
+  NumberFilterOperator,
   DateFilterCondition,
+  DateFilterOperator,
   ColumnFilterModel,
   FilterModel,
 } from "../types";
@@ -42,6 +45,20 @@ function isBlankValue(cellValue: CellValue): boolean {
 // Text Filter Conditions
 // =============================================================================
 
+const TEXT_OPERATORS: Record<
+  TextFilterOperator,
+  (s: string, f: string, isBlank: boolean) => boolean
+> = {
+  contains: (s, f) => s.includes(f),
+  notContains: (s, f) => !s.includes(f),
+  equals: (s, f) => s === f,
+  notEquals: (s, f) => s !== f,
+  startsWith: (s, f) => s.startsWith(f),
+  endsWith: (s, f) => s.endsWith(f),
+  blank: (_s, _f, b) => b,
+  notBlank: (_s, _f, b) => !b,
+};
+
 /**
  * Evaluate a text filter condition against a cell value.
  */
@@ -73,35 +90,27 @@ export function evaluateTextCondition(
     return condition.selectedValues.has(cellStr) || includesBlank;
   }
 
-  // Handle operator-based conditions
   const strValue = formatCellValue(cellValue).toLowerCase();
   const filterValue = String(condition.value ?? "").toLowerCase();
-
-  switch (condition.operator) {
-    case "contains":
-      return strValue.includes(filterValue);
-    case "notContains":
-      return !strValue.includes(filterValue);
-    case "equals":
-      return strValue === filterValue;
-    case "notEquals":
-      return strValue !== filterValue;
-    case "startsWith":
-      return strValue.startsWith(filterValue);
-    case "endsWith":
-      return strValue.endsWith(filterValue);
-    case "blank":
-      return isBlank;
-    case "notBlank":
-      return !isBlank;
-    default:
-      return true;
-  }
+  return TEXT_OPERATORS[condition.operator](strValue, filterValue, isBlank);
 }
 
 // =============================================================================
 // Number Filter Conditions
 // =============================================================================
+
+const NUMBER_OPERATORS: Record<
+  Exclude<NumberFilterOperator, "blank" | "notBlank">,
+  (v: number, f: number, fTo: number) => boolean
+> = {
+  "=": (v, f) => v === f,
+  "!=": (v, f) => v !== f,
+  ">": (v, f) => v > f,
+  "<": (v, f) => v < f,
+  ">=": (v, f) => v >= f,
+  "<=": (v, f) => v <= f,
+  between: (v, f, fTo) => v >= f && v <= fTo,
+};
 
 /**
  * Evaluate a number filter condition against a cell value.
@@ -116,36 +125,31 @@ export function evaluateNumberCondition(
   if (condition.operator === "notBlank") return !isBlank;
   if (isBlank) return false;
 
-  const numValue =
-    typeof cellValue === "number" ? cellValue : Number(cellValue);
+  const numValue = typeof cellValue === "number" ? cellValue : Number(cellValue);
   if (Number.isNaN(numValue)) return false;
 
   const filterValue = condition.value ?? 0;
   const filterValueTo = condition.valueTo ?? 0;
-
-  switch (condition.operator) {
-    case "=":
-      return numValue === filterValue;
-    case "!=":
-      return numValue !== filterValue;
-    case ">":
-      return numValue > filterValue;
-    case "<":
-      return numValue < filterValue;
-    case ">=":
-      return numValue >= filterValue;
-    case "<=":
-      return numValue <= filterValue;
-    case "between":
-      return numValue >= filterValue && numValue <= filterValueTo;
-    default:
-      return true;
-  }
+  return NUMBER_OPERATORS[condition.operator](numValue, filterValue, filterValueTo);
 }
 
 // =============================================================================
 // Date Filter Conditions
 // =============================================================================
+
+const DATE_OPERATORS: Record<
+  Exclude<DateFilterOperator, "blank" | "notBlank">,
+  (d: Date, f: Date, fTo: Date) => boolean
+> = {
+  "=": (d, f) => isSameDay(d, f),
+  "!=": (d, f) => !isSameDay(d, f),
+  ">": (d, f) => d.getTime() > f.getTime(),
+  "<": (d, f) => d.getTime() < f.getTime(),
+  between: (d, f, fTo) => {
+    const t = d.getTime();
+    return t >= f.getTime() && t <= fTo.getTime();
+  },
+};
 
 /**
  * Evaluate a date filter condition against a cell value.
@@ -160,37 +164,19 @@ export function evaluateDateCondition(
   if (condition.operator === "notBlank") return !isBlank;
   if (isBlank) return false;
 
-  const dateValue =
-    cellValue instanceof Date ? cellValue : new Date(formatCellValue(cellValue));
+  const dateValue = cellValue instanceof Date
+    ? cellValue
+    : new Date(formatCellValue(cellValue));
   if (Number.isNaN(dateValue.getTime())) return false;
 
-  const filterDate =
-    condition.value instanceof Date
-      ? condition.value
-      : new Date(String(condition.value ?? ""));
-  const filterDateTo =
-    condition.valueTo instanceof Date
-      ? condition.valueTo
-      : new Date(String(condition.valueTo ?? ""));
+  const filterDate = condition.value instanceof Date
+    ? condition.value
+    : new Date(String(condition.value ?? ""));
+  const filterDateTo = condition.valueTo instanceof Date
+    ? condition.valueTo
+    : new Date(String(condition.valueTo ?? ""));
 
-  const dateTime = dateValue.getTime();
-  const filterTime = filterDate.getTime();
-  const filterTimeTo = filterDateTo.getTime();
-
-  switch (condition.operator) {
-    case "=":
-      return isSameDay(dateValue, filterDate);
-    case "!=":
-      return !isSameDay(dateValue, filterDate);
-    case ">":
-      return dateTime > filterTime;
-    case "<":
-      return dateTime < filterTime;
-    case "between":
-      return dateTime >= filterTime && dateTime <= filterTimeTo;
-    default:
-      return true;
-  }
+  return DATE_OPERATORS[condition.operator](dateValue, filterDate, filterDateTo);
 }
 
 // =============================================================================

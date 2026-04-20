@@ -12,7 +12,6 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  injectStyles,
   calculateScaledColumnPositions,
   getTotalWidth,
   calculateFillHandlePosition,
@@ -40,9 +39,6 @@ export type {
 export function Grid<TData = unknown>(
   props: GridProps<TData>,
 ): React.ReactNode {
-  // Inject styles on first render (safe to call multiple times)
-  injectStyles();
-
   const {
     columns,
     dataSource: providedDataSource,

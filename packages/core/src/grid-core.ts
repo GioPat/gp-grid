@@ -2,13 +2,11 @@
 
 import type {
   GridCoreOptions,
-  GridInstruction,
   BatchInstructionListener,
   ColumnDefinition,
   CellValue,
   CellValueChangedEvent,
   DataSource,
-  DataSourceRequest,
   RowId,
   SortModel,
   SortDirection,
@@ -16,21 +14,37 @@ import type {
   ColumnFilterModel,
   EditState,
 } from "./types";
-import { SelectionManager } from "./selection";
-import { FillManager } from "./fill";
-import { SlotPoolManager } from "./slot-pool";
-import { EditManager } from "./edit-manager";
+import type { SelectionManager } from "./selection";
+import type { FillManager } from "./fill";
+import type { SlotPoolManager } from "./slot-pool";
+import type { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
-import {
+import type {
   HighlightManager,
-  SortFilterManager,
   RowMutationManager,
   ScrollVirtualizationManager,
+  SortFilterManager,
+  ViewportState,
 } from "./managers";
+import { InstructionBatcher } from "./managers";
 import {
-  getFieldValue,
-  setFieldValue,
-} from "./indexed-data-store/field-helpers";
+  buildDataSourceRequest,
+  computeColumnPositions,
+  readCell,
+  writeCell,
+} from "./utils";
+import { buildGridManagers } from "./grid-core-managers";
+import {
+  emitContentSize as emitContentSizeFn,
+  emitHeaders as emitHeadersFn,
+  emitVisibleRange as emitVisibleRangeFn,
+} from "./grid-core-emitters";
+import {
+  applyColumnMove,
+  applyColumnResize,
+  applyRowDragCommit,
+  refreshTransactionData,
+} from "./grid-core-operations";
 
 // =============================================================================
 // GridCore
@@ -52,10 +66,7 @@ export class GridCore<TData = unknown> {
   private readonly onColumnMoved?: (fromIndex: number, toIndex: number) => void;
 
   // Viewport state
-  private scrollTop: number = 0;
-  private scrollLeft: number = 0;
-  private viewportWidth: number = 800;
-  private viewportHeight: number = 600;
+  private readonly viewport: ViewportState;
 
   // Data state
   private readonly currentPageIndex: number = 0;
@@ -77,9 +88,8 @@ export class GridCore<TData = unknown> {
   // Column positions (computed)
   private columnPositions: number[] = [];
 
-  // Instruction listeners
-  private batchListeners: BatchInstructionListener[] = [];
-  private instructionBuffer: GridInstruction[] | null = null;
+  // Instruction dispatch
+  private readonly batcher = new InstructionBatcher();
 
   // Scroll virtualization
   private readonly scrollVirtualization: ScrollVirtualizationManager;
@@ -103,151 +113,41 @@ export class GridCore<TData = unknown> {
     this.onRowDragEnd = options.onRowDragEnd;
     this.onColumnResized = options.onColumnResized;
     this.onColumnMoved = options.onColumnMoved;
-
     if (this.onCellValueChanged && !this.getRowId) {
       throw new Error("getRowId is required when onCellValueChanged is provided");
     }
 
     this.computeColumnPositions();
 
-    // Initialize selection manager
-    this.selection = new SelectionManager({
-      getRowCount: () => this.totalRows,
-      getColumnCount: () => this.columns.length,
-      getCellValue: (row, col) => this.getCellValue(row, col),
-      getRowData: (row) => this.cachedRows.get(row),
-      getColumn: (col) => this.columns[col],
-    });
-
-    // Forward selection instructions
-    this.selection.onInstruction((instruction) => {
-      this.emit(instruction);
-      // Notify highlight manager of selection changes
-      this.highlight?.onSelectionChange();
-    });
-
-    // Initialize highlight manager (only if highlighting options provided)
-    if (options.highlighting) {
-      this.highlight = new HighlightManager<TData>(
-        {
-          getActiveCell: () => this.selection.getActiveCell(),
-          getSelectionRange: () => this.selection.getSelectionRange(),
-          getColumn: (colIndex) => this.columns[colIndex],
-        },
-        options.highlighting,
-      );
-
-      // Forward highlight instructions
-      this.highlight.onInstruction((instruction) => this.emit(instruction));
-    } else {
-      this.highlight = null;
-    }
-
-    // Initialize fill manager
-    this.fill = new FillManager({
-      getRowCount: () => this.totalRows,
-      getColumnCount: () => this.columns.length,
-      getCellValue: (row, col) => this.getCellValue(row, col),
-      getColumn: (col) => this.columns[col],
-      setCellValue: (row, col, value) => this.setCellValue(row, col, value),
-    });
-
-    // Forward fill instructions
-    this.fill.onInstruction((instruction) => this.emit(instruction));
-
-    // Initialize scroll virtualization manager
-    this.scrollVirtualization = new ScrollVirtualizationManager({
-      getRowHeight: () => this.rowHeight,
-      getHeaderHeight: () => this.headerHeight,
+    const managers = buildGridManagers<TData>({
+      batcher: this.batcher,
+      highlighting: options.highlighting,
+      getColumns: () => this.columns,
+      getCachedRows: () => this.cachedRows,
+      setCachedRows: (rows) => { this.cachedRows = rows; },
       getTotalRows: () => this.totalRows,
-      getScrollTop: () => this.scrollTop,
-      getViewportHeight: () => this.viewportHeight,
-    });
-
-    // Initialize slot pool manager
-    this.slotPool = new SlotPoolManager({
+      setTotalRows: (count) => { this.totalRows = count; },
       getRowHeight: () => this.rowHeight,
       getHeaderHeight: () => this.headerHeight,
       getOverscan: () => this.overscan,
-      getScrollTop: () => this.scrollTop,
-      getViewportHeight: () => this.viewportHeight,
-      getTotalRows: () => this.totalRows,
-      getScrollRatio: () => this.scrollVirtualization.getScrollRatio(),
-      getVirtualContentHeight: () =>
-        this.scrollVirtualization.getVirtualContentHeight(),
-      getRowData: (rowIndex) => this.cachedRows.get(rowIndex),
-    });
-
-    // Forward slot pool instructions (use batch listener for performance)
-    this.slotPool.onBatchInstruction((instructions) =>
-      this.emitBatch(instructions),
-    );
-
-    // Initialize edit manager
-    this.editManager = new EditManager({
-      getColumn: (col) => this.columns[col],
+      getSortingEnabled: () => this.sortingEnabled,
       getCellValue: (row, col) => this.getCellValue(row, col),
       setCellValue: (row, col, value) => this.setCellValue(row, col, value),
-      onCommit: (row) => {
-        // Update the slot displaying this row after edit commit
-        this.slotPool.updateSlot(row);
-      },
-    });
-
-    // Forward edit manager instructions
-    this.editManager.onInstruction((instruction) => this.emit(instruction));
-
-    // Initialize sort/filter manager
-    this.sortFilter = new SortFilterManager<TData>({
-      getColumns: () => this.columns,
-      isSortingEnabled: () => this.sortingEnabled,
-      getCachedRows: () => this.cachedRows,
-      onSortFilterChange: async () => {
-        await this.fetchData();
-        this.highlight?.clearAllCaches();
-        // Reset scroll to top — filtered/sorted results are a new view.
-        // Both internal state and framework container must agree on scrollTop,
-        // otherwise slots are positioned for a stale offset.
-        this.scrollTop = 0;
-        this.startBatch();
-        try {
-          this.emit({ type: "SCROLL_TO", scrollTop: 0 });
-          this.emitContentSize();
-          this.emitHeaders();
-          this.slotPool.refreshAllSlots();
-        } finally {
-          this.flushBatch();
-        }
-      },
-      onDataRefreshed: () => {
-        // Handled in onSortFilterChange via startBatch/flushBatch
-        // so all UI updates arrive as a single atomic batch.
-      },
-    });
-
-    // Forward sort/filter instructions
-    this.sortFilter.onInstruction((instruction) => this.emit(instruction));
-
-    // Initialize row mutation manager
-    this.rowMutation = new RowMutationManager<TData>({
-      getCachedRows: () => this.cachedRows,
-      setCachedRows: (rows) => {
-        this.cachedRows = rows;
-      },
-      getTotalRows: () => this.totalRows,
-      setTotalRows: (count) => {
-        this.totalRows = count;
-      },
-      updateSlot: (rowIndex) => this.slotPool.updateSlot(rowIndex),
-      refreshAllSlots: () => this.slotPool.refreshAllSlots(),
       emitContentSize: () => this.emitContentSize(),
+      emitHeaders: () => this.emitHeaders(),
+      fetchData: () => this.fetchData(),
       clearSelectionIfInvalid: (maxValidRow) => this.clearSelectionIfInvalid(maxValidRow),
     });
+    this.selection = managers.selection;
+    this.highlight = managers.highlight;
+    this.fill = managers.fill;
+    this.scrollVirtualization = managers.scrollVirtualization;
+    this.viewport = managers.viewport;
+    this.slotPool = managers.slotPool;
+    this.editManager = managers.editManager;
+    this.sortFilter = managers.sortFilter;
+    this.rowMutation = managers.rowMutation;
 
-    // Forward row mutation instructions
-    this.rowMutation.onInstruction((instruction) => this.emit(instruction));
-
-    // Initialize input handler
     this.input = new InputHandler(this, {
       getHeaderHeight: () => this.headerHeight,
       getRowHeight: () => this.rowHeight,
@@ -265,51 +165,7 @@ export class GridCore<TData = unknown> {
    * Batch listeners receive arrays of instructions instead of individual ones.
    */
   onBatchInstruction(listener: BatchInstructionListener): () => void {
-    this.batchListeners.push(listener);
-    return () => {
-      this.batchListeners = this.batchListeners.filter((l) => l !== listener);
-    };
-  }
-
-  /**
-   * Start buffering instructions. All emit/emitBatch calls will accumulate
-   * into an internal buffer until flushBatch() is called.
-   */
-  private startBatch(): void {
-    this.instructionBuffer = [];
-  }
-
-  /**
-   * Flush buffered instructions to listeners as a single batch, then
-   * stop buffering.
-   */
-  private flushBatch(): void {
-    const buffer = this.instructionBuffer;
-    this.instructionBuffer = null;
-    if (buffer && buffer.length > 0) {
-      for (const listener of this.batchListeners) {
-        listener(buffer);
-      }
-    }
-  }
-
-  private emit(instruction: GridInstruction): void {
-    if (this.instructionBuffer) {
-      this.instructionBuffer.push(instruction);
-    } else {
-      this.emitBatch([instruction]);
-    }
-  }
-
-  private emitBatch(instructions: GridInstruction[]): void {
-    if (instructions.length === 0) return;
-    if (this.instructionBuffer) {
-      this.instructionBuffer.push(...instructions);
-      return;
-    }
-    for (const listener of this.batchListeners) {
-      listener(instructions);
-    }
+    return this.batcher.subscribe(listener);
   }
 
   // ===========================================================================
@@ -340,43 +196,17 @@ export class GridCore<TData = unknown> {
     width: number,
     height: number,
   ): void {
-    // When scroll ratio < 1, map the visual scroll position to actual content position
-    // scrollTop is the browser's reported scroll position within the virtual container
-    // We need to convert this to determine which row should be at the top of the viewport
-    const scrollRatio = this.scrollVirtualization.getScrollRatio();
-    const effectiveScrollTop =
-      scrollRatio < 1 ? scrollTop / scrollRatio : scrollTop;
-
-    const viewportSizeChanged =
-      this.viewportWidth !== width || this.viewportHeight !== height;
-
-    const changed =
-      this.scrollTop !== effectiveScrollTop ||
-      this.scrollLeft !== scrollLeft ||
-      viewportSizeChanged;
-
+    const { changed, viewportSizeChanged } = this.viewport.update(
+      scrollTop,
+      scrollLeft,
+      width,
+      height,
+    );
     if (!changed) return;
 
-    this.scrollTop = effectiveScrollTop;
-    this.scrollLeft = scrollLeft;
-    this.viewportWidth = width;
-    this.viewportHeight = height;
-
     this.slotPool.syncSlots();
-
-    // Emit visible range update so React (or other frameworks) can track it
-    const visibleRange = this.getVisibleRowRange();
-    this.emit({
-      type: "UPDATE_VISIBLE_RANGE",
-      start: visibleRange.start,
-      end: visibleRange.end,
-      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
-    });
-
-    // Emit content size when viewport size changes (for column scaling)
-    if (viewportSizeChanged) {
-      this.emitContentSize();
-    }
+    this.emitVisibleRange();
+    if (viewportSizeChanged) this.emitContentSize();
   }
 
   // ===========================================================================
@@ -385,20 +215,15 @@ export class GridCore<TData = unknown> {
 
   private async fetchData(): Promise<void> {
     this._isDataLoading = true;
-    this.emit({ type: "DATA_LOADING" });
+    this.batcher.emit({ type: "DATA_LOADING" });
 
     try {
-      const sortModel = this.sortFilter.getSortModel();
-      const filterModel = this.sortFilter.getFilterModel();
-
-      const request: DataSourceRequest = {
-        pagination: {
-          pageIndex: this.currentPageIndex,
-          pageSize: this.pageSize,
-        },
-        sort: sortModel.length > 0 ? sortModel : undefined,
-        filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
-      };
+      const request = buildDataSourceRequest({
+        pageIndex: this.currentPageIndex,
+        pageSize: this.pageSize,
+        sortModel: this.sortFilter.getSortModel(),
+        filterModel: this.sortFilter.getFilterModel(),
+      });
 
       const response = await this.dataSource.fetch(request);
 
@@ -410,9 +235,9 @@ export class GridCore<TData = unknown> {
       });
       this.totalRows = response.totalRows;
 
-      this.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
+      this.batcher.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
     } catch (error) {
-      this.emit({
+      this.batcher.emit({
         type: "DATA_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
@@ -496,38 +321,14 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   getCellValue(row: number, col: number): CellValue {
-    const rowData = this.cachedRows.get(row);
-    if (!rowData) return null;
-
-    const column = this.columns[col];
-    if (!column) return null;
-
-    return getFieldValue(rowData, column.field);
+    return readCell(this.cachedRows, this.columns, row, col);
   }
 
   setCellValue(row: number, col: number, value: CellValue): void {
-    const rowData = this.cachedRows.get(row);
-    if (!rowData || typeof rowData !== "object") return;
-
-    const column = this.columns[col];
-    if (!column) return;
-
-    const oldValue = this.onCellValueChanged
-      ? getFieldValue(rowData, column.field)
-      : undefined;
-
-    setFieldValue(rowData as Record<string, unknown>, column.field, value);
-
-    if (this.onCellValueChanged) {
-      this.onCellValueChanged({
-        rowId: this.getRowId!(rowData),
-        colIndex: col,
-        field: column.field,
-        oldValue: oldValue!,
-        newValue: value,
-        rowData,
-      });
-    }
+    writeCell(this.cachedRows, this.columns, row, col, value, {
+      onCellValueChanged: this.onCellValueChanged,
+      getRowId: this.getRowId,
+    });
   }
 
   // ===========================================================================
@@ -542,50 +343,33 @@ export class GridCore<TData = unknown> {
   }
 
   private computeColumnPositions(): void {
-    this.columnPositions = [0];
-    let pos = 0;
-    for (const col of this.columns) {
-      // Only include visible columns in content width calculation
-      if (!col.hidden) {
-        pos += col.width;
-        this.columnPositions.push(pos);
-      }
-    }
+    this.columnPositions = computeColumnPositions(this.columns);
   }
 
   private emitContentSize(): void {
-    const width = this.columnPositions.at(- 1) ?? 0;
-
-    // Update scroll virtualization calculations
-    this.scrollVirtualization.updateContentSize();
-
-    this.emit({
-      type: "SET_CONTENT_SIZE",
-      width,
-      height: this.scrollVirtualization.getVirtualHeight(),
-      viewportWidth: this.viewportWidth,
-      viewportHeight: this.viewportHeight,
-      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
+    emitContentSizeFn({
+      batcher: this.batcher,
+      scrollVirtualization: this.scrollVirtualization,
+      slotPool: this.slotPool,
+      viewport: this.viewport,
+      columnPositions: this.columnPositions,
     });
   }
 
   private emitHeaders(): void {
-    const sortInfoMap = this.sortFilter.getSortInfoMap();
+    emitHeadersFn({
+      batcher: this.batcher,
+      sortFilter: this.sortFilter,
+      columns: this.columns,
+    });
+  }
 
-    for (let i = 0; i < this.columns.length; i++) {
-      const column = this.columns[i]!;
-      const colId = column.colId ?? column.field;
-      const sortInfo = sortInfoMap.get(colId);
-
-      this.emit({
-        type: "UPDATE_HEADER",
-        colIndex: i,
-        column,
-        sortDirection: sortInfo?.direction,
-        sortIndex: sortInfo?.index,
-        hasFilter: this.sortFilter.hasActiveFilter(colId),
-      });
-    }
+  private emitVisibleRange(): void {
+    emitVisibleRangeFn({
+      batcher: this.batcher,
+      scrollVirtualization: this.scrollVirtualization,
+      slotPool: this.slotPool,
+    });
   }
 
   // ===========================================================================
@@ -596,49 +380,33 @@ export class GridCore<TData = unknown> {
    * Set the width of a column and recompute layout.
    */
   setColumnWidth(colIndex: number, width: number): void {
-    const column = this.columns[colIndex];
-    if (!column) return;
-    column.width = width;
-    this.computeColumnPositions();
-    this.startBatch();
-    try {
-      this.emitContentSize();
-      this.emitHeaders();
-      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
-      this.slotPool.syncSlots();
-    } finally {
-      this.flushBatch();
-    }
-    this.onColumnResized?.(colIndex, width);
+    applyColumnResize(colIndex, width, {
+      batcher: this.batcher,
+      slotPool: this.slotPool,
+      refreshSlots: "sync",
+      computeColumnPositions: () => this.computeColumnPositions(),
+      emitContentSize: () => this.emitContentSize(),
+      emitHeaders: () => this.emitHeaders(),
+      columns: this.columns,
+      onComplete: () => this.onColumnResized?.(colIndex, width),
+    });
   }
 
   /**
    * Move a column from one index to another and recompute layout.
    */
   moveColumn(fromIndex: number, toIndex: number): void {
-    if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= this.columns.length) return;
-    const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
-    if (adjustedTo < 0 || adjustedTo >= this.columns.length) return;
-    if (fromIndex === adjustedTo) return;
-
-    console.log('[gp-grid] moveColumn', fromIndex, '->', adjustedTo, 'batching:', this.instructionBuffer !== null);
-
-    const [col] = this.columns.splice(fromIndex, 1);
-    this.columns.splice(adjustedTo, 0, col!);
-
-    this.computeColumnPositions();
-    this.startBatch();
-    try {
-      this.emitContentSize();
-      this.emitHeaders();
-      this.emit({ type: "COLUMNS_CHANGED", columns: [...this.columns] });
-      this.slotPool.refreshAllSlots();
-      console.log('[gp-grid] moveColumn batch size:', this.instructionBuffer?.length);
-    } finally {
-      this.flushBatch();
-      console.log('[gp-grid] moveColumn batch flushed');
-    }
-    this.onColumnMoved?.(fromIndex, adjustedTo);
+    const adjustedTo = applyColumnMove(fromIndex, toIndex, {
+      batcher: this.batcher,
+      slotPool: this.slotPool,
+      refreshSlots: "all",
+      computeColumnPositions: () => this.computeColumnPositions(),
+      emitContentSize: () => this.emitContentSize(),
+      emitHeaders: () => this.emitHeaders(),
+      columns: this.columns,
+      onComplete: () => {},
+    });
+    if (adjustedTo !== null) this.onColumnMoved?.(fromIndex, adjustedTo);
   }
 
   /**
@@ -650,47 +418,13 @@ export class GridCore<TData = unknown> {
    * performed, then only update the affected slots.
    */
   commitRowDrag(sourceIndex: number, targetIndex: number): void {
-    const ds = this.dataSource as { moveRow?: (from: number, to: number) => void };
-    if (ds.moveRow) {
-      ds.moveRow(sourceIndex, targetIndex);
-      this.reorderCachedRows(sourceIndex, targetIndex);
-
-      // Only update the affected slots (no refetch needed)
-      this.highlight?.clearAllCaches();
-      const lo = Math.min(sourceIndex, targetIndex);
-      const hi = Math.max(sourceIndex, targetIndex);
-      for (let i = lo; i <= hi; i++) {
-        this.slotPool.updateSlot(i);
-      }
-    }
+    applyRowDragCommit(sourceIndex, targetIndex, {
+      dataSource: this.dataSource,
+      cachedRows: this.cachedRows,
+      slotPool: this.slotPool,
+      highlight: this.highlight,
+    });
     this.onRowDragEnd?.(sourceIndex, targetIndex);
-  }
-
-  /**
-   * Update cachedRows in-place to mirror the splice the data source performed.
-   * The data source does: splice(from, 1) then splice(adjustedTo, 0, row).
-   * Uses a unified loop with step direction instead of two separate branch loops.
-   */
-  private reorderCachedRows(sourceIndex: number, targetIndex: number): void {
-    const movedRow = this.cachedRows.get(sourceIndex);
-    if (movedRow === undefined) return;
-
-    if (sourceIndex < targetIndex) {
-      const placementIndex = targetIndex - 1;
-      for (let i = sourceIndex; i < placementIndex; i++) {
-        const neighbor = this.cachedRows.get(i + 1);
-        if (neighbor === undefined) this.cachedRows.delete(i);
-        else this.cachedRows.set(i, neighbor);
-      }
-      this.cachedRows.set(placementIndex, movedRow);
-    } else {
-      for (let i = sourceIndex; i > targetIndex; i--) {
-        const neighbor = this.cachedRows.get(i - 1);
-        if (neighbor === undefined) this.cachedRows.delete(i);
-        else this.cachedRows.set(i, neighbor);
-      }
-      this.cachedRows.set(targetIndex, movedRow);
-    }
   }
 
   /**
@@ -780,21 +514,12 @@ export class GridCore<TData = unknown> {
    */
   async refresh(): Promise<void> {
     await this.fetchData();
-    // Clear highlight caches since row data may have changed
     this.highlight?.clearAllCaches();
-    // Use refreshAllSlots instead of syncSlots to ensure all slot data is updated
-    // This is important when data changes (e.g., rows added) but visible indices stay the same
+    // refreshAllSlots (not syncSlots) ensures stale slot data is re-read
+    // when totalRows didn't change but row contents did.
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
-
-    // Emit visible range since totalRows may have changed
-    const visibleRange = this.getVisibleRowRange();
-    this.emit({
-      type: "UPDATE_VISIBLE_RANGE",
-      start: visibleRange.start,
-      end: visibleRange.end,
-      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
-    });
+    this.emitVisibleRange();
   }
 
   /**
@@ -803,43 +528,16 @@ export class GridCore<TData = unknown> {
    * Use this when data was mutated via MutableDataSource transactions.
    */
   async refreshFromTransaction(): Promise<void> {
-    const visibleRange = this.getVisibleRowRange();
-    const start = Math.max(0, visibleRange.start - this.overscan);
-    const end = visibleRange.end + this.overscan;
-
-    const sortModel = this.sortFilter.getSortModel();
-    const filterModel = this.sortFilter.getFilterModel();
-
-    const response = await this.dataSource.fetch({
-      pagination: {
-        pageIndex: 0,
-        pageSize: end + 1,
-      },
-      sort: sortModel.length > 0 ? sortModel : undefined,
-      filter: Object.keys(filterModel).length > 0 ? filterModel : undefined,
+    await refreshTransactionData({
+      dataSource: this.dataSource,
+      sortFilter: this.sortFilter,
+      cachedRows: this.cachedRows,
+      setTotalRows: (n) => { this.totalRows = n; },
     });
-
-    // Update totalRows (may have changed from add/remove)
-    this.totalRows = response.totalRows;
-
-    // Update only the visible range in the cache
-    for (let i = start; i < Math.min(end + 1, response.rows.length); i++) {
-      const row = response.rows[i];
-      if (row !== undefined) {
-        this.cachedRows.set(i, row);
-      }
-    }
-
     this.highlight?.clearAllCaches();
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
-
-    this.emit({
-      type: "UPDATE_VISIBLE_RANGE",
-      start: visibleRange.start,
-      end: visibleRange.end,
-      rowsWrapperOffset: this.slotPool.getRowsWrapperOffset(),
-    });
+    this.emitVisibleRange();
   }
 
   /**
@@ -935,7 +633,7 @@ export class GridCore<TData = unknown> {
     this.cachedRows.clear();
 
     // Clear listeners
-    this.batchListeners = [];
+    this.batcher.clearListeners();
 
     // Reset state
     this.totalRows = 0;

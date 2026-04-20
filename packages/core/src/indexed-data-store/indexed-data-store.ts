@@ -61,7 +61,11 @@ export class IndexedDataStore<TData = unknown> {
   // Filter state
   private filterModel: FilterModel = {};
   private filteredIndices: Set<number> = new Set(); // Indices that pass filter
-  private readonly distinctValues: Map<string, Set<CellValue>> = new Map(); // field -> unique values
+  // field -> (value -> count of rows currently holding that value). Counts
+  // let us correctly evict a value from the filter popup when the last
+  // row holding it is removed or updated. Per-mutation cost is O(fields)
+  // with constant-time Map ops (see addToDistinctValues / decrementDistinctValues).
+  private readonly distinctValues: Map<string, Map<CellValue, number>> = new Map();
 
   // Hash cache for sorted comparisons
   private rowSortCache: Map<number, RowSortCache> = new Map();
@@ -232,8 +236,8 @@ export class IndexedDataStore<TData = unknown> {
    * Get distinct values for a field (for filter UI).
    */
   getDistinctValues(field: string): CellValue[] {
-    const values = this.distinctValues.get(field);
-    return values ? Array.from(values) : [];
+    const counts = this.distinctValues.get(field);
+    return counts ? Array.from(counts.keys()) : [];
   }
 
   // ===========================================================================
@@ -290,9 +294,10 @@ export class IndexedDataStore<TData = unknown> {
   }
 
   /**
-   * Remove rows by ID.
+   * Remove rows by ID. Returns the number of rows actually removed (unknown
+   * ids are ignored).
    */
-  removeRows(ids: RowId[]): void {
+  removeRows(ids: RowId[]): number {
     const indicesToRemove: number[] = [];
 
     for (const id of ids) {
@@ -302,7 +307,7 @@ export class IndexedDataStore<TData = unknown> {
       }
     }
 
-    if (indicesToRemove.length === 0) return;
+    if (indicesToRemove.length === 0) return 0;
 
     // Sort indices in descending order to remove from end first
     indicesToRemove.sort((a, b) => b - a);
@@ -310,6 +315,7 @@ export class IndexedDataStore<TData = unknown> {
     for (const index of indicesToRemove) {
       this.removeRowByIndex(index);
     }
+    return indicesToRemove.length;
   }
 
   /**
@@ -663,58 +669,95 @@ export class IndexedDataStore<TData = unknown> {
   }
 
   /**
-   * Update distinct values when a row is added or removed.
+   * Update distinct-value refcounts when a row is added or removed.
+   * Skips null/undefined cell values — they never enter the filter popup.
    */
   private updateDistinctValuesForRow(
     row: TData,
     operation: "add" | "remove",
   ): void {
     if (typeof row !== "object" || row === null) return;
-    // Note: For "remove", we'd need reference counting to know if value is still used.
-    // For simplicity, we don't remove from distinct values on row removal.
-    if (operation !== "add") return;
 
     for (const [field, value] of Object.entries(
       row as Record<string, unknown>,
     )) {
-      if (value != null) {
+      if (value == null) continue;
+      if (operation === "add") {
         this.addToDistinctValues(field, value);
+      } else {
+        this.decrementDistinctValues(field, value);
       }
     }
   }
 
   /**
-   * Update distinct value for a specific field when cell value changes.
+   * Update distinct-value refcounts when a cell value changes: decrement
+   * the old value's count (evicting it if this was the last reference)
+   * and increment the new value's count.
    */
   private updateDistinctValueForField(
     field: string,
-    _oldValue: CellValue,
+    oldValue: CellValue,
     newValue: CellValue,
   ): void {
-    // Add new value (old value stays since other rows might use it)
+    if (oldValue != null) {
+      this.decrementDistinctValues(field, oldValue);
+    }
     if (newValue != null) {
       this.addToDistinctValues(field, newValue);
     }
   }
 
   /**
-   * Add a value (scalar or array) to the distinct values set for a field.
-   * Creates the set if it doesn't exist. For arrays, adds each non-null item individually.
+   * Add a value (scalar or array) to the distinct-value refcount map.
+   * Creates the field's count map lazily. For arrays, each non-null item
+   * is counted individually so tag-column filters see element-level
+   * distinct values.
    */
   private addToDistinctValues(field: string, value: unknown): void {
-    let values = this.distinctValues.get(field);
-    if (!values) {
-      values = new Set();
-      this.distinctValues.set(field, values);
+    let counts = this.distinctValues.get(field);
+    if (!counts) {
+      counts = new Map();
+      this.distinctValues.set(field, counts);
     }
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (item != null) {
-          values.add(item as CellValue);
-        }
+        if (item != null) incrementCount(counts, item as CellValue);
       }
-    } else {
-      values.add(value as CellValue);
+      return;
     }
+    incrementCount(counts, value as CellValue);
+  }
+
+  /**
+   * Decrement refcount(s) for a value (scalar or array). When a count
+   * reaches zero the key is deleted so getDistinctValues() no longer
+   * returns stale values after the last holder is removed.
+   */
+  private decrementDistinctValues(field: string, value: unknown): void {
+    const counts = this.distinctValues.get(field);
+    if (counts === undefined) return;
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item != null) decrementCount(counts, item as CellValue);
+      }
+      return;
+    }
+    decrementCount(counts, value as CellValue);
   }
 }
+
+const incrementCount = (counts: Map<CellValue, number>, value: CellValue): void => {
+  counts.set(value, (counts.get(value) ?? 0) + 1);
+};
+
+const decrementCount = (counts: Map<CellValue, number>, value: CellValue): void => {
+  const current = counts.get(value);
+  if (current === undefined) return;
+  if (current <= 1) {
+    counts.delete(value);
+    return;
+  }
+  counts.set(value, current - 1);
+};

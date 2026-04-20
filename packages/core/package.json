@@ -6,6 +6,13 @@
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./dist/styles.css": "./dist/styles.css"
+  },
   "author": "Giovanni Patruno (giovanni.patruno@outlook.com)",
   "repository": {
     "type": "git",
@@ -42,13 +49,12 @@
     "build": "tsdown --clean --sourcemap",
     "build:production": "tsdown --clean --minify --treeshake --dts --tsconfig tsconfig.build.json",
     "test": "vitest",
-    "test:ui": "vitest --ui",
     "bench": "vitest bench"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
     "tsdown": "^0.20.3",
-    "typescript": "~5.8.3",
+    "typescript": "~5.9.0",
     "vitest": "^4.0.15"
   }
 }

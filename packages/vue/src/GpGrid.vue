@@ -11,7 +11,6 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  injectStyles,
   calculateScaledColumnPositions,
   getTotalWidth,
 } from "@gp-grid/core";
@@ -23,9 +22,6 @@ import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./type
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
-
-// Inject styles on first render
-injectStyles();
 
 const props = withDefaults(
   defineProps<{

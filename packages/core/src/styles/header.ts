@@ -123,7 +123,7 @@ export const headerStyles: string = `
 }
 
 /* Touch device: larger tap target for filter icon */
-@media (pointer: coarse) {
+@media (pointer: coarse) and (hover: none) and (max-width: 768px) {
   .gp-grid-filter-icon {
     min-width: 44px;
     min-height: 44px;
@@ -167,7 +167,7 @@ export const headerStyles: string = `
 }
 
 /* Touch device: wider resize handle hit area */
-@media (pointer: coarse) {
+@media (pointer: coarse) and (hover: none) and (max-width: 768px) {
   .gp-grid-header-resize-handle {
     width: 24px;
     right: -12px;

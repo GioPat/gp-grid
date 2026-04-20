@@ -1,5 +1,7 @@
 // packages/core/src/input-handler.ts
-// Framework-agnostic input handler containing all input business logic
+// Framework-agnostic input handler. Thin dispatcher that routes pointer
+// events to focused drag-mode classes (see `./input/`) and keeps keyboard
+// handling in-place.
 
 import type { GridCore } from "./grid-core";
 import type { CellPosition, CellRange, SortDirection } from "./types";
@@ -12,21 +14,29 @@ import type {
   DragMoveResult,
   InputHandlerDeps,
   DragState,
-  ColumnResizeDragState,
-  ColumnMoveDragState,
-  RowDragState,
 } from "./types/input";
-import type { Direction } from "./selection";
-import { findColumnAtX } from "./utils";
+import {
+  ColumnResizeDrag,
+  ColumnMoveDrag,
+  RowDrag,
+  SelectionDrag,
+  FillDrag,
+  PendingRowDragState,
+  KeyboardHandler,
+  computeCellTarget,
+} from "./input";
 
 // =============================================================================
-// Constants
+// Helpers (module-private)
 // =============================================================================
 
-const AUTO_SCROLL_THRESHOLD = 40;
-const AUTO_SCROLL_SPEED = 10;
-const DRAG_THRESHOLD = 5;
-const DEFAULT_MIN_COLUMN_WIDTH = 50;
+const cycleSortDirection = (
+  current: SortDirection | null | undefined,
+): SortDirection | null => {
+  if (current == null) return "asc";
+  if (current === "asc") return "desc";
+  return null;
+};
 
 // =============================================================================
 // InputHandler Class
@@ -36,187 +46,152 @@ export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
   private deps: InputHandlerDeps;
 
-  // Drag state
-  private isDraggingSelection = false;
-  private isDraggingFill = false;
-  private fillSourceRange: CellRange | null = null;
-  private fillTarget: { row: number; col: number } | null = null;
-
-  // Column resize state
-  private isDraggingColumnResize = false;
-  private resizeColIndex = -1;
-  private resizeStartX = 0;
-  private resizeInitialWidth = 0;
-  private resizeCurrentWidth = 0;
-
-  // Column move state
-  private isDraggingColumnMove = false;
-  private moveSourceColIndex = -1;
-  private moveStartX = 0;
-  private moveStartY = 0;
-  private moveThresholdMet = false;
-  private moveShiftKey = false;
-  private moveGhostWidth = 0;
-  private moveGhostHeight = 0;
-  private moveCurrentX = 0;
-  private moveCurrentY = 0;
-  private moveDropTargetIndex: number | null = null;
-
-  // Row drag state
-  private isDraggingRow = false;
-  private rowDragSourceIndex = -1;
-  private rowDragStartX = 0;
-  private rowDragStartY = 0;
-  private rowDragThresholdMet = false;
-  private rowDragCurrentX = 0;
-  private rowDragCurrentY = 0;
-  private rowDragDropTargetIndex: number | null = null;
-
-  // Pending row drag (touch long-press)
-  private pendingRowDrag: { rowIndex: number; colIndex: number; clientX: number; clientY: number } | null = null;
+  readonly columnResize: ColumnResizeDrag<TData>;
+  readonly columnMove: ColumnMoveDrag<TData>;
+  readonly rowDrag: RowDrag<TData>;
+  readonly selectionDrag: SelectionDrag<TData>;
+  readonly fillDrag: FillDrag<TData>;
+  private readonly pendingRowDrag = new PendingRowDragState();
+  private readonly keyboard: KeyboardHandler<TData>;
 
   constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
     this.core = core;
     this.deps = deps;
+    this.columnResize = new ColumnResizeDrag(core);
+    this.columnMove = new ColumnMoveDrag(core, deps);
+    this.rowDrag = new RowDrag(core, deps);
+    this.selectionDrag = new SelectionDrag(core);
+    this.fillDrag = new FillDrag(core);
+    this.keyboard = new KeyboardHandler(core);
   }
 
-  /**
-   * Update dependencies (called when options change)
-   */
+  /** Update dependencies (called when options change) */
   updateDeps(deps: Partial<InputHandlerDeps>): void {
     this.deps = { ...this.deps, ...deps };
+    this.columnMove.updateDeps(this.deps);
+    this.rowDrag.updateDeps(this.deps);
   }
 
-  // ===========================================================================
-  // State Accessors (for UI rendering)
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
+  // Drag state (for UI rendering)
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Get current drag state for UI rendering
-   */
   getDragState(): DragState {
     const dragType = this.getDragType();
-
-    const columnResize: ColumnResizeDragState | null = dragType === "column-resize"
-      ? { colIndex: this.resizeColIndex, initialWidth: this.resizeInitialWidth, currentWidth: this.resizeCurrentWidth }
-      : null;
-
-    const columnMove: ColumnMoveDragState | null = dragType === "column-move"
-      ? {
-        sourceColIndex: this.moveSourceColIndex,
-        currentX: this.moveCurrentX,
-        currentY: this.moveCurrentY,
-        dropTargetIndex: this.moveDropTargetIndex,
-        ghostWidth: this.moveGhostWidth,
-        ghostHeight: this.moveGhostHeight,
-      }
-      : null;
-
-    const rowDrag: RowDragState | null = dragType === "row-drag"
-      ? {
-        sourceRowIndex: this.rowDragSourceIndex,
-        currentX: this.rowDragCurrentX,
-        currentY: this.rowDragCurrentY,
-        dropTargetIndex: this.rowDragDropTargetIndex,
-        dropIndicatorY: this.rowDragDropTargetIndex === null
-          ? 0 : this.core.getRowTranslateY(this.rowDragDropTargetIndex),
-      }
-      : null;
-
+    const fillSnapshot = this.fillDrag.stateSnapshot;
     return {
       isDragging: dragType !== null,
       dragType,
-      fillSourceRange: this.fillSourceRange,
-      fillTarget: this.fillTarget,
-      columnResize,
-      columnMove,
-      rowDrag,
+      fillSourceRange: fillSnapshot.sourceRange,
+      fillTarget: fillSnapshot.target,
+      columnResize: this.columnResize.getState(),
+      columnMove: this.columnMove.getState(),
+      rowDrag: this.rowDrag.getState(),
     };
   }
 
   private getDragType(): DragState["dragType"] {
-    if (this.isDraggingFill) return "fill";
-    if (this.isDraggingColumnResize) return "column-resize";
-    if (this.isDraggingColumnMove && this.moveThresholdMet) return "column-move";
-    if (this.isDraggingRow && this.rowDragThresholdMet) return "row-drag";
-    if (this.isDraggingSelection) return "selection";
+    if (this.fillDrag.isActive) return "fill";
+    if (this.columnResize.isActive) return "column-resize";
+    if (this.columnMove.isDraggingForDisplay) return "column-move";
+    if (this.rowDrag.isDraggingForDisplay) return "row-drag";
+    if (this.selectionDrag.isActive) return "selection";
     return null;
   }
 
-  // ===========================================================================
-  // Cell Mouse Down
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
+  // Pointer entry points
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Handle cell mouse down event
-   */
+  handleHeaderMouseDown(
+    colIndex: number,
+    colWidth: number,
+    colHeight: number,
+    event: PointerEventData,
+  ): InputResult {
+    return this.columnMove.start(colIndex, colWidth, colHeight, event);
+  }
+
+  handleHeaderResizeMouseDown(
+    colIndex: number,
+    colWidth: number,
+    event: PointerEventData,
+  ): InputResult {
+    return this.columnResize.start(colIndex, colWidth, event);
+  }
+
   handleCellMouseDown(
     rowIndex: number,
     colIndex: number,
-    event: PointerEventData
+    event: PointerEventData,
   ): InputResult {
-    // Only handle left mouse button
-    if (event.button !== 0) {
-      return { preventDefault: false, stopPropagation: false };
-    }
+    if (event.button !== 0) return noopResult;
+    if (this.core.getEditState() !== null) return noopResult;
 
-    // Don't start selection while editing
-    if (this.core.getEditState() !== null) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    // Check if this should start a row drag
     const column = this.core.getColumns()[colIndex];
-    const isRowDragEntireRow = this.core.isRowDragEntireRow();
-    const isRowDragHandle = column?.rowDrag === true;
+    const wantsRowDrag =
+      (column?.rowDrag === true || this.core.isRowDragEntireRow()) &&
+      !event.shiftKey;
 
-    if ((isRowDragHandle || isRowDragEntireRow) && !event.shiftKey) {
-      const isTouch = event.pointerType === "touch";
-
-      // For touch: require a long-press before activating row drag.
-      // The framework handles the delay and calls confirmRowDrag() after hold time.
-      if (isTouch) {
-        this.pendingRowDrag = { rowIndex, colIndex, clientX: event.clientX, clientY: event.clientY };
-        this.core.selection.startSelection(
-          { row: rowIndex, col: colIndex },
-          { shift: false, ctrl: false }
-        );
-        return {
-          preventDefault: false,
-          stopPropagation: false,
-          focusContainer: true,
-          startDrag: "row-drag-pending",
-        };
-      }
-
-      this.isDraggingRow = true;
-      this.rowDragSourceIndex = rowIndex;
-      this.rowDragStartX = event.clientX;
-      this.rowDragStartY = event.clientY;
-      this.rowDragThresholdMet = false;
-      this.rowDragCurrentX = event.clientX;
-      this.rowDragCurrentY = event.clientY;
-      this.rowDragDropTargetIndex = null;
-
-      // Still set active cell for visual feedback
-      this.core.selection.startSelection(
-        { row: rowIndex, col: colIndex },
-        { shift: false, ctrl: false }
-      );
-
-      return {
-        preventDefault: true,
-        stopPropagation: true,
-        focusContainer: true,
-        startDrag: "row-drag",
-      };
+    if (wantsRowDrag && event.pointerType === "touch") {
+      return this.startPendingRowDrag(rowIndex, colIndex, event);
     }
+    if (wantsRowDrag) {
+      return this.startRowDrag(rowIndex, colIndex, event);
+    }
+    return this.startSelectionClick(rowIndex, colIndex, event);
+  }
 
+  private startPendingRowDrag(
+    rowIndex: number,
+    colIndex: number,
+    event: PointerEventData,
+  ): InputResult {
+    this.pendingRowDrag.set({
+      rowIndex,
+      colIndex,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
     this.core.selection.startSelection(
       { row: rowIndex, col: colIndex },
-      { shift: event.shiftKey, ctrl: event.ctrlKey || event.metaKey }
+      { shift: false, ctrl: false },
     );
+    return {
+      preventDefault: false,
+      stopPropagation: false,
+      focusContainer: true,
+      startDrag: "row-drag-pending",
+    };
+  }
 
+  private startRowDrag(
+    rowIndex: number,
+    colIndex: number,
+    event: PointerEventData,
+  ): InputResult {
+    this.rowDrag.start(rowIndex, event.clientX, event.clientY);
+    this.core.selection.startSelection(
+      { row: rowIndex, col: colIndex },
+      { shift: false, ctrl: false },
+    );
+    return {
+      preventDefault: true,
+      stopPropagation: true,
+      focusContainer: true,
+      startDrag: "row-drag",
+    };
+  }
+
+  private startSelectionClick(
+    rowIndex: number,
+    colIndex: number,
+    event: PointerEventData,
+  ): InputResult {
+    this.core.selection.startSelection(
+      { row: rowIndex, col: colIndex },
+      { shift: event.shiftKey, ctrl: event.ctrlKey || event.metaKey },
+    );
     return {
       preventDefault: false,
       stopPropagation: false,
@@ -225,636 +200,112 @@ export class InputHandler<TData = unknown> {
     };
   }
 
-  /**
-   * Handle cell double click event (start editing)
-   */
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
     this.core.startEdit(rowIndex, colIndex);
   }
 
-  // ===========================================================================
-  // Hover Tracking (for highlighting)
-  // ===========================================================================
-
-  /**
-   * Handle cell mouse enter event (for hover highlighting)
-   */
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {
     this.core.highlight?.setHoverPosition({ row: rowIndex, col: colIndex });
   }
 
-  /**
-   * Handle cell mouse leave event (for hover highlighting)
-   */
   handleCellMouseLeave(): void {
     this.core.highlight?.setHoverPosition(null);
   }
 
-  // ===========================================================================
-  // Fill Handle Mouse Down
-  // ===========================================================================
-
-  /**
-   * Handle fill handle mouse down event
-   */
   handleFillHandleMouseDown(
     activeCell: CellPosition | null,
     selectionRange: CellRange | null,
-    _event: PointerEventData
+    _event: PointerEventData,
   ): InputResult {
-    if (!activeCell && !selectionRange) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    // Create source range from selection or active cell
-    const sourceRange: CellRange = selectionRange ?? {
-      startRow: activeCell!.row,
-      startCol: activeCell!.col,
-      endRow: activeCell!.row,
-      endCol: activeCell!.col,
-    };
-
-    this.core.fill.startFillDrag(sourceRange);
-    this.fillSourceRange = sourceRange;
-    this.fillTarget = {
-      row: Math.max(sourceRange.startRow, sourceRange.endRow),
-      col: Math.max(sourceRange.startCol, sourceRange.endCol),
-    };
-    this.isDraggingFill = true;
-
-    return {
-      preventDefault: true,
-      stopPropagation: true,
-      startDrag: "fill",
-    };
+    return this.fillDrag.start(activeCell, selectionRange);
   }
 
-  // ===========================================================================
-  // Header Click
-  // ===========================================================================
-
-  /**
-   * Handle header click event (cycle sort direction)
-   */
   handleHeaderClick(colId: string, addToExisting: boolean): void {
     const currentDirection = this.core
       .getSortModel()
       .find((s) => s.colId === colId)?.direction;
-
-    const nextDirection = this.cycleSortDirection(currentDirection);
-    this.core.setSort(colId, nextDirection, addToExisting);
+    this.core.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
   }
 
-  // ===========================================================================
-  // Column Resize
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
+  // Drag lifecycle (move/end dispatch)
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Handle mousedown on the resize handle of a header cell.
-   * Returns InputResult with startDrag: "column-resize".
-   */
-  handleHeaderResizeMouseDown(
-    colIndex: number,
-    colWidth: number,
-    event: PointerEventData,
-  ): InputResult {
-    if (event.button !== 0) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    const column = this.core.getColumns()[colIndex];
-    if (column?.resizable === false) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    this.isDraggingColumnResize = true;
-    this.resizeColIndex = colIndex;
-    this.resizeStartX = event.clientX;
-    this.resizeInitialWidth = colWidth;
-    this.resizeCurrentWidth = colWidth;
-
-    return {
-      preventDefault: true,
-      stopPropagation: true,
-      startDrag: "column-resize",
-    };
-  }
-
-  // ===========================================================================
-  // Column Move
-  // ===========================================================================
-
-  /**
-   * Handle mousedown on a header cell for potential column move.
-   * Uses a drag threshold to distinguish click (sort) vs drag (move).
-   */
-  handleHeaderMouseDown(
-    colIndex: number,
-    colWidth: number,
-    colHeight: number,
-    event: PointerEventData,
-  ): InputResult {
-    if (event.button !== 0) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    const column = this.core.getColumns()[colIndex];
-    if (column?.movable === false) {
-      return { preventDefault: false, stopPropagation: false };
-    }
-
-    this.isDraggingColumnMove = true;
-    this.moveSourceColIndex = colIndex;
-    this.moveStartX = event.clientX;
-    this.moveStartY = event.clientY;
-    this.moveThresholdMet = false;
-    this.moveShiftKey = event.shiftKey;
-    this.moveGhostWidth = colWidth;
-    this.moveGhostHeight = colHeight;
-    this.moveCurrentX = event.clientX;
-    this.moveCurrentY = event.clientY;
-    this.moveDropTargetIndex = null;
-
-    return {
-      preventDefault: true,
-      stopPropagation: true,
-      startDrag: "column-move",
-    };
-  }
-
-  // ===========================================================================
-  // Drag Operations
-  // ===========================================================================
-
-  /**
-   * Start selection drag (called by framework after handleCellMouseDown returns startDrag: 'selection')
-   */
   startSelectionDrag(): void {
-    this.isDraggingSelection = true;
+    this.selectionDrag.start();
   }
 
-  /**
-   * Confirm a pending row drag (called by framework after long-press timer fires).
-   * Returns true if the row drag was activated, false if the pending drag was already cancelled.
-   */
   confirmPendingRowDrag(): boolean {
-    const pending = this.pendingRowDrag;
-    if (!pending) return false;
-
-    this.pendingRowDrag = null;
-    this.isDraggingRow = true;
-    this.rowDragSourceIndex = pending.rowIndex;
-    this.rowDragStartX = pending.clientX;
-    this.rowDragStartY = pending.clientY;
-    this.rowDragThresholdMet = false;
-    this.rowDragCurrentX = pending.clientX;
-    this.rowDragCurrentY = pending.clientY;
-    this.rowDragDropTargetIndex = null;
+    const pending = this.pendingRowDrag.consume();
+    if (pending === null) return false;
+    this.rowDrag.start(pending.rowIndex, pending.clientX, pending.clientY);
     return true;
   }
 
-  /**
-   * Cancel a pending row drag (called when the pointer moves before the hold timer fires).
-   */
   cancelPendingRowDrag(): void {
-    this.pendingRowDrag = null;
+    this.pendingRowDrag.clear();
   }
 
-  /**
-   * Handle drag move event (selection, fill, column-resize, column-move, or row-drag)
-   */
   handleDragMove(
     event: PointerEventData,
-    bounds: ContainerBounds
+    bounds: ContainerBounds,
   ): DragMoveResult | null {
-    if (this.isDraggingColumnResize) return this.handleColumnResizeDragMove(event, bounds);
-    if (this.isDraggingColumnMove) return this.handleColumnMoveDragMove(event, bounds);
-    if (this.isDraggingRow) return this.handleRowDragDragMove(event, bounds);
-    return this.handleSelectionFillDragMove(event, bounds);
+    if (this.columnResize.isActive) return this.columnResize.move(event, bounds);
+    if (this.columnMove.isActive) return this.columnMove.move(event, bounds);
+    if (this.rowDrag.isActive) return this.rowDrag.move(event, bounds);
+    return this.selectionFillMove(event, bounds);
   }
 
-  private handleColumnResizeDragMove(event: PointerEventData, bounds: ContainerBounds): DragMoveResult {
-    const column = this.core.getColumns()[this.resizeColIndex];
-    const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
-    const maxWidth = column?.maxWidth;
-    let newWidth = this.resizeInitialWidth + (event.clientX - this.resizeStartX);
-    newWidth = Math.max(minWidth, newWidth);
-    if (maxWidth !== undefined) {
-      newWidth = Math.min(maxWidth, newWidth);
-    }
-    this.resizeCurrentWidth = newWidth;
-
-    // Auto-scroll horizontally when resizing near container edges
-    const mouseXInContainer = event.clientX - bounds.left;
-    let scrollDx = 0;
-    if (mouseXInContainer > bounds.width - AUTO_SCROLL_THRESHOLD) {
-      scrollDx = AUTO_SCROLL_SPEED;
-    }
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
-
-    return { targetRow: 0, targetCol: this.resizeColIndex, autoScroll };
-  }
-
-  private handleColumnMoveDragMove(
+  private selectionFillMove(
     event: PointerEventData,
     bounds: ContainerBounds,
   ): DragMoveResult | null {
-    const dx = event.clientX - this.moveStartX;
-    const dy = event.clientY - this.moveStartY;
+    const isActive = this.selectionDrag.isActive || this.fillDrag.isActive;
+    if (isActive === false) return null;
 
-    if (this.moveThresholdMet === false) {
-      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
-      if (thresholdCrossed === false) return null;
-      this.moveThresholdMet = true;
-    }
-
-    this.moveCurrentX = event.clientX;
-    this.moveCurrentY = event.clientY;
-
-    const { left, width, scrollLeft } = bounds;
-    const mouseX = event.clientX - left + scrollLeft;
-    const columnPositions = this.deps.getColumnPositions();
-    const columnCount = this.deps.getColumnCount();
-    this.moveDropTargetIndex = Math.max(
-      0,
-      Math.min(findColumnAtX(mouseX, columnPositions), columnCount)
-    );
-
-    // Auto-scroll horizontally when dragging near container edges
-    const mouseXInContainer = event.clientX - left;
-    let scrollDx = 0;
-    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
-      scrollDx = -AUTO_SCROLL_SPEED;
-    } else if (mouseXInContainer > width - AUTO_SCROLL_THRESHOLD) {
-      scrollDx = AUTO_SCROLL_SPEED;
-    }
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
-
-    return { targetRow: 0, targetCol: this.moveDropTargetIndex ?? 0, autoScroll };
+    const target = computeCellTarget(this.core, this.deps, event, bounds);
+    this.selectionDrag.moveToTarget(target.row, target.col);
+    this.fillDrag.moveToTarget(target.row, target.col);
+    return {
+      targetRow: target.row,
+      targetCol: target.col,
+      autoScroll: target.autoScroll,
+    };
   }
 
-  private handleRowDragDragMove(
-    event: PointerEventData,
-    bounds: ContainerBounds,
-  ): DragMoveResult | null {
-    const dx = event.clientX - this.rowDragStartX;
-    const dy = event.clientY - this.rowDragStartY;
-
-    if (this.rowDragThresholdMet === false) {
-      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
-      if (thresholdCrossed === false) return null;
-      this.rowDragThresholdMet = true;
-    }
-
-    this.rowDragCurrentX = event.clientX;
-    this.rowDragCurrentY = event.clientY;
-
-    const { top, height, width, scrollTop } = bounds;
-    const headerHeight = this.deps.getHeaderHeight();
-    const viewportY = event.clientY - top;
-    const rowCount = this.core.getRowCount();
-
-    const targetRow = Math.max(
-      0,
-      Math.min(
-        this.core.getRowIndexAtDisplayY(viewportY, scrollTop),
-        rowCount
-      )
-    );
-    this.rowDragDropTargetIndex = targetRow;
-
-    const mouseYInContainer = event.clientY - top;
-    const mouseXInContainer = event.clientX - bounds.left;
-    const autoScroll = this.calculateAutoScroll(
-      mouseYInContainer,
-      mouseXInContainer,
-      height,
-      width,
-      headerHeight
-    );
-
-    return { targetRow, targetCol: 0, autoScroll };
-  }
-
-  private handleSelectionFillDragMove(
-    event: PointerEventData,
-    bounds: ContainerBounds,
-  ): DragMoveResult | null {
-    const isActiveDrag = this.isDraggingSelection || this.isDraggingFill;
-    if (isActiveDrag === false) return null;
-
-    const { top, left, width, height, scrollTop, scrollLeft } = bounds;
-    const headerHeight = this.deps.getHeaderHeight();
-    const columnPositions = this.deps.getColumnPositions();
-    const columnCount = this.deps.getColumnCount();
-
-    const mouseX = event.clientX - left + scrollLeft;
-    const viewportY = event.clientY - top;
-
-    const targetRow = Math.max(
-      0,
-      Math.min(
-        this.core.getRowIndexAtDisplayY(viewportY, scrollTop),
-        this.core.getRowCount() - 1
-      )
-    );
-
-    const visibleColIndex = Math.max(
-      0,
-      Math.min(findColumnAtX(mouseX, columnPositions), columnCount - 1)
-    );
-    const targetCol = this.deps.getOriginalColumnIndex
-      ? this.deps.getOriginalColumnIndex(visibleColIndex)
-      : visibleColIndex;
-
-    if (this.isDraggingSelection) {
-      this.core.selection.startSelection(
-        { row: targetRow, col: targetCol },
-        { shift: true }
-      );
-    }
-
-    if (this.isDraggingFill) {
-      this.core.fill.updateFillDrag(targetRow, targetCol);
-      this.fillTarget = { row: targetRow, col: targetCol };
-    }
-
-    const mouseYInContainer = event.clientY - top;
-    const mouseXInContainer = event.clientX - left;
-    const autoScroll = this.calculateAutoScroll(
-      mouseYInContainer,
-      mouseXInContainer,
-      height,
-      width,
-      headerHeight
-    );
-
-    return { targetRow, targetCol, autoScroll };
-  }
-
-  /**
-   * Handle drag end event
-   */
   handleDragEnd(): void {
-    if (this.isDraggingColumnResize) return this.endColumnResizeDrag();
-    if (this.isDraggingColumnMove) return this.endColumnMoveDrag();
-    if (this.isDraggingRow) return this.endRowDrag();
-    this.endSelectionFillDrag();
+    if (this.columnResize.isActive) return this.columnResize.end();
+    if (this.columnMove.isActive) return this.columnMove.end(cycleSortDirection);
+    if (this.rowDrag.isActive) return this.rowDrag.end();
+    this.selectionDrag.end();
+    this.fillDrag.end();
   }
 
-  private endColumnResizeDrag(): void {
-    this.core.setColumnWidth(this.resizeColIndex, this.resizeCurrentWidth);
-    this.isDraggingColumnResize = false;
-    this.resizeColIndex = -1;
-  }
-
-  private endColumnMoveDrag(): void {
-    if (this.moveThresholdMet) {
-      if (this.moveDropTargetIndex !== null) {
-        const fromOriginal = this.moveSourceColIndex;
-        const toOriginal = this.deps.getOriginalColumnIndex
-          ? this.deps.getOriginalColumnIndex(
-            Math.min(this.moveDropTargetIndex, this.deps.getColumnCount() - 1)
-          )
-          : this.moveDropTargetIndex;
-
-        if (fromOriginal !== toOriginal) {
-          this.core.moveColumn(fromOriginal, toOriginal);
-        }
-      }
-    } else {
-      // Threshold not met — treat as a click (sort).
-      const column = this.core.getColumns()[this.moveSourceColIndex];
-      if (column) {
-        const colId = column.colId ?? column.field;
-        this.handleHeaderClick(colId, this.moveShiftKey);
-      }
-    }
-    this.isDraggingColumnMove = false;
-    this.moveSourceColIndex = -1;
-    this.moveThresholdMet = false;
-    this.moveShiftKey = false;
-    this.moveDropTargetIndex = null;
-  }
-
-  private endRowDrag(): void {
-    if (this.rowDragThresholdMet && this.rowDragDropTargetIndex !== null) {
-      if (this.rowDragDropTargetIndex !== this.rowDragSourceIndex) {
-        this.core.commitRowDrag(this.rowDragSourceIndex, this.rowDragDropTargetIndex);
-      }
-    }
-    this.isDraggingRow = false;
-    this.rowDragSourceIndex = -1;
-    this.rowDragThresholdMet = false;
-    this.rowDragDropTargetIndex = null;
-  }
-
-  private endSelectionFillDrag(): void {
-    if (this.isDraggingFill) {
-      this.core.fill.commitFillDrag();
-      this.core.refreshSlotData();
-    }
-
-    this.isDraggingSelection = false;
-    this.isDraggingFill = false;
-    this.fillSourceRange = null;
-    this.fillTarget = null;
-  }
-
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
   // Wheel
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Handle wheel event with dampening for large datasets
-   * Returns scroll deltas or null if no dampening needed
-   */
   handleWheel(
     deltaY: number,
     deltaX: number,
-    dampening: number
+    dampening: number,
   ): { dy: number; dx: number } | null {
-    if (!this.core.isScalingActive()) {
-      return null;
-    }
+    if (!this.core.isScalingActive()) return null;
     return { dy: deltaY * dampening, dx: deltaX * dampening };
   }
 
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
   // Keyboard
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Handle keyboard event
-   */
   handleKeyDown(
     event: KeyEventData,
     activeCell: CellPosition | null,
     editingCell: { row: number; col: number } | null,
-    filterPopupOpen: boolean
+    filterPopupOpen: boolean,
   ): KeyboardResult {
-    if (filterPopupOpen) {
-      return { preventDefault: false };
-    }
-
-    // Don't handle most keys while editing (except special keys)
-    if (
-      editingCell &&
-      event.key !== "Enter" &&
-      event.key !== "Escape" &&
-      event.key !== "Tab"
-    ) {
-      return { preventDefault: false };
-    }
-
-    return this.handleKeyAction(event, activeCell, editingCell);
-  }
-
-  private handleKeyAction(
-    event: KeyEventData,
-    activeCell: CellPosition | null,
-    editingCell: { row: number; col: number } | null,
-  ): KeyboardResult {
-    const { selection } = this.core;
-    const isShift = event.shiftKey;
-    const isCtrl = event.ctrlKey || event.metaKey;
-
-    const direction = this.keyToDirection(event.key);
-    if (direction) {
-      selection.moveFocus(direction, isShift);
-      const newActiveCell = selection.getActiveCell();
-      return {
-        preventDefault: true,
-        scrollToCell: newActiveCell ?? undefined,
-      };
-    }
-
-    switch (event.key) {
-      case "Enter":
-        if (editingCell) {
-          this.core.commitEdit();
-        } else if (activeCell) {
-          this.core.startEdit(activeCell.row, activeCell.col);
-        }
-        return { preventDefault: true };
-
-      case "Escape":
-        if (editingCell) {
-          this.core.cancelEdit();
-        } else {
-          selection.clearSelection();
-        }
-        return { preventDefault: true };
-
-      case "Tab":
-        if (editingCell) {
-          this.core.commitEdit();
-        }
-        selection.moveFocus(isShift ? "left" : "right", false);
-        return { preventDefault: true };
-
-      default:
-        return this.handleNonEditingKey(event.key, activeCell, editingCell, isCtrl);
-    }
-  }
-
-  private handleNonEditingKey(
-    key: string,
-    activeCell: CellPosition | null,
-    editingCell: { row: number; col: number } | null,
-    isCtrl: boolean,
-  ): KeyboardResult {
-    const { selection } = this.core;
-
-    switch (key) {
-      case "a":
-        if (isCtrl) {
-          selection.selectAll();
-          return { preventDefault: true };
-        }
-        break;
-
-      case "c":
-        if (isCtrl) {
-          selection.copySelectionToClipboard();
-          return { preventDefault: true };
-        }
-        break;
-
-      case "F2":
-        if (activeCell && !editingCell) {
-          this.core.startEdit(activeCell.row, activeCell.col);
-        }
-        return { preventDefault: true };
-
-      case "Delete":
-      case "Backspace":
-        if (activeCell && !editingCell) {
-          this.core.startEdit(activeCell.row, activeCell.col);
-          return { preventDefault: true };
-        }
-        break;
-
-      default:
-        if (activeCell && !editingCell && !isCtrl && key.length === 1) {
-          this.core.startEdit(activeCell.row, activeCell.col);
-        }
-        break;
-    }
-
-    return { preventDefault: false };
-  }
-
-  private keyToDirection(key: string): Direction | null {
-    switch (key) {
-      case "ArrowUp": return "up";
-      case "ArrowDown": return "down";
-      case "ArrowLeft": return "left";
-      case "ArrowRight": return "right";
-      default: return null;
-    }
-  }
-
-  // ===========================================================================
-  // Helper Methods
-  // ===========================================================================
-
-  /**
-   * Cycle sort direction: undefined/null → asc → desc → null
-   */
-  private cycleSortDirection(current: SortDirection | null | undefined): SortDirection | null {
-    if (current == null) return "asc";
-    if (current === "asc") return "desc";
-    return null;
-  }
-
-  /**
-   * Calculate auto-scroll deltas based on mouse position
-   */
-  private calculateAutoScroll(
-    mouseYInContainer: number,
-    mouseXInContainer: number,
-    containerHeight: number,
-    containerWidth: number,
-    headerHeight: number
-  ): { dx: number; dy: number } | null {
-    let dx = 0;
-    let dy = 0;
-
-    // Vertical scrolling
-    if (mouseYInContainer < AUTO_SCROLL_THRESHOLD + headerHeight) {
-      dy = -AUTO_SCROLL_SPEED;
-    } else if (mouseYInContainer > containerHeight - AUTO_SCROLL_THRESHOLD) {
-      dy = AUTO_SCROLL_SPEED;
-    }
-
-    // Horizontal scrolling
-    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
-      dx = -AUTO_SCROLL_SPEED;
-    } else if (mouseXInContainer > containerWidth - AUTO_SCROLL_THRESHOLD) {
-      dx = AUTO_SCROLL_SPEED;
-    }
-
-    return dx !== 0 || dy !== 0 ? { dx, dy } : null;
+    return this.keyboard.handle(event, activeCell, editingCell, filterPopupOpen);
   }
 }
+
+const noopResult: InputResult = { preventDefault: false, stopPropagation: false };

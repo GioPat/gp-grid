@@ -6,6 +6,13 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./dist/styles.css": "./dist/styles.css"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GioPat/gp-grid.git",
@@ -68,6 +75,6 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tsdown": "^0.20.3",
-    "typescript": "^5.9.3"
+    "typescript": "~5.9.0"
   }
 }

@@ -168,8 +168,14 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * For array-type columns (like tags), each unique array combination is returned.
    * Arrays are sorted internally for consistent comparison.
    * Limited to maxValues distinct results and maxScanRows rows scanned.
-   * The row scan cap prevents hangs on low-cardinality columns (e.g. a tags column
-   * with only ~100 distinct combinations in 1.5M rows would otherwise scan every row).
+   *
+   * When the total exceeds maxScanRows we stride-sample across the full
+   * dataset instead of scanning the first N rows. Sequential scan was
+   * broken under an active sort: Map iteration follows insertion order,
+   * which after sort is the sorted order — so the first 100k rows only
+   * covered the "smallest" values of the column. Stride sampling covers
+   * the whole range at the cost of possibly missing rare values, which
+   * the maxValues cap would have dropped anyway.
    */
   getDistinctValuesForColumn(
     colId: string,
@@ -181,11 +187,13 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     if (!column) return [];
 
     const cachedRows = this.options.getCachedRows();
-    const valuesMap = new Map<string, CellValue>();
-    let rowsScanned = 0;
+    const total = cachedRows.size;
+    const stride = total > maxScanRows ? Math.ceil(total / maxScanRows) : 1;
 
-    for (const row of cachedRows.values()) {
-      if (++rowsScanned > maxScanRows) break;
+    const valuesMap = new Map<string, CellValue>();
+    for (let i = 0; i < total; i += stride) {
+      const row = cachedRows.get(i);
+      if (row === undefined) continue;
       const value = getFieldValue(row, column.field);
       const [key, normalized] = this.normalizeDistinctValue(value);
       if (!valuesMap.has(key)) {

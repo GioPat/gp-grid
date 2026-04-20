@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "pnpm --filter=./packages/core --filter=./packages/react -r build && pnpm --filter=./playgrounds/vite-react dev",
     "dev:vue": "pnpm --filter=./packages/core --filter=./packages/vue -r build && pnpm --filter=./playgrounds/vite-vue dev",
+    "dev:angular": "pnpm --filter=./packages/core --filter=./packages/angular build && pnpm --filter ./playgrounds/angular start",
     "install:packages": "pnpm --filter=./packages/* install --frozen-lockfile",
     "build:packages": "pnpm --filter=./packages/* -r build",
     "test": "vitest",
@@ -33,7 +34,12 @@
   },
   "pnpm": {
     "overrides": {
-      "vite": "npm:rolldown-vite@7.1.12"
+      "vite": "npm:rolldown-vite@7.1.12",
+      "@angular/core": "^21.2.0",
+      "@angular/common": "^21.2.0",
+      "@angular/compiler": "^21.2.0",
+      "@angular/compiler-cli": "^21.2.0",
+      "ng-packagr": "^21.0.0"
     }
   },
   "packageManager": "pnpm@10.17.1+sha512.17c560fca4867ae9473a3899ad84a88334914f379be46d455cbf92e5cf4b39d34985d452d2583baf19967fa76cb5c17bc9e245529d0b98745721aa7200ecaf7a",

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "paths": {
+      "@gp-grid/core": ["../core/src"]
+    }
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}
