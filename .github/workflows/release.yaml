@@ -71,6 +71,17 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+      - name: Resolve workspace protocol (angular)
+        if: matrix.package == 'angular' && steps.check-npm.outputs.exists == 'false'
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = '${{ matrix.publish_dir }}/package.json';
+            const corePkg = require('./packages/core/package.json');
+            const distPkg = require('./' + path);
+            distPkg.dependencies['@gp-grid/core'] = corePkg.version;
+            fs.writeFileSync(path, JSON.stringify(distPkg, null, 2) + '\n');
+          "
       - name: Publish to NPM
         if: steps.check-npm.outputs.exists == 'false'
         run: pnpm publish --access public --provenance --no-git-checks
