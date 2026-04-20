@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.0...gp-grid-v0.11.1) (2026-04-20)
+
+
+### 🐛 Bug Fixes
+
+* trigger release ([7c293d3](https://github.com/GioPat/gp-grid/commit/7c293d3a3321307d1b1738ccccf6c21bb1022105))
+
 ## [0.11.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.10.3...gp-grid-v0.11.0) (2026-04-20)
 
 
