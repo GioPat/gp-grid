@@ -24,7 +24,6 @@ export const headerStyles: string = `
   border-right: 1px solid var(--gp-grid-border);
   font-weight: 600;
   font-size: 12px;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--gp-grid-header-text);
   cursor: pointer;
@@ -202,7 +201,6 @@ export const headerStyles: string = `
   padding: 0 12px;
   font-weight: 600;
   font-size: 12px;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--gp-grid-header-text);
   box-sizing: border-box;
