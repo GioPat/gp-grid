@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.2...gp-grid-v0.11.3) (2026-04-21)
+
+
+### 🐛 Bug Fixes
+
+* **core:** Remove enforcing of uppercase ([1ab458d](https://github.com/GioPat/gp-grid/commit/1ab458d7cf190e49d1c08d2ac974ea188e9f8477))
+
 ## [0.11.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.1...gp-grid-v0.11.2) (2026-04-20)
 
 
