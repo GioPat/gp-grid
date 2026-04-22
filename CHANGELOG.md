@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.3...gp-grid-v0.12.0) (2026-04-22)
+
+
+### ✨ Features
+
+* **vue:** support SFC for custom renderers ([9f29705](https://github.com/GioPat/gp-grid/commit/9f297053d53f05e13cd88b71ac6dfe41f52240aa))
+
 ## [0.11.3](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.2...gp-grid-v0.11.3) (2026-04-21)
 
 
