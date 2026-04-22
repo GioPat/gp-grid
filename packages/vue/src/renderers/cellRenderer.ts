@@ -4,7 +4,7 @@ import { createTextVNode, type VNode } from "vue";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
 import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
-import { toVNode } from "./utils";
+import { invokeRenderer } from "./utils";
 
 export { getFieldValue as getCellValue } from "@gp-grid/core";
 
@@ -49,19 +49,20 @@ export function renderCell(options: RenderCellOptions): VNode {
   };
 
   // Check for column-specific renderer
-  if (column.cellRenderer) {
-    if (typeof column.cellRenderer === "function") {
-      return toVNode(column.cellRenderer(params) as VNode | string | null);
-    }
-    const renderer = cellRenderers[column.cellRenderer];
-    if (renderer) {
-      return toVNode(renderer(params));
+  if (column.cellRenderer != null) {
+    if (typeof column.cellRenderer === "string") {
+      const renderer = cellRenderers[column.cellRenderer];
+      if (renderer) {
+        return invokeRenderer(renderer, params);
+      }
+    } else {
+      return invokeRenderer(column.cellRenderer as VueCellRenderer, params);
     }
   }
 
   // Fall back to global renderer
   if (globalCellRenderer) {
-    return toVNode(globalCellRenderer(params));
+    return invokeRenderer(globalCellRenderer, params);
   }
 
   // Default text rendering

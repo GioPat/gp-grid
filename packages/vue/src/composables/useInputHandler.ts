@@ -12,6 +12,7 @@ import type {
   GridCore,
   CellPosition,
   CellRange,
+  ColumnDefinition,
   PointerEventData,
   ContainerBounds,
   DragState,

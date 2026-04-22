@@ -19,6 +19,7 @@ import type {
   ColumnFilterModel,
   CellValueChangedEvent,
   DataSource,
+  DragState,
   GridState,
   SlotData,
   HighlightingOptions,
@@ -73,9 +74,9 @@ export interface UseGpGridResult<TData = unknown> {
 
   // Event handlers
   handleScroll: () => void;
-  handleCellMouseDown: (rowIndex: number, colIndex: number, e: MouseEvent) => void;
+  handleCellMouseDown: (rowIndex: number, colIndex: number, e: PointerEvent) => void;
   handleCellDoubleClick: (rowIndex: number, colIndex: number) => void;
-  handleFillHandleMouseDown: (e: MouseEvent) => void;
+  handleFillHandleMouseDown: (e: PointerEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
@@ -85,12 +86,7 @@ export interface UseGpGridResult<TData = unknown> {
   handleCellMouseLeave: () => void;
 
   // Drag state
-  dragState: Ref<{
-    isDragging: boolean;
-    dragType: "selection" | "fill" | null;
-    fillSourceRange: { startRow: number; startCol: number; endRow: number; endCol: number } | null;
-    fillTarget: { row: number; col: number } | null;
-  }>;
+  dragState: Ref<DragState>;
 
   // Helpers
   isCellSelected: typeof isCellSelected;
@@ -162,6 +158,7 @@ export function useGpGrid<TData = unknown>(
       columnPositions,
       visibleColumnsWithIndices,
       slots: computed(() => state.value.slots),
+      rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
     },
   );
 

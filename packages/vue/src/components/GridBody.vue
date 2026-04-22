@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import type {
   GridCore,
-  Row,
   ColumnDefinition,
   CellPosition,
   CellRange,
@@ -21,7 +20,7 @@ import {
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
-import type { VueCellRenderer, VueEditRenderer } from "../types";
+import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
   rowHeight: number;

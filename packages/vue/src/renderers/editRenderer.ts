@@ -4,7 +4,7 @@ import { h, createTextVNode, type VNode } from "vue";
 import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
-import { toVNode } from "./utils";
+import { invokeRenderer } from "./utils";
 
 export interface RenderEditCellOptions {
   column: ColumnDefinition;
@@ -53,19 +53,20 @@ export function renderEditCell(
   };
 
   // Check for column-specific renderer
-  if (column.editRenderer) {
-    if (typeof column.editRenderer === "function") {
-      return toVNode(column.editRenderer(params) as VNode | null);
-    }
-    const renderer = editRenderers[column.editRenderer];
-    if (renderer) {
-      return toVNode(renderer(params));
+  if (column.editRenderer != null) {
+    if (typeof column.editRenderer === "string") {
+      const renderer = editRenderers[column.editRenderer];
+      if (renderer) {
+        return invokeRenderer(renderer, params);
+      }
+    } else {
+      return invokeRenderer(column.editRenderer as VueEditRenderer, params);
     }
   }
 
   // Fall back to global renderer
   if (globalEditRenderer) {
-    return toVNode(globalEditRenderer(params));
+    return invokeRenderer(globalEditRenderer, params);
   }
 
   // Default input

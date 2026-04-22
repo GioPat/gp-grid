@@ -1,9 +1,9 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
-import { h, Fragment, createTextVNode, type VNode } from "vue";
+import { h, Fragment, type VNode } from "vue";
 import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { VueHeaderRenderer } from "../types";
-import { toVNode } from "./utils";
+import { invokeRenderer } from "./utils";
 
 export interface RenderHeaderOptions {
   column: ColumnDefinition;
@@ -70,19 +70,20 @@ export function renderHeader(
   };
 
   // Check for column-specific renderer
-  if (column.headerRenderer) {
-    if (typeof column.headerRenderer === "function") {
-      return toVNode(column.headerRenderer(params) as VNode | string | null);
-    }
-    const renderer = headerRenderers[column.headerRenderer];
-    if (renderer) {
-      return toVNode(renderer(params));
+  if (column.headerRenderer != null) {
+    if (typeof column.headerRenderer === "string") {
+      const renderer = headerRenderers[column.headerRenderer];
+      if (renderer) {
+        return invokeRenderer(renderer, params);
+      }
+    } else {
+      return invokeRenderer(column.headerRenderer as VueHeaderRenderer, params);
     }
   }
 
   // Fall back to global renderer
   if (globalHeaderRenderer) {
-    return toVNode(globalHeaderRenderer(params));
+    return invokeRenderer(globalHeaderRenderer, params);
   }
 
   // Default header with stacked sort arrows and filter icon

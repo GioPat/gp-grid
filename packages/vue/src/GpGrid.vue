@@ -14,11 +14,12 @@ import {
   calculateScaledColumnPositions,
   getTotalWidth,
 } from "@gp-grid/core";
-import type { Row, RowId, ColumnDefinition, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions } from "@gp-grid/core";
+import type { Component } from "vue";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
-import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./types";
+import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
@@ -92,8 +93,12 @@ const { state, applyInstructions, reset: resetState } = useGridState({
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
 
-// Effective columns: use core-updated columns (after resize/move) or fall back to props
-const effectiveColumns = computed(() => state.value.columns ?? props.columns);
+// Effective columns: use core-updated columns (after resize/move) or fall back to props.
+// Cast user props to core's ColumnDefinition for internal plumbing — the Vue-widened
+// renderer fields are structurally a superset but core only reads non-renderer props here.
+const effectiveColumns = computed<CoreColumnDefinition[]>(
+  () => state.value.columns ?? (props.columns as unknown as CoreColumnDefinition[]),
+);
 
 // Create visible columns with original index tracking (for hidden column support)
 const visibleColumnsWithIndices = computed(() =>
@@ -220,9 +225,12 @@ function initializeCore(dataSource: DataSource<Row>): void {
     coreRef.value.destroy();
   }
 
-  // Create new GridCore
+  // Create new GridCore.
+  // Vue's ColumnDefinition widens the renderer fields to also accept Components,
+  // which core's agnostic type doesn't name. The cast is safe because core only
+  // stores the renderer and never invokes it — the Vue layer handles dispatch.
   const core = new GridCore<Row>({
-    columns: props.columns,
+    columns: props.columns as unknown as CoreColumnDefinition[],
     dataSource,
     rowHeight: props.rowHeight,
     headerHeight: totalHeaderHeight.value,

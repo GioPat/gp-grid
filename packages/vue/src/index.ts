@@ -64,6 +64,7 @@ export type {
   VueEditRenderer,
   VueHeaderRenderer,
   GpGridProps,
+  ColumnDefinition,
 } from "./types";
 
 // =============================================================================
@@ -99,8 +100,6 @@ export type {
   RowId,
   SortDirection,
   SortModel,
-  // Column definition
-  ColumnDefinition,
   // Cell coordinates
   CellPosition,
   CellRange,

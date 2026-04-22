@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { ColumnDefinition, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
-import type { GridCore, Row } from "@gp-grid/core";
+import type { GridCore } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
-import type { VueHeaderRenderer } from "../types";
+import type { Row, VueHeaderRenderer } from "../types";
 
 const props = defineProps<{
   headerHeight: number;
