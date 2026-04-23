@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.0...gp-grid-v0.12.1) (2026-04-23)
+
+
+### 🐛 Bug Fixes
+
+* enable filter value formatted ([879435d](https://github.com/GioPat/gp-grid/commit/879435d28d428677ae771f27e8bfceeed214e2bd))
+
 ## [0.12.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.11.3...gp-grid-v0.12.0) (2026-04-22)
 
 
