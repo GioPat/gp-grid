@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.1...gp-grid-v0.12.2) (2026-04-23)
+
+
+### 🐛 Bug Fixes
+
+* **angular:** change detection strategy from eager to OnPush ([58485ce](https://github.com/GioPat/gp-grid/commit/58485ce7963891c3f4aa1e67c69752eb26322de9))
+
 ## [0.12.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.0...gp-grid-v0.12.1) (2026-04-23)
 
 
