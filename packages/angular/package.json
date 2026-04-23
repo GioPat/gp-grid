@@ -1,7 +1,7 @@
 {
   "name": "@gp-grid/angular",
   "description": "A high-performance Angular data grid component with virtual scrolling, cell selection, sorting, filtering, and Excel-like editing",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "license": "Apache-2.0",
   "module": "dist/angular/fesm2022/gp-grid-angular.mjs",
   "typings": "dist/angular/types/gp-grid-angular.d.ts",
