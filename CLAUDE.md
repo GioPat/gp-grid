@@ -45,4 +45,4 @@ The features that the library must support are:
 ## Gotchas
 
 - The library `core` package must be library/framework agnostic
-- Check LSP type errors
+- Check LSP type errors with the `tsc --noEmit` command.

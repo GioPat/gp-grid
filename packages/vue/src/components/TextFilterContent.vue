@@ -20,6 +20,7 @@ type FilterMode = "values" | "condition";
 
 const props = defineProps<{
   distinctValues: CellValue[];
+  valueFormatter?: (v: CellValue) => string;
   currentFilter?: ColumnFilterModel;
 }>();
 
@@ -28,30 +29,38 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-// Helper to convert value to display string
-function valueToString(v: CellValue): string {
-  if (Array.isArray(v)) {
-    return v.join(", ");
-  }
+// Raw key stored in selectedValues — must match what evaluateTextCondition produces.
+function valueToKey(v: CellValue): string {
+  if (Array.isArray(v)) return v.join(", ");
   return String(v ?? "");
 }
 
-// Computed unique values
-const uniqueValues = computed(() => {
-  const values = props.distinctValues
-    .filter((v) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
-    .map((v) => valueToString(v));
-  return Array.from(new Set(values)).sort((a, b) => {
-    const numA = parseFloat(a);
-    const numB = parseFloat(b);
-    if (!isNaN(numA) && !isNaN(numB)) {
-      return numA - numB;
-    }
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+// Display label shown to the user.
+function valueToLabel(v: CellValue): string {
+  return props.valueFormatter ? props.valueFormatter(v) : valueToKey(v);
+}
+
+// Distinct entries: key for selectedValues, label for display.
+const uniqueEntries = computed(() => {
+  const seen = new Set<string>();
+  const entries: { key: string; label: string }[] = [];
+  for (const v of props.distinctValues) {
+    if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+    const key = valueToKey(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ key, label: valueToLabel(v) });
+  }
+  entries.sort((a, b) => {
+    const numA = parseFloat(a.label);
+    const numB = parseFloat(b.label);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
   });
+  return entries;
 });
 
-const hasTooManyValues = computed(() => uniqueValues.value.length > MAX_VALUES_FOR_LIST);
+const hasTooManyValues = computed(() => uniqueEntries.value.length > MAX_VALUES_FOR_LIST);
 
 // Detect initial mode from existing filter
 const initialMode = computed((): FilterMode => {
@@ -112,10 +121,10 @@ const { conditions, combination, updateCondition, addCondition, removeCondition 
   );
 
 // ============= VALUES MODE LOGIC =============
-const displayValues = computed(() => {
-  if (!searchText.value) return uniqueValues.value;
+const displayEntries = computed(() => {
+  if (!searchText.value) return uniqueEntries.value;
   const lower = searchText.value.toLowerCase();
-  return uniqueValues.value.filter((v) => v.toLowerCase().includes(lower));
+  return uniqueEntries.value.filter((e) => e.label.toLowerCase().includes(lower));
 });
 
 const hasBlanks = computed(() => {
@@ -123,12 +132,12 @@ const hasBlanks = computed(() => {
 });
 
 const allSelected = computed(() => {
-  const allNonBlank = displayValues.value.every((v) => selectedValues.value.has(v));
+  const allNonBlank = displayEntries.value.every((e) => selectedValues.value.has(e.key));
   return allNonBlank && (!hasBlanks.value || includeBlanks.value);
 });
 
 function handleSelectAll(): void {
-  selectedValues.value = new Set(displayValues.value);
+  selectedValues.value = new Set(displayEntries.value.map((e) => e.key));
   if (hasBlanks.value) includeBlanks.value = true;
 }
 
@@ -150,7 +159,7 @@ function handleValueToggle(value: string): void {
 // ============= APPLY LOGIC =============
 function handleApply(): void {
   if (mode.value === "values") {
-    const allNonBlankSelected = uniqueValues.value.every((v) => selectedValues.value.has(v));
+    const allNonBlankSelected = uniqueEntries.value.every((e) => selectedValues.value.has(e.key));
     const isAllSelected = allNonBlankSelected && (!hasBlanks.value || includeBlanks.value);
 
     if (isAllSelected) {
@@ -221,7 +230,7 @@ function handleClear(): void {
 
     <!-- Too many values message -->
     <div v-if="hasTooManyValues && mode === 'condition'" class="gp-grid-filter-info">
-      Too many unique values ({{ uniqueValues.length }}). Use conditions to filter.
+      Too many unique values ({{ uniqueEntries.length }}). Use conditions to filter.
     </div>
 
     <!-- VALUES MODE -->
@@ -259,16 +268,16 @@ function handleClear(): void {
 
         <!-- Values -->
         <label
-          v-for="value in displayValues"
-          :key="value"
+          v-for="entry in displayEntries"
+          :key="entry.key"
           class="gp-grid-filter-option"
         >
           <input
             type="checkbox"
-            :checked="selectedValues.has(value)"
-            @change="handleValueToggle(value)"
+            :checked="selectedValues.has(entry.key)"
+            @change="handleValueToggle(entry.key)"
           />
-          <span>{{ value }}</span>
+          <span>{{ entry.label }}</span>
         </label>
       </div>
     </template>

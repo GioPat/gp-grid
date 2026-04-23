@@ -61,7 +61,7 @@ export class App implements AfterViewInit {
       { field: 'id', cellDataType: 'number', headerName: 'ID', width: 80, sortable: true },
       { field: 'name', cellDataType: 'text', headerName: 'Name', width: 200, sortable: true, filterable: true, editable: true },
       { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge },
-      { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor },
+      { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor, valueFormatter: (v) => `🏙 ${String(v ?? "")}` },
     ];
     this.cdr.detectChanges();
   }

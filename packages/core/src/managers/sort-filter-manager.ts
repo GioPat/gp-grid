@@ -190,23 +190,24 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     const total = cachedRows.size;
     const stride = total > maxScanRows ? Math.ceil(total / maxScanRows) : 1;
 
+    const formatter = column.valueFormatter;
     const valuesMap = new Map<string, CellValue>();
     for (let i = 0; i < total; i += stride) {
       const row = cachedRows.get(i);
       if (row === undefined) continue;
       const value = getFieldValue(row, column.field);
-      const [key, normalized] = this.normalizeDistinctValue(value);
+      const [key, normalized] = this.normalizeDistinctValue(value, formatter);
       if (!valuesMap.has(key)) {
         valuesMap.set(key, normalized);
         if (valuesMap.size >= maxValues) break;
       }
     }
 
-    // Sort the results
+    // Sort the results by their display string
     const results = Array.from(valuesMap.values());
     results.sort((a, b) => {
-      const strA = formatCellValue(a);
-      const strB = formatCellValue(b);
+      const strA = formatCellValue(a, formatter);
+      const strB = formatCellValue(b, formatter);
       return strA.localeCompare(strB, undefined, {
         numeric: true,
         sensitivity: "base",
@@ -217,10 +218,15 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   }
 
   /**
-   * Normalize a cell value into a dedup key and display value.
+   * Normalize a cell value into a dedup key and the value to store.
    * Arrays are sorted lexicographically so different orderings produce the same key.
+   * When a formatter is provided it is applied to the key so that two raw values
+   * that render identically are treated as the same distinct entry.
    */
-  private normalizeDistinctValue(value: CellValue): [string, CellValue] {
+  private normalizeDistinctValue(
+    value: CellValue,
+    formatter?: (v: CellValue) => string,
+  ): [string, CellValue] {
     if (Array.isArray(value)) {
       const sorted = [...value].sort((a, b) => {
         const sa = String(a);
@@ -228,9 +234,11 @@ export class SortFilterManager<TData = Record<string, unknown>> {
         if (sa === sb) return 0;
         return sa < sb ? -1 : 1;
       });
-      return [JSON.stringify(sorted), sorted];
+      const key = formatter ? formatter(sorted) : JSON.stringify(sorted);
+      return [key, sorted];
     }
-    return [JSON.stringify(value), value];
+    const key = formatter ? formatter(value) : JSON.stringify(value);
+    return [key, value];
   }
 
   // ===========================================================================

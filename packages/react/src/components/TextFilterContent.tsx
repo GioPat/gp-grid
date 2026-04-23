@@ -5,6 +5,7 @@ import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOpera
 
 export interface TextFilterContentProps {
   distinctValues: CellValue[];
+  valueFormatter?: (v: CellValue) => string;
   currentFilter?: ColumnFilterModel;
   onApply: (filter: ColumnFilterModel | null) => void;
   onClose: () => void;
@@ -33,38 +34,45 @@ type FilterMode = "values" | "condition";
 
 export function TextFilterContent({
   distinctValues,
+  valueFormatter,
   currentFilter,
   onApply,
   onClose,
 }: TextFilterContentProps): React.ReactNode {
-  // Helper to convert value to display string
-  const valueToString = useCallback((v: CellValue): string => {
-    if (Array.isArray(v)) {
-      return v.join(', ');
-    }
+  // Raw key used in selectedValues — must match what evaluateTextCondition produces.
+  const valueToKey = useCallback((v: CellValue): string => {
+    if (Array.isArray(v)) return v.join(', ');
     return String(v ?? '');
   }, []);
 
-  // Determine if we should use values mode or condition mode
-  // distinctValues are already sorted by grid-core for array-type columns
-  const uniqueValues = useMemo(() => {
-    const values = distinctValues
-      .filter((v) => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
-      .map((v) => valueToString(v));
-    // Use Set to deduplicate string representations
-    return Array.from(new Set(values)).sort((a, b) => {
-      const numA = parseFloat(a);
-      const numB = parseFloat(b);
-      // If both are valid numbers, sort numerically
-      if (!isNaN(numA) && !isNaN(numB)) {
-        return numA - numB;
-      }
-      // Otherwise, use locale-aware string comparison
-      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-    });
-  }, [distinctValues, valueToString]);
+  // Display label shown to the user in the checkbox list.
+  const valueToLabel = useCallback((v: CellValue): string => {
+    if (valueFormatter) return valueFormatter(v);
+    return valueToKey(v);
+  }, [valueFormatter, valueToKey]);
 
-  const hasTooManyValues = uniqueValues.length > MAX_VALUES_FOR_LIST;
+  // Distinct entries: key for selectedValues, label for display.
+  // distinctValues are already sorted by grid-core.
+  const uniqueEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const entries: { key: string; label: string }[] = [];
+    for (const v of distinctValues) {
+      if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+      const key = valueToKey(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({ key, label: valueToLabel(v) });
+    }
+    entries.sort((a, b) => {
+      const numA = parseFloat(a.label);
+      const numB = parseFloat(b.label);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    return entries;
+  }, [distinctValues, valueToKey, valueToLabel]);
+
+  const hasTooManyValues = uniqueEntries.length > MAX_VALUES_FOR_LIST;
 
   // Detect current filter mode from existing filter
   const initialMode = useMemo((): FilterMode => {
@@ -122,25 +130,25 @@ export function TextFilterContent({
   const [conditions, setConditions] = useState<Condition[]>(initialConditions);
 
   // ============= VALUES MODE LOGIC =============
-  const displayValues = useMemo(() => {
-    if (!searchText) return uniqueValues;
+  const displayEntries = useMemo(() => {
+    if (!searchText) return uniqueEntries;
     const lower = searchText.toLowerCase();
-    return uniqueValues.filter((v) => v.toLowerCase().includes(lower));
-  }, [uniqueValues, searchText]);
+    return uniqueEntries.filter((e) => e.label.toLowerCase().includes(lower));
+  }, [uniqueEntries, searchText]);
 
   const hasBlanks = useMemo(() => {
     return distinctValues.some((v) => v == null || v === "");
   }, [distinctValues]);
 
   const allSelected = useMemo(() => {
-    const allNonBlank = displayValues.every((v) => selectedValues.has(v));
+    const allNonBlank = displayEntries.every((e) => selectedValues.has(e.key));
     return allNonBlank && (!hasBlanks || includeBlanks);
-  }, [displayValues, selectedValues, hasBlanks, includeBlanks]);
+  }, [displayEntries, selectedValues, hasBlanks, includeBlanks]);
 
   const handleSelectAll = useCallback(() => {
-    setSelectedValues(new Set(displayValues));
+    setSelectedValues(new Set(displayEntries.map((e) => e.key)));
     if (hasBlanks) setIncludeBlanks(true);
-  }, [displayValues, hasBlanks]);
+  }, [displayEntries, hasBlanks]);
 
   const handleDeselectAll = useCallback(() => {
     setSelectedValues(new Set());
@@ -180,7 +188,7 @@ export function TextFilterContent({
   const handleApply = useCallback(() => {
     if (mode === "values") {
       // Values mode - use selectedValues
-      const allNonBlankSelected = uniqueValues.every((v) => selectedValues.has(v));
+      const allNonBlankSelected = uniqueEntries.every((e) => selectedValues.has(e.key));
       const isAllSelected = allNonBlankSelected && (!hasBlanks || includeBlanks);
 
       if (isAllSelected) {
@@ -223,7 +231,7 @@ export function TextFilterContent({
       };
       onApply(filter);
     }
-  }, [mode, uniqueValues, selectedValues, includeBlanks, hasBlanks, conditions, onApply]);
+  }, [mode, uniqueEntries, selectedValues, includeBlanks, hasBlanks, conditions, onApply]);
 
   const handleClear = useCallback(() => {
     onApply(null);
@@ -254,7 +262,7 @@ export function TextFilterContent({
       {/* Too many values message */}
       {hasTooManyValues && mode === "condition" && (
         <div className="gp-grid-filter-info">
-          Too many unique values ({uniqueValues.length}). Use conditions to filter.
+          Too many unique values ({uniqueEntries.length}). Use conditions to filter.
         </div>
       )}
 
@@ -296,14 +304,14 @@ export function TextFilterContent({
             )}
 
             {/* Values */}
-            {displayValues.map((value) => (
-              <label key={value} className="gp-grid-filter-option">
+            {displayEntries.map((entry) => (
+              <label key={entry.key} className="gp-grid-filter-option">
                 <input
                   type="checkbox"
-                  checked={selectedValues.has(value)}
-                  onChange={() => handleValueToggle(value)}
+                  checked={selectedValues.has(entry.key)}
+                  onChange={() => handleValueToggle(entry.key)}
                 />
-                <span>{value}</span>
+                <span>{entry.label}</span>
               </label>
             ))}
           </div>

@@ -22,6 +22,7 @@ import {
   MAX_CHECKBOX_VALUES,
   NUMBER_OPERATORS,
   TEXT_OPERATORS,
+  type FilterEntry,
   type FilterMode,
   type NumberConditionState,
   type TextConditionState,
@@ -106,17 +107,21 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   showValuesMode(): boolean {
-    return this.uniqueValues().length <= MAX_CHECKBOX_VALUES;
+    return this.uniqueEntries().length <= MAX_CHECKBOX_VALUES;
+  }
+
+  uniqueEntries(): FilterEntry[] {
+    return computeUniqueValues(this.distinctValues(), this.column().valueFormatter);
   }
 
   uniqueValues(): string[] {
-    return computeUniqueValues(this.distinctValues());
+    return this.uniqueEntries().map(e => e.key);
   }
 
-  filteredUniqueValues(): string[] {
+  filteredUniqueEntries(): FilterEntry[] {
     const search = this.searchText.toLowerCase();
-    if (!search) return this.uniqueValues();
-    return this.uniqueValues().filter(v => v.toLowerCase().includes(search));
+    if (!search) return this.uniqueEntries();
+    return this.uniqueEntries().filter(e => e.label.toLowerCase().includes(search));
   }
 
   toggleValue(val: string, checked: boolean): void {

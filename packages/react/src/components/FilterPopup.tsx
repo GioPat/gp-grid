@@ -139,6 +139,7 @@ export function FilterPopup({
       {isTextType && (
         <TextFilterContent
           distinctValues={distinctValues}
+          valueFormatter={column.valueFormatter}
           currentFilter={currentFilter}
           onApply={handleApply}
           onClose={onClose}
@@ -164,6 +165,7 @@ export function FilterPopup({
       {!isTextType && !isNumberType && !isDateType && (
         <TextFilterContent
           distinctValues={distinctValues}
+          valueFormatter={column.valueFormatter}
           currentFilter={currentFilter}
           onApply={handleApply}
           onClose={onClose}

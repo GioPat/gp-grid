@@ -283,6 +283,7 @@ const columns: ColumnDefinition[] = [
     width: 120,
     headerName: "Status",
     cellRenderer: "statusBadge", // Reference renderer by key
+    valueFormatter: (v) => String(v ?? "").toUpperCase(),
   },
   {
     field: "salary",

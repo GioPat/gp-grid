@@ -144,6 +144,7 @@ const popupStyle = computed(() => ({
     <TextFilterContent
       v-else
       :distinct-values="distinctValues"
+      :value-formatter="column.valueFormatter"
       :current-filter="currentFilter"
       @apply="handleApply"
       @close="handleClose"

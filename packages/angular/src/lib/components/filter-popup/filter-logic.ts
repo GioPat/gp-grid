@@ -69,18 +69,26 @@ export const defaultNumberCondition = (): NumberConditionState => ({
   nextOperator: 'and',
 });
 
-export const computeUniqueValues = (distinctValues: ReadonlyArray<unknown>): string[] => {
+export interface FilterEntry {
+  key: string;
+  label: string;
+}
+
+export const computeUniqueValues = (
+  distinctValues: ReadonlyArray<unknown>,
+  formatter?: (v: unknown) => string,
+): FilterEntry[] => {
   const seen = new Set<string>();
-  const result: string[] = [];
+  const result: FilterEntry[] = [];
   for (const val of distinctValues) {
     if (val === null || val === undefined || val === '') continue;
-    const str = String(val);
-    if (!seen.has(str)) {
-      seen.add(str);
-      result.push(str);
+    const key = String(val);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push({ key, label: formatter ? formatter(val) : key });
     }
   }
-  return result.sort();
+  return result.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
 };
 
 export interface TextInitState {

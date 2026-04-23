@@ -107,13 +107,13 @@ export const FILTER_POPUP_TEMPLATE = `
               (change)="includeBlanks = $any($event.target).checked" />
             <span class="gp-grid-filter-blank">(Blanks)</span>
           </label>
-          @for (val of filteredUniqueValues(); track val) {
+          @for (entry of filteredUniqueEntries(); track entry.key) {
             <label class="gp-grid-filter-option">
               <input
                 type="checkbox"
-                [checked]="selectedValues.has(val)"
-                (change)="toggleValue(val, $any($event.target).checked)" />
-              <span>{{ val }}</span>
+                [checked]="selectedValues.has(entry.key)"
+                (change)="toggleValue(entry.key, $any($event.target).checked)" />
+              <span>{{ entry.label }}</span>
             </label>
           }
         </div>

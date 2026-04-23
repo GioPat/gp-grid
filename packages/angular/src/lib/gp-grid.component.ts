@@ -95,10 +95,10 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   constructor() {
-    effect(() => this.bindings.applyPendingScroll());
+    effect(() => this.bindings.applyPendingScroll(), { allowSignalWrites: true });
     effect(() => this.bindings.syncHighlighting(this.highlighting()));
-    effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]));
-    effect(() => this.bindings.syncRows(this.rows(), this.dataSource()));
+    effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]), { allowSignalWrites: true });
+    effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
   }
 
   ngOnInit(): void {

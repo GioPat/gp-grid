@@ -87,6 +87,7 @@ const columns: ColumnDefinition[] = [
         width: 120,
         headerName: "Status",
         cellRenderer: StatusBadge,
+        valueFormatter: (v) => String(v ?? "").toUpperCase(),
     },
     {
         field: "salary",

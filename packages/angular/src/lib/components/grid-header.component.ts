@@ -69,37 +69,37 @@ const TEMPLATE = `
             </ng-container>
           } @else {
             <span class="gp-grid-header-text">{{ entry.column.headerName ?? entry.column.field }}</span>
-            <span class="gp-grid-header-icons">
-              @if (sortingEnabled() && entry.column.sortable !== false) {
-                <span class="gp-grid-sort-arrows">
-                  <span class="gp-grid-sort-arrows-stack">
-                    <svg
-                      [class]="'gp-grid-sort-arrow-up' + (headerData?.sortDirection === 'asc' ? ' active' : '')"
-                      width="8" height="6" viewBox="0 0 8 6">
-                      <path d="M4 0L8 6H0L4 0Z" fill="currentColor"/>
-                    </svg>
-                    <svg
-                      [class]="'gp-grid-sort-arrow-down' + (headerData?.sortDirection === 'desc' ? ' active' : '')"
-                      width="8" height="6" viewBox="0 0 8 6">
-                      <path d="M4 6L0 0H8L4 6Z" fill="currentColor"/>
-                    </svg>
-                  </span>
-                  @if ((headerData?.sortIndex ?? 0) > 0) {
-                    <span class="gp-grid-sort-index">{{ headerData?.sortIndex }}</span>
-                  }
-                </span>
-              }
-              @if (entry.column.filterable) {
-                <span
-                  [class]="'gp-grid-filter-icon' + (headerData?.hasFilter ? ' active' : '')"
-                  (pointerdown)="onFilterPointerDown($event, entry.originalIndex)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z"/>
+          }
+          <span class="gp-grid-header-icons">
+            @if (sortingEnabled() && entry.column.sortable !== false) {
+              <span class="gp-grid-sort-arrows">
+                <span class="gp-grid-sort-arrows-stack">
+                  <svg
+                    [class]="'gp-grid-sort-arrow-up' + (headerData?.sortDirection === 'asc' ? ' active' : '')"
+                    width="8" height="6" viewBox="0 0 8 6">
+                    <path d="M4 0L8 6H0L4 0Z" fill="currentColor"/>
+                  </svg>
+                  <svg
+                    [class]="'gp-grid-sort-arrow-down' + (headerData?.sortDirection === 'desc' ? ' active' : '')"
+                    width="8" height="6" viewBox="0 0 8 6">
+                    <path d="M4 6L0 0H8L4 6Z" fill="currentColor"/>
                   </svg>
                 </span>
-              }
-            </span>
-          }
+                @if ((headerData?.sortIndex ?? 0) > 0) {
+                  <span class="gp-grid-sort-index">{{ headerData?.sortIndex }}</span>
+                }
+              </span>
+            }
+            @if (entry.column.filterable !== false) {
+              <span
+                [class]="'gp-grid-filter-icon' + (headerData?.hasFilter ? ' active' : '')"
+                (pointerdown)="onFilterPointerDown($event, entry.originalIndex)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z"/>
+                </svg>
+              </span>
+            }
+          </span>
           @if (entry.column.resizable !== false) {
             <div
               class="gp-grid-header-resize-handle"
@@ -182,7 +182,7 @@ export class GridHeaderComponent {
     headerData: HeaderData | undefined,
   ): HeaderRendererParams {
     const sortable = this.sortingEnabled() && column.sortable !== false;
-    const filterable = column.filterable === true;
+    const filterable = column.filterable !== false;
     return {
       column,
       colIndex,
