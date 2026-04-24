@@ -28,6 +28,11 @@ export interface IndexedDataStoreOptions<TData> {
   getRowId: (row: TData) => RowId;
   /** Custom field accessor for nested properties */
   getFieldValue?: (row: TData, field: string) => CellValue;
+  /**
+   * Lookup for a field's valueFormatter. Lets text filter conditions compare
+   * against the displayed (formatted) value.
+   */
+  getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined;
 }
 
 /** Hash cache for a single row */
@@ -80,6 +85,7 @@ export class IndexedDataStore<TData = unknown> {
     this.options = {
       getRowId: options.getRowId,
       getFieldValue: options.getFieldValue ?? getFieldValue,
+      getValueFormatter: options.getValueFormatter ?? (() => undefined),
     };
 
     // Initialize with data
@@ -635,7 +641,12 @@ export class IndexedDataStore<TData = unknown> {
    * Check if a row passes the current filter.
    */
   private rowPassesFilter(row: TData): boolean {
-    return rowPassesFilter(row, this.filterModel, this.options.getFieldValue);
+    return rowPassesFilter(
+      row,
+      this.filterModel,
+      this.options.getFieldValue,
+      this.options.getValueFormatter,
+    );
   }
 
   /**

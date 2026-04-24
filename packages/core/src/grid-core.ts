@@ -223,6 +223,7 @@ export class GridCore<TData = unknown> {
         pageSize: this.pageSize,
         sortModel: this.sortFilter.getSortModel(),
         filterModel: this.sortFilter.getFilterModel(),
+        columns: this.columns,
       });
 
       const response = await this.dataSource.fetch(request);
@@ -533,6 +534,7 @@ export class GridCore<TData = unknown> {
       sortFilter: this.sortFilter,
       cachedRows: this.cachedRows,
       setTotalRows: (n) => { this.totalRows = n; },
+      getColumns: () => this.columns,
     });
     this.highlight?.clearAllCaches();
     this.slotPool.refreshAllSlots();

@@ -4,9 +4,16 @@
 import type { CellValue, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
 
-/** Cell renderer params */
+/**
+ * Cell renderer params.
+ *
+ * `value` is the value the renderer should display. If the column declares a
+ * `valueFormatter`, `value` is its output (a string); otherwise it's the raw
+ * cell value. Read the raw value from `rowData[column.field]` if the renderer
+ * needs it independently.
+ */
 export interface CellRendererParams<TData = unknown> {
-  /** Cell value */
+  /** Post-formatter display value, or raw CellValue when no formatter is set */
   value: CellValue;
   /** Row data */
   rowData: TData;

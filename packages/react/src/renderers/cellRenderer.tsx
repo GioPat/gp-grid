@@ -35,9 +35,12 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     globalCellRenderer,
   } = options;
 
-  const value = getFieldValue(rowData, column.field);
+  const rawValue = getFieldValue(rowData, column.field);
+  const displayValue = column.valueFormatter
+    ? column.valueFormatter(rawValue)
+    : rawValue;
   const params: CellRendererParams = {
-    value,
+    value: displayValue,
     rowData,
     column,
     rowIndex,
@@ -63,6 +66,6 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     return globalCellRenderer(params);
   }
 
-  // Default text rendering
-  return formatCellValue(value, column.valueFormatter);
+  // Default text rendering — re-format to string in case rawValue has no formatter
+  return formatCellValue(rawValue, column.valueFormatter);
 }

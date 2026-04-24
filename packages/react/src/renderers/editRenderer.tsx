@@ -36,9 +36,12 @@ export function renderEditCell<TData>(
   const core = coreRef.current;
   if (!core) return null;
 
-  const value = getCellValue(rowData, column.field);
+  const rawValue = getCellValue(rowData, column.field);
+  const displayValue = column.valueFormatter
+    ? column.valueFormatter(rawValue)
+    : rawValue;
   const params: EditRendererParams = {
-    value,
+    value: displayValue,
     rowData,
     column,
     rowIndex,

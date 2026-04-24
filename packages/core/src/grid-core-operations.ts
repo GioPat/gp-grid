@@ -96,6 +96,7 @@ export interface RefreshTransactionDeps<TData> {
   sortFilter: SortFilterManager<TData>;
   cachedRows: Map<number, TData>;
   setTotalRows: (n: number) => void;
+  getColumns: () => ColumnDefinition[];
 }
 
 export interface RefreshTransactionResult {
@@ -118,6 +119,7 @@ export const refreshTransactionData = async <TData>(
       pageSize: Number.MAX_SAFE_INTEGER,
       sortModel: deps.sortFilter.getSortModel(),
       filterModel: deps.sortFilter.getFilterModel(),
+      columns: deps.getColumns(),
     }),
   );
 

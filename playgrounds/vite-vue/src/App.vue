@@ -73,7 +73,20 @@ const columns: ColumnDefinition[] = [
         cellRenderer: Bold,
     },
     { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
-    { field: "age", cellDataType: "number", width: 110, headerName: "Age" },
+    {
+        field: "age",
+        cellDataType: "text",
+        width: 130,
+        headerName: "Age bucket",
+        valueFormatter: (v) => {
+            const n = typeof v === "number" ? v : Number(v);
+            if (!Number.isFinite(n)) return "";
+            if (n < 25) return "< 25";
+            if (n < 40) return "25–39";
+            if (n < 60) return "40–59";
+            return "60+";
+        },
+    },
     {
         field: "email",
         cellDataType: "text",

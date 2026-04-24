@@ -1,7 +1,7 @@
 // packages/core/src/types/data-source.ts
 // Data source types
 
-import type { SortModel } from "./basic";
+import type { CellValue, SortModel } from "./basic";
 import type { FilterModel } from "./filters";
 
 /** Data source request */
@@ -17,6 +17,12 @@ export interface DataSourceRequest {
   sort?: SortModel[];
   /** Filter */
   filter?: FilterModel;
+  /**
+   * Per-field value formatters, derived from column definitions.
+   * Client data sources use these so text filters compare against the
+   * displayed (formatted) value. Server-side data sources may ignore them.
+   */
+  valueFormatters?: Record<string, (v: CellValue) => string>;
 }
 
 /** Data source response */

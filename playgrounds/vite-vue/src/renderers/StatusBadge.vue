@@ -2,11 +2,18 @@
 import { type CellRendererParams } from "@gp-grid/vue";
 
 const props = defineProps<CellRendererParams>();
+
+// Raw value drives the CSS variant; `props.value` may be the formatted display
+// string when the column declares a valueFormatter.
+const rawStatus = (): string => {
+    const row = props.rowData as Record<string, unknown> | null;
+    return String(row?.[props.column.field] ?? "");
+};
 </script>
 
 <template>
-    <span class="status-badge" :class="`status-badge--${props.value}`">
-        {{ String(props.value ?? "").toUpperCase() }}
+    <span class="status-badge" :class="`status-badge--${rawStatus()}`">
+        {{ props.value }}
     </span>
 </template>
 

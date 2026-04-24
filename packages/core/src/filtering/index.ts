@@ -61,10 +61,14 @@ const TEXT_OPERATORS: Record<
 
 /**
  * Evaluate a text filter condition against a cell value.
+ * When `formatter` is provided, the cell value is compared via its formatted
+ * form so values-mode selections and condition-mode inputs align with what
+ * the grid displays.
  */
 export function evaluateTextCondition(
   cellValue: CellValue,
   condition: TextFilterCondition,
+  formatter?: (v: CellValue) => string,
 ): boolean {
   const isBlank = isBlankValue(cellValue);
 
@@ -82,15 +86,15 @@ export function evaluateTextCondition(
         if (sa === sb) return 0;
         return sa < sb ? -1 : 1;
       });
-      const arrayStr = sortedArray.join(", ");
+      const arrayStr = formatter ? formatter(sortedArray) : sortedArray.join(", ");
       return condition.selectedValues.has(arrayStr) || includesBlank;
     }
 
-    const cellStr = formatCellValue(cellValue);
+    const cellStr = formatCellValue(cellValue, formatter);
     return condition.selectedValues.has(cellStr) || includesBlank;
   }
 
-  const strValue = formatCellValue(cellValue).toLowerCase();
+  const strValue = formatCellValue(cellValue, formatter).toLowerCase();
   const filterValue = String(condition.value ?? "").toLowerCase();
   return TEXT_OPERATORS[condition.operator](strValue, filterValue, isBlank);
 }
@@ -185,14 +189,16 @@ export function evaluateDateCondition(
 
 /**
  * Evaluate a single filter condition against a cell value.
+ * Text conditions honor `formatter` so comparisons match the displayed value.
  */
 export function evaluateCondition(
   cellValue: CellValue,
   condition: FilterCondition,
+  formatter?: (v: CellValue) => string,
 ): boolean {
   switch (condition.type) {
     case "text":
-      return evaluateTextCondition(cellValue, condition);
+      return evaluateTextCondition(cellValue, condition, formatter);
     case "number":
       return evaluateNumberCondition(cellValue, condition);
     case "date":
@@ -209,10 +215,13 @@ export function evaluateCondition(
 /**
  * Evaluate a column filter model against a cell value.
  * Uses left-to-right evaluation with per-condition operators.
+ * When `formatter` is provided, text conditions compare against the formatted
+ * display value rather than the raw string.
  */
 export function evaluateColumnFilter(
   cellValue: CellValue,
   filter: ColumnFilterModel,
+  formatter?: (v: CellValue) => string,
 ): boolean {
   if (!filter.conditions || filter.conditions.length === 0) return true;
 
@@ -220,7 +229,7 @@ export function evaluateColumnFilter(
   if (!firstCondition) return true;
 
   // Evaluate first condition
-  let result = evaluateCondition(cellValue, firstCondition);
+  let result = evaluateCondition(cellValue, firstCondition, formatter);
 
   // Iterate through remaining conditions with per-condition operators
   for (let i = 1; i < filter.conditions.length; i++) {
@@ -228,7 +237,7 @@ export function evaluateColumnFilter(
     const currentCondition = filter.conditions[i]!;
     // Use nextOperator from previous condition, fallback to global combination
     const operator = prevCondition.nextOperator ?? filter.combination;
-    const conditionResult = evaluateCondition(cellValue, currentCondition);
+    const conditionResult = evaluateCondition(cellValue, currentCondition, formatter);
 
     if (operator === "and") {
       result = result && conditionResult;
@@ -246,11 +255,14 @@ export function evaluateColumnFilter(
 
 /**
  * Check if a row passes all filters in a filter model.
+ * `getValueFormatter` — when provided — lets text conditions compare the
+ * formatted (displayed) cell value instead of the raw string.
  */
 export function rowPassesFilter<TData>(
   row: TData,
   filterModel: FilterModel,
   getFieldValue: (row: TData, field: string) => CellValue,
+  getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined,
 ): boolean {
   const filterEntries = Object.entries(filterModel).filter(
     ([, value]) => value != null,
@@ -262,8 +274,9 @@ export function rowPassesFilter<TData>(
 
   for (const [field, filter] of filterEntries) {
     const cellValue = getFieldValue(row, field);
+    const formatter = getValueFormatter?.(field);
 
-    if (!evaluateColumnFilter(cellValue, filter)) {
+    if (!evaluateColumnFilter(cellValue, filter, formatter)) {
       return false;
     }
   }
@@ -278,11 +291,14 @@ export function rowPassesFilter<TData>(
 /**
  * Apply filters to a data array.
  * Supports both new ColumnFilterModel format and legacy string format.
+ * `getValueFormatter` — when provided — lets text conditions compare the
+ * formatted (displayed) cell value instead of the raw string.
  */
 export function applyFilters<TData>(
   data: TData[],
   filterModel: FilterModel | Record<string, string>,
   getFieldValue: (row: TData, field: string) => CellValue,
+  getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined,
 ): TData[] {
   const filterEntries = Object.entries(filterModel).filter(([, filter]) => {
     // Handle both old string format and new ColumnFilterModel format
@@ -300,10 +316,11 @@ export function applyFilters<TData>(
     // All column filters must pass (AND between columns)
     for (const [field, filter] of filterEntries) {
       const cellValue = getFieldValue(row, field);
+      const formatter = getValueFormatter?.(field);
 
       // Handle old string format (backwards compatibility)
       if (typeof filter === "string") {
-        const strValue = formatCellValue(cellValue).toLowerCase();
+        const strValue = formatCellValue(cellValue, formatter).toLowerCase();
         if (!strValue.includes(filter.toLowerCase())) {
           return false;
         }
@@ -311,7 +328,7 @@ export function applyFilters<TData>(
       }
 
       // Handle new ColumnFilterModel format
-      if (!evaluateColumnFilter(cellValue, filter)) {
+      if (!evaluateColumnFilter(cellValue, filter, formatter)) {
         return false;
       }
     }

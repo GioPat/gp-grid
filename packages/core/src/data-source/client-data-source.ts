@@ -46,6 +46,12 @@ export function defaultGetFieldValue<TData>(row: TData, field: string): CellValu
 export interface ClientDataSourceOptions<TData> {
   /** Custom field accessor for nested properties */
   getFieldValue?: (row: TData, field: string) => CellValue;
+  /**
+   * Lookup for a field's valueFormatter. Lets text filter conditions compare
+   * against the displayed (formatted) value so that what the user sees in the
+   * grid matches what the filter popup selects against.
+   */
+  getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined;
   /** Use Web Worker for sorting large datasets (default: true) */
   useWorker?: boolean;
   /** Options for parallel sorting (only used when useWorker is true) */
@@ -61,7 +67,12 @@ export function createClientDataSource<TData = unknown>(
   data: TData[],
   options: ClientDataSourceOptions<TData> = {},
 ): DataSource<TData> {
-  const { getFieldValue = defaultGetFieldValue, useWorker = true, parallelSort } = options;
+  const {
+    getFieldValue = defaultGetFieldValue,
+    getValueFormatter,
+    useWorker = true,
+    parallelSort,
+  } = options;
 
   // Mutable reference so we can clear it on destroy
   let internalData: TData[] | null = data;
@@ -83,10 +94,15 @@ export function createClientDataSource<TData = unknown>(
 
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
+        const formatterLookup =
+          request.valueFormatters != null
+            ? (field: string) => request.valueFormatters?.[field]
+            : getValueFormatter;
         processedData = applyFilters(
           processedData,
           request.filter,
           getFieldValue,
+          formatterLookup,
         );
       }
 

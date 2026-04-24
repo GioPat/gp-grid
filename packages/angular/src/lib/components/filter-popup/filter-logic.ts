@@ -82,10 +82,12 @@ export const computeUniqueValues = (
   const result: FilterEntry[] = [];
   for (const val of distinctValues) {
     if (val === null || val === undefined || val === '') continue;
-    const key = String(val);
+    // Key by formatter output when available so filter-time comparison
+    // (which also goes through the formatter) matches what the user selects.
+    const key = formatter ? formatter(val) : String(val);
     if (!seen.has(key)) {
       seen.add(key);
-      result.push({ key, label: formatter ? formatter(val) : key });
+      result.push({ key, label: key });
     }
   }
   return result.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));

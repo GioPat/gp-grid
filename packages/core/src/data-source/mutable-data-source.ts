@@ -69,6 +69,11 @@ export interface MutableClientDataSourceOptions<TData> {
   getRowId: (row: TData) => RowId;
   /** Custom field accessor for nested properties. */
   getFieldValue?: (row: TData, field: string) => CellValue;
+  /**
+   * Lookup for a field's valueFormatter. Lets text filter conditions compare
+   * against the displayed (formatted) value.
+   */
+  getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined;
   /** Debounce time for transactions in ms. Default 50. Set to 0 for sync. */
   debounceMs?: number;
   /** Callback when transactions are processed. */
@@ -95,6 +100,7 @@ export function createMutableClientDataSource<TData = unknown>(
   const {
     getRowId,
     getFieldValue,
+    getValueFormatter,
     debounceMs = 50,
     onTransactionProcessed,
     useWorker = true,
@@ -105,6 +111,7 @@ export function createMutableClientDataSource<TData = unknown>(
   const store = new IndexedDataStore({
     getRowId,
     getFieldValue: getFieldValue ?? defaultGetFieldValue,
+    getValueFormatter,
   }, data);
 
   // Subscribers for data change notifications
@@ -154,7 +161,16 @@ export function createMutableClientDataSource<TData = unknown>(
 
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
-        processedData = applyFilters(processedData, request.filter, fieldAccessor);
+        const formatterLookup =
+          request.valueFormatters != null
+            ? (field: string) => request.valueFormatters?.[field]
+            : getValueFormatter;
+        processedData = applyFilters(
+          processedData,
+          request.filter,
+          fieldAccessor,
+          formatterLookup,
+        );
       }
 
       // Apply sorting (async with worker for large datasets, sync for small)

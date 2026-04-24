@@ -29,15 +29,20 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-// Raw key stored in selectedValues — must match what evaluateTextCondition produces.
+// Stored key used both in selectedValues and by evaluateTextCondition at
+// filter-time. When a valueFormatter exists we key by its output so two
+// distinct raw values that render identically collapse into a single entry
+// (and the filter applied on that entry matches every row formatting to it).
 function valueToKey(v: CellValue): string {
+  if (props.valueFormatter) return props.valueFormatter(v);
   if (Array.isArray(v)) return v.join(", ");
   return String(v ?? "");
 }
 
-// Display label shown to the user.
+// Display label shown to the user — same as the key so the user sees what
+// they select against.
 function valueToLabel(v: CellValue): string {
-  return props.valueFormatter ? props.valueFormatter(v) : valueToKey(v);
+  return valueToKey(v);
 }
 
 // Distinct entries: key for selectedValues, label for display.

@@ -135,8 +135,12 @@ export class GridBodyComponent {
     rowIndex: number,
     colIndex: number,
   ): CellRendererParams {
+    const rawValue = getFieldValue(rowData, column.field);
+    const displayValue = column.valueFormatter
+      ? column.valueFormatter(rawValue)
+      : rawValue;
     return {
-      value: getFieldValue(rowData, column.field),
+      value: displayValue,
       rowData,
       column,
       rowIndex,
@@ -178,8 +182,12 @@ export class GridBodyComponent {
     colIndex: number,
   ): EditRendererParams {
     const ec = this.editingCell();
+    const rawValue = getFieldValue(rowData, column.field);
+    const displayValue = column.valueFormatter
+      ? column.valueFormatter(rawValue)
+      : rawValue;
     return {
-      value: getFieldValue(rowData, column.field),
+      value: displayValue,
       rowData,
       column,
       rowIndex,

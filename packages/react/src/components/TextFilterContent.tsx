@@ -39,17 +39,19 @@ export function TextFilterContent({
   onApply,
   onClose,
 }: TextFilterContentProps): React.ReactNode {
-  // Raw key used in selectedValues — must match what evaluateTextCondition produces.
+  // Stored key used both in selectedValues and by evaluateTextCondition at
+  // filter-time. When a valueFormatter exists we key by its output so two
+  // distinct raw values that render identically collapse into a single entry
+  // (and the filter applied on that entry matches every row formatting to it).
   const valueToKey = useCallback((v: CellValue): string => {
+    if (valueFormatter) return valueFormatter(v);
     if (Array.isArray(v)) return v.join(', ');
     return String(v ?? '');
-  }, []);
+  }, [valueFormatter]);
 
-  // Display label shown to the user in the checkbox list.
-  const valueToLabel = useCallback((v: CellValue): string => {
-    if (valueFormatter) return valueFormatter(v);
-    return valueToKey(v);
-  }, [valueFormatter, valueToKey]);
+  // Display label shown to the user — same as the key so the user sees what
+  // they select against.
+  const valueToLabel = useCallback((v: CellValue): string => valueToKey(v), [valueToKey]);
 
   // Distinct entries: key for selectedValues, label for display.
   // distinctValues are already sorted by grid-core.
