@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.2...gp-grid-v0.13.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **angular:** add injectable GridDataService ([075d35c](https://github.com/GioPat/gp-grid/commit/075d35cab9dd2486cddf83d90f090ff70f51c50f))
+
 ## [0.12.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.1...gp-grid-v0.12.2) (2026-04-23)
 
 
