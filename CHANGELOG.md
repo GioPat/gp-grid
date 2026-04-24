@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.0...gp-grid-v0.13.1) (2026-04-24)
+
+
+### 🐛 Bug Fixes
+
+* formatValue before passing to cellRenderer ([ab02846](https://github.com/GioPat/gp-grid/commit/ab02846baab3ccf582668528a14098d20e948f76))
+
 ## [0.13.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.12.2...gp-grid-v0.13.0) (2026-04-24)
 
 
