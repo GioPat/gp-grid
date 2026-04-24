@@ -50,7 +50,7 @@ Instead of rendering all rows, the grid maintains a pool of reusable "slots" (DO
 
 The core emits declarative **instructions** (commands) that describe what the UI should do, rather than manipulating the DOM directly. This pattern:
 
-- Keeps the core framework-agnostic (works with React, Vue, Svelte, vanilla JS)
+- Keeps the core framework-agnostic (works with React, Vue, Angular)
 - Enables batched updates for optimal rendering performance
 - Provides a clean separation between logic and presentation
 
@@ -81,6 +81,7 @@ Data fetching is abstracted through a `DataSource` interface, supporting both:
 | [**@gp-grid/core**](./packages/core/README.md)   | Framework-agnostic core library with virtual scrolling, data sources, and instruction-based architecture |
 | [**@gp-grid/react**](./packages/react/README.md) | Official React implementation with full feature support                                                  |
 | [**@gp-grid/vue**](./packages/vue/README.md)     | Official Vue3 implementation with full feature support                                                   |
+| [**@gp-grid/angular**](./packages/angular/README.md)     | Official Angular implementation with full feature support                                                   |
 
 ## Quick Start
 

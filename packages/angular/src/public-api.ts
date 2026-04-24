@@ -2,6 +2,8 @@ export * from './lib/gp-grid.component';
 export * from './lib/components';
 export * from './lib/types';
 export * from './lib/createGridData';
+export * from './lib/grid-data.service';
+export * from './lib/provide-grid-data';
 
 // Re-export core types for convenience
 export type {

@@ -1,7 +1,7 @@
 import { Component, signal, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { isPlatformBrowser } from '@angular/common';
-import { GpGridComponent, createGridData } from '@gp-grid/angular';
+import { GpGridComponent, provideGridData, injectGridData } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
   CellRendererTemplate,
@@ -18,11 +18,28 @@ interface Person {
   city: string;
 }
 
+const NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
+const CITIES = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
+
+const generateRows = (count: number): Person[] =>
+  Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    name: NAMES[i % NAMES.length],
+    age: 20 + (i % 50),
+    city: CITIES[i % CITIES.length],
+  }));
+
 @Component({
   selector: 'app-root',
   imports: [GpGridComponent, FormsModule],
   templateUrl: './app.html',
   styleUrl: './app.css',
+  providers: [
+    provideGridData<Person>({
+      getRowId: (row) => row.id,
+      initialData: generateRows(1_500_000),
+    }),
+  ],
 })
 export class App implements AfterViewInit {
   protected darkMode = signal(false);
@@ -34,11 +51,9 @@ export class App implements AfterViewInit {
   @ViewChild('cityHeader', { static: true }) cityHeader!: HeaderRendererTemplate;
   @ViewChild('cityEditor', { static: true }) cityEditor!: EditRendererTemplate;
 
-  protected readonly cityOptions = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
+  protected readonly cityOptions = CITIES;
 
-  protected readonly grid = createGridData<Person>(App.generateRows(1_500_000), {
-    getRowId: (row) => row.id,
-  });
+  protected readonly grid = injectGridData<Person>();
 
   protected rowIdToUpdate = signal(1);
 
@@ -92,9 +107,8 @@ export class App implements AfterViewInit {
   }
 
   protected updateRowRandom(): void {
-    const names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
     this.grid.updateRow(this.rowIdToUpdate(), {
-      name: `Person ${names[Math.floor(Math.random() * names.length)]}`,
+      name: `Person ${NAMES[Math.floor(Math.random() * NAMES.length)]}`,
       age: 20 + Math.floor(Math.random() * 60),
       city: this.cityOptions[Math.floor(Math.random() * this.cityOptions.length)],
     });
@@ -102,16 +116,5 @@ export class App implements AfterViewInit {
 
   protected toggleDarkMode(): void {
     this.darkMode.update(v => !v);
-  }
-
-  private static generateRows(count: number): Person[] {
-    const names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
-    const cities = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
-    return Array.from({ length: count }, (_, i) => ({
-      id: i + 1,
-      name: names[i % names.length],
-      age: 20 + (i % 50),
-      city: cities[i % cities.length],
-    }));
   }
 }

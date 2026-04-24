@@ -73,6 +73,61 @@ Import the stylesheet once (e.g. in `styles.css` or `angular.json`):
 
 For custom cell, edit, and header renderers, pass `ng-template` references via the column `cellRenderer` / `editRenderer` / `headerRenderer` fields — see the [Angular docs](https://www.gp-grid.io/docs/angular) for the full API.
 
+## Dependency injection
+
+For components that want lifecycle-managed cleanup or testable seams, use `provideGridData` and `injectGridData`. They wire the same mutable data source through Angular's DI, mirroring `useGridData` in `@gp-grid/react` and `@gp-grid/vue`. The service implements `OnDestroy` and clears the data source automatically when the component is destroyed.
+
+```ts
+import { Component } from "@angular/core";
+import {
+  GpGridComponent,
+  provideGridData,
+  injectGridData,
+} from "@gp-grid/angular";
+import type { AngularColumnDefinition } from "@gp-grid/angular";
+
+interface Person {
+  id: number;
+  name: string;
+  age: number;
+}
+
+const initialRows: Person[] = [
+  { id: 1, name: "Alice", age: 30 },
+  { id: 2, name: "Bob", age: 25 },
+];
+
+@Component({
+  selector: "app-root",
+  standalone: true,
+  imports: [GpGridComponent],
+  providers: [
+    provideGridData<Person>({
+      getRowId: (row) => row.id,
+      initialData: initialRows,
+    }),
+  ],
+  template: `
+    <gp-grid
+      [columns]="columns"
+      [dataSource]="grid.dataSource"
+      [rowHeight]="36" />
+    <button (click)="grid.addRows([{ id: 3, name: 'Carol', age: 28 }])">Add</button>
+  `,
+})
+export class App {
+  protected readonly grid = injectGridData<Person>();
+
+  protected readonly columns: AngularColumnDefinition[] = [
+    { field: "id", cellDataType: "number", headerName: "ID", width: 80 },
+    { field: "name", cellDataType: "text", headerName: "Name", width: 200 },
+    { field: "age", cellDataType: "number", headerName: "Age", width: 100 },
+  ];
+}
+```
+
+`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source.
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE).
