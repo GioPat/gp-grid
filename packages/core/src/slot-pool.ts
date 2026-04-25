@@ -292,12 +292,16 @@ export class SlotPoolManager {
   updateSlot(rowIndex: number): void {
     const slotId = this.state.rowToSlot.get(rowIndex);
     if (slotId) {
+      const slot = this.state.slots.get(slotId);
+      if (slot === undefined) return;
       const presentationRow = this.options.getPresentationRow?.(rowIndex);
       const rowData = getPresentationRowData(
         presentationRow,
         this.options.getRowData(rowIndex),
       );
       if (rowData) {
+        slot.rowData = rowData;
+        Object.assign(slot, getSlotMetadata(presentationRow));
         this.emit({
           type: "ASSIGN_SLOT",
           slotId,

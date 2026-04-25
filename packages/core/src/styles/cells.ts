@@ -81,7 +81,7 @@ export const cellStyles: string = `
 }
 
 :where(.gp-grid-cell--pinned) {
-  background-color: var(--gp-grid-bg);
+  background-color: inherit;
 }
 
 :where(.gp-grid-cell--pinned-left) {

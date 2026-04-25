@@ -211,7 +211,7 @@ export class IndexedDataStore<TData = unknown> {
   moveRow(fromIndex: number, toIndex: number): void {
     if (fromIndex === toIndex) return;
     if (fromIndex < 0 || fromIndex >= this.rows.length) return;
-    if (toIndex < 0 || toIndex >= this.rows.length) return;
+    if (toIndex < 0 || toIndex > this.rows.length) return;
 
     const [row] = this.rows.splice(fromIndex, 1);
     const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;

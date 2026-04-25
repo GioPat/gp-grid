@@ -43,6 +43,9 @@ export type {
   HighlightingOptions,
   HighlightContext,
 
+  // Row grouping
+  RowGroupingOptions,
+
   // Instructions (for advanced use cases)
   GridInstruction,
 } from '@gp-grid/core';

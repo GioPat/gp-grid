@@ -14,6 +14,7 @@ import type {
   FilterModel,
   ColumnFilterModel,
   EditState,
+  RowGroupingOptions,
 } from "./types";
 import type { SelectionManager } from "./selection";
 import type { FillManager } from "./fill";
@@ -445,13 +446,21 @@ export class GridCore<TData = unknown> {
    * performed, then only update the affected slots.
    */
   commitRowDrag(sourceIndex: number, targetIndex: number): void {
-    applyRowDragCommit(sourceIndex, targetIndex, {
+    const sourceDataIndex = this.getSourceRowIndex(sourceIndex);
+    const targetDataIndex = this.getDropTargetSourceIndex(targetIndex);
+    if (sourceDataIndex === null || targetDataIndex === null) return;
+
+    const moved = applyRowDragCommit(sourceDataIndex, targetDataIndex, {
       dataSource: this.dataSource,
       cachedRows: this.cachedRows,
       slotPool: this.slotPool,
       highlight: this.highlight,
     });
-    this.onRowDragEnd?.(sourceIndex, targetIndex);
+    if (moved === false) return;
+
+    this.refreshPresentationRows();
+
+    this.onRowDragEnd?.(sourceDataIndex, targetDataIndex);
   }
 
   /**
@@ -553,14 +562,39 @@ export class GridCore<TData = unknown> {
     this.emitVisibleRange();
   }
 
+  setRowGrouping(rowGrouping: RowGroupingOptions | undefined): void {
+    const changed = this.rowGrouping.setGrouping(rowGrouping);
+    if (changed) {
+      this.batcher.emit({
+        type: "DATA_LOADED",
+        totalRows: this.getPresentationRowCount(),
+      });
+      this.emitContentSize();
+      this.slotPool.syncSlots();
+      this.emitVisibleRange();
+    }
+  }
+
   private getPresentationRowCount(): number {
     return this.rowGrouping.getRowCount();
   }
 
-  private getSourceRowIndex(rowIndex: number): number {
+  private getSourceRowIndex(rowIndex: number): number | null {
     const row = this.getPresentationRow(rowIndex);
     if (row?.kind === "data") return row.rowIndex;
-    return rowIndex;
+    if (row === undefined && this.rowGrouping.isGroupingActive() === false) return rowIndex;
+    return null;
+  }
+
+  private getDropTargetSourceIndex(rowIndex: number): number | null {
+    if (this.rowGrouping.isGroupingActive() === false) return rowIndex;
+    if (rowIndex >= this.getPresentationRowCount()) return this.totalRows;
+
+    for (let index = rowIndex; index < this.getPresentationRowCount(); index++) {
+      const row = this.getPresentationRow(index);
+      if (row?.kind === "data") return row.rowIndex;
+    }
+    return this.totalRows;
   }
 
   private refreshPresentationRows(): void {

@@ -11,6 +11,7 @@ import type {
   ColumnDefinition,
   DataSource,
   HighlightingOptions,
+  RowGroupingOptions,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
 
@@ -111,6 +112,10 @@ export class GpGridBindings<TData = unknown> {
     if (core?.highlight && opts) {
       core.highlight.updateOptions(opts as HighlightingOptions<TData>);
     }
+  }
+
+  syncRowGrouping(opts: RowGroupingOptions | null): void {
+    this.coreRef?.setRowGrouping(opts ?? undefined);
   }
 
   syncColumns(cols: ColumnDefinition[]): void {

@@ -69,10 +69,13 @@ export class RowDrag<TData = unknown> {
     const viewportY = event.clientY - top;
     const rowCount = this.core.getRowCount();
 
-    const targetRow = Math.max(
+    const hoveredRow = Math.max(
       0,
       Math.min(this.core.getRowIndexAtDisplayY(viewportY, scrollTop), rowCount),
     );
+    const targetRow = hoveredRow > this.sourceRowIndex
+      ? Math.min(hoveredRow + 1, rowCount)
+      : hoveredRow;
     this.dropTargetIndex = targetRow;
 
     const autoScroll = calculateAutoScroll(

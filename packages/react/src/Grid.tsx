@@ -167,6 +167,8 @@ export function Grid<TData = unknown>(
   onRowGroupExpandedChangeRef.current = onRowGroupExpandedChange;
   const highlightingRef = useRef(highlighting);
   highlightingRef.current = highlighting;
+  const rowGroupingRef = useRef(rowGrouping);
+  rowGroupingRef.current = rowGrouping;
 
   // Ref for dataSource so initial core gets the right one without being in the dep array
   const dataSourceRef = useRef(dataSource);
@@ -249,7 +251,7 @@ export function Grid<TData = unknown>(
       onRowDragEnd: (src, tgt) => onRowDragEndRef.current?.(src, tgt),
       onColumnResized: (col, w) => onColumnResizedRef.current?.(col, w),
       onColumnMoved: (from, to) => onColumnMovedRef.current?.(from, to),
-      rowGrouping,
+      rowGrouping: rowGroupingRef.current,
       onRowGroupExpandedChange: (groupKey, expanded) =>
         onRowGroupExpandedChangeRef.current?.(groupKey, expanded),
     });
@@ -315,8 +317,13 @@ export function Grid<TData = unknown>(
     sortingEnabled,
     gridRef,
     rowDragEntireRow,
-    rowGrouping,
   ]);
+
+  // Handle reactive row grouping changes without re-creating core. This avoids
+  // expensive regrouping when unrelated props, like highlighting, change.
+  useEffect(() => {
+    coreRef.current?.setRowGrouping(rowGrouping);
+  }, [rowGrouping]);
 
   // Handle reactive data source changes without re-creating core
   useEffect(() => {

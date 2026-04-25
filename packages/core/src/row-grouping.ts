@@ -49,12 +49,18 @@ export class RowGroupingManager<TData = unknown> {
     this.setGrouping(grouping);
   }
 
-  setGrouping(grouping: RowGroupingOptions | undefined): void {
-    this.grouping = normalizeGrouping(grouping);
+  setGrouping(grouping: RowGroupingOptions | undefined): boolean {
+    const normalizedGrouping = normalizeGrouping(grouping);
+    if (areGroupingOptionsEqual(this.grouping, normalizedGrouping)) {
+      return false;
+    }
+
+    this.grouping = normalizedGrouping;
     this.expansionOverrides = new Map(
       (this.grouping?.expandedGroups ?? []).map((groupKey) => [groupKey, true]),
     );
     this.rebuild();
+    return true;
   }
 
   rebuild(): void {
@@ -213,4 +219,25 @@ const buildGroupKey = (parentKey: string, field: string, value: CellValue): stri
   const encodedValue = encodeURIComponent(String(value ?? ""));
   const segment = `${field}:${encodedValue}`;
   return parentKey ? `${parentKey}|${segment}` : segment;
+};
+
+const areGroupingOptionsEqual = (
+  left: RowGroupingOptions | undefined,
+  right: RowGroupingOptions | undefined,
+): boolean => {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  if (left.defaultExpandedDepth !== right.defaultExpandedDepth) return false;
+  if (left.columns.length !== right.columns.length) return false;
+  for (let index = 0; index < left.columns.length; index++) {
+    if (left.columns[index] !== right.columns[index]) return false;
+  }
+
+  const leftExpandedGroups = left.expandedGroups ?? [];
+  const rightExpandedGroups = right.expandedGroups ?? [];
+  if (leftExpandedGroups.length !== rightExpandedGroups.length) return false;
+  for (let index = 0; index < leftExpandedGroups.length; index++) {
+    if (leftExpandedGroups[index] !== rightExpandedGroups[index]) return false;
+  }
+  return true;
 };

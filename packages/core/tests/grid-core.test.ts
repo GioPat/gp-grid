@@ -625,6 +625,25 @@ describe("GridCore", () => {
       expect(emittedInstructions.some((i) => i.type === "ASSIGN_SLOT")).toBe(true);
       expect(emittedInstructions.some((i) => i.type === "DATA_LOADING")).toBe(false);
     });
+
+    it("should reorder visible row data after row drag commit", async () => {
+      await grid.initialize();
+      grid.setViewport(0, 0, 800, 200);
+      emittedInstructions = [];
+
+      grid.commitRowDrag(1, 3);
+
+      expect(grid.getRowData(0)?.name).toBe("Alice");
+      expect(grid.getRowData(1)?.name).toBe("Charlie");
+      expect(grid.getRowData(2)?.name).toBe("Bob");
+
+      const assignedRows = emittedInstructions
+        .filter((instruction) => instruction.type === "ASSIGN_SLOT")
+        .map((instruction) => instruction.rowData as TestRow);
+
+      expect(assignedRows.some((row) => row.name === "Charlie")).toBe(true);
+      expect(assignedRows.some((row) => row.name === "Bob")).toBe(true);
+    });
   });
 
   describe("instruction listeners", () => {

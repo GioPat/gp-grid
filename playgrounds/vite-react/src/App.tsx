@@ -350,6 +350,7 @@ const initialRowData = generateRowData();
 function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
+  const [groupingEnabled, setGroupingEnabled] = useState(true);
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
 
   const { dataSource, updateRow } = useGridData<Person>(
@@ -371,6 +372,14 @@ function MainDemo() {
       return [];
     } : undefined,
   }), [highlightMode]);
+
+  const rowGrouping = useMemo(
+    () =>
+      groupingEnabled
+        ? { columns: ["status", "name"], defaultExpandedDepth: 1 }
+        : undefined,
+    [groupingEnabled],
+  );
 
   const handleUpdateRow = () => {
     updateRow(rowIdToUpdate, {
@@ -405,6 +414,25 @@ function MainDemo() {
           </button>
         ))}
       </div>
+      <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+        <button
+          onClick={() => setGroupingEnabled((enabled) => !enabled)}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "600",
+            backgroundColor: groupingEnabled ? "#3b82f6" : "#374151",
+            color: groupingEnabled ? "white" : "#9ca3af",
+          }}
+        >
+          {groupingEnabled ? "Disable" : "Enable"} grouping
+        </button>
+        <span style={{ color: "#9ca3af" }}>
+          Groups by Status, then Name
+        </span>
+      </div>
 
       <div style={{ width: "1000px", height: "400px" }}>
         <Grid
@@ -418,7 +446,7 @@ function MainDemo() {
           headerHeight={40}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
-          rowGrouping={{ columns: ["status", "name"], defaultExpandedDepth: 1 }}
+          rowGrouping={rowGrouping}
           rowDragEntireRow
           onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
         />

@@ -145,7 +145,7 @@ export function createClientDataSource<TData = unknown>(
     moveRow(fromIndex: number, toIndex: number): void {
       if (!internalData || fromIndex === toIndex) return;
       if (fromIndex < 0 || fromIndex >= internalData.length) return;
-      if (toIndex < 0 || toIndex >= internalData.length) return;
+      if (toIndex < 0 || toIndex > internalData.length) return;
       const [row] = internalData.splice(fromIndex, 1);
       const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
       internalData.splice(adjustedTo, 0, row!);

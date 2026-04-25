@@ -22,6 +22,39 @@
     </button>
   </header>
 
+  <section class="grouping-controls" aria-label="Row grouping controls">
+    <div class="grouping-controls__header">
+      <label class="grouping-toggle">
+        <input
+          type="checkbox"
+          [checked]="groupingEnabled()"
+          (change)="groupingEnabled.set($any($event.target).checked)"
+        />
+        Enable grouping
+      </label>
+      <span class="grouping-summary">
+        @if (groupingEnabled() && rowGrouping().columns.length > 0) {
+          Grouping by {{ rowGrouping().columns.join(' → ') }}
+        } @else {
+          Grouping disabled
+        }
+      </span>
+    </div>
+    <div class="grouping-options">
+      @for (column of groupableColumns; track column.field) {
+        <label class="grouping-option">
+          <input
+            type="checkbox"
+            [checked]="isGroupColumnSelected(column.field)"
+            [disabled]="!groupingEnabled()"
+            (change)="onGroupColumnChange(column.field, $event)"
+          />
+          {{ column.label }}
+        </label>
+      }
+    </div>
+  </section>
+
   <ng-template #ageBadge let-params>
     <span class="age-badge" [attr.data-tone]="ageTone(params.value)">{{ params.value }}</span>
   </ng-template>
@@ -57,6 +90,7 @@
       [darkMode]="darkMode()"
       [highlighting]="highlighting"
       [rowDragEntireRow]="true"
+      [rowGrouping]="rowGrouping()"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>
 
