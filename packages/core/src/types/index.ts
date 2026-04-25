@@ -27,6 +27,14 @@ export type {
 // Column types
 export type { ColumnDefinition } from "./columns";
 
+// Column layout types
+export type {
+  ColumnLayout,
+  ColumnLayoutItem,
+  ColumnLayoutRegion,
+  ColumnPinRegion,
+} from "../utils/column-layout";
+
 // Filter types
 export type {
   TextFilterOperator,
@@ -103,7 +111,7 @@ export type {
 } from "./renderers";
 
 // Options types
-export type { GridCoreOptions } from "./options";
+export type { GridCoreOptions, RowGroupingOptions } from "./options";
 
 // Input types
 export type {

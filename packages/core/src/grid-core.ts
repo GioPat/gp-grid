@@ -7,6 +7,7 @@ import type {
   CellValue,
   CellValueChangedEvent,
   DataSource,
+  ColumnLayout,
   RowId,
   SortModel,
   SortDirection,
@@ -19,6 +20,8 @@ import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
+import { RowGroupingManager } from "./row-grouping";
+import type { PresentationRow } from "./row-grouping";
 import type {
   HighlightManager,
   RowMutationManager,
@@ -29,6 +32,7 @@ import type {
 import { InstructionBatcher } from "./managers";
 import {
   buildDataSourceRequest,
+  computeColumnLayout,
   computeColumnPositions,
   readCell,
   writeCell,
@@ -64,6 +68,7 @@ export class GridCore<TData = unknown> {
   private readonly onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
   private readonly onColumnResized?: (colIndex: number, newWidth: number) => void;
   private readonly onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  private readonly onRowGroupExpandedChange?: (groupKey: string, expanded: boolean) => void;
 
   // Viewport state
   private readonly viewport: ViewportState;
@@ -74,6 +79,7 @@ export class GridCore<TData = unknown> {
   private readonly pageSize: number = Number.MAX_SAFE_INTEGER;
   private cachedRows: Map<number, TData> = new Map();
   private totalRows: number = 0;
+  private readonly rowGrouping: RowGroupingManager<TData>;
 
   // Managers
   public readonly selection: SelectionManager;
@@ -87,6 +93,7 @@ export class GridCore<TData = unknown> {
 
   // Column positions (computed)
   private columnPositions: number[] = [];
+  private columnLayout: ColumnLayout;
 
   // Instruction dispatch
   private readonly batcher = new InstructionBatcher();
@@ -113,11 +120,21 @@ export class GridCore<TData = unknown> {
     this.onRowDragEnd = options.onRowDragEnd;
     this.onColumnResized = options.onColumnResized;
     this.onColumnMoved = options.onColumnMoved;
+    this.onRowGroupExpandedChange = options.onRowGroupExpandedChange;
     if (this.onCellValueChanged && !this.getRowId) {
       throw new Error("getRowId is required when onCellValueChanged is provided");
     }
 
+    this.columnLayout = computeColumnLayout(this.columns);
     this.computeColumnPositions();
+    this.rowGrouping = new RowGroupingManager<TData>({
+      getColumns: () => this.columns,
+      getCachedRows: () => this.cachedRows,
+      getTotalRows: () => this.totalRows,
+      onExpandedChange: (groupKey, expanded) => {
+        this.onRowGroupExpandedChange?.(groupKey, expanded);
+      },
+    }, options.rowGrouping);
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
@@ -125,8 +142,9 @@ export class GridCore<TData = unknown> {
       getColumns: () => this.columns,
       getCachedRows: () => this.cachedRows,
       setCachedRows: (rows) => { this.cachedRows = rows; },
-      getTotalRows: () => this.totalRows,
+      getTotalRows: () => this.getPresentationRowCount(),
       setTotalRows: (count) => { this.totalRows = count; },
+      getPresentationRow: (rowIndex) => this.getPresentationRow(rowIndex),
       getRowHeight: () => this.rowHeight,
       getHeaderHeight: () => this.headerHeight,
       getOverscan: () => this.overscan,
@@ -152,6 +170,7 @@ export class GridCore<TData = unknown> {
       getHeaderHeight: () => this.headerHeight,
       getRowHeight: () => this.rowHeight,
       getColumnPositions: () => this.columnPositions,
+      getColumnLayout: () => this.columnLayout,
       getColumnCount: () => this.columns.length,
     });
   }
@@ -196,7 +215,7 @@ export class GridCore<TData = unknown> {
     width: number,
     height: number,
   ): void {
-    const { changed, viewportSizeChanged } = this.viewport.update(
+    const { changed, verticalChanged, viewportSizeChanged } = this.viewport.update(
       scrollTop,
       scrollLeft,
       width,
@@ -204,8 +223,10 @@ export class GridCore<TData = unknown> {
     );
     if (!changed) return;
 
-    this.slotPool.syncSlots();
-    this.emitVisibleRange();
+    if (verticalChanged || viewportSizeChanged) {
+      this.slotPool.syncSlots();
+      this.emitVisibleRange();
+    }
     if (viewportSizeChanged) this.emitContentSize();
   }
 
@@ -235,8 +256,12 @@ export class GridCore<TData = unknown> {
         this.cachedRows.set(startIndex + i, row);
       });
       this.totalRows = response.totalRows;
+      this.rowGrouping.rebuild();
 
-      this.batcher.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
+      this.batcher.emit({
+        type: "DATA_LOADED",
+        totalRows: this.getPresentationRowCount(),
+      });
     } catch (error) {
       this.batcher.emit({
         type: "DATA_ERROR",
@@ -322,11 +347,11 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   getCellValue(row: number, col: number): CellValue {
-    return readCell(this.cachedRows, this.columns, row, col);
+    return readCell(this.cachedRows, this.columns, this.getSourceRowIndex(row), col);
   }
 
   setCellValue(row: number, col: number, value: CellValue): void {
-    writeCell(this.cachedRows, this.columns, row, col, value, {
+    writeCell(this.cachedRows, this.columns, this.getSourceRowIndex(row), col, value, {
       onCellValueChanged: this.onCellValueChanged,
       getRowId: this.getRowId,
     });
@@ -345,6 +370,7 @@ export class GridCore<TData = unknown> {
 
   private computeColumnPositions(): void {
     this.columnPositions = computeColumnPositions(this.columns);
+    this.columnLayout = computeColumnLayout(this.columns);
   }
 
   private emitContentSize(): void {
@@ -447,8 +473,12 @@ export class GridCore<TData = unknown> {
     return [...this.columnPositions];
   }
 
+  getColumnLayout(): ColumnLayout {
+    return this.columnLayout;
+  }
+
   getRowCount(): number {
-    return this.totalRows;
+    return this.getPresentationRowCount();
   }
 
   getRowHeight(): number {
@@ -503,7 +533,45 @@ export class GridCore<TData = unknown> {
   }
 
   getRowData(rowIndex: number): TData | undefined {
+    const row = this.getPresentationRow(rowIndex);
+    if (row?.kind === "data") return row.rowData;
     return this.cachedRows.get(rowIndex);
+  }
+
+  getPresentationRow(rowIndex: number): PresentationRow<TData> | undefined {
+    return this.rowGrouping.getRow(rowIndex);
+  }
+
+  toggleRowGroup(groupKey: string): void {
+    this.rowGrouping.toggle(groupKey);
+    this.batcher.emit({
+      type: "DATA_LOADED",
+      totalRows: this.getPresentationRowCount(),
+    });
+    this.emitContentSize();
+    this.slotPool.syncSlots();
+    this.emitVisibleRange();
+  }
+
+  private getPresentationRowCount(): number {
+    return this.rowGrouping.getRowCount();
+  }
+
+  private getSourceRowIndex(rowIndex: number): number {
+    const row = this.getPresentationRow(rowIndex);
+    if (row?.kind === "data") return row.rowIndex;
+    return rowIndex;
+  }
+
+  private refreshPresentationRows(): void {
+    this.rowGrouping.rebuild();
+    this.batcher.emit({
+      type: "DATA_LOADED",
+      totalRows: this.getPresentationRowCount(),
+    });
+    this.slotPool.syncSlots();
+    this.emitContentSize();
+    this.emitVisibleRange();
   }
 
   // ===========================================================================
@@ -536,6 +604,7 @@ export class GridCore<TData = unknown> {
       setTotalRows: (n) => { this.totalRows = n; },
       getColumns: () => this.columns,
     });
+    this.rowGrouping.rebuild();
     this.highlight?.clearAllCaches();
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
@@ -560,6 +629,7 @@ export class GridCore<TData = unknown> {
    */
   addRows(rows: TData[], index?: number): void {
     this.rowMutation.addRows(rows, index);
+    this.refreshPresentationRows();
   }
 
   /**
@@ -567,6 +637,7 @@ export class GridCore<TData = unknown> {
    */
   updateRows(updates: Array<{ index: number; data: Partial<TData> }>): void {
     this.rowMutation.updateRows(updates);
+    this.refreshPresentationRows();
   }
 
   /**
@@ -574,6 +645,7 @@ export class GridCore<TData = unknown> {
    */
   deleteRows(indices: number[]): void {
     this.rowMutation.deleteRows(indices);
+    this.refreshPresentationRows();
   }
 
   /**
@@ -589,6 +661,7 @@ export class GridCore<TData = unknown> {
    */
   setRow(index: number, data: TData): void {
     this.rowMutation.setRow(index, data);
+    this.refreshPresentationRows();
   }
 
   /**
@@ -602,7 +675,7 @@ export class GridCore<TData = unknown> {
     }
     this.dataSource = dataSource;
     await this.refresh();
-    this.clearSelectionIfInvalid(this.totalRows);
+    this.clearSelectionIfInvalid(this.getPresentationRowCount());
   }
 
   /**
@@ -611,6 +684,7 @@ export class GridCore<TData = unknown> {
   setColumns(columns: ColumnDefinition[]): void {
     this.columns = columns;
     this.computeColumnPositions();
+    this.rowGrouping.rebuild();
     this.emitContentSize();
     this.emitHeaders();
     this.slotPool.syncSlots();

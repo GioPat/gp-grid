@@ -15,9 +15,18 @@ import type {
 
 export interface SlotData<TData = unknown> {
   slotId: string;
+  /** Presentation row index. Equals source row index when row grouping is disabled. */
   rowIndex: number;
   rowData: TData;
   translateY: number;
+  rowKind?: "data" | "group";
+  sourceRowIndex?: number;
+  groupKey?: string;
+  groupDepth?: number;
+  groupField?: string;
+  groupValue?: CellValue;
+  groupChildCount?: number;
+  groupExpanded?: boolean;
 }
 
 export interface HeaderData {

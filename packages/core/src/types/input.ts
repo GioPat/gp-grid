@@ -2,6 +2,7 @@
 // Framework-agnostic input types for InputHandler
 
 import type { CellPosition, CellRange } from "./basic";
+import type { ColumnLayout } from "../utils/column-layout";
 
 // =============================================================================
 // Event Data Types (framework-agnostic)
@@ -111,6 +112,8 @@ export interface InputHandlerDeps {
   getOriginalColumnIndex?: (visibleIndex: number) => number;
   /** Get column widths array (indexed by visible column) */
   getColumnWidths?: () => number[];
+  /** Get region-aware column layout. Preferred by pinned-column aware input paths. */
+  getColumnLayout?: () => ColumnLayout;
 }
 
 // =============================================================================

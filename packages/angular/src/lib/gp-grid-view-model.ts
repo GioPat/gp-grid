@@ -2,6 +2,7 @@ import { Signal, computed, signal } from '@angular/core';
 import {
   calculateFillHandlePosition,
   calculateScaledColumnPositions,
+  computeColumnLayout,
   getTotalWidth,
 } from '@gp-grid/core';
 import type {
@@ -9,6 +10,7 @@ import type {
   CellPosition,
   CellRange,
   ColumnDefinition,
+  ColumnLayout,
   DragState,
   FillHandlePosition,
   FilterPopupState,
@@ -68,10 +70,12 @@ export class GpGridViewModel {
   readonly visibleColumnWithIndices: Signal<VisibleColumnInfo[]>;
   readonly columnPositions: Signal<number[]>;
   readonly columnWidths: Signal<number[]>;
+  readonly columnLayout: Signal<ColumnLayout>;
   readonly totalWidth: Signal<number>;
   readonly fillHandlePosition: Signal<FillHandlePosition | null>;
   readonly slotsArray: Signal<SlotData[]>;
   readonly totalRows: Signal<number>;
+  private readonly totalRowsSignal = signal<number>(0);
 
   readonly batchSetters: BatchChangeSetters;
 
@@ -94,6 +98,9 @@ export class GpGridViewModel {
     );
     this.columnPositions = computed(() => columnLayout().positions);
     this.columnWidths = computed(() => columnLayout().widths);
+    this.columnLayout = computed(() =>
+      computeColumnLayout(this.effectiveColumns(), { containerWidth: this.viewportWidth() })
+    );
     this.totalWidth = computed(() => getTotalWidth(this.columnPositions()));
     this.fillHandlePosition = computed(() =>
       calculateFillHandlePosition({
@@ -108,7 +115,7 @@ export class GpGridViewModel {
       })
     );
     this.slotsArray = computed(() => [...this.slots().values()]);
-    this.totalRows = computed(() => deps.getRows().length);
+    this.totalRows = computed(() => this.totalRowsSignal() || deps.getRows().length);
 
     this.batchSetters = {
       setContentWidth: (v) => this.contentWidth.set(v),
@@ -122,6 +129,7 @@ export class GpGridViewModel {
       setEditingCell: (v) => this.editingCell.set(v),
       setHoverPosition: (v) => this.hoverPosition.set(v),
       setColumnsOverride: (v) => this.columnsOverride.set(v),
+      setTotalRows: (v) => this.totalRowsSignal.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };
   }

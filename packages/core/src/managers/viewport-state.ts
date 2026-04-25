@@ -4,6 +4,7 @@
 
 export interface ViewportUpdateResult {
   changed: boolean;
+  verticalChanged: boolean;
   viewportSizeChanged: boolean;
 }
 
@@ -60,8 +61,9 @@ export class ViewportState {
 
     const viewportSizeChanged =
       this.viewportWidth !== width || this.viewportHeight !== height;
+    const verticalChanged = this.scrollTop !== effectiveScrollTop;
     const changed =
-      this.scrollTop !== effectiveScrollTop ||
+      verticalChanged ||
       this.scrollLeft !== scrollLeft ||
       viewportSizeChanged;
 
@@ -71,6 +73,6 @@ export class ViewportState {
       this.viewportWidth = width;
       this.viewportHeight = height;
     }
-    return { changed, viewportSizeChanged };
+    return { changed, verticalChanged, viewportSizeChanged };
   }
 }

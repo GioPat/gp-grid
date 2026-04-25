@@ -13,6 +13,13 @@ export { FillManager } from "./fill";
 export { SlotPoolManager } from "./slot-pool";
 export { EditManager } from "./edit-manager";
 export { InputHandler } from "./input-handler";
+export { RowGroupingManager } from "./row-grouping";
+export type {
+  DataPresentationRow,
+  GroupPresentationRow,
+  PresentationRow,
+  RowGroupingManagerOptions,
+} from "./row-grouping";
 export {
   HighlightManager,
   SortFilterManager,
@@ -117,6 +124,10 @@ export type {
 
   /** Column definition */
   ColumnDefinition,
+  ColumnLayout,
+  ColumnLayoutItem,
+  ColumnLayoutRegion,
+  ColumnPinRegion,
 
   /** Cell Position coordinates: row and column, zero-based indices */
   CellPosition,
@@ -177,6 +188,7 @@ export type {
 
   /** Options */
   GridCoreOptions,
+  RowGroupingOptions,
 
   // Renderer params (for adapters)
   CellRendererParams,
@@ -235,6 +247,17 @@ export {
   getTotalWidth,
   findColumnAtX,
 } from "./utils/positioning";
+export {
+  computeColumnLayout,
+  getColumnLayoutItemByOriginalIndex,
+  getColumnLayoutViewportLeft,
+} from "./utils/column-layout";
+export type {
+  ColumnLayout,
+  ColumnLayoutItem,
+  ColumnLayoutRegion,
+  ColumnPinRegion,
+} from "./utils/column-layout";
 
 /** Class name utilities */
 export {

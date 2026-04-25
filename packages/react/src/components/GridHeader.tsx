@@ -1,7 +1,13 @@
 // packages/react/src/components/GridHeader.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
+import type {
+  GridCore,
+  HeaderData,
+  VisibleColumnInfo,
+  ColumnLayout,
+  ColumnLayoutItem,
+} from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { ReactHeaderRenderer } from "../types";
 
@@ -12,6 +18,7 @@ export interface GridHeaderProps<TData = unknown> {
   totalWidth: number;
   isLoading: boolean;
   visibleColumnsWithIndices: VisibleColumnInfo[];
+  columnLayout: ColumnLayout;
   columnPositions: number[];
   columnWidths: number[];
   headers: Map<number, HeaderData>;
@@ -29,13 +36,9 @@ export const GridHeader = <TData = unknown>(
 ): React.ReactNode => {
   const {
     headerHeight,
-    scrollLeft,
     contentWidth,
-    totalWidth,
     isLoading,
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
+    columnLayout,
     headers,
     sortingEnabled,
     onHeaderMouseDown,
@@ -51,59 +54,91 @@ export const GridHeader = <TData = unknown>(
       className={`gp-grid-header${isLoading ? " gp-grid-header--loading" : ""}`}
       style={{ height: headerHeight }}
     >
+      {renderRegion(columnLayout.leftPinned.items, {
+        left: 0,
+        width: columnLayout.leftPinnedWidth,
+        zIndex: 3,
+      })}
+      {renderRegion(columnLayout.center.items, {
+        left: columnLayout.leftPinnedWidth,
+        width: Math.max(columnLayout.centerWidth, contentWidth - columnLayout.leftPinnedWidth - columnLayout.rightPinnedWidth),
+        transform: "translate3d(calc(-1 * var(--gp-grid-scroll-left, 0px)), 0, 0)",
+        zIndex: 1,
+      })}
+      {renderRegion(columnLayout.rightPinned.items, {
+        right: 0,
+        width: columnLayout.rightPinnedWidth,
+        zIndex: 3,
+      })}
+    </div>
+  );
+
+  function renderRegion(
+    items: ColumnLayoutItem[],
+    style: React.CSSProperties,
+  ): React.ReactNode {
+    return (
       <div
+        className="gp-grid-column-region"
         style={{
           position: "absolute",
           top: 0,
-          left: 0,
-          transform: `translateX(${-scrollLeft}px)`,
-          width: Math.max(contentWidth, totalWidth),
           height: headerHeight,
+          ...style,
         }}
       >
-        {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
-          const headerInfo = headers.get(originalIndex);
-          const colW = columnWidths[visibleIndex] ?? 0;
-          return (
-            <div
-              key={column.colId ?? column.field}
-              className="gp-grid-header-cell"
-              data-col-index={originalIndex}
-              style={{
-                left: `${columnPositions[visibleIndex]}px`,
-                width: `${colW}px`,
-                height: `${headerHeight}px`,
-              }}
-              onPointerDown={(e) =>
-                onHeaderMouseDown(originalIndex, colW, headerHeight, e)
-              }
-            >
-              {renderHeader({
-                column,
-                colIndex: originalIndex,
-                sortDirection: headerInfo?.sortDirection,
-                sortIndex: headerInfo?.sortIndex,
-                sortable: (column.sortable !== false) && sortingEnabled,
-                filterable: column.filterable !== false,
-                hasFilter: headerInfo?.hasFilter ?? false,
-                coreRef,
-                containerRef: outerContainerRef,
-                headerRenderers,
-                globalHeaderRenderer,
-              })}
-              {column.resizable !== false && (
-                <div
-                  className="gp-grid-header-resize-handle"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    onHeaderResizeMouseDown(originalIndex, colW, e);
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
+        {items.map((item) => renderHeaderCell(item))}
       </div>
-    </div>
-  );
+    );
+  }
+
+  function renderHeaderCell(item: ColumnLayoutItem): React.ReactNode {
+    const { column, originalIndex } = item;
+    const headerInfo = headers.get(originalIndex);
+    return (
+      <div
+        key={item.key}
+        className={[
+          "gp-grid-header-cell",
+          item.region === "left" ? "gp-grid-header-cell--pinned-left" : "",
+          item.region === "right" ? "gp-grid-header-cell--pinned-right" : "",
+        ].filter(Boolean).join(" ")}
+        data-col-index={originalIndex}
+        style={{
+          left: `${item.left}px`,
+          width: `${item.width}px`,
+          height: `${headerHeight}px`,
+        }}
+        onPointerDown={(e) =>
+          onHeaderMouseDown(originalIndex, item.width, headerHeight, e)
+        }
+      >
+        {renderHeader({
+          column,
+          colIndex: originalIndex,
+          sortDirection: headerInfo?.sortDirection,
+          sortIndex: headerInfo?.sortIndex,
+          sortable: (column.sortable !== false) && sortingEnabled,
+          filterable: column.filterable !== false,
+          hasFilter: headerInfo?.hasFilter ?? false,
+          coreRef,
+          containerRef: outerContainerRef,
+          headerRenderers,
+          globalHeaderRenderer,
+        })}
+        {column.resizable !== false && (
+          <div
+            className={[
+              "gp-grid-header-resize-handle",
+              item.region === "right" ? "gp-grid-header-resize-handle--inside" : "",
+            ].filter(Boolean).join(" ")}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onHeaderResizeMouseDown(originalIndex, item.width, e);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 };

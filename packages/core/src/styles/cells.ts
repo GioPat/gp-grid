@@ -16,10 +16,35 @@ export const cellStyles: string = `
   will-change: transform; 
 }
 
+.gp-grid-rows-wrapper > .gp-grid-pinned-boundary {
+  z-index: 8;
+}
+
 .gp-grid-row {
   position: absolute;
   top: 0;
   left: 0;
+}
+
+.gp-grid-row--group {
+  z-index: 3;
+  cursor: pointer;
+}
+
+.gp-grid-row-group-cell {
+  position: sticky;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: var(--gp-grid-text);
+  background-color: var(--gp-grid-header-bg);
+  border-right: 1px solid var(--gp-grid-border-light);
+  border-bottom: 1px solid var(--gp-grid-border);
+  user-select: none;
+  z-index: 6;
 }
 
 /* Row background - :where() for zero specificity, so user highlight classes always win */
@@ -49,6 +74,22 @@ export const cellStyles: string = `
   border-right: 1px solid var(--gp-grid-border-light);
   border-bottom: 1px solid var(--gp-grid-border-light);
   background-color: transparent;
+}
+
+.gp-grid-cell--pinned {
+  z-index: 6;
+}
+
+:where(.gp-grid-cell--pinned) {
+  background-color: var(--gp-grid-bg);
+}
+
+:where(.gp-grid-cell--pinned-left) {
+  border-right-color: var(--gp-grid-border);
+}
+
+:where(.gp-grid-cell--pinned-right) {
+  border-left: 1px solid var(--gp-grid-border);
 }
 
 /* Active cell (focused) - structural properties stay, visual use :where() */

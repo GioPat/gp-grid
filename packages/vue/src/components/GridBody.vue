@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type {
   GridCore,
   ColumnDefinition,
@@ -10,6 +10,8 @@ import type {
   SlotData,
   FillHandlePosition,
   VisibleColumnInfo,
+  ColumnLayout,
+  ColumnLayoutItem,
 } from "@gp-grid/core";
 import {
   isCellSelected,
@@ -28,6 +30,8 @@ const props = defineProps<{
   contentWidth: number;
   contentHeight: number;
   totalWidth: number;
+  scrollLeft: number;
+  viewportWidth: number;
   rowsWrapperOffset: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
@@ -38,6 +42,7 @@ const props = defineProps<{
   totalRows: number;
   slotsArray: SlotData[];
   visibleColumnsWithIndices: VisibleColumnInfo[];
+  columnLayout: ColumnLayout;
   columnPositions: number[];
   columnWidths: number[];
   fillHandlePosition: FillHandlePosition | null;
@@ -58,6 +63,9 @@ const props = defineProps<{
 }>();
 
 const bodyRef = ref<HTMLDivElement | null>(null);
+const renderedWidth = computed(() =>
+  Math.max(props.contentWidth, props.totalWidth, props.columnLayout.totalWidth),
+);
 
 // Get row classes including highlight classes
 const getRowClasses = (slot: { rowIndex: number; rowData: Row }): string => {
@@ -98,6 +106,41 @@ const getCellClasses = (
   ].filter(Boolean).join(" ");
 };
 
+const getCellStyle = (item: ColumnLayoutItem): Record<string, string | number> => {
+  if (item.region === "left") {
+    return {
+      position: "absolute",
+      left: `calc(var(--gp-grid-scroll-left, 0px) + ${item.left}px)`,
+      top: 0,
+      width: `${item.width}px`,
+      height: `${props.rowHeight}px`,
+      zIndex: 6,
+    };
+  }
+  if (item.region === "right") {
+    return {
+      position: "absolute",
+      left: `calc(var(--gp-grid-scroll-left, 0px) + var(--gp-grid-viewport-width, 0px) - ${props.columnLayout.rightPinnedWidth - item.left}px)`,
+      top: 0,
+      width: `${item.width}px`,
+      height: `${props.rowHeight}px`,
+      zIndex: 6,
+    };
+  }
+  return {
+    position: "absolute",
+    left: `${props.columnLayout.leftPinnedWidth + item.left}px`,
+    top: 0,
+    width: `${item.width}px`,
+    height: `${props.rowHeight}px`,
+  };
+};
+
+const groupLabel = (slot: SlotData): string => {
+  const expanded = slot.groupExpanded === true ? "[-]" : "[+]";
+  return `${expanded} ${slot.groupField ?? "Group"}: ${String(slot.groupValue ?? "")} (${slot.groupChildCount ?? 0})`;
+};
+
 defineExpose({ bodyRef });
 </script>
 
@@ -111,7 +154,7 @@ defineExpose({ bodyRef });
     <!-- Content sizer - provides scroll range -->
     <div
       :style="{
-        width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+        width: `${renderedWidth}px`,
         height: `${Math.max(props.contentHeight - props.totalHeaderHeight, 0)}px`,
         position: 'relative',
         minWidth: '100%',
@@ -121,7 +164,7 @@ defineExpose({ bodyRef });
       <div
         class="gp-grid-rows-wrapper"
         :style="{
-          width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+          width: `${renderedWidth}px`,
           transform: `translateY(${props.rowsWrapperOffset}px)`,
         }"
       >
@@ -129,40 +172,52 @@ defineExpose({ bodyRef });
         <div
           v-for="slot in props.slotsArray.filter((s) => s.rowIndex >= 0)"
           :key="slot.slotId"
-          :class="getRowClasses(slot)"
+          :class="slot.rowKind === 'group' ? 'gp-grid-row gp-grid-row--group' : getRowClasses(slot)"
           :style="{
             position: 'absolute',
             top: 0,
             left: 0,
             transform: `translateY(${slot.translateY}px)`,
-            width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+            width: `${renderedWidth}px`,
             height: `${props.rowHeight}px`,
           }"
         >
           <div
-            v-for="({ column, originalIndex }, visibleIndex) in props.visibleColumnsWithIndices"
-            :key="`${slot.slotId}-${column.colId ?? column.field}`"
-            :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, props.hoverPosition)"
+            v-if="slot.rowKind === 'group'"
+            class="gp-grid-row-group-cell"
             :style="{
-              position: 'absolute',
-              left: `${props.columnPositions[visibleIndex]}px`,
-              top: 0,
-              width: `${props.columnWidths[visibleIndex]}px`,
+              left: 0,
+              width: `${renderedWidth}px`,
               height: `${props.rowHeight}px`,
+              paddingLeft: `${12 + (slot.groupDepth ?? 0) * 16}px`,
             }"
-            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, originalIndex, e)"
-            @dblclick="() => props.onCellDoubleClick(slot.rowIndex, originalIndex)"
-            @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, originalIndex)"
+            @pointerdown.prevent="() => slot.groupKey && props.coreRef?.toggleRowGroup(slot.groupKey)"
+          >
+            {{ groupLabel(slot) }}
+          </div>
+          <div
+            v-for="item in slot.rowKind === 'group' ? [] : props.columnLayout.items"
+            :key="`${slot.slotId}-${item.key}`"
+            :class="[
+              getCellClasses(slot.rowIndex, item.originalIndex, item.column, slot.rowData, props.hoverPosition),
+              item.region !== 'center' ? 'gp-grid-cell--pinned' : '',
+              item.region === 'left' ? 'gp-grid-cell--pinned-left' : '',
+              item.region === 'right' ? 'gp-grid-cell--pinned-right' : '',
+            ].filter(Boolean).join(' ')"
+            :style="getCellStyle(item)"
+            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, item.originalIndex, e)"
+            @dblclick="() => props.onCellDoubleClick(slot.rowIndex, item.originalIndex)"
+            @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, item.originalIndex)"
             @mouseleave="props.onCellMouseLeave"
           >
             <!-- Edit mode -->
-            <template v-if="isCellEditing(slot.rowIndex, originalIndex, props.editingCell) && props.editingCell">
+            <template v-if="isCellEditing(slot.rowIndex, item.originalIndex, props.editingCell) && props.editingCell">
               <component
                 :is="renderEditCell({
-                  column,
+                  column: item.column,
                   rowData: slot.rowData,
                   rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
+                  colIndex: item.originalIndex,
                   initialValue: props.editingCell.initialValue,
                   core: props.coreRef,
                   editRenderers: props.editRenderers,
@@ -174,12 +229,12 @@ defineExpose({ bodyRef });
             <template v-else>
               <component
                 :is="renderCell({
-                  column,
+                  column: item.column,
                   rowData: slot.rowData,
                   rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
-                  isActive: isCellActive(slot.rowIndex, originalIndex, props.activeCell),
-                  isSelected: isCellSelected(slot.rowIndex, originalIndex, props.selectionRange),
+                  colIndex: item.originalIndex,
+                  isActive: isCellActive(slot.rowIndex, item.originalIndex, props.activeCell),
+                  isSelected: isCellSelected(slot.rowIndex, item.originalIndex, props.selectionRange),
                   isEditing: false,
                   cellRenderers: props.cellRenderers,
                   globalCellRenderer: props.globalCellRenderer,
@@ -206,7 +261,7 @@ defineExpose({ bodyRef });
           class="gp-grid-row-drop-indicator"
           :style="{
             transform: `translateY(${props.dragState.rowDrag!.dropIndicatorY}px)`,
-            width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+            width: `${renderedWidth}px`,
           }"
         />
       </div>

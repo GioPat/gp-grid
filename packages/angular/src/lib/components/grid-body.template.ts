@@ -13,22 +13,30 @@ export const GRID_BODY_TEMPLATE = `<div
         @for (slot of slotsArray(); track slot.slotId) {
           @if (slot.rowIndex >= 0) {
             <div
-              [class]="rowClass(slot.rowIndex, slot.rowData)"
+              [class]="slot.rowKind === 'group' ? 'gp-grid-row gp-grid-row--group' : rowClass(slot.rowIndex, slot.rowData)"
               style="position: absolute; top: 0; left: 0"
               [style.transform]="'translateY(' + slot.translateY + 'px)'"
               [style.width.px]="innerWidth()"
               [style.height.px]="rowHeight()"
             >
-              @for (entry of visibleColumnWithIndices(); track entry.originalIndex; let i = $index) {
+              @if (slot.rowKind === 'group') {
+                <div
+                  class="gp-grid-row-group-cell"
+                  [style.width.px]="innerWidth()"
+                  [style.height.px]="rowHeight()"
+                  [style.paddingLeft.px]="12 + ((slot.groupDepth ?? 0) * 16)"
+                  (pointerdown)="$event.preventDefault(); toggleGroup(slot)">
+                  {{ groupLabel(slot) }}
+                </div>
+              }
+              @for (entry of columnLayout().items; track entry.key) {
+                @if (slot.rowKind !== 'group') {
                 @let editing = isEditing(slot.rowIndex, entry.originalIndex);
                 <div
-                  [class]="cellClass(slot.rowIndex, entry.originalIndex, entry.column, slot.rowData)"
-                  style="position: absolute; top: 0;"
+                  [class]="cellClassWithPinning(slot, entry)"
+                  [ngStyle]="cellStyle(entry)"
                   [attr.data-row-index]="slot.rowIndex"
                   [attr.data-col-index]="entry.originalIndex"
-                  [style.left.px]="columnPositions()[i]"
-                  [style.width.px]="columnWidths()[i]"
-                  [style.height.px]="rowHeight()"
                   (pointerdown)="cellPointerDown.emit({ rowIndex: slot.rowIndex, colIndex: entry.originalIndex, event: $event })"
                   (mouseenter)="cellPointerEnter.emit({ rowIndex: slot.rowIndex, colIndex: entry.originalIndex })"
                   (mouseleave)="cellPointerLeave.emit()"
@@ -64,6 +72,7 @@ export const GRID_BODY_TEMPLATE = `<div
                     }
                   }
                 </div>
+                }
               }
             </div>
           }

@@ -13,6 +13,8 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
   calculateScaledColumnPositions,
+  computeColumnLayout,
+  getColumnLayoutItemByOriginalIndex,
   getTotalWidth,
   calculateFillHandlePosition,
 } from "@gp-grid/core";
@@ -66,6 +68,8 @@ export function Grid<TData = unknown>(
     onRowDragEnd,
     onColumnResized,
     onColumnMoved,
+    rowGrouping,
+    onRowGroupExpandedChange,
   } = props;
 
   const outerContainerRef = useRef<HTMLDivElement>(null);
@@ -159,6 +163,8 @@ export function Grid<TData = unknown>(
   onColumnResizedRef.current = onColumnResized;
   const onColumnMovedRef = useRef(onColumnMoved);
   onColumnMovedRef.current = onColumnMoved;
+  const onRowGroupExpandedChangeRef = useRef(onRowGroupExpandedChange);
+  onRowGroupExpandedChangeRef.current = onRowGroupExpandedChange;
   const highlightingRef = useRef(highlighting);
   highlightingRef.current = highlighting;
 
@@ -176,6 +182,11 @@ export function Grid<TData = unknown>(
         .map((col, index) => ({ column: col, originalIndex: index }))
         .filter(({ column }) => !column.hidden),
     [effectiveColumns],
+  );
+
+  const columnLayout = useMemo(
+    () => computeColumnLayout(effectiveColumns, { containerWidth: state.viewportWidth }),
+    [effectiveColumns, state.viewportWidth],
   );
 
   // Compute column positions (scaled to fill container when wider) - only for visible columns
@@ -207,6 +218,7 @@ export function Grid<TData = unknown>(
     rowHeight,
     headerHeight: totalHeaderHeight,
     columnPositions,
+    columnLayout,
     visibleColumnsWithIndices,
     slots: state.slots,
     rowsWrapperOffset: state.rowsWrapperOffset,
@@ -237,6 +249,9 @@ export function Grid<TData = unknown>(
       onRowDragEnd: (src, tgt) => onRowDragEndRef.current?.(src, tgt),
       onColumnResized: (col, w) => onColumnResizedRef.current?.(col, w),
       onColumnMoved: (from, to) => onColumnMovedRef.current?.(from, to),
+      rowGrouping,
+      onRowGroupExpandedChange: (groupKey, expanded) =>
+        onRowGroupExpandedChangeRef.current?.(groupKey, expanded),
     });
 
     coreRef.current = core;
@@ -248,6 +263,7 @@ export function Grid<TData = unknown>(
       getHeaderHeight: () => totalHeaderHeight,
       getRowHeight: () => rowHeight,
       getColumnPositions: () => columnPositions,
+      getColumnLayout: () => columnLayout,
       getColumnCount: () => visibleColumnsWithIndices.length,
       getOriginalColumnIndex: (visibleIndex: number) => {
         const info = visibleColumnsWithIndices[visibleIndex];
@@ -299,6 +315,7 @@ export function Grid<TData = unknown>(
     sortingEnabled,
     gridRef,
     rowDragEntireRow,
+    rowGrouping,
   ]);
 
   // Handle reactive data source changes without re-creating core
@@ -468,12 +485,36 @@ export function Grid<TData = unknown>(
   const [scrollLeft, setScrollLeft] = React.useState(0);
 
   // Enhanced scroll handler that also syncs header
+  const syncScrollCssVars = useCallback((container: HTMLDivElement) => {
+    outerContainerRef.current?.style.setProperty(
+      "--gp-grid-scroll-left",
+      `${container.scrollLeft}px`,
+    );
+  }, []);
+
   const handleScrollWithHeaderSync = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    setScrollLeft(container.scrollLeft);
+    syncScrollCssVars(container);
     handleScroll();
-  }, [handleScroll]);
+  }, [handleScroll, syncScrollCssVars]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const sync = () => syncScrollCssVars(container);
+    container.addEventListener("scroll", sync, { passive: true });
+    sync();
+    return () => container.removeEventListener("scroll", sync);
+  }, [syncScrollCssVars]);
+
+  const getViewportLeftForLayoutItem = useCallback((item: typeof columnLayout.items[number]): string | number => {
+    if (item.region === "left") return item.left;
+    if (item.region === "right") {
+      return `calc(var(--gp-grid-viewport-width, 0px) - ${columnLayout.rightPinnedWidth - item.left}px)`;
+    }
+    return `calc(${columnLayout.leftPinnedWidth + item.left}px - var(--gp-grid-scroll-left, 0px))`;
+  }, [columnLayout]);
 
   return (
     <div
@@ -485,6 +526,8 @@ export function Grid<TData = unknown>(
         position: "relative",
         display: "flex",
         flexDirection: "column",
+        "--gp-grid-scroll-left": `${scrollLeft}px`,
+        "--gp-grid-viewport-width": `${state.viewportWidth}px`,
       }}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -496,6 +539,7 @@ export function Grid<TData = unknown>(
         totalWidth={totalWidth}
         isLoading={state.isLoading}
         visibleColumnsWithIndices={visibleColumnsWithIndices}
+        columnLayout={columnLayout}
         columnPositions={columnPositions}
         columnWidths={columnWidths}
         headers={state.headers}
@@ -515,6 +559,8 @@ export function Grid<TData = unknown>(
         contentWidth={state.contentWidth}
         contentHeight={state.contentHeight}
         totalWidth={totalWidth}
+        scrollLeft={scrollLeft}
+        viewportWidth={state.viewportWidth}
         rowsWrapperOffset={state.rowsWrapperOffset}
         activeCell={state.activeCell}
         selectionRange={state.selectionRange}
@@ -524,6 +570,7 @@ export function Grid<TData = unknown>(
         totalRows={state.totalRows}
         slotsArray={slotsArray}
         visibleColumnsWithIndices={visibleColumnsWithIndices}
+        columnLayout={columnLayout}
         columnPositions={columnPositions}
         columnWidths={columnWidths}
         fillHandlePosition={fillHandlePosition}
@@ -581,11 +628,16 @@ export function Grid<TData = unknown>(
 
       {/* Column resize line */}
       {dragState.dragType === "column-resize" && dragState.columnResize && (() => {
-        const visibleIndex = visibleColumnsWithIndices.findIndex(
-          (v) => v.originalIndex === dragState.columnResize!.colIndex,
+        const item = getColumnLayoutItemByOriginalIndex(
+          columnLayout,
+          dragState.columnResize!.colIndex,
         );
-        if (visibleIndex === -1) return null;
-        const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth - scrollLeft;
+        if (!item) return null;
+        const lineLeft = (() => {
+          const base = getViewportLeftForLayoutItem(item);
+          if (typeof base === "number") return base + dragState.columnResize!.currentWidth;
+          return `calc(${base} + ${dragState.columnResize!.currentWidth}px)`;
+        })();
         return (
           <div
             className="gp-grid-column-resize-line"
@@ -618,7 +670,13 @@ export function Grid<TData = unknown>(
                 style={{
                   position: "absolute",
                   top: 0,
-                  left: (columnPositions[cm.dropTargetIndex] ?? 0) - scrollLeft,
+                  left: (() => {
+                    const item = columnLayout.items.find(
+                      (entry) => entry.visibleIndex === cm.dropTargetIndex,
+                    );
+                    if (!item) return 0;
+                    return getViewportLeftForLayoutItem(item);
+                  })(),
                   height: headerHeight,
                 }}
               />

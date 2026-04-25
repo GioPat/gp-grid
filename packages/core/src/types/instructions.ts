@@ -34,6 +34,14 @@ export interface AssignSlotInstruction {
   slotId: string;
   rowIndex: number;
   rowData: unknown;
+  rowKind?: "data" | "group";
+  sourceRowIndex?: number;
+  groupKey?: string;
+  groupDepth?: number;
+  groupField?: string;
+  groupValue?: CellValue;
+  groupChildCount?: number;
+  groupExpanded?: boolean;
 }
 
 /** Move slot instruction */

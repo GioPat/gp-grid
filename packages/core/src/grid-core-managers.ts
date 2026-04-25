@@ -20,6 +20,7 @@ import type {
   ColumnDefinition,
   HighlightingOptions,
 } from "./types";
+import type { PresentationRow } from "./row-grouping";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
@@ -28,6 +29,7 @@ export interface GridManagersDeps<TData> {
   getCachedRows: () => Map<number, TData>;
   setCachedRows: (rows: Map<number, TData>) => void;
   getTotalRows: () => number;
+  getPresentationRow?: (rowIndex: number) => PresentationRow<TData> | undefined;
   setTotalRows: (n: number) => void;
   getRowHeight: () => number;
   getHeaderHeight: () => number;
@@ -78,7 +80,11 @@ export const buildGridManagers = <TData>(
     getRowCount: deps.getTotalRows,
     getColumnCount: () => deps.getColumns().length,
     getCellValue: deps.getCellValue,
-    getRowData: (row) => deps.getCachedRows().get(row),
+    getRowData: (row) => {
+      const presentationRow = deps.getPresentationRow?.(row);
+      if (presentationRow?.kind === "data") return presentationRow.rowData;
+      return deps.getCachedRows().get(row);
+    },
     getColumn: (col) => deps.getColumns()[col],
   });
   selection.onInstruction((instruction) => {
@@ -117,6 +123,7 @@ export const buildGridManagers = <TData>(
     getScrollRatio: () => scrollVirtualization.getScrollRatio(),
     getVirtualContentHeight: () => scrollVirtualization.getVirtualContentHeight(),
     getRowData: (rowIndex) => deps.getCachedRows().get(rowIndex),
+    getPresentationRow: deps.getPresentationRow,
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 

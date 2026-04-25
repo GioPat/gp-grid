@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, TemplateRef, ViewChild } from "@angular/core";
-import { NgTemplateOutlet } from "@angular/common";
+import { NgStyle, NgTemplateOutlet } from "@angular/common";
 import {
   formatCellValue,
   getFieldValue,
@@ -14,6 +14,8 @@ import {
   CellRange,
   CellValue,
   ColumnDefinition,
+  ColumnLayout,
+  ColumnLayoutItem,
   CellRendererParams,
   EditRendererParams,
   FillHandlePosition,
@@ -61,7 +63,7 @@ export interface EditingCellState {
 @Component({
   selector: "gp-grid-body",
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgStyle, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`:host { display: flex; flex: 1; min-height: 0; overflow: hidden; }`],
   template: GRID_BODY_TEMPLATE,
@@ -72,9 +74,12 @@ export class GridBodyComponent {
   totalHeaderHeight = input.required<number>();
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();
+  scrollLeft = input.required<number>();
+  viewportWidth = input.required<number>();
   rowsWrapperOffset = input.required<number>();
   slotsArray = input.required<SlotData[]>();
   visibleColumnWithIndices = input.required<VisibleColumnInfo[]>();
+  columnLayout = input.required<ColumnLayout>();
   totalWidth = input.required<number>();
   columnPositions = input.required<number[]>();
   columnWidths = input.required<number[]>();
@@ -101,9 +106,10 @@ export class GridBodyComponent {
   editCommit = output<void>();
   editCancel = output<void>();
   fillHandlePointerDown = output<FillHandlePointerDownEvent>();
+  rowGroupToggle = output<string>();
 
   protected innerWidth = computed(() =>
-    Math.max(this.contentWidth(), this.totalWidth()),
+    Math.max(this.contentWidth(), this.totalWidth(), this.columnLayout().totalWidth),
   );
 
   protected sizerHeight = computed(() =>
@@ -118,8 +124,63 @@ export class GridBodyComponent {
   });
 
   protected rowDropIndicatorWidth = computed(() =>
-    Math.max(this.contentWidth(), this.totalWidth()),
+    this.innerWidth(),
   );
+
+  protected cellStyle(item: ColumnLayoutItem): Record<string, string | number> {
+    if (item.region === 'left') {
+      return {
+        position: 'absolute',
+        left: `calc(var(--gp-grid-scroll-left, 0px) + ${item.left}px)`,
+        top: 0,
+        width: `${item.width}px`,
+        height: `${this.rowHeight()}px`,
+        zIndex: 6,
+      };
+    }
+    if (item.region === 'right') {
+      return {
+        position: 'absolute',
+        left: `calc(var(--gp-grid-scroll-left, 0px) + var(--gp-grid-viewport-width, 0px) - ${this.columnLayout().rightPinnedWidth - item.left}px)`,
+        top: 0,
+        width: `${item.width}px`,
+        height: `${this.rowHeight()}px`,
+        zIndex: 6,
+      };
+    }
+    return {
+      position: 'absolute',
+      left: `${this.columnLayout().leftPinnedWidth + item.left}px`,
+      top: 0,
+      width: `${item.width}px`,
+      height: `${this.rowHeight()}px`,
+    };
+  }
+
+  protected groupLabel(slot: SlotData): string {
+    const expanded = slot.groupExpanded === true ? '[-]' : '[+]';
+    return `${expanded} ${slot.groupField ?? 'Group'}: ${String(slot.groupValue ?? '')} (${slot.groupChildCount ?? 0})`;
+  }
+
+  protected cellClassWithPinning(
+    slot: SlotData,
+    item: ColumnLayoutItem,
+  ): string {
+    const classes = [
+      this.cellClass(slot.rowIndex, item.originalIndex, item.column, slot.rowData),
+      item.region !== 'center' ? 'gp-grid-cell--pinned' : '',
+      item.region === 'left' ? 'gp-grid-cell--pinned-left' : '',
+      item.region === 'right' ? 'gp-grid-cell--pinned-right' : '',
+    ];
+    return classes.filter(Boolean).join(' ');
+  }
+
+  protected toggleGroup(slot: SlotData): void {
+    const groupKey = slot.groupKey;
+    if (groupKey) {
+      this.rowGroupToggle.emit(groupKey);
+    }
+  }
 
   protected wrapperTransform = computed(() =>
     `translateY(${this.rowsWrapperOffset()}px)`);

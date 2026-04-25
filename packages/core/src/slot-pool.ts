@@ -1,6 +1,7 @@
 // packages/core/src/slot-pool.ts
 
 import type { SlotState, GridInstruction } from "./types";
+import type { PresentationRow } from "./row-grouping";
 import { createBatchInstructionEmitter } from "./utils";
 
 // =============================================================================
@@ -26,6 +27,8 @@ export interface SlotPoolManagerOptions {
   getVirtualContentHeight: () => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
+  /** Get presentation row metadata by index */
+  getPresentationRow?: (rowIndex: number) => PresentationRow | undefined;
 }
 
 interface SlotPoolState {
@@ -123,16 +126,18 @@ export class SlotPoolManager {
 
     const instructions: GridInstruction[] = [];
 
-    const slotsToRecycle = this.partitionSlots(requiredRows);
+    const slotsToRecycle = this.collectRecyclableSlots(requiredRows);
 
     let recycleIdx = 0;
     for (const rowIndex of requiredRows) {
-      const rowData = this.options.getRowData(rowIndex);
+      const presentationRow = this.options.getPresentationRow?.(rowIndex);
+      const rowData = getPresentationRowData(presentationRow, this.options.getRowData(rowIndex));
       if (rowData === undefined) continue;
-      const recycledSlotId = recycleIdx < slotsToRecycle.length
-        ? slotsToRecycle[recycleIdx++]
-        : undefined;
-      this.assignSlotToRow(rowIndex, rowData, recycledSlotId, instructions);
+      const existingSlotId = this.state.rowToSlot.get(rowIndex);
+      const targetSlotId = existingSlotId ?? (
+        recycleIdx < slotsToRecycle.length ? slotsToRecycle[recycleIdx++] : undefined
+      );
+      this.assignSlotToRow(rowIndex, rowData, targetSlotId, instructions, presentationRow);
     }
 
     for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
@@ -147,15 +152,12 @@ export class SlotPoolManager {
   }
 
   /**
-   * Partition existing slots into recyclable and still-needed.
-   * Mutates requiredRows: rows that already have a slot are removed.
+   * Collect slots that can be reassigned while keeping required rows in place.
    */
-  private partitionSlots(requiredRows: Set<number>): string[] {
+  private collectRecyclableSlots(requiredRows: Set<number>): string[] {
     const slotsToRecycle: string[] = [];
     for (const [slotId, slot] of this.state.slots) {
-      if (requiredRows.has(slot.rowIndex)) {
-        requiredRows.delete(slot.rowIndex);
-      } else {
+      if (!requiredRows.has(slot.rowIndex)) {
         slotsToRecycle.push(slotId);
         this.state.rowToSlot.delete(slot.rowIndex);
       }
@@ -171,6 +173,7 @@ export class SlotPoolManager {
     rowData: unknown,
     recycledSlotId: string | undefined,
     instructions: GridInstruction[],
+    presentationRow: PresentationRow | undefined,
   ): void {
     let slotId: string;
 
@@ -181,6 +184,7 @@ export class SlotPoolManager {
         rowIndex,
         rowData,
         translateY: this.getRowTranslateY(rowIndex),
+        ...getSlotMetadata(presentationRow),
       });
       instructions.push({ type: "CREATE_SLOT", slotId });
     } else {
@@ -189,11 +193,12 @@ export class SlotPoolManager {
       slot.rowIndex = rowIndex;
       slot.rowData = rowData;
       slot.translateY = this.getRowTranslateY(rowIndex);
+      Object.assign(slot, getSlotMetadata(presentationRow));
     }
 
     this.state.rowToSlot.set(rowIndex, slotId);
     instructions.push(
-      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData },
+      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData, ...getSlotMetadata(presentationRow) },
       { type: "MOVE_SLOT", slotId, translateY: this.getRowTranslateY(rowIndex) },
     );
   }
@@ -249,16 +254,27 @@ export class SlotPoolManager {
     for (const [slotId, slot] of this.state.slots) {
       // Check if row index is still valid and data is available
       if (slot.rowIndex >= 0 && slot.rowIndex < totalRows) {
-        const rowData = this.options.getRowData(slot.rowIndex);
+        const presentationRow = this.options.getPresentationRow?.(slot.rowIndex);
+        const rowData = getPresentationRowData(
+          presentationRow,
+          this.options.getRowData(slot.rowIndex),
+        );
         if (rowData === undefined) continue;
 
         const translateY = this.getRowTranslateY(slot.rowIndex);
 
         slot.rowData = rowData;
         slot.translateY = translateY;
+        Object.assign(slot, getSlotMetadata(presentationRow));
 
         instructions.push(
-          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData },
+          {
+            type: "ASSIGN_SLOT",
+            slotId,
+            rowIndex: slot.rowIndex,
+            rowData,
+            ...getSlotMetadata(presentationRow),
+          },
           { type: "MOVE_SLOT", slotId, translateY },
         );
       }
@@ -276,13 +292,18 @@ export class SlotPoolManager {
   updateSlot(rowIndex: number): void {
     const slotId = this.state.rowToSlot.get(rowIndex);
     if (slotId) {
-      const rowData = this.options.getRowData(rowIndex);
+      const presentationRow = this.options.getPresentationRow?.(rowIndex);
+      const rowData = getPresentationRowData(
+        presentationRow,
+        this.options.getRowData(rowIndex),
+      );
       if (rowData) {
         this.emit({
           type: "ASSIGN_SLOT",
           slotId,
           rowIndex,
           rowData,
+          ...getSlotMetadata(presentationRow),
         });
       }
     }
@@ -353,3 +374,50 @@ export class SlotPoolManager {
     return firstVisibleRowY * scrollRatio;
   }
 }
+
+const getPresentationRowData = (
+  row: PresentationRow | undefined,
+  fallback: unknown,
+): unknown => {
+  if (!row) return fallback;
+  if (row.kind === "data") return row.rowData;
+  return row;
+};
+
+const getSlotMetadata = (
+  row: PresentationRow | undefined,
+): Pick<
+  SlotState,
+  | "rowKind"
+  | "sourceRowIndex"
+  | "groupKey"
+  | "groupDepth"
+  | "groupField"
+  | "groupValue"
+  | "groupChildCount"
+  | "groupExpanded"
+> => {
+  if (!row) return { rowKind: "data" };
+  if (row.kind === "data") {
+    return {
+      rowKind: "data",
+      sourceRowIndex: row.rowIndex,
+      groupKey: undefined,
+      groupDepth: undefined,
+      groupField: undefined,
+      groupValue: undefined,
+      groupChildCount: undefined,
+      groupExpanded: undefined,
+    };
+  }
+  return {
+    rowKind: "group",
+    sourceRowIndex: undefined,
+    groupKey: row.groupKey,
+    groupDepth: row.depth,
+    groupField: row.field,
+    groupValue: row.value,
+    groupChildCount: row.childCount,
+    groupExpanded: row.expanded,
+  };
+};

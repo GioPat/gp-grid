@@ -22,6 +22,7 @@ import type {
   DataSource,
   HighlightingOptions,
   RowId,
+  RowGroupingOptions,
 } from '@gp-grid/core';
 import {
   GridHeaderComponent,
@@ -78,6 +79,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
+  rowGrouping = input<RowGroupingOptions | null>(null);
+  onRowGroupExpandedChange = output<{ groupKey: string; expanded: boolean }>();
 
   protected readonly vm = new GpGridViewModel({
     getColumns: () => this.columns(),
@@ -93,6 +96,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     getRowHeight: () => this.rowHeight(),
     getHeaderHeight: () => this.headerHeight(),
   });
+  private syncScrollCssVars: (() => void) | null = null;
 
   constructor() {
     effect(() => this.bindings.applyPendingScroll(), { allowSignalWrites: true });
@@ -113,12 +117,15 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,
         getRowId: this.getRowId() ?? undefined,
         rowDragEntireRow: this.rowDragEntireRow(),
+        rowGrouping: this.rowGrouping() ?? undefined,
       },
       {
         onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
         onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
         onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
+        onRowGroupExpandedChange: (groupKey, expanded) =>
+          this.onRowGroupExpandedChange.emit({ groupKey, expanded }),
       },
     );
     this.bindings.attach(core);
@@ -126,10 +133,19 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (this.isBrowser === false) return;
+    const bodyEl = this.body.scrollContainer.nativeElement;
+    this.syncScrollCssVars = (): void => {
+      this.container.nativeElement.style.setProperty(
+        '--gp-grid-scroll-left',
+        `${bodyEl.scrollLeft}px`,
+      );
+    };
     this.bindings.observeViewport(
       this.container.nativeElement,
-      this.body.scrollContainer.nativeElement,
+      bodyEl,
     );
+    bodyEl.addEventListener('scroll', this.syncScrollCssVars, { passive: true });
+    this.syncScrollCssVars();
     document.addEventListener('pointermove', this.onDocumentPointerMove, { passive: false });
     document.addEventListener('pointerup', this.onDocumentPointerUp);
   }
@@ -139,10 +155,14 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.isBrowser) {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
       document.removeEventListener('pointerup', this.onDocumentPointerUp);
+      if (this.syncScrollCssVars !== null && this.body?.scrollContainer?.nativeElement) {
+        this.body.scrollContainer.nativeElement.removeEventListener('scroll', this.syncScrollCssVars);
+      }
     }
   }
 
   protected onBodyScroll(scrollLeft: number): void {
+    this.container.nativeElement.style.setProperty('--gp-grid-scroll-left', `${scrollLeft}px`);
     this.vm.scrollLeft.set(scrollLeft);
     const el = this.body.scrollContainer.nativeElement;
     this.bindings.coreRef?.setViewport(el.scrollTop, scrollLeft, el.clientWidth, el.clientHeight);
@@ -211,6 +231,10 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected onCellDoubleClick(evt: CellDoubleClickEvent): void {
     this.bindings.coreRef?.startEdit(evt.rowIndex, evt.colIndex);
+  }
+
+  protected onRowGroupToggle(groupKey: string): void {
+    this.bindings.coreRef?.toggleRowGroup(groupKey);
   }
 
   protected onEditValueChange(value: string): void {

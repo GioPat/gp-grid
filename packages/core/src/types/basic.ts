@@ -98,4 +98,12 @@ export interface SlotState {
   rowData: unknown;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
+  rowKind?: "data" | "group";
+  sourceRowIndex?: number;
+  groupKey?: string;
+  groupDepth?: number;
+  groupField?: string;
+  groupValue?: CellValue;
+  groupChildCount?: number;
+  groupExpanded?: boolean;
 }

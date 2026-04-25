@@ -20,6 +20,7 @@ export const applyInstruction = <TData = unknown>(
         rowIndex: -1,
         rowData: {} as TData,
         translateY: 0,
+        rowKind: "data",
       });
       return null;
 
@@ -34,6 +35,14 @@ export const applyInstruction = <TData = unknown>(
           ...existing,
           rowIndex: instruction.rowIndex,
           rowData: instruction.rowData as TData,
+          rowKind: instruction.rowKind ?? "data",
+          sourceRowIndex: instruction.sourceRowIndex,
+          groupKey: instruction.groupKey,
+          groupDepth: instruction.groupDepth,
+          groupField: instruction.groupField,
+          groupValue: instruction.groupValue,
+          groupChildCount: instruction.groupChildCount,
+          groupExpanded: instruction.groupExpanded,
         });
       }
       return null;

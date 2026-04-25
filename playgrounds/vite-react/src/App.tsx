@@ -265,6 +265,7 @@ const columns: ColumnDefinition[] = [
     width: 80,
     headerName: "ID",
     cellRenderer: "bold", // Reference renderer by key
+    pinned: "left",
   },
   {
     field: "name",
@@ -272,6 +273,7 @@ const columns: ColumnDefinition[] = [
     cellDataType: "text",
     width: 150,
     headerName: "Name",
+    pinned: "left",
   },
   {
     field: "age",
@@ -308,6 +310,7 @@ const columns: ColumnDefinition[] = [
     width: 150,
     headerName: "Salary",
     cellRenderer: "currency", // Reference renderer by key
+    pinned: "right",
   },
   {
     field: "tags",
@@ -415,6 +418,7 @@ function MainDemo() {
           headerHeight={40}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
+          rowGrouping={{ columns: ["status", "name"], defaultExpandedDepth: 1 }}
           rowDragEntireRow
           onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
         />

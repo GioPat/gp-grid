@@ -12,10 +12,11 @@ import {
   createClientDataSource,
   createDataSourceFromArray,
   calculateScaledColumnPositions,
+  computeColumnLayout,
   getTotalWidth,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowGroupingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -61,6 +62,8 @@ const props = withDefaults(
     onColumnResized?: (colIndex: number, newWidth: number) => void;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+    rowGrouping?: RowGroupingOptions;
+    onRowGroupExpandedChange?: (groupKey: string, expanded: boolean) => void;
   }>(),
   {
     overscan: 3,
@@ -116,6 +119,9 @@ const scaledColumns = computed(() =>
 const columnPositions = computed(() => scaledColumns.value.positions);
 const columnWidths = computed(() => scaledColumns.value.widths);
 const totalWidth = computed(() => getTotalWidth(columnPositions.value));
+const columnLayout = computed(() =>
+  computeColumnLayout(effectiveColumns.value, { containerWidth: state.value.viewportWidth }),
+);
 const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
 // Input handling
@@ -137,6 +143,7 @@ const {
   rowHeight: props.rowHeight,
   headerHeight: totalHeaderHeight.value,
   columnPositions,
+  columnLayout,
   visibleColumnsWithIndices,
   slots: computed(() => state.value.slots),
   rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
@@ -172,9 +179,16 @@ function handleScroll(): void {
 function handleScrollWithHeaderSync(): void {
   const container = bodyContainerRef.value;
   if (container) {
-    scrollLeft.value = container.scrollLeft;
+    syncScrollCssVars(container);
   }
   handleScroll();
+}
+
+function syncScrollCssVars(container: HTMLDivElement): void {
+    outerContainerRef.value?.style.setProperty(
+        "--gp-grid-scroll-left",
+        `${container.scrollLeft}px`,
+    );
 }
 
 // Handle filter apply
@@ -245,6 +259,9 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onRowDragEnd: (src, tgt) => props.onRowDragEnd?.(src, tgt),
     onColumnResized: (col, w) => props.onColumnResized?.(col, w),
     onColumnMoved: (from, to) => props.onColumnMoved?.(from, to),
+    rowGrouping: props.rowGrouping,
+    onRowGroupExpandedChange: (groupKey, expanded) =>
+      props.onRowGroupExpandedChange?.(groupKey, expanded),
   });
 
   coreRef.value = core;
@@ -292,6 +309,13 @@ onMounted(() => {
     onUnmounted(() => {
       resizeObserver.disconnect();
     });
+  }
+
+  if (container) {
+    const sync = () => syncScrollCssVars(container);
+    container.addEventListener("scroll", sync, { passive: true });
+    sync();
+    onUnmounted(() => container.removeEventListener("scroll", sync));
   }
 
   // Cleanup on unmount
@@ -393,7 +417,15 @@ defineExpose({
   <div
     ref="outerContainerRef"
     :class="['gp-grid-container', { 'gp-grid-container--dark': darkMode }]"
-    style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
+    :style="{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        '--gp-grid-scroll-left': `${scrollLeft}px`,
+        '--gp-grid-viewport-width': `${state.viewportWidth}px`,
+    }"
     tabindex="0"
     @keydown="handleKeyDown"
   >
@@ -404,6 +436,7 @@ defineExpose({
       :total-width="totalWidth"
       :is-loading="state.isLoading"
       :visible-columns-with-indices="visibleColumnsWithIndices"
+      :column-layout="columnLayout"
       :column-positions="columnPositions"
       :column-widths="columnWidths"
       :headers="state.headers"
@@ -423,6 +456,8 @@ defineExpose({
       :content-width="state.contentWidth"
       :content-height="state.contentHeight"
       :total-width="totalWidth"
+      :scroll-left="scrollLeft"
+      :viewport-width="state.viewportWidth"
       :rows-wrapper-offset="state.rowsWrapperOffset"
       :active-cell="state.activeCell"
       :selection-range="state.selectionRange"
@@ -433,6 +468,7 @@ defineExpose({
       :total-rows="state.totalRows"
       :slots-array="slotsArray"
       :visible-columns-with-indices="visibleColumnsWithIndices"
+      :column-layout="columnLayout"
       :column-positions="columnPositions"
       :column-widths="columnWidths"
       :fill-handle-position="fillHandlePosition"

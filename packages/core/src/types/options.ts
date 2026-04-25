@@ -6,6 +6,15 @@ import type { ColumnDefinition } from "./columns";
 import type { DataSource } from "./data-source";
 import type { HighlightingOptions } from "./highlighting";
 
+export interface RowGroupingOptions {
+  /** Column fields or colIds used as hierarchical grouping levels. */
+  columns: string[];
+  /** Groups with depth lower than this value start expanded. Default: all collapsed. */
+  defaultExpandedDepth?: number;
+  /** Controlled/initial expanded group keys. */
+  expandedGroups?: string[];
+}
+
 /** Grid core options */
 export interface GridCoreOptions<TData = unknown> {
   /** Column definitions */
@@ -36,4 +45,8 @@ export interface GridCoreOptions<TData = unknown> {
   onColumnResized?: (colIndex: number, newWidth: number) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  /** Client-side row grouping configuration. */
+  rowGrouping?: RowGroupingOptions;
+  /** Called when a row group is expanded or collapsed. */
+  onRowGroupExpandedChange?: (groupKey: string, expanded: boolean) => void;
 }

@@ -71,8 +71,9 @@ const columns: ColumnDefinition[] = [
         width: 80,
         headerName: "ID",
         cellRenderer: Bold,
+        pinned: "left",
     },
-    { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
+    { field: "name", cellDataType: "text", width: 150, headerName: "Name", pinned: "left" },
     {
         field: "age",
         cellDataType: "text",
@@ -108,6 +109,7 @@ const columns: ColumnDefinition[] = [
         width: 150,
         headerName: "Salary",
         cellRenderer: Currency,
+        pinned: "right",
     },
     {
         field: "tags",
@@ -193,6 +195,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :row-height="36"
             :header-height="40"
             :dark-mode="true"
+            :row-grouping="{ columns: ['status', 'name'], defaultExpandedDepth: 1 }"
         />
     </div>
 

@@ -11,6 +11,7 @@ import type {
   HeaderData,
   VisibleColumnInfo,
   ColumnDefinition,
+  ColumnLayout,
   HeaderRendererParams,
   SortDirection,
 } from '@gp-grid/core';
@@ -52,6 +53,7 @@ const TEMPLATE = `
       [style.width.px]="innerWidth()"
       [style.height.px]="headerHeight()">
       @for (entry of visibleColumnsWithIndices(); track entry.originalIndex; let i = $index) {
+        @let layoutItem = columnLayout().items.find(item => item.originalIndex === entry.originalIndex);
         @let colW = columnWidths()[i] ?? 0;
         @let headerData = headers().get(entry.originalIndex);
         @let tpl = headerTemplate(entry.column);
@@ -102,7 +104,7 @@ const TEMPLATE = `
           </span>
           @if (entry.column.resizable !== false) {
             <div
-              class="gp-grid-header-resize-handle"
+              [class]="'gp-grid-header-resize-handle' + (layoutItem?.region === 'right' ? ' gp-grid-header-resize-handle--inside' : '')"
               (pointerdown)="onResizePointerDown($event, entry.originalIndex, colW)">
             </div>
           }
@@ -126,6 +128,7 @@ export class GridHeaderComponent {
   totalWidth = input.required<number>();
   isLoading = input.required<boolean>();
   visibleColumnsWithIndices = input.required<VisibleColumnInfo[]>();
+  columnLayout = input.required<ColumnLayout>();
   columnPositions = input.required<number[]>();
   columnWidths = input.required<number[]>();
   headers = input.required<Map<number, HeaderData>>();
@@ -144,7 +147,7 @@ export class GridHeaderComponent {
   );
 
   protected transformStyle = computed(() =>
-    `translateX(${-this.scrollLeft()}px)`
+    'translate3d(calc(-1 * var(--gp-grid-scroll-left, 0px)), 0, 0)'
   );
 
   protected onHeaderPointerDown(event: PointerEvent, colIndex: number, colWidth: number): void {

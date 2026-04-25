@@ -9,6 +9,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   DataSource,
+  RowGroupingOptions,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -88,4 +89,6 @@ export interface GpGridProps<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
+  rowGrouping?: RowGroupingOptions;
+  onRowGroupExpandedChange?: (groupKey: string, expanded: boolean) => void;
 }

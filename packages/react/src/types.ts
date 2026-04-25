@@ -10,6 +10,7 @@ import type {
   HeaderRendererParams,
   GridCore,
   HighlightingOptions,
+  RowGroupingOptions,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -101,4 +102,8 @@ export interface GridProps<TData = unknown> {
   onColumnResized?: (colIndex: number, newWidth: number) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  /** Client-side row grouping configuration. */
+  rowGrouping?: RowGroupingOptions;
+  /** Called when a row group is expanded or collapsed. */
+  onRowGroupExpandedChange?: (groupKey: string, expanded: boolean) => void;
 }

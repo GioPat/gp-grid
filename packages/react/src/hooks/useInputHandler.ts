@@ -8,6 +8,7 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
+  ColumnLayout,
 } from "@gp-grid/core";
 import { scrollCellIntoView } from "@gp-grid/core";
 import type { SlotData } from "../gridState/types";
@@ -29,6 +30,7 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: number[];
+  columnLayout?: ColumnLayout;
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: VisibleColumnInfo[];
   slots: Map<string, SlotData>;
@@ -76,6 +78,7 @@ export function useInputHandler<TData>(
     rowHeight,
     headerHeight,
     columnPositions,
+    columnLayout,
     visibleColumnsWithIndices,
     slots,
     rowsWrapperOffset,
@@ -113,6 +116,7 @@ export function useInputHandler<TData>(
         getHeaderHeight: () => headerHeight,
         getRowHeight: () => rowHeight,
         getColumnPositions: () => columnPositions,
+        getColumnLayout: columnLayout ? () => columnLayout : undefined,
         getColumnCount: () => visibleColumnsWithIndices.length,
         getOriginalColumnIndex: (visibleIndex: number) => {
           const info = visibleColumnsWithIndices[visibleIndex];
@@ -120,7 +124,7 @@ export function useInputHandler<TData>(
         },
       });
     }
-  }, [coreRef, headerHeight, rowHeight, columnPositions, visibleColumnsWithIndices]);
+  }, [coreRef, headerHeight, rowHeight, columnPositions, columnLayout, visibleColumnsWithIndices]);
 
   // Get container bounds
   const getContainerBounds = useCallback((): ContainerBounds | null => {

@@ -56,5 +56,17 @@ export { reorderCachedRows } from "./cached-rows";
 
 export { computeColumnPositions } from "./column-positions";
 
+export {
+  computeColumnLayout,
+  getColumnLayoutItemByOriginalIndex,
+  getColumnLayoutViewportLeft,
+} from "./column-layout";
+export type {
+  ColumnLayout,
+  ColumnLayoutItem,
+  ColumnLayoutRegion,
+  ColumnPinRegion,
+} from "./column-layout";
+
 export { readCell, writeCell } from "./cell-access";
 export type { WriteCellDeps } from "./cell-access";

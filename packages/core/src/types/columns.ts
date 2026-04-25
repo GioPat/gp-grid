@@ -31,6 +31,8 @@ export interface ColumnDefinition {
   maxWidth?: number;
   /** Whether column can be moved/reordered by dragging the header. Default: true */
   movable?: boolean;
+  /** Pin the column to a horizontal edge. Unset/false keeps it in the scrollable center region. */
+  pinned?: "left" | "right" | false;
   /** Whether this column acts as a drag handle for row dragging. Default: false */
   rowDrag?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */

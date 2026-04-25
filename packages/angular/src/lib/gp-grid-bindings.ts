@@ -78,6 +78,7 @@ export class GpGridBindings<TData = unknown> {
       getHeaderHeight: this.deps.getHeaderHeight,
       getRowHeight: this.deps.getRowHeight,
       getColumnPositions: () => this.deps.vm.columnPositions(),
+      getColumnLayout: () => this.deps.vm.columnLayout(),
       getColumnCount: () => this.deps.vm.visibleColumnWithIndices().length,
       getOriginalColumnIndex: (visibleIndex) =>
         this.deps.vm.visibleColumnWithIndices()[visibleIndex]?.originalIndex ?? visibleIndex,

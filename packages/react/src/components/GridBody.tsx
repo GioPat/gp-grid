@@ -3,7 +3,6 @@
 import React from "react";
 import type {
   GridCore,
-  ColumnDefinition,
   CellPosition,
   CellRange,
   CellValue,
@@ -11,6 +10,8 @@ import type {
   SlotData,
   FillHandlePosition,
   VisibleColumnInfo,
+  ColumnLayout,
+  ColumnLayoutItem,
 } from "@gp-grid/core";
 import {
   isCellSelected,
@@ -29,6 +30,8 @@ export interface GridBodyProps<TData = unknown> {
   contentWidth: number;
   contentHeight: number;
   totalWidth: number;
+  scrollLeft: number;
+  viewportWidth: number;
   rowsWrapperOffset: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
@@ -38,6 +41,7 @@ export interface GridBodyProps<TData = unknown> {
   totalRows: number;
   slotsArray: SlotData<TData>[];
   visibleColumnsWithIndices: VisibleColumnInfo[];
+  columnLayout: ColumnLayout;
   columnPositions: number[];
   columnWidths: number[];
   fillHandlePosition: FillHandlePosition | null;
@@ -73,9 +77,7 @@ const GridBodyInner = <TData = unknown>(
     isLoading,
     totalRows,
     slotsArray,
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
+    columnLayout,
     fillHandlePosition,
     dragState,
     onScroll,
@@ -90,6 +92,70 @@ const GridBodyInner = <TData = unknown>(
     globalCellRenderer,
     globalEditRenderer,
   } = props;
+  const renderedWidth = Math.max(contentWidth, totalWidth, columnLayout.totalWidth);
+
+  const renderGroupRow = (
+    slot: SlotData<TData>,
+    width: number,
+  ): React.ReactNode => {
+    const depth = slot.groupDepth ?? 0;
+    const expanded = slot.groupExpanded === true;
+    const label = `${expanded ? "[-]" : "[+]"} ${slot.groupField ?? "Group"}: ${String(slot.groupValue ?? "")} (${slot.groupChildCount ?? 0})`;
+    return (
+      <div
+        key={slot.slotId}
+        className="gp-grid-row gp-grid-row--group"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          transform: `translateY(${slot.translateY}px)`,
+          width: `${width}px`,
+          height: `${rowHeight}px`,
+        }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          if (slot.groupKey) coreRef.current?.toggleRowGroup(slot.groupKey);
+        }}
+      >
+        <div
+          className="gp-grid-row-group-cell"
+          style={{
+            left: 0,
+            width: `${width}px`,
+            height: `${rowHeight}px`,
+            paddingLeft: `${12 + depth * 16}px`,
+          }}
+        >
+          {label}
+        </div>
+      </div>
+    );
+  };
+
+  const getCellPositionStyle = (
+    item: ColumnLayoutItem,
+    layout: ColumnLayout,
+  ): React.CSSProperties => {
+    if (item.region === "left") {
+      return {
+        position: "absolute",
+        left: `calc(var(--gp-grid-scroll-left, 0px) + ${item.left}px)`,
+        zIndex: 6,
+      };
+    }
+    if (item.region === "right") {
+      return {
+        position: "absolute",
+        left: `calc(var(--gp-grid-scroll-left, 0px) + var(--gp-grid-viewport-width, 0px) - ${layout.rightPinnedWidth - item.left}px)`,
+        zIndex: 6,
+      };
+    }
+    return {
+      position: "absolute",
+      left: `${layout.leftPinnedWidth + item.left}px`,
+    };
+  };
 
   return (
     <div
@@ -104,7 +170,7 @@ const GridBodyInner = <TData = unknown>(
       {/* Content sizer - provides scroll range */}
       <div
         style={{
-          width: Math.max(contentWidth, totalWidth),
+          width: renderedWidth,
           height: Math.max(contentHeight - totalHeaderHeight, 0),
           position: "relative",
           minWidth: "100%",
@@ -115,7 +181,7 @@ const GridBodyInner = <TData = unknown>(
         <div
           className="gp-grid-rows-wrapper"
           style={{
-            width: `${Math.max(contentWidth, totalWidth)}px`,
+            width: `${renderedWidth}px`,
             transform: `translateY(${rowsWrapperOffset}px)`,
           }}
         >
@@ -124,6 +190,10 @@ const GridBodyInner = <TData = unknown>(
             if (slot.rowIndex < 0) return null;
 
             // Compute row highlight classes (pass rowData for content-based rules)
+            if (slot.rowKind === "group") {
+              return renderGroupRow(slot, renderedWidth);
+            }
+
             const highlightRowClasses =
               coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
             const rowClassName = ["gp-grid-row", ...highlightRowClasses]
@@ -139,11 +209,12 @@ const GridBodyInner = <TData = unknown>(
                   top: 0,
                   left: 0,
                   transform: `translateY(${slot.translateY}px)`,
-                  width: `${Math.max(contentWidth, totalWidth)}px`,
+                  width: `${renderedWidth}px`,
                   height: `${rowHeight}px`,
                 }}
               >
-                {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
+                {columnLayout.items.map((item) => {
+                  const { column, originalIndex } = item;
                   const isEditing = isCellEditing(
                     slot.rowIndex,
                     originalIndex,
@@ -189,6 +260,9 @@ const GridBodyInner = <TData = unknown>(
                   const cellClasses = [
                     baseCellClasses,
                     ...highlightCellClasses,
+                    item.region !== "center" ? "gp-grid-cell--pinned" : "",
+                    item.region === "left" ? "gp-grid-cell--pinned-left" : "",
+                    item.region === "right" ? "gp-grid-cell--pinned-right" : "",
                     isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
                   ]
                     .filter(Boolean)
@@ -199,10 +273,9 @@ const GridBodyInner = <TData = unknown>(
                       key={`${slot.slotId}-${originalIndex}`}
                       className={cellClasses}
                       style={{
-                        position: "absolute",
-                        left: `${columnPositions[visibleIndex]}px`,
+                        ...getCellPositionStyle(item, columnLayout),
                         top: 0,
-                        width: `${columnWidths[visibleIndex]}px`,
+                        width: `${item.width}px`,
                         height: `${rowHeight}px`,
                       }}
                       onPointerDown={(e) =>

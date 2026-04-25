@@ -18,6 +18,7 @@ import type {
   DragState,
   SlotData,
   VisibleColumnInfo,
+  ColumnLayout,
 } from "@gp-grid/core";
 import { scrollCellIntoView } from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
@@ -33,6 +34,7 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: ComputedRef<number[]>;
+  columnLayout?: ComputedRef<ColumnLayout>;
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
   slots: ComputedRef<Map<string, SlotData>>;
@@ -76,6 +78,7 @@ export function useInputHandler<TData = unknown>(
     rowHeight,
     headerHeight,
     columnPositions,
+    columnLayout,
     visibleColumnsWithIndices,
     slots,
     rowsWrapperOffset,
@@ -125,6 +128,7 @@ export function useInputHandler<TData = unknown>(
       () => headerHeight,
       () => rowHeight,
       columnPositions,
+      ...(columnLayout ? [columnLayout] : []),
       visibleColumnsWithIndices,
     ],
     () => {
@@ -135,6 +139,7 @@ export function useInputHandler<TData = unknown>(
           getHeaderHeight: () => headerHeight,
           getRowHeight: () => rowHeight,
           getColumnPositions: () => columnPositions.value,
+          getColumnLayout: columnLayout ? () => columnLayout.value : undefined,
           getColumnCount: () => visible.length,
           getOriginalColumnIndex: (visibleIndex: number) => {
             const info = visible[visibleIndex];

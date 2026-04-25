@@ -5,6 +5,7 @@ import type {
   DataSource,
   HighlightingOptions,
   RowId,
+  RowGroupingOptions,
 } from '@gp-grid/core';
 
 export interface BuildGridCoreInputs<TData> {
@@ -17,6 +18,7 @@ export interface BuildGridCoreInputs<TData> {
   highlighting: HighlightingOptions<TData> | undefined;
   getRowId: ((row: TData) => RowId) | undefined;
   rowDragEntireRow: boolean;
+  rowGrouping: RowGroupingOptions | undefined;
 }
 
 export interface BuildGridCoreEmitters<TData> {
@@ -24,6 +26,7 @@ export interface BuildGridCoreEmitters<TData> {
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
   onColumnResized: (colIndex: number, newWidth: number) => void;
   onColumnMoved: (fromIndex: number, toIndex: number) => void;
+  onRowGroupExpandedChange: (groupKey: string, expanded: boolean) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -44,9 +47,11 @@ export const buildGridCore = <TData>(
     highlighting: inputs.highlighting,
     getRowId: inputs.getRowId,
     rowDragEntireRow: inputs.rowDragEntireRow,
+    rowGrouping: inputs.rowGrouping,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
     onColumnResized: emitters.onColumnResized,
     onColumnMoved: emitters.onColumnMoved,
+    onRowGroupExpandedChange: emitters.onRowGroupExpandedChange,
   });
 };

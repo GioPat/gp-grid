@@ -47,6 +47,7 @@ describe("applyInstruction", () => {
         rowIndex: -1,
         rowData: {},
         translateY: 0,
+        rowKind: "data",
       });
     });
 
@@ -105,6 +106,14 @@ describe("applyInstruction", () => {
         rowIndex: 3,
         rowData,
         translateY: 64,
+        rowKind: "data",
+        sourceRowIndex: undefined,
+        groupKey: undefined,
+        groupDepth: undefined,
+        groupField: undefined,
+        groupValue: undefined,
+        groupChildCount: undefined,
+        groupExpanded: undefined,
       });
     });
 

@@ -2,6 +2,8 @@ export const GP_GRID_TEMPLATE = `
     <div #container
       [class]="'gp-grid-container' + (darkMode() ? ' gp-grid-container--dark' : '')"
       style="width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; outline: none;"
+      [style.--gp-grid-scroll-left]="vm.scrollLeft() + 'px'"
+      [style.--gp-grid-viewport-width]="vm.viewportWidth() + 'px'"
       tabindex="0"
       (keydown)="onKeyDown($event)"
       (wheel)="onWheel($event)"
@@ -13,6 +15,7 @@ export const GP_GRID_TEMPLATE = `
         [totalWidth]="vm.totalWidth()"
         [isLoading]="vm.isLoading()"
         [visibleColumnsWithIndices]="vm.visibleColumnWithIndices()"
+        [columnLayout]="vm.columnLayout()"
         [columnPositions]="vm.columnPositions()"
         [columnWidths]="vm.columnWidths()"
         [headers]="vm.headerState()"
@@ -30,9 +33,12 @@ export const GP_GRID_TEMPLATE = `
         [contentWidth]="vm.contentWidth()"
         [contentHeight]="vm.contentHeight()"
         [totalWidth]="vm.totalWidth()"
+        [scrollLeft]="vm.scrollLeft()"
+        [viewportWidth]="vm.viewportWidth()"
         [rowsWrapperOffset]="vm.rowsWrapperOffset()"
         [slotsArray]="vm.slotsArray()"
         [visibleColumnWithIndices]="vm.visibleColumnWithIndices()"
+        [columnLayout]="vm.columnLayout()"
         [columnPositions]="vm.columnPositions()"
         [columnWidths]="vm.columnWidths()"
         [totalRows]="vm.totalRows()"
@@ -57,6 +63,7 @@ export const GP_GRID_TEMPLATE = `
         (editCommit)="onEditCommit()"
         (editCancel)="onEditCancel()"
         (fillHandlePointerDown)="onFillHandlePointerDown($event)"
+        (rowGroupToggle)="onRowGroupToggle($event)"
       />
       <gp-grid-overlays
         [filterPopup]="vm.filterPopup()"

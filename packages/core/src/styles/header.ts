@@ -32,7 +32,6 @@ export const headerStyles: string = `
   align-items: center;
   padding: 0 12px;
   background-color: transparent;
-  transition: background-color 0.1s ease;
   top: 0;
   background: transparent;
   touch-action: none;
@@ -44,6 +43,19 @@ export const headerStyles: string = `
 
 .gp-grid-container .gp-grid-header-cell:active {
   background-color: var(--gp-grid-border-light);
+}
+
+.gp-grid-container .gp-grid-header-cell--pinned-left {
+  border-right-color: var(--gp-grid-border);
+}
+
+.gp-grid-container .gp-grid-header-cell--pinned-right {
+  border-left: 1px solid var(--gp-grid-border);
+  background-color: var(--gp-grid-header-bg);
+}
+
+.gp-grid-column-region {
+  background-color: var(--gp-grid-header-bg);
 }
 
 .gp-grid-container .gp-grid-header-text {
@@ -159,6 +171,10 @@ export const headerStyles: string = `
   touch-action: none;
 }
 
+.gp-grid-header-resize-handle--inside {
+  right: 0;
+}
+
 .gp-grid-header-resize-handle:hover,
 .gp-grid-header-resize-handle--active {
   background-color: var(--gp-grid-primary);
@@ -170,6 +186,10 @@ export const headerStyles: string = `
   .gp-grid-header-resize-handle {
     width: 24px;
     right: -12px;
+  }
+
+  .gp-grid-header-resize-handle--inside {
+    right: 0;
   }
 }
 
