@@ -230,18 +230,10 @@ export class SelectionManager {
    * Get the data from the currently selected cells as a 2D array.
    */
   getSelectedData(): CellValue[][] {
-    const { range, activeCell } = this.state;
-
-    if (!range && !activeCell) {
+    const effectiveRange = this.getEffectiveRange();
+    if (effectiveRange === null) {
       return [];
     }
-
-    const effectiveRange = range || {
-      startRow: activeCell!.row,
-      startCol: activeCell!.col,
-      endRow: activeCell!.row,
-      endCol: activeCell!.col,
-    };
 
     const { minRow, maxRow, minCol, maxCol } = normalizeRange(effectiveRange);
     const data: CellValue[][] = [];
@@ -266,13 +258,25 @@ export class SelectionManager {
       return;
     }
 
+    const effectiveRange = this.getEffectiveRange();
+    if (effectiveRange === null) return;
+
     const data = this.getSelectedData();
     if (data.length === 0) return;
+
+    const { minCol } = normalizeRange(effectiveRange);
 
     // Convert to tab-separated values (Excel-compatible)
     const tsv = data
       .map((row) =>
-        row.map((cell) => formatCellValue(cell)).join("\t")
+        row
+          .map((cell, colOffset) =>
+            formatCellValue(
+              cell,
+              this.options.getColumn(minCol + colOffset)?.valueFormatter,
+            ),
+          )
+          .join("\t"),
       )
       .join("\n");
 
@@ -308,6 +312,21 @@ export class SelectionManager {
       row: Math.max(0, Math.min(pos.row, rowCount - 1)),
       col: Math.max(0, Math.min(pos.col, colCount - 1)),
     };
+  }
+
+  private getEffectiveRange(): CellRange | null {
+    const { range, activeCell } = this.state;
+    if (range) return range;
+    if (activeCell) {
+      return {
+        startRow: activeCell.row,
+        startCol: activeCell.col,
+        endRow: activeCell.row,
+        endCol: activeCell.col,
+      };
+    }
+
+    return null;
   }
 }
 

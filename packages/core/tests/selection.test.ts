@@ -30,6 +30,36 @@ function createMockOptions(
   };
 }
 
+const createClipboardWriteMock = () => {
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined);
+
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+
+  return writeText;
+};
+
+const withFormattedColumn = (
+  options: SelectionManagerOptions,
+  formattedCol: number,
+): SelectionManagerOptions => ({
+  ...options,
+  getColumn: (col) => {
+    const column = options.getColumn(col);
+    if (column === undefined) return undefined;
+    if (col === formattedCol) {
+      return {
+        ...column,
+        valueFormatter: (value) => `[${String(value)}]`,
+      };
+    }
+
+    return column;
+  },
+});
+
 describe("SelectionManager", () => {
   let manager: SelectionManager;
   let options: SelectionManagerOptions;
@@ -402,6 +432,31 @@ describe("SelectionManager", () => {
         ["R0C0", "R0C1"],
         ["R1C0", "R1C1"],
       ]);
+    });
+  });
+
+  describe("copySelectionToClipboard", () => {
+    it("copies the formatted value for a single active cell", async () => {
+      const writeText = createClipboardWriteMock();
+      manager = new SelectionManager(withFormattedColumn(options, 1));
+
+      manager.startSelection({ row: 2, col: 1 });
+
+      await manager.copySelectionToClipboard();
+
+      expect(writeText).toHaveBeenCalledWith("[R2C1]");
+    });
+
+    it("copies mixed raw and formatted values across a range", async () => {
+      const writeText = createClipboardWriteMock();
+      manager = new SelectionManager(withFormattedColumn(options, 1));
+
+      manager.startSelection({ row: 0, col: 0 });
+      manager.startSelection({ row: 1, col: 1 }, { shift: true });
+
+      await manager.copySelectionToClipboard();
+
+      expect(writeText).toHaveBeenCalledWith("R0C0\t[R0C1]\nR1C0\t[R1C1]");
     });
   });
 

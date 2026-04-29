@@ -10,6 +10,7 @@ import Currency from "./renderers/Currency.vue";
 import StatusBadge from "./renderers/StatusBadge.vue";
 import Bold from "./renderers/Bold.vue";
 import Tags from "./renderers/Tags.vue";
+import AgeBucket from "./renderers/AgeBucket.vue";
 type HighlightMode = "row" | "column" | "cell";
 const highlightMode = ref<HighlightMode>("row");
 
@@ -76,8 +77,9 @@ const columns: ColumnDefinition[] = [
     {
         field: "age",
         cellDataType: "text",
-        width: 130,
+        width: 150,
         headerName: "Age bucket",
+        cellRenderer: AgeBucket,
         valueFormatter: (v) => {
             const n = typeof v === "number" ? v : Number(v);
             if (!Number.isFinite(n)) return "";
@@ -129,6 +131,7 @@ const rowIdToUpdate = ref(1);
 const handleUpdateRow = () => {
     updateRow(rowIdToUpdate.value, {
         name: `Person ${names[getRandomInt(0, 3)]}`,
+        age: getRandomInt(18, 90),
         salary: getRandomInt(30000, 150000),
     });
 };
