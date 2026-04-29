@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.1...gp-grid-v0.13.2) (2026-04-29)
+
+
+### 🐛 Bug Fixes
+
+* make copy consistent to valueFormatting ([6f9c190](https://github.com/GioPat/gp-grid/commit/6f9c190377eb346c82fcdc212d2fd549349aa74a))
+
 ## [0.13.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.0...gp-grid-v0.13.1) (2026-04-24)
 
 
