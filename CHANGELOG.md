@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.2...gp-grid-v0.14.0) (2026-05-07)
+
+
+### ✨ Features
+
+* apply matrix-based copy-paste ([2b682dd](https://github.com/GioPat/gp-grid/commit/2b682dd2158a30daeeaecbe6035da33ff703d028))
+
 ## [0.13.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.1...gp-grid-v0.13.2) (2026-04-29)
 
 
