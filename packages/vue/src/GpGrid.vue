@@ -49,7 +49,7 @@ const props = withDefaults(
     highlighting?: HighlightingOptions<Row>;
     /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
     getRowId?: (row: Row) => RowId;
-    /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+    /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
     onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
     /** Custom loading component to render instead of default spinner */
     loadingComponent?: Component<{ isLoading: boolean }>;
@@ -127,6 +127,7 @@ const {
   handleHeaderMouseDown,
   handleHeaderResizeMouseDown,
   handleKeyDown,
+  handlePaste,
   handleWheel,
   dragState,
 } = useInputHandler(coreRef, bodyContainerRef, effectiveColumns, {
@@ -396,6 +397,7 @@ defineExpose({
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
     tabindex="0"
     @keydown="handleKeyDown"
+    @paste="handlePaste"
   >
     <GridHeader
       :header-height="totalHeaderHeight"

@@ -4,6 +4,7 @@ export const GP_GRID_TEMPLATE = `
       style="width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; outline: none;"
       tabindex="0"
       (keydown)="onKeyDown($event)"
+      (paste)="onPaste($event)"
       (wheel)="onWheel($event)"
     >
       <gp-grid-header

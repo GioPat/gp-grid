@@ -8,6 +8,13 @@ import type {
   ColumnDefinition,
 } from "./types";
 import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
+import {
+  coerceClipboardValue,
+  normalizeClipboardText,
+  parseClipboardText,
+  type ClipboardCell,
+  type ClipboardMatrix,
+} from "./utils/clipboard-helpers";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -17,6 +24,17 @@ export interface SelectionManagerOptions {
   getCellValue: (row: number, col: number) => CellValue;
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
+  setCellValue: (row: number, col: number, value: CellValue) => void;
+}
+
+export interface PasteResult {
+  handled: boolean;
+  changedCells: Array<{ row: number; col: number; value: CellValue }>;
+}
+
+interface ClipboardSnapshot {
+  text: string;
+  cells: ClipboardMatrix;
 }
 
 /**
@@ -32,6 +50,7 @@ export class SelectionManager {
 
   private readonly options: SelectionManagerOptions;
   private readonly emitter = createInstructionEmitter();
+  private clipboardSnapshot: ClipboardSnapshot | null = null;
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
@@ -253,34 +272,42 @@ export class SelectionManager {
    * Copy the selected data to the clipboard (Ctrl+C).
    */
   async copySelectionToClipboard(): Promise<void> {
+    const effectiveRange = this.getEffectiveRange();
+    if (effectiveRange === null) return;
+
+    const snapshot = this.createClipboardSnapshot(effectiveRange);
+    if (snapshot.cells.length === 0) return;
+
+    this.clipboardSnapshot = snapshot;
+
     // Guard for SSR - clipboard APIs not available in Node.js
     if (typeof navigator === "undefined" || typeof document === "undefined") {
       return;
     }
 
+    await navigator.clipboard.writeText(snapshot.text);
+  }
+
+  /**
+   * Paste text data into the active cell or selected target range.
+   */
+  pasteClipboardText(text: string): PasteResult {
     const effectiveRange = this.getEffectiveRange();
-    if (effectiveRange === null) return;
+    if (effectiveRange === null) {
+      return { handled: false, changedCells: [] };
+    }
 
-    const data = this.getSelectedData();
-    if (data.length === 0) return;
+    const sourceCells = this.getPasteSourceCells(text);
+    if (sourceCells.length === 0) {
+      return { handled: false, changedCells: [] };
+    }
 
-    const { minCol } = normalizeRange(effectiveRange);
-
-    // Convert to tab-separated values (Excel-compatible)
-    const tsv = data
-      .map((row) =>
-        row
-          .map((cell, colOffset) =>
-            formatCellValue(
-              cell,
-              this.options.getColumn(minCol + colOffset)?.valueFormatter,
-            ),
-          )
-          .join("\t"),
-      )
-      .join("\n");
-
-    await navigator.clipboard.writeText(tsv);
+    const changedCells = this.applyPasteSource(
+      sourceCells,
+      effectiveRange,
+      this.state.range !== null,
+    );
+    return { handled: true, changedCells };
   }
 
   // ===========================================================================
@@ -298,6 +325,7 @@ export class SelectionManager {
       anchor: null,
       selectionMode: false,
     };
+    this.clipboardSnapshot = null;
   }
 
   // ===========================================================================
@@ -328,5 +356,122 @@ export class SelectionManager {
 
     return null;
   }
-}
 
+  private createClipboardSnapshot(range: CellRange): ClipboardSnapshot {
+    const { minRow, maxRow, minCol, maxCol } = normalizeRange(range);
+    const cells: ClipboardMatrix = [];
+
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowCells: ClipboardCell[] = [];
+      for (let col = minCol; col <= maxCol; col++) {
+        const value = this.options.getCellValue(row, col);
+        const text = formatCellValue(
+          value,
+          this.options.getColumn(col)?.valueFormatter,
+        );
+        rowCells.push({ value, text });
+      }
+      cells.push(rowCells);
+    }
+
+    return {
+      cells,
+      text: cells.map((row) => row.map((cell) => cell.text).join("\t")).join("\n"),
+    };
+  }
+
+  private getPasteSourceCells(text: string): ClipboardMatrix {
+    const snapshot = this.clipboardSnapshot;
+    if (snapshot && normalizeClipboardText(snapshot.text) === normalizeClipboardText(text)) {
+      return snapshot.cells;
+    }
+
+    return parseClipboardText(text);
+  }
+
+  private applyPasteSource(
+    sourceCells: ClipboardMatrix,
+    targetRange: CellRange,
+    targetIsSelection: boolean,
+  ): Array<{ row: number; col: number; value: CellValue }> {
+    const changedCells: Array<{ row: number; col: number; value: CellValue }> = [];
+    const { minRow, maxRow, minCol, maxCol } = normalizeRange(targetRange);
+    const isSingleSourceCell = this.isSingleSourceCell(sourceCells);
+
+    const sourceMaxRow = isSingleSourceCell
+      ? maxRow
+      : minRow + sourceCells.length - 1;
+    const sourceMaxCol = isSingleSourceCell
+      ? maxCol
+      : minCol + this.getMaxSourceColumnCount(sourceCells) - 1;
+    const targetMaxRow = targetIsSelection
+      ? Math.min(sourceMaxRow, maxRow)
+      : sourceMaxRow;
+    const targetMaxCol = targetIsSelection
+      ? Math.min(sourceMaxCol, maxCol)
+      : sourceMaxCol;
+
+    const rowCount = this.options.getRowCount();
+    const colCount = this.options.getColumnCount();
+    const boundedMaxRow = Math.min(targetMaxRow, rowCount - 1);
+    const boundedMaxCol = Math.min(targetMaxCol, colCount - 1);
+
+    for (let row = minRow; row <= boundedMaxRow; row++) {
+      for (let col = minCol; col <= boundedMaxCol; col++) {
+        const sourceCell = this.getSourceCellForTarget(
+          sourceCells,
+          row - minRow,
+          col - minCol,
+          isSingleSourceCell,
+        );
+        if (sourceCell) {
+          this.applyPasteCell(row, col, sourceCell, changedCells);
+        }
+      }
+    }
+
+    return changedCells;
+  }
+
+  private applyPasteCell(
+    row: number,
+    col: number,
+    sourceCell: ClipboardCell,
+    changedCells: Array<{ row: number; col: number; value: CellValue }>,
+  ): void {
+    const column = this.options.getColumn(col);
+    if (column === undefined) return;
+    if (column.hidden === true) return;
+    if (column.editable !== true) return;
+
+    const coerced = coerceClipboardValue(sourceCell, column);
+    if (coerced.ok === false) return;
+
+    this.options.setCellValue(row, col, coerced.value);
+    changedCells.push({ row, col, value: coerced.value });
+  }
+
+  private getSourceCellForTarget(
+    sourceCells: ClipboardMatrix,
+    rowOffset: number,
+    colOffset: number,
+    isSingleSourceCell: boolean,
+  ): ClipboardCell | null {
+    if (isSingleSourceCell) {
+      return sourceCells[0]?.[0] ?? null;
+    }
+
+    return sourceCells[rowOffset]?.[colOffset] ?? null;
+  }
+
+  private isSingleSourceCell(sourceCells: ClipboardMatrix): boolean {
+    return sourceCells.length === 1 && sourceCells[0]?.length === 1;
+  }
+
+  private getMaxSourceColumnCount(sourceCells: ClipboardMatrix): number {
+    return sourceCells.reduce(
+      (maxCount, row) => Math.max(maxCount, row.length),
+      0,
+    );
+  }
+}

@@ -193,6 +193,18 @@ export class InputEventAdapter<TData = unknown> {
     );
   }
 
+  pasteText(
+    text: string,
+    editingCell: { row: number; col: number } | null,
+    filterPopupOpen: boolean,
+  ): boolean {
+    const core = this.deps.getCore();
+    if (core === null) return false;
+    if (editingCell !== null) return false;
+    if (filterPopupOpen) return false;
+    return core.pasteClipboardText(text);
+  }
+
   private dispatchCellDragStart(
     startDrag: InputResult["startDrag"],
     event: PointerEvent,

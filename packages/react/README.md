@@ -35,7 +35,7 @@ A high-performance, feature lean React data grid component built to manage grids
 - **Column Filtering**: Built-in filter row with debounced input
 - **Cell Editing**: Double-click or press Enter to edit, with custom editor support
 - **Fill Handle**: Excel-like drag-to-fill for editable cells
-- **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C
+- **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
 - **TypeScript**: Full type safety with exported types
@@ -559,6 +559,7 @@ interface HeaderRendererParams {
 | Delete / Backspace | Start editing with empty value    |
 | Ctrl + A           | Select all                        |
 | Ctrl + C           | Copy selection to clipboard       |
+| Ctrl + V           | Paste clipboard values into selection |
 | Any character      | Start editing with that character |
 
 ## Styling

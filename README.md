@@ -69,7 +69,7 @@ Data fetching is abstracted through a `DataSource` interface, supporting both:
 - **Column Filtering**: Built-in filter row with debounced input
 - **Cell Editing**: Double-click or press Enter to edit, with custom editor support
 - **Fill Handle**: Excel-like drag-to-fill for editable cells
-- **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C
+- **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
 - **TypeScript**: Full type safety with exported types

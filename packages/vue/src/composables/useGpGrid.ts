@@ -46,7 +46,7 @@ export interface UseGpGridOptions<TData = unknown> {
   highlighting?: HighlightingOptions<TData>;
   /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
   getRowId?: (row: TData) => RowId;
-  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
@@ -79,6 +79,7 @@ export interface UseGpGridResult<TData = unknown> {
   handleFillHandleMouseDown: (e: PointerEvent) => void;
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
+  handlePaste: (e: ClipboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   handleFilterApply: (colId: string, filter: ColumnFilterModel | null) => void;
   handleFilterPopupClose: () => void;
@@ -142,6 +143,7 @@ export function useGpGrid<TData = unknown>(
     handleFillHandleMouseDown,
     handleHeaderClick,
     handleKeyDown,
+    handlePaste,
     handleWheel,
     dragState,
   } = useInputHandler<TData>(
@@ -341,6 +343,7 @@ export function useGpGrid<TData = unknown>(
     handleFillHandleMouseDown,
     handleHeaderClick,
     handleKeyDown,
+    handlePaste,
     handleWheel,
     handleFilterApply,
     handleFilterPopupClose,

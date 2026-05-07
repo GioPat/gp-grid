@@ -51,6 +51,7 @@ export interface UseInputHandlerResult {
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
+  handlePaste: (e: ClipboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
   dragState: Ref<DragState>;
 }
@@ -469,6 +470,18 @@ export function useInputHandler<TData = unknown>(
     }
   }
 
+  function handlePaste(e: ClipboardEvent): void {
+    const core = coreRef.value;
+    if (core === null) return;
+    if (editingCell.value !== null) return;
+    if (filterPopupOpen.value) return;
+
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    if (core.pasteClipboardText(text)) {
+      e.preventDefault();
+    }
+  }
+
   function handleWheel(e: WheelEvent, wheelDampening: number): void {
     const core = coreRef.value;
     const container = containerRef.value;
@@ -504,6 +517,7 @@ export function useInputHandler<TData = unknown>(
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
     handleKeyDown,
+    handlePaste,
     handleWheel,
     dragState,
   };
