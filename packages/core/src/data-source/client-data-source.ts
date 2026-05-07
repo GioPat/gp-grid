@@ -25,7 +25,10 @@ const WORKER_THRESHOLD = 200000;
 /**
  * Default field value accessor supporting dot-notation for nested properties
  */
-export function defaultGetFieldValue<TData>(row: TData, field: string): CellValue {
+export function defaultGetFieldValue<TData>(
+  row: TData,
+  field: string,
+): CellValue {
   const parts = field.split(".");
   let value: unknown = row;
 
@@ -95,9 +98,9 @@ export function createClientDataSource<TData = unknown>(
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
         const formatterLookup =
-          request.valueFormatters != null
-            ? (field: string) => request.valueFormatters?.[field]
-            : getValueFormatter;
+          request.valueFormatters === null
+            ? getValueFormatter
+            : (field: string) => request.valueFormatters?.[field];
         processedData = applyFilters(
           processedData,
           request.filter,
@@ -114,7 +117,12 @@ export function createClientDataSource<TData = unknown>(
           processedData.length >= WORKER_THRESHOLD;
 
         processedData = canUseWorkerSort
-          ? await performWorkerSort(processedData, request.sort, sortManager, getFieldValue)
+          ? await performWorkerSort(
+              processedData,
+              request.sort,
+              sortManager,
+              getFieldValue,
+            )
           : applySort(processedData, request.sort, getFieldValue);
       }
 

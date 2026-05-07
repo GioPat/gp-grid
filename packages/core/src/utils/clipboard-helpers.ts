@@ -12,7 +12,7 @@ export type CoerceClipboardValueResult =
   | { ok: false };
 
 export const normalizeClipboardText = (text: string): string =>
-  text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  text.replaceAll(/\r\n/g, "\n").replaceAll(/\r/g, "\n");
 
 export const parseClipboardText = (text: string): ClipboardMatrix => {
   const normalized = normalizeClipboardText(text);
@@ -142,5 +142,4 @@ const coerceObject = (
   return { ok: false };
 };
 
-const isValidDate = (value: Date): boolean =>
-  Number.isFinite(value.getTime());
+const isValidDate = (value: Date): boolean => Number.isFinite(value.getTime());

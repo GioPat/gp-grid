@@ -8,10 +8,7 @@ import type {
   CellValue,
 } from "../types";
 import { IndexedDataStore } from "../indexed-data-store";
-import {
-  TransactionManager,
-  type TransactionResult,
-} from "../managers";
+import { TransactionManager, type TransactionResult } from "../managers";
 import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
 import { applySort } from "../indexed-data-store/sorting";
 import { defaultGetFieldValue } from "./client-data-source";
@@ -108,11 +105,14 @@ export function createMutableClientDataSource<TData = unknown>(
   } = options;
 
   // Create the indexed data store
-  const store = new IndexedDataStore({
-    getRowId,
-    getFieldValue: getFieldValue ?? defaultGetFieldValue,
-    getValueFormatter,
-  }, data);
+  const store = new IndexedDataStore(
+    {
+      getRowId,
+      getFieldValue: getFieldValue ?? defaultGetFieldValue,
+      getValueFormatter,
+    },
+    data,
+  );
 
   // Subscribers for data change notifications
   const subscribers = new Set<DataChangeListener>();
@@ -123,7 +123,9 @@ export function createMutableClientDataSource<TData = unknown>(
 
   // Create parallel sort manager only if both useWorker is enabled and parallelSort is not disabled
   const sortManager =
-    useWorker && parallelSort !== false ? new ParallelSortManager(parallelSort) : null;
+    useWorker && parallelSort !== false
+      ? new ParallelSortManager(parallelSort)
+      : null;
 
   // Create the transaction manager
   const transactionManager = new TransactionManager<TData>({
@@ -162,9 +164,9 @@ export function createMutableClientDataSource<TData = unknown>(
       // Apply filters (always sync - filtering is fast)
       if (request.filter && Object.keys(request.filter).length > 0) {
         const formatterLookup =
-          request.valueFormatters != null
-            ? (field: string) => request.valueFormatters?.[field]
-            : getValueFormatter;
+          request.valueFormatters === null
+            ? getValueFormatter
+            : (field: string) => request.valueFormatters?.[field];
         processedData = applyFilters(
           processedData,
           request.filter,
@@ -183,7 +185,12 @@ export function createMutableClientDataSource<TData = unknown>(
         if (canUseWorkerSort) {
           emit({ type: "DATA_LOADING" });
           try {
-            processedData = await performWorkerSort(processedData, request.sort, sortManager, fieldAccessor);
+            processedData = await performWorkerSort(
+              processedData,
+              request.sort,
+              sortManager,
+              fieldAccessor,
+            );
           } finally {
             emit({ type: "DATA_LOADED", totalRows: processedData.length });
           }
