@@ -12,7 +12,7 @@ export type CoerceClipboardValueResult =
   | { ok: false };
 
 export const normalizeClipboardText = (text: string): string =>
-  text.replaceAll(/\r\n/g, "\n").replaceAll(/\r/g, "\n");
+  text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 
 export const parseClipboardText = (text: string): ClipboardMatrix => {
   const normalized = normalizeClipboardText(text);
