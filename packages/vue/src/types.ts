@@ -84,7 +84,7 @@ export interface GpGridProps<TData = unknown> {
   headerRenderer?: VueHeaderRenderer;
   /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
   getRowId?: (row: TData) => RowId;
-  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;

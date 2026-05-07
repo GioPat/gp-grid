@@ -80,6 +80,7 @@ export const buildGridManagers = <TData>(
     getCellValue: deps.getCellValue,
     getRowData: (row) => deps.getCachedRows().get(row),
     getColumn: (col) => deps.getColumns()[col],
+    setCellValue: deps.setCellValue,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);

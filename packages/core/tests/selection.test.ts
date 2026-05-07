@@ -2,12 +2,12 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SelectionManager, type SelectionManagerOptions } from "../src/selection";
-import type { GridInstruction } from "../src/types";
+import type { CellValue, ColumnDefinition, GridInstruction } from "../src/types";
 
 function createMockOptions(
   rowCount = 10,
   colCount = 5
-): SelectionManagerOptions {
+): SelectionManagerOptions & { getData: () => Record<string, unknown>[][] } {
   const data: Record<string, unknown>[][] = [];
   for (let r = 0; r < rowCount; r++) {
     const row: Record<string, unknown>[] = [];
@@ -27,6 +27,13 @@ function createMockOptions(
       cellDataType: "text" as const,
       width: 100,
     }),
+    setCellValue: (row, col, value) => {
+      const rowData = data[row];
+      if (rowData) {
+        rowData[col] = { value };
+      }
+    },
+    getData: () => data,
   };
 }
 
@@ -58,6 +65,36 @@ const withFormattedColumn = (
 
     return column;
   },
+});
+
+const createPasteOptions = (
+  data: CellValue[][],
+  columns: ColumnDefinition[],
+): SelectionManagerOptions & { getData: () => CellValue[][] } => ({
+  getRowCount: () => data.length,
+  getColumnCount: () => columns.length,
+  getCellValue: (row, col) => data[row]?.[col] ?? null,
+  getRowData: (row) => data[row] ?? undefined,
+  getColumn: (col) => columns[col],
+  setCellValue: (row, col, value) => {
+    const rowData = data[row];
+    if (rowData) {
+      rowData[col] = value;
+    }
+  },
+  getData: () => data,
+});
+
+const editableColumn = (
+  field: string,
+  cellDataType: ColumnDefinition["cellDataType"],
+  extra: Partial<ColumnDefinition> = {},
+): ColumnDefinition => ({
+  field,
+  cellDataType,
+  width: 100,
+  editable: true,
+  ...extra,
 });
 
 describe("SelectionManager", () => {
@@ -457,6 +494,202 @@ describe("SelectionManager", () => {
       await manager.copySelectionToClipboard();
 
       expect(writeText).toHaveBeenCalledWith("R0C0\t[R0C1]\nR1C0\t[R1C1]");
+    });
+  });
+
+  describe("pasteClipboardText", () => {
+    it("fills a selected target range when the copied source is one cell", async () => {
+      const writeText = createClipboardWriteMock();
+      const pasteOptions = createPasteOptions(
+        [
+          [7, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        [
+          editableColumn("a", "number"),
+          editableColumn("b", "number"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+
+      manager.startSelection({ row: 0, col: 0 });
+      await manager.copySelectionToClipboard();
+      manager.startSelection({ row: 1, col: 0 });
+      manager.startSelection({ row: 2, col: 1 }, { shift: true });
+
+      const result = manager.pasteClipboardText("7");
+
+      expect(writeText).toHaveBeenCalledWith("7");
+      expect(result.handled).toBe(true);
+      expect(result.changedCells).toHaveLength(4);
+      expect(pasteOptions.getData()).toEqual([
+        [7, 0],
+        [7, 7],
+        [7, 7],
+      ]);
+    });
+
+    it("expands copied vertical cells from a single target cell", async () => {
+      createClipboardWriteMock();
+      const pasteOptions = createPasteOptions(
+        [
+          ["A", null],
+          ["B", null],
+          ["C", null],
+          ["D", null],
+        ],
+        [
+          editableColumn("source", "text"),
+          editableColumn("target", "text"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+
+      manager.startSelection({ row: 0, col: 0 });
+      manager.startSelection({ row: 2, col: 0 }, { shift: true });
+      await manager.copySelectionToClipboard();
+      manager.startSelection({ row: 1, col: 1 });
+
+      const result = manager.pasteClipboardText("A\nB\nC");
+
+      expect(result.handled).toBe(true);
+      expect(result.changedCells).toEqual([
+        { row: 1, col: 1, value: "A" },
+        { row: 2, col: 1, value: "B" },
+        { row: 3, col: 1, value: "C" },
+      ]);
+      expect(pasteOptions.getData()).toEqual([
+        ["A", null],
+        ["B", "A"],
+        ["C", "B"],
+        ["D", "C"],
+      ]);
+    });
+
+    it("parses primitive and object values by target column type", () => {
+      const pasteOptions = createPasteOptions(
+        [[null, null, null, null, null]],
+        [
+          editableColumn("text", "text"),
+          editableColumn("number", "number"),
+          editableColumn("boolean", "boolean"),
+          editableColumn("date", "date"),
+          editableColumn("object", "object"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 0, col: 0 });
+
+      const result = manager.pasteClipboardText(
+        "hello\t42\ttrue\t2026-05-07\t{\"nested\":true}",
+      );
+
+      expect(result.changedCells).toHaveLength(5);
+      expect(pasteOptions.getData()[0]?.[0]).toBe("hello");
+      expect(pasteOptions.getData()[0]?.[1]).toBe(42);
+      expect(pasteOptions.getData()[0]?.[2]).toBe(true);
+      expect(pasteOptions.getData()[0]?.[3]).toBeInstanceOf(Date);
+      expect(pasteOptions.getData()[0]?.[4]).toEqual({ nested: true });
+    });
+
+    it("skips incompatible cells without aborting compatible cells", () => {
+      const pasteOptions = createPasteOptions(
+        [["initial", 10, false, { keep: true }]],
+        [
+          editableColumn("text", "text"),
+          editableColumn("number", "number"),
+          editableColumn("boolean", "boolean"),
+          editableColumn("object", "object"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 0, col: 0 });
+
+      const result = manager.pasteClipboardText("updated\tnope\tmaybe\tnot-json");
+
+      expect(result.handled).toBe(true);
+      expect(result.changedCells).toEqual([
+        { row: 0, col: 0, value: "updated" },
+      ]);
+      expect(pasteOptions.getData()[0]).toEqual([
+        "updated",
+        10,
+        false,
+        { keep: true },
+      ]);
+    });
+
+    it("skips non-editable and hidden target columns", () => {
+      const pasteOptions = createPasteOptions(
+        [[null, "locked", "hidden"]],
+        [
+          editableColumn("editable", "text"),
+          { field: "locked", cellDataType: "text", width: 100 },
+          editableColumn("hidden", "text", { hidden: true }),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 0, col: 0 });
+
+      const result = manager.pasteClipboardText("A\tB\tC");
+
+      expect(result.changedCells).toEqual([{ row: 0, col: 0, value: "A" }]);
+      expect(pasteOptions.getData()[0]).toEqual(["A", "locked", "hidden"]);
+    });
+
+    it("clips pasted shapes at grid bounds", () => {
+      const pasteOptions = createPasteOptions(
+        [
+          [null, null],
+          [null, null],
+        ],
+        [
+          editableColumn("a", "text"),
+          editableColumn("b", "text"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 1, col: 1 });
+
+      const result = manager.pasteClipboardText("A\tB\nC\tD");
+
+      expect(result.changedCells).toEqual([{ row: 1, col: 1, value: "A" }]);
+      expect(pasteOptions.getData()).toEqual([
+        [null, null],
+        [null, "A"],
+      ]);
+    });
+
+    it("clips pasted shapes to the selected target range", () => {
+      const pasteOptions = createPasteOptions(
+        [
+          [null, null],
+          [null, null],
+          [null, null],
+          [null, null],
+        ],
+        [
+          editableColumn("a", "text"),
+          editableColumn("b", "text"),
+        ],
+      );
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 1, col: 0 });
+      manager.startSelection({ row: 2, col: 0 }, { shift: true });
+
+      const result = manager.pasteClipboardText("A\nB\nC");
+
+      expect(result.changedCells).toEqual([
+        { row: 1, col: 0, value: "A" },
+        { row: 2, col: 0, value: "B" },
+      ]);
+      expect(pasteOptions.getData()).toEqual([
+        [null, null],
+        ["A", null],
+        ["B", null],
+        [null, null],
+      ]);
     });
   });
 

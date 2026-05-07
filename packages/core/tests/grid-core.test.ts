@@ -529,6 +529,36 @@ describe("GridCore", () => {
     });
   });
 
+  describe("clipboard paste", () => {
+    it("pastes compatible values and emits cell value changes", async () => {
+      const onCellValueChanged = vi.fn();
+      const pasteGrid = new GridCore<TestRow>({
+        columns,
+        dataSource: createClientDataSource(JSON.parse(JSON.stringify(sampleData)) as TestRow[]),
+        rowHeight: 32,
+        getRowId: (row) => row.id,
+        onCellValueChanged,
+      });
+
+      await pasteGrid.initialize();
+      pasteGrid.selection.startSelection({ row: 0, col: 2 });
+
+      const handled = pasteGrid.pasteClipboardText("44");
+
+      expect(handled).toBe(true);
+      expect(pasteGrid.getCellValue(0, 2)).toBe(44);
+      expect(onCellValueChanged).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rowId: 1,
+          colIndex: 2,
+          field: "age",
+          oldValue: 30,
+          newValue: 44,
+        }),
+      );
+    });
+  });
+
   describe("public accessors", () => {
     it("should return columns", async () => {
       await grid.initialize();

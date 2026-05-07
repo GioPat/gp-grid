@@ -252,6 +252,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     if (result.scrollToCell) this.bindings.scrollToRow(result.scrollToCell.row);
   }
 
+  protected onPaste(event: ClipboardEvent): void {
+    const editing = this.vm.editingCell();
+    const handled = this.bindings.input.pasteText(
+      event.clipboardData?.getData('text/plain') ?? '',
+      editing === null ? null : { row: editing.row, col: editing.col },
+      this.vm.filterPopup() !== null,
+    );
+    if (handled) event.preventDefault();
+  }
+
   protected onResizePointerDown(evt: ResizePointerDownEvent): void {
     if (this.bindings.input.resizePointerDown(evt.colIndex, evt.colWidth, evt.event)) {
       evt.event.preventDefault();

@@ -73,7 +73,7 @@ const columns: ColumnDefinition[] = [
         headerName: "ID",
         cellRenderer: Bold,
     },
-    { field: "name", cellDataType: "text", width: 150, headerName: "Name" },
+    { field: "name", editable: true, cellDataType: "text", width: 150, headerName: "Name" },
     {
         field: "age",
         cellDataType: "text",

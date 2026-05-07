@@ -44,6 +44,7 @@ export interface UseInputHandlerResult {
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  handlePaste: (e: React.ClipboardEvent) => void;
   handleWheel: (e: React.WheelEvent, wheelDampening: number) => void;
   // Drag state for UI rendering
   dragState: DragState;
@@ -467,6 +468,21 @@ export function useInputHandler<TData>(
     [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset]
   );
 
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const core = coreRef.current;
+      if (!core) return;
+      if (editingCell !== null) return;
+      if (filterPopupOpen) return;
+
+      const text = e.clipboardData.getData("text/plain");
+      if (core.pasteClipboardText(text)) {
+        e.preventDefault();
+      }
+    },
+    [coreRef, editingCell, filterPopupOpen]
+  );
+
   const handleWheel = useCallback(
     (e: React.WheelEvent, wheelDampening: number) => {
       const core = coreRef.current;
@@ -505,6 +521,7 @@ export function useInputHandler<TData>(
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
     handleKeyDown,
+    handlePaste,
     handleWheel,
     dragState,
   };

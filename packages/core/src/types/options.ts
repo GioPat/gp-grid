@@ -26,7 +26,7 @@ export interface GridCoreOptions<TData = unknown> {
   getRowId?: (row: TData) => RowId;
   /** Row/column/cell highlighting configuration */
   highlighting?: HighlightingOptions<TData>;
-  /** Called when a cell value is changed via editing or fill drag. Requires getRowId. */
+  /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Whether clicking and dragging any cell in a row drags the entire row instead of starting selection. Default: false */
   rowDragEntireRow?: boolean;

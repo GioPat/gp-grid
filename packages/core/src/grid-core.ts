@@ -313,6 +313,17 @@ export class GridCore<TData = unknown> {
     this.editManager.cancel();
   }
 
+  pasteClipboardText(text: string): boolean {
+    if (this.editManager.getState()) return false;
+
+    const result = this.selection.pasteClipboardText(text);
+    if (result.changedCells.length > 0) {
+      this.refreshSlotData();
+    }
+
+    return result.handled;
+  }
+
   getEditState(): EditState | null {
     return this.editManager.getState();
   }

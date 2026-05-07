@@ -72,7 +72,7 @@ export interface FillHandleState {
   targetCol: number;
 }
 
-/** Event emitted when a cell value is changed via editing or fill drag */
+/** Event emitted when a cell value is changed via editing, fill drag, or paste */
 export interface CellValueChangedEvent<TData = unknown> {
   /** Stable row ID (from getRowId) */
   rowId: RowId;

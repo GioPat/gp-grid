@@ -197,6 +197,7 @@ export function Grid<TData = unknown>(
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
     handleKeyDown,
+    handlePaste,
     handleWheel,
     dragState,
   } = useInputHandler(coreRef, containerRef, effectiveColumns, {
@@ -487,6 +488,7 @@ export function Grid<TData = unknown>(
         flexDirection: "column",
       }}
       onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
       tabIndex={0}
     >
       <GridHeader
