@@ -4,11 +4,11 @@
 // a single mutation so the GridCore facade stays thin.
 
 import type { DataSource, ColumnDefinition } from "./types";
+import type { FilterModel, SortModel } from "./types";
 import type { SlotPoolManager } from "./slot-pool";
 import type {
   HighlightManager,
   InstructionBatcher,
-  SortFilterManager,
 } from "./managers";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
@@ -93,7 +93,8 @@ export const applyRowDragCommit = <TData>(
 
 export interface RefreshTransactionDeps<TData> {
   dataSource: DataSource<TData>;
-  sortFilter: SortFilterManager<TData>;
+  sortModel: SortModel[];
+  filterModel: FilterModel;
   cachedRows: Map<number, TData>;
   setTotalRows: (n: number) => void;
   getColumns: () => ColumnDefinition[];
@@ -115,10 +116,9 @@ export const refreshTransactionData = async <TData>(
 ): Promise<RefreshTransactionResult> => {
   const response = await deps.dataSource.fetch(
     buildDataSourceRequest({
-      pageIndex: 0,
-      pageSize: Number.MAX_SAFE_INTEGER,
-      sortModel: deps.sortFilter.getSortModel(),
-      filterModel: deps.sortFilter.getFilterModel(),
+      range: { startRow: 0, endRow: Number.MAX_SAFE_INTEGER },
+      sortModel: deps.sortModel,
+      filterModel: deps.filterModel,
       columns: deps.getColumns(),
     }),
   );

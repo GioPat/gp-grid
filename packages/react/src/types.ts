@@ -10,6 +10,7 @@ import type {
   HeaderRendererParams,
   GridCore,
   HighlightingOptions,
+  RowLoadingOptions,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -55,6 +56,8 @@ export interface GridProps<TData = unknown> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
+  /** Row loading and cache behavior. Server data sources use paginated loading by default. */
+  rowLoading?: RowLoadingOptions;
   /** Enable/disable sorting globally. Default: true */
   sortingEnabled?: boolean;
   /** Enable dark mode styling: Default to false */

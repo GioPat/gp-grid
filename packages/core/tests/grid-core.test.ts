@@ -778,9 +778,9 @@ describe("GridCore", () => {
       const extremeDataSource: DataSource<TestRow> = {
         async fetch(request) {
           const rows: TestRow[] = [];
-          const start = request.pagination?.pageIndex ?? 0;
-          const size = request.pagination?.pageSize ?? 100;
-          for (let i = start; i < Math.min(start + size, extremeRowCount); i++) {
+          const start = request.range.startRow;
+          const end = Math.min(request.range.endRow, extremeRowCount);
+          for (let i = start; i < end; i++) {
             rows.push({ id: i, name: `Row ${i}`, age: 20, email: `row${i}@example.com` });
           }
           return { rows, totalRows: extremeRowCount };
@@ -840,9 +840,9 @@ describe("GridCore", () => {
       const extremeDataSource: DataSource<TestRow> = {
         async fetch(request) {
           const rows: TestRow[] = [];
-          const start = request.pagination?.pageIndex ?? 0;
-          const size = request.pagination?.pageSize ?? 100;
-          for (let i = start; i < Math.min(start + size, extremeRowCount); i++) {
+          const start = request.range.startRow;
+          const end = Math.min(request.range.endRow, extremeRowCount);
+          for (let i = start; i < end; i++) {
             rows.push({ id: i, name: `Row ${i}`, age: 20, email: `row${i}@example.com` });
           }
           return { rows, totalRows: extremeRowCount };

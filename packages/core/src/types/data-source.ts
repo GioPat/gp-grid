@@ -4,15 +4,21 @@
 import type { CellValue, SortModel } from "./basic";
 import type { FilterModel } from "./filters";
 
+/** Data loading mode advertised by a data source */
+export type DataSourceLoadMode = "all" | "paginated";
+
+/** Absolute row range requested from a data source. endRow is exclusive. */
+export interface DataSourceRange {
+  /** First row index to fetch */
+  startRow: number;
+  /** First row index after the requested range */
+  endRow: number;
+}
+
 /** Data source request */
 export interface DataSourceRequest {
-  /** Pagination */
-  pagination: {
-    /** Page index */
-    pageIndex: number;
-    /** Page size */
-    pageSize: number;
-  };
+  /** Absolute row range to fetch. endRow is exclusive. */
+  range: DataSourceRange;
   /** Sort */
   sort?: SortModel[];
   /** Filter */
@@ -35,6 +41,11 @@ export interface DataSourceResponse<TData = unknown> {
 
 /** Data source interface */
 export interface DataSource<TData = unknown> {
+  /**
+   * Loading mode preferred by this data source.
+   * Undefined is treated as "all".
+   */
+  readonly loadMode?: DataSourceLoadMode;
   /** Fetch data based on the request */
   fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
   /** Optional cleanup method to release resources */

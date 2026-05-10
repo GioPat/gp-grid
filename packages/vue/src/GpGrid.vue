@@ -15,7 +15,7 @@ import {
   getTotalWidth,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -32,6 +32,7 @@ const props = withDefaults(
     rowHeight: number;
     headerHeight?: number;
     overscan?: number;
+    rowLoading?: RowLoadingOptions;
     sortingEnabled?: boolean;
     darkMode?: boolean;
     wheelDampening?: number;
@@ -236,6 +237,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowHeight: props.rowHeight,
     headerHeight: totalHeaderHeight.value,
     overscan: props.overscan,
+    rowLoading: props.rowLoading,
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
     getRowId: props.getRowId,

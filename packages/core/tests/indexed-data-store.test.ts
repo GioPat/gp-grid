@@ -42,9 +42,9 @@ describe("IndexedDataStore", () => {
   });
 
   describe("query", () => {
-    it("should return paginated results", () => {
+    it("should return ranged results", () => {
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 2 },
+        range: { startRow: 0, endRow: 2 },
       });
 
       expect(result.rows.length).toBe(2);
@@ -53,7 +53,7 @@ describe("IndexedDataStore", () => {
 
     it("should apply sorting", () => {
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -64,7 +64,7 @@ describe("IndexedDataStore", () => {
 
     it("should apply descending sort", () => {
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "desc" }],
       });
 
@@ -74,7 +74,7 @@ describe("IndexedDataStore", () => {
 
     it("should apply filtering", () => {
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -109,7 +109,7 @@ describe("IndexedDataStore", () => {
 
     it("should maintain sort order when adding rows", () => {
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -117,7 +117,7 @@ describe("IndexedDataStore", () => {
       store.addRows([{ id: 4, name: "David", age: 27 }]);
 
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -135,7 +135,7 @@ describe("IndexedDataStore", () => {
     it("should honor filter when adding rows", () => {
       // First apply a filter
       const result1 = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -154,7 +154,7 @@ describe("IndexedDataStore", () => {
 
       // Query again - should have 2 matching rows
       const result2 = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -174,7 +174,7 @@ describe("IndexedDataStore", () => {
 
       // Query again - should still have only 2 matching rows
       const result3 = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -192,7 +192,7 @@ describe("IndexedDataStore", () => {
     it("should maintain sort order when adding rows (numeric ID)", () => {
       // Sort by ID descending
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "id", direction: "desc" }],
       });
 
@@ -201,7 +201,7 @@ describe("IndexedDataStore", () => {
 
       // Query - new row should be first (highest ID)
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "id", direction: "desc" }],
       });
 
@@ -213,7 +213,7 @@ describe("IndexedDataStore", () => {
     it("should maintain sort order when adding rows (ascending ID)", () => {
       // Sort by ID ascending
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "id", direction: "asc" }],
       });
 
@@ -222,7 +222,7 @@ describe("IndexedDataStore", () => {
 
       // Query - new row should be last (highest ID)
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "id", direction: "asc" }],
       });
 
@@ -249,7 +249,7 @@ describe("IndexedDataStore", () => {
 
       // Remaining rows should still be accessible
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
       });
 
       expect(result.rows.length).toBe(2);
@@ -266,7 +266,7 @@ describe("IndexedDataStore", () => {
     it("should maintain sort order when updating sorted column", () => {
       // Sort by age ascending
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -274,7 +274,7 @@ describe("IndexedDataStore", () => {
       store.updateCell(2, "age", 40);
 
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -286,7 +286,7 @@ describe("IndexedDataStore", () => {
     it("should update filter results when filtered column changes", () => {
       // Set up filter
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -302,7 +302,7 @@ describe("IndexedDataStore", () => {
       store.updateCell(1, "name", "Alicia");
 
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -344,7 +344,7 @@ describe("IndexedDataStore", () => {
   describe("getSortModel / setSortModel", () => {
     it("should track sort model", () => {
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "asc" }],
       });
 
@@ -354,14 +354,14 @@ describe("IndexedDataStore", () => {
     it("should rebuild indices when sort model changes", () => {
       // First sort by age
       const result1 = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
       expect(result1.rows[0]?.name).toBe("Bob");
 
       // Then sort by name
       const result2 = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "asc" }],
       });
       expect(result2.rows[0]?.name).toBe("Alice");
@@ -371,7 +371,7 @@ describe("IndexedDataStore", () => {
   describe("getFilterModel / setFilterModel", () => {
     it("should track filter model", () => {
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           name: {
             conditions: [{
@@ -407,10 +407,10 @@ describe("IndexedDataStore", () => {
   describe("reindex under active sort", () => {
     it("keeps sorted order after removing a row", () => {
       // Sort by age asc, then remove Bob (youngest). Remaining order: Alice, Charlie.
-      store.query({ pagination: { pageIndex: 0, pageSize: 10 }, sort: [{ colId: "age", direction: "asc" }] });
+      store.query({ range: { startRow: 0, endRow: 10 }, sort: [{ colId: "age", direction: "asc" }] });
       store.removeRows([2]);
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
       expect(result.rows.map((r) => r.name)).toEqual(["Alice", "Charlie"]);
@@ -418,16 +418,16 @@ describe("IndexedDataStore", () => {
 
     it("updateCell on a NON-sort-affecting field does not change order", () => {
       // Invariant: if the updated field isn't in sortModel, sortedIndices must stay put.
-      store.query({ pagination: { pageIndex: 0, pageSize: 10 }, sort: [{ colId: "age", direction: "asc" }] });
+      store.query({ range: { startRow: 0, endRow: 10 }, sort: [{ colId: "age", direction: "asc" }] });
       const orderBefore = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       }).rows.map((r) => r.id);
 
       store.updateCell(2, "name", "Bobby"); // 'name' not in sortModel
 
       const orderAfter = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       }).rows.map((r) => r.id);
       expect(orderAfter).toEqual(orderBefore);
@@ -437,12 +437,12 @@ describe("IndexedDataStore", () => {
       // Sort desc by age, then remove the middle row. Remaining order should
       // still descend cleanly: Charlie (35) → Bob (25).
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "desc" }],
       });
       store.removeRows([1]); // Alice
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "desc" }],
       });
       expect(result.rows.map((r) => r.name)).toEqual(["Charlie", "Bob"]);
@@ -453,12 +453,12 @@ describe("IndexedDataStore", () => {
     it("removed row exits filteredIndices cleanly", () => {
       // Filter to just Alice, then remove her; filtered count should be 0.
       store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: { name: { conditions: [{ type: "text", operator: "equals", value: "Alice" }], combination: "or" } },
       });
       store.removeRows([1]);
       const result = store.query({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: { name: { conditions: [{ type: "text", operator: "equals", value: "Alice" }], combination: "or" } },
       });
       expect(result.rows.length).toBe(0);
@@ -470,9 +470,9 @@ describe("IndexedDataStore", () => {
       const filter = {
         name: { conditions: [{ type: "text" as const, operator: "equals" as const, value: "Alice" }], combination: "or" as const },
       };
-      store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      store.query({ range: { startRow: 0, endRow: 10 }, filter });
       store.removeRows([2]); // Bob was filtered out
-      const result = store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      const result = store.query({ range: { startRow: 0, endRow: 10 }, filter });
       expect(result.rows.map((r) => r.name)).toEqual(["Alice"]);
       expect(store.getTotalRowCount()).toBe(2);
     });
@@ -483,9 +483,9 @@ describe("IndexedDataStore", () => {
       const filter = {
         name: { conditions: [{ type: "text" as const, operator: "contains" as const, value: "ali" }], combination: "or" as const },
       };
-      store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      store.query({ range: { startRow: 0, endRow: 10 }, filter });
       store.updateCell(2, "name", "Bali");
-      const result = store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      const result = store.query({ range: { startRow: 0, endRow: 10 }, filter });
       expect(result.rows.map((r) => r.name).sort()).toEqual(["Alice", "Bali"]);
     });
   });
@@ -559,7 +559,7 @@ describe("IndexedDataStore", () => {
       // Matches: Alice (30) and Charlie (35). Sorted desc → [Charlie, Alice].
       // Remove Alice. Remaining should be just [Charlie].
       const params = {
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "desc" as const }],
         filter: {
           name: { conditions: [{ type: "text" as const, operator: "contains" as const, value: "e" }], combination: "or" as const },
@@ -579,7 +579,7 @@ describe("IndexedDataStore", () => {
     it("remove-all leaves the store empty but queryable", () => {
       store.removeRows([1, 2, 3]);
       expect(store.getTotalRowCount()).toBe(0);
-      const result = store.query({ pagination: { pageIndex: 0, pageSize: 10 } });
+      const result = store.query({ range: { startRow: 0, endRow: 10 } });
       expect(result.rows).toEqual([]);
       expect(result.totalRows).toBe(0);
     });
@@ -588,14 +588,14 @@ describe("IndexedDataStore", () => {
       const filter = {
         name: { conditions: [{ type: "text" as const, operator: "equals" as const, value: "Alice" }], combination: "or" as const },
       };
-      store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      store.query({ range: { startRow: 0, endRow: 10 }, filter });
       store.addRows([{ id: 4, name: "Dave", age: 40 }]);
 
       // Storage grew by one row
       expect(store.getTotalRowCount()).toBe(4);
 
       // But the filter excludes Dave — visible set is still just Alice
-      const result = store.query({ pagination: { pageIndex: 0, pageSize: 10 }, filter });
+      const result = store.query({ range: { startRow: 0, endRow: 10 }, filter });
       expect(result.rows.map((r) => r.name)).toEqual(["Alice"]);
     });
   });

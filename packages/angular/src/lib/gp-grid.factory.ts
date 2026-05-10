@@ -4,6 +4,7 @@ import type {
   ColumnDefinition,
   DataSource,
   HighlightingOptions,
+  RowLoadingOptions,
   RowId,
 } from '@gp-grid/core';
 
@@ -13,6 +14,7 @@ export interface BuildGridCoreInputs<TData> {
   rowHeight: number;
   headerHeight: number;
   overscan: number;
+  rowLoading: RowLoadingOptions | undefined;
   sortingEnabled: boolean;
   highlighting: HighlightingOptions<TData> | undefined;
   getRowId: ((row: TData) => RowId) | undefined;
@@ -40,6 +42,7 @@ export const buildGridCore = <TData>(
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
     overscan: inputs.overscan,
+    rowLoading: inputs.rowLoading,
     sortingEnabled: inputs.sortingEnabled,
     highlighting: inputs.highlighting,
     getRowId: inputs.getRowId,

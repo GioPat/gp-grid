@@ -45,6 +45,8 @@ export type {
 export type {
   DataSourceRequest,
   DataSourceResponse,
+  DataSourceRange,
+  DataSourceLoadMode,
   DataSource,
 } from "./data-source";
 
@@ -103,7 +105,13 @@ export type {
 } from "./renderers";
 
 // Options types
-export type { GridCoreOptions } from "./options";
+export type {
+  GridCoreOptions,
+  RowLoadingOptions,
+  RowLoadingMode,
+  RowCacheOptions,
+  RowCacheEviction,
+} from "./options";
 
 // Input types
 export type {

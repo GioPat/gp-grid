@@ -2,13 +2,13 @@ import type {
   CellValue,
   ColumnDefinition,
   DataSourceRequest,
+  DataSourceRange,
   FilterModel,
   SortModel,
 } from "../types";
 
 export interface BuildRequestOptions {
-  pageIndex: number;
-  pageSize: number;
+  range: DataSourceRange;
   sortModel: SortModel[];
   filterModel: FilterModel;
   /**
@@ -37,7 +37,7 @@ const collectValueFormatters = (
  * `refreshFromTransaction`.
  */
 export const buildDataSourceRequest = (options: BuildRequestOptions): DataSourceRequest => ({
-  pagination: { pageIndex: options.pageIndex, pageSize: options.pageSize },
+  range: options.range,
   sort: options.sortModel.length > 0 ? options.sortModel : undefined,
   filter: Object.keys(options.filterModel).length > 0 ? options.filterModel : undefined,
   valueFormatters: collectValueFormatters(options.columns),

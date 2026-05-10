@@ -17,6 +17,7 @@ export interface BatchChangeSetters {
   setRowsWrapperOffset: (v: number) => void;
   setIsLoading: (v: boolean) => void;
   setErrorMessage: (v: string | null) => void;
+  setTotalRows: (v: number) => void;
   setPendingScrollTop: (v: number | null) => void;
   setActiveCell: (v: CellPosition | null) => void;
   setSelectionRange: (v: CellRange | null) => void;
@@ -80,6 +81,7 @@ const applyScalarState = (
   if (changes.rowsWrapperOffset !== undefined) setters.setRowsWrapperOffset(changes.rowsWrapperOffset);
   if (changes.isLoading !== undefined) setters.setIsLoading(changes.isLoading);
   if (changes.error !== undefined) setters.setErrorMessage(changes.error);
+  if (changes.totalRows !== undefined) setters.setTotalRows(changes.totalRows);
   if (changes.pendingScrollTop !== undefined) setters.setPendingScrollTop(changes.pendingScrollTop);
   if (changes.activeCell !== undefined) setters.setActiveCell(changes.activeCell);
   if (changes.selectionRange !== undefined) setters.setSelectionRange(changes.selectionRange);

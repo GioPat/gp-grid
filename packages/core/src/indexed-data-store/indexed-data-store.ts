@@ -143,7 +143,7 @@ export class IndexedDataStore<TData = unknown> {
   // ===========================================================================
 
   /**
-   * Query data with sorting, filtering, and pagination.
+   * Query data with sorting, filtering, and row-range slicing.
    * Compatible with DataSource.fetch() interface.
    */
   query(request: DataSourceRequest): DataSourceResponse<TData> {
@@ -157,10 +157,9 @@ export class IndexedDataStore<TData = unknown> {
     const visibleIndices = this.getVisibleIndices();
     const totalRows = visibleIndices.length;
 
-    // Apply pagination
-    const { pageIndex, pageSize } = request.pagination;
-    const startIndex = pageIndex * pageSize;
-    const endIndex = Math.min(startIndex + pageSize, totalRows);
+    // Apply requested row range
+    const startIndex = request.range.startRow;
+    const endIndex = Math.min(request.range.endRow, totalRows);
 
     const rows: TData[] = [];
     for (let i = startIndex; i < endIndex; i++) {

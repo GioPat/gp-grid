@@ -40,6 +40,12 @@ export type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
+  DataSourceRange,
+  DataSourceLoadMode,
+  RowLoadingOptions,
+  RowLoadingMode,
+  RowCacheOptions,
+  RowCacheEviction,
 
   // Renderer params
   CellRendererParams,

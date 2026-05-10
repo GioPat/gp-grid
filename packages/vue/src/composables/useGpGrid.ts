@@ -23,6 +23,7 @@ import type {
   GridState,
   SlotData,
   HighlightingOptions,
+  RowLoadingOptions,
 } from "@gp-grid/core";
 import { useGridState } from "../gridState";
 import { useInputHandler, type VisibleColumnInfo } from "./useInputHandler";
@@ -40,6 +41,7 @@ export interface UseGpGridOptions<TData = unknown> {
   rowHeight: number;
   headerHeight?: number;
   overscan?: number;
+  rowLoading?: RowLoadingOptions;
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
@@ -217,6 +219,7 @@ export function useGpGrid<TData = unknown>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       overscan: options.overscan ?? 3,
+      rowLoading: options.rowLoading,
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,
       getRowId: options.getRowId,
