@@ -3,8 +3,7 @@
 // function encapsulates the batch-emit + cache-maintenance sequence for
 // a single mutation so the GridCore facade stays thin.
 
-import type { DataSource, ColumnDefinition } from "./types";
-import type { FilterModel, SortModel } from "./types";
+import type { DataSource, ColumnDefinition, FilterModel, SortModel } from "./types";
 import type { SlotPoolManager } from "./slot-pool";
 import type {
   HighlightManager,

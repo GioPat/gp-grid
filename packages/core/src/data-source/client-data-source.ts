@@ -39,7 +39,7 @@ export function defaultGetFieldValue<TData>(
     value = (value as Record<string, unknown>)[part];
   }
 
-  return (value ?? null) as CellValue;
+  return value as CellValue;
 }
 
 // =============================================================================
@@ -120,11 +120,11 @@ export function createClientDataSource<TData = unknown>(
 
         processedData = canUseWorkerSort
           ? await performWorkerSort(
-              processedData,
-              request.sort,
-              sortManager,
-              getFieldValue,
-            )
+            processedData,
+            request.sort,
+            sortManager,
+            getFieldValue,
+          )
           : applySort(processedData, request.sort, getFieldValue);
       }
 
