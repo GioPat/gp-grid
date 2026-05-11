@@ -1,0 +1,78 @@
+{
+  "skill_name": "gp-grid-integration",
+  "evals": [
+    {
+      "id": 0,
+      "name": "react-basic-setup-with-mutable-data",
+      "prompt": "I'm building an admin dashboard in a fresh Vite + React 18 + TypeScript project. I need to show a list of users in a table — columns: id (number), email (text), role (text, one of 'admin' | 'editor' | 'viewer'), and status (text, 'active' or 'inactive'). The data is around 5,000 users that I get back from `/api/users` (already loaded into a `users: User[]` state in my parent component). Users get added or removed when I submit other forms. I want to integrate gp-grid for this. Walk me through what to install, what CSS to import, and the actual component code — make sure data updates from form submissions are efficient (no full rebuilds). Don't worry about styling beyond defaults.",
+      "expected_output": "A correct React integration that: (1) installs @gp-grid/react, (2) imports the CSS once at app entry, (3) wraps the grid in a sized container, (4) uses useGridData with getRowId for mutation efficiency (NOT just rowData=users), (5) sets cellDataType correctly per column, (6) hooks up addRows/removeRows/updateRow on form callbacks. Should not use raw rowData prop for mutations on 5000 rows.",
+      "assertions": [
+        "Recommends installing @gp-grid/react (the React wrapper, not @gp-grid/core alone)",
+        "Tells the user to import the stylesheet from @gp-grid/react/dist/styles.css exactly once at app entry",
+        "Wraps the grid in a parent element with explicit width AND height (not relying on auto sizing)",
+        "Uses the useGridData hook from @gp-grid/react for mutable data — does NOT recommend rebuilding the rowData prop on every state change",
+        "Provides getRowId callback to useGridData so transactions can identify rows",
+        "Demonstrates calling addRows / removeRows / updateRow on form submission events instead of replacing the full array",
+        "Sets cellDataType='number' for the id column and cellDataType='text' for email/role/status",
+        "Imports the component as Grid (or GpGrid) from @gp-grid/react",
+        "Solution code would compile against the real @gp-grid/react public API (no invented props/types/exports)"
+      ],
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "vue-custom-cell-renderer",
+      "prompt": "I have a Vue 3 + Vite + TypeScript app with gp-grid already wired up showing orders. Order shape: `{ id: number; customer: string; total: number; status: 'pending' | 'shipped' | 'delivered' | 'cancelled' }`. Right now the 'status' column shows raw text. I want to render it as a colored pill: pending=orange, shipped=blue, delivered=green, cancelled=red. Show me how to add a custom cell renderer for just the status column. I'd prefer the renderer as its own .vue SFC if that's idiomatic.",
+      "expected_output": "A Vue custom renderer using a Vue SFC component (.vue file) passed directly as the `cellRenderer` field on the column (since @gp-grid/vue's ColumnDefinition widens the renderer to accept Components). The SFC should accept CellRendererParams as props. Should NOT recommend the registry-by-string pattern as the only option without mentioning the SFC option exists. Should mention container sizing, CSS import only if relevant.",
+      "assertions": [
+        "Defines the renderer as a separate .vue Single-File Component (per the user's preference)",
+        "Passes the imported SFC directly via cellRenderer: SfcComponent on the status column (no registry-by-string forced when SFC is requested)",
+        "Imports ColumnDefinition from @gp-grid/vue (NOT from @gp-grid/core), so the renderer field accepts a Vue Component",
+        "The SFC uses defineProps to accept the CellRendererParams shape (value, rowData, column, etc.)",
+        "Maps each status value to the requested color: pending→orange, shipped→blue, delivered→green, cancelled→red",
+        "Pill styling is reasonable (padding, rounded corners, contrasting text color)",
+        "Solution code would compile against the real @gp-grid/vue public API (no invented props/types/exports)"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "angular-server-side-data-source",
+      "prompt": "Angular 19 standalone-component app. I need to show a 2M-row dataset of trades from a backend. The backend exposes GET /api/trades with query params: ?page=N&pageSize=N&sortBy=field:dir,field2:dir&filter_<field>=<value>. Returns `{ items: Trade[]; total: number }`. Trade shape: `{ id: number; symbol: string; side: 'buy' | 'sell'; quantity: number; price: number; tradedAt: string }`. Show me how to wire up gp-grid with a server-side data source so the backend handles paging, sorting, and filtering. Use Angular's HttpClient and signals where natural. The grid should fill the full page below a 56px-tall toolbar.",
+      "expected_output": "Angular integration using @gp-grid/angular's GpGridComponent, createServerDataSource with a fetch fn that builds URLSearchParams matching the backend's contract, returns { rows, totalRows }. Uses HttpClient with firstValueFrom or similar to make it async. Shows correct AngularColumnDefinition[] with appropriate cellDataType per field. Container has explicit height (e.g. calc(100vh - 56px)). Standalone imports include GpGridComponent. CSS import noted. Data source created once (not per render).",
+      "assertions": [
+        "Imports GpGridComponent from @gp-grid/angular and lists it in the component's standalone imports array",
+        "Uses createServerDataSource from @gp-grid/angular (NOT createClientDataSource or rowData)",
+        "The fetch function builds query params matching the backend contract: page, pageSize, sortBy=col:dir,col:dir, filter_<field>=<value>",
+        "Fetch returns the correct shape { rows, totalRows } from the response { items, total }",
+        "Uses Angular HttpClient (with firstValueFrom or async/await pattern)",
+        "Container has explicit height that fills the page below the 56px toolbar (e.g. calc(100vh - 56px) or flex-1 inside a sized parent)",
+        "Imports the @gp-grid/angular CSS once (in styles.css or angular.json)",
+        "Uses AngularColumnDefinition[] for the columns array and sets correct cellDataType per Trade field (number for id/quantity/price, text for symbol/side, text or dateString for tradedAt)",
+        "The data source is created once (class field or ngOnInit), not recreated on every change detection",
+        "Solution code would compile against the real @gp-grid/angular public API (no invented inputs/types/exports)"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "react-multi-select-edit-renderer",
+      "prompt": "Working in a React 18 + Vite + TypeScript app. I have a gp-grid showing tasks. Each task has a `tags: string[]` field — possible values are 'urgent', 'important', 'archived', 'review'. I want users to double-click the tags cell and get a multi-select dropdown to pick 0..N tags. On commit, I need to PATCH /api/tasks/:id with the new tags. Build me the custom edit renderer (you can use react-select or just plain checkboxes if simpler — your call). Make sure the cell shows the tags nicely when not editing too.",
+      "expected_output": "A complete React solution that: (1) defines a cell renderer for the tags column showing tags as visible chips/badges (handles empty array), (2) defines an edit renderer that opens a multi-select on edit (react-select with menuPortalTarget=document.body, OR plain checkboxes — both acceptable), (3) wires onValueChange/onCommit/onCancel correctly, (4) sets editable: true on the column, (5) provides getRowId, (6) wires onCellValueChanged to PATCH the backend with the new tags. Edit renderer must use defineProps/state correctly and handle Escape→onCancel, Enter→onCommit. Does NOT mutate state from outside the renderer hooks rules.",
+      "assertions": [
+        "Defines a cell renderer for the tags column that displays the array as visible chips/badges (and handles the empty array case)",
+        "Defines an edit renderer that opens a multi-select UI on edit (react-select OR plain checkboxes are both acceptable)",
+        "The edit renderer calls params.onValueChange(newValue) when the user changes the selection",
+        "The edit renderer handles Escape key by calling params.onCancel()",
+        "The edit renderer commits via params.onCommit() (on Enter, blur, or done button)",
+        "Sets editable: true on the tags column",
+        "Provides getRowId so onCellValueChanged can identify the row",
+        "Wires onCellValueChanged to PATCH /api/tasks/:id with the new tags array",
+        "If react-select is used: passes menuPortalTarget={document.body} (or equivalent) to escape the cell's overflow:hidden clipping",
+        "Renderers wired via the cellRenderers / editRenderers registry props (or inline column functions); column references the renderer by string key when registry is used",
+        "Solution code would compile against the real @gp-grid/react public API (no invented props/types/exports)"
+      ],
+      "files": []
+    }
+  ]
+}

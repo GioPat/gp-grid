@@ -25,7 +25,10 @@ dist-ssr
 *.sw?
 
 # Claude
-.claude
+.claude/*
+!.claude/skills/
+.claude/skills/*-workspace/
+.claude/skills/*-workspace/**
 
 # Benchmarks
 benchmarks/results/*
