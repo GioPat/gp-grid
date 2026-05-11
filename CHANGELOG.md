@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.14.0...gp-grid-v0.15.0) (2026-05-11)
+
+
+### ✨ Features
+
+* improve Server Side pagination ([fe05105](https://github.com/GioPat/gp-grid/commit/fe05105730631465f5e2d8cd4fa24565ec587b2e))
+* improve Server Side pagination ([0dde700](https://github.com/GioPat/gp-grid/commit/0dde700dc5d6c79e3854557fe9fc5923c5b8f1c5))
+
 ## [0.14.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.13.2...gp-grid-v0.14.0) (2026-05-07)
 
 
