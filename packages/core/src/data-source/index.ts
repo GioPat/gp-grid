@@ -12,6 +12,7 @@ export {
 export {
   createServerDataSource,
   type ServerFetchFunction,
+  type ServerDataSourceOptions,
 } from "./server-data-source";
 
 // Mutable data source

@@ -142,6 +142,8 @@ export function createMutableClientDataSource<TData = unknown>(
   });
 
   return {
+    loadMode: "all",
+
     async fetch(
       request: DataSourceRequest,
     ): Promise<DataSourceResponse<TData>> {
@@ -201,10 +203,11 @@ export function createMutableClientDataSource<TData = unknown>(
 
       const totalRows = processedData.length;
 
-      // Apply pagination
-      const { pageIndex, pageSize } = request.pagination;
-      const startIndex = pageIndex * pageSize;
-      const rows = processedData.slice(startIndex, startIndex + pageSize);
+      // Apply requested row range
+      const rows = processedData.slice(
+        request.range.startRow,
+        request.range.endRow,
+      );
 
       return { rows, totalRows };
     },

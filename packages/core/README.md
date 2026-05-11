@@ -188,7 +188,7 @@ const dataSource = createClientDataSource(data, {
 
 ### Server-Side Data Source
 
-For large datasets that require server-side pagination, sorting, and filtering.
+For large datasets that require server-side row-window loading, sorting, and filtering.
 
 ```typescript
 import {
@@ -207,8 +207,8 @@ const dataSource = createServerDataSource<Person>(
   async (request: DataSourceRequest) => {
     // Build query parameters from request
     const params = new URLSearchParams({
-      page: String(request.pagination.pageIndex),
-      pageSize: String(request.pagination.pageSize),
+      offset: String(request.range.startRow),
+      limit: String(request.range.endRow - request.range.startRow),
     });
 
     // Add sort parameters
@@ -248,9 +248,9 @@ interface DataSource<TData = Row> {
 }
 
 interface DataSourceRequest {
-  pagination: {
-    pageIndex: number;
-    pageSize: number;
+  range: {
+    startRow: number;
+    endRow: number; // exclusive
   };
   sort?: SortModel[];
   filter?: FilterModel;
@@ -260,6 +260,30 @@ interface DataSourceResponse<TData> {
   rows: TData[];
   totalRows: number;
 }
+```
+
+`createServerDataSource` uses paginated loading by default. The grid sends
+one absolute `range`, so APIs can use `startRow` as an offset and
+`endRow - startRow` as a limit. Use
+`createServerDataSource(fetchFn, { loadMode: "all" })` or
+`rowLoading: { mode: "all" }` when you intentionally want fetch-all behavior.
+
+Paginated cache aggressiveness is controlled through `rowLoading.cache`:
+
+```typescript
+const grid = new GridCore({
+  columns,
+  dataSource: createServerDataSource(fetchPeople),
+  rowHeight: 36,
+  rowLoading: {
+    cache: {
+      eviction: "aggressive", // "balanced" by default
+      pageSize: 100,
+      prefetchPages: 0,
+      maxPages: 1,
+    },
+  },
+});
 ```
 
 ## Types Reference

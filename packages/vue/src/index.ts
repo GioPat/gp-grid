@@ -111,6 +111,12 @@ export type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
+  DataSourceRange,
+  DataSourceLoadMode,
+  RowLoadingOptions,
+  RowLoadingMode,
+  RowCacheOptions,
+  RowCacheEviction,
   MutableDataSource,
   // Filters
   FilterModel,

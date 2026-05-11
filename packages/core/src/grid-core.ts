@@ -28,12 +28,10 @@ import type {
 } from "./managers";
 import { InstructionBatcher } from "./managers";
 import {
-  buildDataSourceRequest,
   computeColumnPositions,
-  readCell,
-  writeCell,
 } from "./utils";
 import { buildGridManagers } from "./grid-core-managers";
+import { RowDataManager } from "./managers/row-data-manager";
 import {
   emitContentSize as emitContentSizeFn,
   emitHeaders as emitHeadersFn,
@@ -43,7 +41,6 @@ import {
   applyColumnMove,
   applyColumnResize,
   applyRowDragCommit,
-  refreshTransactionData,
 } from "./grid-core-operations";
 
 // =============================================================================
@@ -53,7 +50,6 @@ import {
 export class GridCore<TData = unknown> {
   // Configuration
   private columns: ColumnDefinition[];
-  private dataSource: DataSource<TData>;
   private readonly rowHeight: number;
   private readonly headerHeight: number;
   private readonly overscan: number;
@@ -69,11 +65,7 @@ export class GridCore<TData = unknown> {
   private readonly viewport: ViewportState;
 
   // Data state
-  private readonly currentPageIndex: number = 0;
-  // Fetch all rows in a single page for client-side data sources
-  private readonly pageSize: number = Number.MAX_SAFE_INTEGER;
-  private cachedRows: Map<number, TData> = new Map();
-  private totalRows: number = 0;
+  private readonly rowData: RowDataManager<TData>;
 
   // Managers
   public readonly selection: SelectionManager;
@@ -97,12 +89,8 @@ export class GridCore<TData = unknown> {
   // Lifecycle state
   private isDestroyed: boolean = false;
 
-  // Loading state (guards against concurrent sort/filter operations)
-  private _isDataLoading: boolean = false;
-
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
-    this.dataSource = options.dataSource;
     this.rowHeight = options.rowHeight;
     this.headerHeight = options.headerHeight ?? options.rowHeight;
     this.overscan = options.overscan ?? 3;
@@ -119,14 +107,35 @@ export class GridCore<TData = unknown> {
 
     this.computeColumnPositions();
 
+    let viewport!: ViewportState;
+    let slotPool!: SlotPoolManager;
+    let sortFilter!: SortFilterManager<TData>;
+    this.rowData = new RowDataManager<TData>({
+      dataSource: options.dataSource,
+      rowLoading: options.rowLoading,
+      batcher: this.batcher,
+      getColumns: () => this.columns,
+      getSortModel: () => sortFilter.getSortModel(),
+      getFilterModel: () => sortFilter.getFilterModel(),
+      getRowHeight: () => this.rowHeight,
+      getOverscan: () => this.overscan,
+      getScrollTop: () => viewport.getScrollTop(),
+      getViewportHeight: () => viewport.getViewportHeight(),
+      onCellValueChanged: this.onCellValueChanged,
+      getRowId: this.getRowId,
+      syncSlots: () => slotPool.syncSlots(),
+      emitVisibleRange: () => this.emitVisibleRange(),
+      emitContentSize: () => this.emitContentSize(),
+    });
+
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
       highlighting: options.highlighting,
       getColumns: () => this.columns,
-      getCachedRows: () => this.cachedRows,
-      setCachedRows: (rows) => { this.cachedRows = rows; },
-      getTotalRows: () => this.totalRows,
-      setTotalRows: (count) => { this.totalRows = count; },
+      getCachedRows: () => this.rowData.getCachedRows(),
+      setCachedRows: (rows) => this.rowData.setCachedRows(rows),
+      getTotalRows: () => this.rowData.getTotalRows(),
+      setTotalRows: (count) => this.rowData.setTotalRows(count),
       getRowHeight: () => this.rowHeight,
       getHeaderHeight: () => this.headerHeight,
       getOverscan: () => this.overscan,
@@ -135,7 +144,7 @@ export class GridCore<TData = unknown> {
       setCellValue: (row, col, value) => this.setCellValue(row, col, value),
       emitContentSize: () => this.emitContentSize(),
       emitHeaders: () => this.emitHeaders(),
-      fetchData: () => this.fetchData(),
+      fetchData: () => this.rowData.loadInitial(),
       clearSelectionIfInvalid: (maxValidRow) => this.clearSelectionIfInvalid(maxValidRow),
     });
     this.selection = managers.selection;
@@ -147,6 +156,9 @@ export class GridCore<TData = unknown> {
     this.editManager = managers.editManager;
     this.sortFilter = managers.sortFilter;
     this.rowMutation = managers.rowMutation;
+    viewport = this.viewport;
+    slotPool = this.slotPool;
+    sortFilter = this.sortFilter;
 
     this.input = new InputHandler(this, {
       getHeaderHeight: () => this.headerHeight,
@@ -176,7 +188,7 @@ export class GridCore<TData = unknown> {
    * Initialize the grid and load initial data.
    */
   async initialize(): Promise<void> {
-    await this.fetchData();
+    await this.rowData.loadInitial();
     this.slotPool.syncSlots();
     this.emitContentSize();
     this.emitHeaders();
@@ -204,47 +216,10 @@ export class GridCore<TData = unknown> {
     );
     if (!changed) return;
 
+    this.rowData.requestVisibleRows();
     this.slotPool.syncSlots();
     this.emitVisibleRange();
     if (viewportSizeChanged) this.emitContentSize();
-  }
-
-  // ===========================================================================
-  // Data Fetching
-  // ===========================================================================
-
-  private async fetchData(): Promise<void> {
-    this._isDataLoading = true;
-    this.batcher.emit({ type: "DATA_LOADING" });
-
-    try {
-      const request = buildDataSourceRequest({
-        pageIndex: this.currentPageIndex,
-        pageSize: this.pageSize,
-        sortModel: this.sortFilter.getSortModel(),
-        filterModel: this.sortFilter.getFilterModel(),
-        columns: this.columns,
-      });
-
-      const response = await this.dataSource.fetch(request);
-
-      // Cache the fetched rows
-      this.cachedRows.clear();
-      const startIndex = this.currentPageIndex * this.pageSize;
-      response.rows.forEach((row, i) => {
-        this.cachedRows.set(startIndex + i, row);
-      });
-      this.totalRows = response.totalRows;
-
-      this.batcher.emit({ type: "DATA_LOADED", totalRows: this.totalRows });
-    } catch (error) {
-      this.batcher.emit({
-        type: "DATA_ERROR",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      this._isDataLoading = false;
-    }
   }
 
   // ===========================================================================
@@ -256,12 +231,12 @@ export class GridCore<TData = unknown> {
     direction: SortDirection | null,
     addToExisting: boolean = false,
   ): Promise<void> {
-    if (this._isDataLoading) return;
+    if (this.rowData.isLoading()) return;
     return this.sortFilter.setSort(colId, direction, addToExisting);
   }
 
   async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
-    if (this._isDataLoading) return;
+    if (this.rowData.isLoading()) return;
     return this.sortFilter.setFilter(colId, filter);
   }
 
@@ -277,7 +252,7 @@ export class GridCore<TData = unknown> {
   }
 
   openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
-    if (this._isDataLoading) return;
+    if (this.rowData.isLoading()) return;
     this.sortFilter.openFilterPopup(colIndex, anchorRect);
   }
 
@@ -333,14 +308,11 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   getCellValue(row: number, col: number): CellValue {
-    return readCell(this.cachedRows, this.columns, row, col);
+    return this.rowData.getCellValue(row, col);
   }
 
   setCellValue(row: number, col: number, value: CellValue): void {
-    writeCell(this.cachedRows, this.columns, row, col, value, {
-      onCellValueChanged: this.onCellValueChanged,
-      getRowId: this.getRowId,
-    });
+    this.rowData.setCellValue(row, col, value);
   }
 
   // ===========================================================================
@@ -416,7 +388,7 @@ export class GridCore<TData = unknown> {
       emitContentSize: () => this.emitContentSize(),
       emitHeaders: () => this.emitHeaders(),
       columns: this.columns,
-      onComplete: () => {},
+      onComplete: () => { },
     });
     if (adjustedTo !== null) this.onColumnMoved?.(fromIndex, adjustedTo);
   }
@@ -431,8 +403,8 @@ export class GridCore<TData = unknown> {
    */
   commitRowDrag(sourceIndex: number, targetIndex: number): void {
     applyRowDragCommit(sourceIndex, targetIndex, {
-      dataSource: this.dataSource,
-      cachedRows: this.cachedRows,
+      dataSource: this.rowData.getDataSource(),
+      cachedRows: this.rowData.getCachedRows(),
       slotPool: this.slotPool,
       highlight: this.highlight,
     });
@@ -459,7 +431,7 @@ export class GridCore<TData = unknown> {
   }
 
   getRowCount(): number {
-    return this.totalRows;
+    return this.rowData.getTotalRows();
   }
 
   getRowHeight(): number {
@@ -514,7 +486,7 @@ export class GridCore<TData = unknown> {
   }
 
   getRowData(rowIndex: number): TData | undefined {
-    return this.cachedRows.get(rowIndex);
+    return this.rowData.getRowData(rowIndex);
   }
 
   // ===========================================================================
@@ -525,7 +497,7 @@ export class GridCore<TData = unknown> {
    * Refresh data from the data source.
    */
   async refresh(): Promise<void> {
-    await this.fetchData();
+    await this.rowData.loadInitial();
     this.highlight?.clearAllCaches();
     // refreshAllSlots (not syncSlots) ensures stale slot data is re-read
     // when totalRows didn't change but row contents did.
@@ -540,13 +512,7 @@ export class GridCore<TData = unknown> {
    * Use this when data was mutated via MutableDataSource transactions.
    */
   async refreshFromTransaction(): Promise<void> {
-    await refreshTransactionData({
-      dataSource: this.dataSource,
-      sortFilter: this.sortFilter,
-      cachedRows: this.cachedRows,
-      setTotalRows: (n) => { this.totalRows = n; },
-      getColumns: () => this.columns,
-    });
+    await this.rowData.refreshFromTransaction();
     this.highlight?.clearAllCaches();
     this.slotPool.refreshAllSlots();
     this.emitContentSize();
@@ -611,9 +577,9 @@ export class GridCore<TData = unknown> {
     if (this.editManager.getState()) {
       this.editManager.cancel();
     }
-    this.dataSource = dataSource;
+    this.rowData.setDataSource(dataSource);
     await this.refresh();
-    this.clearSelectionIfInvalid(this.totalRows);
+    this.clearSelectionIfInvalid(this.rowData.getTotalRows());
   }
 
   /**
@@ -641,14 +607,10 @@ export class GridCore<TData = unknown> {
     this.highlight?.destroy();
     this.sortFilter.destroy();
     this.rowMutation.destroy();
-
-    // Clear cached row data (can be large for big datasets)
-    this.cachedRows.clear();
+    this.rowData.destroy();
 
     // Clear listeners
     this.batcher.clearListeners();
 
-    // Reset state
-    this.totalRows = 0;
   }
 }

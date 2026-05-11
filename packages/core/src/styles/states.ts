@@ -82,6 +82,9 @@ export const statesStyles: string = `
   z-index: 1000;
   max-width: 80%;
   text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* =============================================================================

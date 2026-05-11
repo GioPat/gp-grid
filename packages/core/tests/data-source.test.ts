@@ -29,12 +29,12 @@ const sampleData: TestRow[] = [
 ];
 
 describe("createClientDataSource", () => {
-  describe("pagination", () => {
-    it("should return first page of data", async () => {
+  describe("row range", () => {
+    it("should return first row range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 2 },
+        range: { startRow: 0, endRow: 2 },
       });
 
       expect(result.rows).toHaveLength(2);
@@ -43,11 +43,11 @@ describe("createClientDataSource", () => {
       expect(result.totalRows).toBe(5);
     });
 
-    it("should return second page of data", async () => {
+    it("should return second row range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 1, pageSize: 2 },
+        range: { startRow: 2, endRow: 4 },
       });
 
       expect(result.rows).toHaveLength(2);
@@ -55,33 +55,33 @@ describe("createClientDataSource", () => {
       expect(result.rows[1].name).toBe("Diana");
     });
 
-    it("should return partial last page", async () => {
+    it("should return partial last range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 2, pageSize: 2 },
+        range: { startRow: 4, endRow: 6 },
       });
 
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0].name).toBe("Eve");
     });
 
-    it("should return empty array for out-of-bounds page", async () => {
+    it("should return empty array for out-of-bounds range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 10, pageSize: 2 },
+        range: { startRow: 20, endRow: 22 },
       });
 
       expect(result.rows).toHaveLength(0);
       expect(result.totalRows).toBe(5);
     });
 
-    it("should return all data with large page size", async () => {
+    it("should return all data with large range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
       });
 
       expect(result.rows).toHaveLength(5);
@@ -93,7 +93,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "name", direction: "asc" }],
       });
 
@@ -106,7 +106,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "name", direction: "desc" }],
       });
 
@@ -119,7 +119,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -130,7 +130,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "age", direction: "desc" }],
       });
 
@@ -148,7 +148,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(dataWithDuplicates);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [
           { colId: "age", direction: "asc" },
           { colId: "name", direction: "desc" },
@@ -164,7 +164,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "nested.city", direction: "asc" }],
       });
 
@@ -183,7 +183,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(dataWithNulls);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "nested.city", direction: "asc" }],
       });
 
@@ -199,7 +199,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { name: "ali" },
       });
 
@@ -212,7 +212,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { email: "example.com" },
       });
 
@@ -223,7 +223,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { name: "a", email: "alice" },
       });
 
@@ -235,7 +235,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { "nested.country": "usa" },
       });
 
@@ -247,7 +247,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { name: "" },
       });
 
@@ -258,7 +258,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { name: "xyz" },
       });
 
@@ -270,7 +270,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { age: "30" },
       });
 
@@ -284,7 +284,7 @@ describe("createClientDataSource", () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         filter: { email: "example.com" },
         sort: [{ colId: "age", direction: "desc" }],
       });
@@ -294,11 +294,11 @@ describe("createClientDataSource", () => {
       expect(result.rows[4].age).toBe(22);
     });
 
-    it("should paginate filtered and sorted results", async () => {
+    it("should slice filtered and sorted results", async () => {
       const dataSource = createClientDataSource(sampleData);
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 2 },
+        range: { startRow: 0, endRow: 2 },
         filter: { email: "example" },
         sort: [{ colId: "name", direction: "asc" }],
       });
@@ -328,7 +328,7 @@ describe("createClientDataSource", () => {
       });
       
       const result = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 100 },
+        range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "customField", direction: "desc" }],
       });
 
@@ -353,7 +353,7 @@ describe("createClientDataSource", () => {
     it("sorts object column ascending by JSON string representation", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
       const result = await ds.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "meta", direction: "asc" }],
       });
 
@@ -367,7 +367,7 @@ describe("createClientDataSource", () => {
     it("sorts object column descending", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
       const result = await ds.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "meta", direction: "desc" }],
       });
 
@@ -381,7 +381,7 @@ describe("createClientDataSource", () => {
     it("filters object column with text 'contains'", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
       const result = await ds.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           meta: {
             conditions: [{ type: "text", operator: "contains", value: "Alice" }],
@@ -406,7 +406,7 @@ describe("createServerDataSource", () => {
     const dataSource = createServerDataSource(mockFetch);
     
     const request: DataSourceRequest = {
-      pagination: { pageIndex: 0, pageSize: 10 },
+      range: { startRow: 0, endRow: 10 },
       sort: [{ colId: "name", direction: "asc" }],
       filter: { name: "test" },
     };
@@ -423,7 +423,7 @@ describe("createServerDataSource", () => {
     const dataSource = createServerDataSource(mockFetch);
     
     const request: DataSourceRequest = {
-      pagination: { pageIndex: 5, pageSize: 25 },
+      range: { startRow: 125, endRow: 150 },
       sort: [
         { colId: "col1", direction: "asc" },
         { colId: "col2", direction: "desc" },
@@ -435,7 +435,7 @@ describe("createServerDataSource", () => {
 
     expect(mockFetch).toHaveBeenCalledWith(request);
     const calledWith = mockFetch.mock.calls[0][0];
-    expect(calledWith.pagination).toEqual({ pageIndex: 5, pageSize: 25 });
+    expect(calledWith.range).toEqual({ startRow: 125, endRow: 150 });
     expect(calledWith.sort).toHaveLength(2);
     expect(calledWith.filter).toEqual({ field1: "value1", field2: "value2" });
   });
@@ -445,7 +445,7 @@ describe("createServerDataSource", () => {
     const dataSource = createServerDataSource(mockFetch);
     
     await expect(
-      dataSource.fetch({ pagination: { pageIndex: 0, pageSize: 10 } })
+      dataSource.fetch({ range: { startRow: 0, endRow: 10 } })
     ).rejects.toThrow("Network error");
   });
 });
@@ -455,7 +455,7 @@ describe("createDataSourceFromArray", () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
     const result = await dataSource.fetch({
-      pagination: { pageIndex: 0, pageSize: 100 },
+      range: { startRow: 0, endRow: 100 },
     });
 
     expect(result.rows).toHaveLength(5);
@@ -466,7 +466,7 @@ describe("createDataSourceFromArray", () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
     const result = await dataSource.fetch({
-      pagination: { pageIndex: 0, pageSize: 100 },
+      range: { startRow: 0, endRow: 100 },
       sort: [{ colId: "name", direction: "asc" }],
     });
 
@@ -477,7 +477,7 @@ describe("createDataSourceFromArray", () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
     const result = await dataSource.fetch({
-      pagination: { pageIndex: 0, pageSize: 100 },
+      range: { startRow: 0, endRow: 100 },
       filter: { name: "bob" },
     });
 
@@ -489,7 +489,7 @@ describe("createDataSourceFromArray", () => {
     const dataSource = createDataSourceFromArray([]);
     
     const result = await dataSource.fetch({
-      pagination: { pageIndex: 0, pageSize: 10 },
+      range: { startRow: 0, endRow: 10 },
     });
 
     expect(result.rows).toHaveLength(0);

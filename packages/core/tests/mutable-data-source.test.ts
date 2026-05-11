@@ -39,7 +39,7 @@ describe("MutableClientDataSource", () => {
   describe("basic functionality", () => {
     it("should fetch data correctly", async () => {
       const response = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
       });
 
       expect(response.rows).toHaveLength(3);
@@ -52,7 +52,7 @@ describe("MutableClientDataSource", () => {
       await dataSource.flushTransactions();
 
       const response = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
       });
 
       const updatedRow = response.rows.find((row) => row.id === 1);
@@ -63,7 +63,7 @@ describe("MutableClientDataSource", () => {
   describe("sorting", () => {
     it("should sort small datasets synchronously", async () => {
       const response = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "asc" }],
       });
 
@@ -81,7 +81,7 @@ describe("MutableClientDataSource", () => {
       });
 
       const response = await largeDataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
 
@@ -107,7 +107,7 @@ describe("MutableClientDataSource", () => {
       });
 
       const response = await largeDataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "desc" }],
       });
 
@@ -133,7 +133,7 @@ describe("MutableClientDataSource", () => {
       await dataSource.flushTransactions();
 
       const response = await dataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 10 },
+        range: { startRow: 0, endRow: 10 },
         filter: {
           age: {
             conditions: [{ type: "number", operator: ">", value: 25 }],
@@ -158,7 +158,7 @@ describe("MutableClientDataSource", () => {
       });
 
       const response = await largeDataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 5 },
+        range: { startRow: 0, endRow: 5 },
         sort: [{ colId: "name", direction: "asc" }],
       });
 
@@ -178,7 +178,7 @@ describe("MutableClientDataSource", () => {
       });
 
       const response = await largeDataSource.fetch({
-        pagination: { pageIndex: 0, pageSize: 5 },
+        range: { startRow: 0, endRow: 5 },
         sort: [{ colId: "age", direction: "desc" }],
       });
 

@@ -4,6 +4,10 @@ export {
   type RowMutationManagerOptions,
 } from "./row-mutation-manager";
 export {
+  RowDataManager,
+  type RowDataManagerOptions,
+} from "./row-data-manager";
+export {
   ScrollVirtualizationManager,
   type ScrollVirtualizationManagerOptions,
 } from "./scroll-virtualization-manager";

@@ -15,11 +15,13 @@ export { EditManager } from "./edit-manager";
 export { InputHandler } from "./input-handler";
 export {
   HighlightManager,
+  RowDataManager,
   SortFilterManager,
   RowMutationManager,
   ScrollVirtualizationManager,
   TransactionManager,
   type RowMutationManagerOptions,
+  type RowDataManagerOptions,
   type SortFilterManagerOptions,
   type ScrollVirtualizationManagerOptions,
 } from "./managers";
@@ -45,6 +47,7 @@ export type {
   MutableDataSource,
   MutableClientDataSourceOptions,
   DataChangeListener,
+  ServerDataSourceOptions,
 } from "./data-source";
 export type {
   IndexedDataStoreOptions,
@@ -134,6 +137,8 @@ export type {
   DataSource,
   DataSourceRequest,
   DataSourceResponse,
+  DataSourceRange,
+  DataSourceLoadMode,
 
   // Instructions
   GridInstruction,
@@ -177,6 +182,10 @@ export type {
 
   /** Options */
   GridCoreOptions,
+  RowLoadingOptions,
+  RowLoadingMode,
+  RowCacheOptions,
+  RowCacheEviction,
 
   // Renderer params (for adapters)
   CellRendererParams,

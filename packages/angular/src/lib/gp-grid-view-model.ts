@@ -63,6 +63,7 @@ export class GpGridViewModel {
   readonly contentHeight = signal<number>(0);
   readonly rowsWrapperOffset = signal<number>(0);
   readonly slots = signal<Map<string, SlotData>>(new Map());
+  readonly totalRows = signal<number>(0);
 
   readonly effectiveColumns: Signal<ColumnDefinition[]>;
   readonly visibleColumnWithIndices: Signal<VisibleColumnInfo[]>;
@@ -71,8 +72,6 @@ export class GpGridViewModel {
   readonly totalWidth: Signal<number>;
   readonly fillHandlePosition: Signal<FillHandlePosition | null>;
   readonly slotsArray: Signal<SlotData[]>;
-  readonly totalRows: Signal<number>;
-
   readonly batchSetters: BatchChangeSetters;
 
   private filterAnchorEl: HTMLElement | null = null;
@@ -108,7 +107,6 @@ export class GpGridViewModel {
       })
     );
     this.slotsArray = computed(() => [...this.slots().values()]);
-    this.totalRows = computed(() => deps.getRows().length);
 
     this.batchSetters = {
       setContentWidth: (v) => this.contentWidth.set(v),
@@ -116,6 +114,7 @@ export class GpGridViewModel {
       setRowsWrapperOffset: (v) => this.rowsWrapperOffset.set(v),
       setIsLoading: (v) => this.isLoading.set(v),
       setErrorMessage: (v) => this.errorMessage.set(v),
+      setTotalRows: (v) => this.totalRows.set(v),
       setPendingScrollTop: (v) => this.pendingScrollTop.set(v),
       setActiveCell: (v) => this.activeCell.set(v),
       setSelectionRange: (v) => this.selectionRange.set(v),

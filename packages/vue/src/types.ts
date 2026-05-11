@@ -9,6 +9,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   DataSource,
+  RowLoadingOptions,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -73,6 +74,7 @@ export interface GpGridProps<TData = unknown> {
   rowHeight: number;
   headerHeight?: number;
   overscan?: number;
+  rowLoading?: RowLoadingOptions;
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
