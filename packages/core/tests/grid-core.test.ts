@@ -738,9 +738,9 @@ describe("GridCore", () => {
   });
 
   describe("error handling", () => {
-    it("should emit DATA_ERROR on fetch failure", async () => {
+    it("should emit DATA_ERROR on query failure", async () => {
       const failingDataSource: DataSource<TestRow> = {
-        async fetch() {
+        async query() {
           throw new Error("Network error");
         },
       };
@@ -776,7 +776,7 @@ describe("GridCore", () => {
       
       // Create a mock data source that returns extreme row count
       const extremeDataSource: DataSource<TestRow> = {
-        async fetch(request) {
+        async query(request) {
           const rows: TestRow[] = [];
           const start = request.range.startRow;
           const end = Math.min(request.range.endRow, extremeRowCount);
@@ -838,7 +838,7 @@ describe("GridCore", () => {
       const extremeRowCount = 500_000;
       
       const extremeDataSource: DataSource<TestRow> = {
-        async fetch(request) {
+        async query(request) {
           const rows: TestRow[] = [];
           const start = request.range.startRow;
           const end = Math.min(request.range.endRow, extremeRowCount);

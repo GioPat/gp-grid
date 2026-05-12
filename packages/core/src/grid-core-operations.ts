@@ -113,7 +113,7 @@ export interface RefreshTransactionResult {
 export const refreshTransactionData = async <TData>(
   deps: RefreshTransactionDeps<TData>,
 ): Promise<RefreshTransactionResult> => {
-  const response = await deps.dataSource.fetch(
+  const response = await deps.dataSource.query(
     buildDataSourceRequest({
       range: { startRow: 0, endRow: Number.MAX_SAFE_INTEGER },
       sortModel: deps.sortModel,

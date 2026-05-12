@@ -92,7 +92,7 @@ The mutable API is the same in every framework:
 
 `getRowId` is required for any mutation.
 
-The server-side fetch function receives a `DataSourceRequest`:
+The server-side query function receives a `DataSourceRequest`:
 
 ```ts
 interface DataSourceRequest {
@@ -141,7 +141,7 @@ if (req.filter) {
 }
 ```
 
-The fetch returns `{ rows: TData[]; totalRows: number }`. Paginated loading is the default; tune via `rowLoading.cache` — **this is a prop on the grid component, NOT a second argument to `createServerDataSource`**. `createServerDataSource(fetchFn, options?)` only accepts `{ loadMode? }` as options; cache config goes on the grid:
+The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is the default; tune via `rowLoading.cache` — **this is a prop on the grid component, NOT a second argument to `createServerDataSource`**. `createServerDataSource(queryFn, options?)` only accepts `{ loadMode? }` as options; cache config goes on the grid:
 
 ```tsx
 // React

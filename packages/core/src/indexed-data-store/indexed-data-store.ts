@@ -144,7 +144,7 @@ export class IndexedDataStore<TData = unknown> {
 
   /**
    * Query data with sorting, filtering, and row-range slicing.
-   * Compatible with DataSource.fetch() interface.
+   * Compatible with DataSource.query() interface.
    */
   query(request: DataSourceRequest): DataSourceResponse<TData> {
     // Update sort model (clear if undefined)

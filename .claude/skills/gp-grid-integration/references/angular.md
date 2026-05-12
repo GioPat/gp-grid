@@ -220,7 +220,7 @@ export class UsersGridComponent {
 
 Initialize once as a class field (or in the constructor / `ngOnInit`) so the data source identity is stable across change detection cycles.
 
-**Tune the page cache via the `[rowLoading]` input on `<gp-grid>`, NOT as a second arg to `createServerDataSource`.** `createServerDataSource(fetchFn, options?)` only accepts `{ loadMode? }`; cache config is a grid-level concern:
+**Tune the page cache via the `[rowLoading]` input on `<gp-grid>`, NOT as a second arg to `createServerDataSource`.** `createServerDataSource(queryFn, options?)` only accepts `{ loadMode? }`; cache config is a grid-level concern:
 
 ```ts
 protected readonly rowLoading: RowLoadingOptions = {

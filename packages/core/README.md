@@ -244,7 +244,7 @@ Both data source types implement this interface:
 
 ```typescript
 interface DataSource<TData = Row> {
-  fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
+  query(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
 }
 
 interface DataSourceRequest {
@@ -265,8 +265,8 @@ interface DataSourceResponse<TData> {
 `createServerDataSource` uses paginated loading by default. The grid sends
 one absolute `range`, so APIs can use `startRow` as an offset and
 `endRow - startRow` as a limit. Use
-`createServerDataSource(fetchFn, { loadMode: "all" })` or
-`rowLoading: { mode: "all" }` when you intentionally want fetch-all behavior.
+`createServerDataSource(queryFn, { loadMode: "all" })` or
+`rowLoading: { mode: "all" }` when you intentionally want load-all behavior.
 
 Paginated cache aggressiveness is controlled through `rowLoading.cache`:
 

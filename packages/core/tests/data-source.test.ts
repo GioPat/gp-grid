@@ -33,7 +33,7 @@ describe("createClientDataSource", () => {
     it("should return first row range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 2 },
       });
 
@@ -46,7 +46,7 @@ describe("createClientDataSource", () => {
     it("should return second row range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 2, endRow: 4 },
       });
 
@@ -58,7 +58,7 @@ describe("createClientDataSource", () => {
     it("should return partial last range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 4, endRow: 6 },
       });
 
@@ -69,7 +69,7 @@ describe("createClientDataSource", () => {
     it("should return empty array for out-of-bounds range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 20, endRow: 22 },
       });
 
@@ -80,7 +80,7 @@ describe("createClientDataSource", () => {
     it("should return all data with large range", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
       });
 
@@ -92,7 +92,7 @@ describe("createClientDataSource", () => {
     it("should sort ascending by string field", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "name", direction: "asc" }],
       });
@@ -105,7 +105,7 @@ describe("createClientDataSource", () => {
     it("should sort descending by string field", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "name", direction: "desc" }],
       });
@@ -118,7 +118,7 @@ describe("createClientDataSource", () => {
     it("should sort ascending by numeric field", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "age", direction: "asc" }],
       });
@@ -129,7 +129,7 @@ describe("createClientDataSource", () => {
     it("should sort descending by numeric field", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "age", direction: "desc" }],
       });
@@ -147,7 +147,7 @@ describe("createClientDataSource", () => {
       
       const dataSource = createClientDataSource(dataWithDuplicates);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [
           { colId: "age", direction: "asc" },
@@ -163,7 +163,7 @@ describe("createClientDataSource", () => {
     it("should handle nested field sorting", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "nested.city", direction: "asc" }],
       });
@@ -182,7 +182,7 @@ describe("createClientDataSource", () => {
       
       const dataSource = createClientDataSource(dataWithNulls);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "nested.city", direction: "asc" }],
       });
@@ -198,7 +198,7 @@ describe("createClientDataSource", () => {
     it("should filter by string field (case-insensitive)", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { name: "ali" },
       });
@@ -211,7 +211,7 @@ describe("createClientDataSource", () => {
     it("should filter by partial match", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { email: "example.com" },
       });
@@ -222,7 +222,7 @@ describe("createClientDataSource", () => {
     it("should support multiple filters (AND logic)", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { name: "a", email: "alice" },
       });
@@ -234,7 +234,7 @@ describe("createClientDataSource", () => {
     it("should filter by nested field", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { "nested.country": "usa" },
       });
@@ -246,7 +246,7 @@ describe("createClientDataSource", () => {
     it("should ignore empty filter values", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { name: "" },
       });
@@ -257,7 +257,7 @@ describe("createClientDataSource", () => {
     it("should return empty for no matches", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { name: "xyz" },
       });
@@ -269,7 +269,7 @@ describe("createClientDataSource", () => {
     it("should filter numeric values as strings", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { age: "30" },
       });
@@ -283,7 +283,7 @@ describe("createClientDataSource", () => {
     it("should filter first then sort", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         filter: { email: "example.com" },
         sort: [{ colId: "age", direction: "desc" }],
@@ -297,7 +297,7 @@ describe("createClientDataSource", () => {
     it("should slice filtered and sorted results", async () => {
       const dataSource = createClientDataSource(sampleData);
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 2 },
         filter: { email: "example" },
         sort: [{ colId: "name", direction: "asc" }],
@@ -327,7 +327,7 @@ describe("createClientDataSource", () => {
         },
       });
       
-      const result = await dataSource.fetch({
+      const result = await dataSource.query({
         range: { startRow: 0, endRow: 100 },
         sort: [{ colId: "customField", direction: "desc" }],
       });
@@ -352,7 +352,7 @@ describe("createClientDataSource", () => {
 
     it("sorts object column ascending by JSON string representation", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
-      const result = await ds.fetch({
+      const result = await ds.query({
         range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "meta", direction: "asc" }],
       });
@@ -366,7 +366,7 @@ describe("createClientDataSource", () => {
 
     it("sorts object column descending", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
-      const result = await ds.fetch({
+      const result = await ds.query({
         range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "meta", direction: "desc" }],
       });
@@ -380,7 +380,7 @@ describe("createClientDataSource", () => {
 
     it("filters object column with text 'contains'", async () => {
       const ds = createClientDataSource(objectData, { useWorker: false });
-      const result = await ds.fetch({
+      const result = await ds.query({
         range: { startRow: 0, endRow: 10 },
         filter: {
           meta: {
@@ -397,7 +397,7 @@ describe("createClientDataSource", () => {
 });
 
 describe("createServerDataSource", () => {
-  it("should delegate to fetch function", async () => {
+  it("should delegate to query function", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       rows: [{ id: 1, name: "Test" }],
       totalRows: 100,
@@ -411,7 +411,7 @@ describe("createServerDataSource", () => {
       filter: { name: "test" },
     };
     
-    const result = await dataSource.fetch(request);
+    const result = await dataSource.query(request);
 
     expect(mockFetch).toHaveBeenCalledWith(request);
     expect(result.rows).toHaveLength(1);
@@ -431,7 +431,7 @@ describe("createServerDataSource", () => {
       filter: { field1: "value1", field2: "value2" },
     };
     
-    await dataSource.fetch(request);
+    await dataSource.query(request);
 
     expect(mockFetch).toHaveBeenCalledWith(request);
     const calledWith = mockFetch.mock.calls[0][0];
@@ -440,12 +440,12 @@ describe("createServerDataSource", () => {
     expect(calledWith.filter).toEqual({ field1: "value1", field2: "value2" });
   });
 
-  it("should handle fetch errors", async () => {
+  it("should handle query errors", async () => {
     const mockFetch = vi.fn().mockRejectedValue(new Error("Network error"));
     const dataSource = createServerDataSource(mockFetch);
     
     await expect(
-      dataSource.fetch({ range: { startRow: 0, endRow: 10 } })
+      dataSource.query({ range: { startRow: 0, endRow: 10 } })
     ).rejects.toThrow("Network error");
   });
 });
@@ -454,7 +454,7 @@ describe("createDataSourceFromArray", () => {
   it("should create a client data source from array", async () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
-    const result = await dataSource.fetch({
+    const result = await dataSource.query({
       range: { startRow: 0, endRow: 100 },
     });
 
@@ -465,7 +465,7 @@ describe("createDataSourceFromArray", () => {
   it("should support sorting", async () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
-    const result = await dataSource.fetch({
+    const result = await dataSource.query({
       range: { startRow: 0, endRow: 100 },
       sort: [{ colId: "name", direction: "asc" }],
     });
@@ -476,7 +476,7 @@ describe("createDataSourceFromArray", () => {
   it("should support filtering", async () => {
     const dataSource = createDataSourceFromArray(sampleData);
     
-    const result = await dataSource.fetch({
+    const result = await dataSource.query({
       range: { startRow: 0, endRow: 100 },
       filter: { name: "bob" },
     });
@@ -488,7 +488,7 @@ describe("createDataSourceFromArray", () => {
   it("should handle empty array", async () => {
     const dataSource = createDataSourceFromArray([]);
     
-    const result = await dataSource.fetch({
+    const result = await dataSource.query({
       range: { startRow: 0, endRow: 10 },
     });
 

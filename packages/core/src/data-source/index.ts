@@ -11,7 +11,7 @@ export {
 // Server data source
 export {
   createServerDataSource,
-  type ServerFetchFunction,
+  type ServerQueryFunction,
   type ServerDataSourceOptions,
 } from "./server-data-source";
 

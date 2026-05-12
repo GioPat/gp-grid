@@ -46,8 +46,8 @@ export interface DataSource<TData = unknown> {
    * Undefined is treated as "all".
    */
   readonly loadMode?: DataSourceLoadMode;
-  /** Fetch data based on the request */
-  fetch(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
+  /** Query data based on the request (range, sort, filter). */
+  query(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
   /** Optional cleanup method to release resources */
   destroy?: () => void;
   /** Move a row */

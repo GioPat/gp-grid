@@ -37,8 +37,8 @@ describe("MutableClientDataSource", () => {
   });
 
   describe("basic functionality", () => {
-    it("should fetch data correctly", async () => {
-      const response = await dataSource.fetch({
+    it("should query data correctly", async () => {
+      const response = await dataSource.query({
         range: { startRow: 0, endRow: 10 },
       });
 
@@ -51,7 +51,7 @@ describe("MutableClientDataSource", () => {
       dataSource.updateRow(1, { name: "Updated Charlie" });
       await dataSource.flushTransactions();
 
-      const response = await dataSource.fetch({
+      const response = await dataSource.query({
         range: { startRow: 0, endRow: 10 },
       });
 
@@ -62,7 +62,7 @@ describe("MutableClientDataSource", () => {
 
   describe("sorting", () => {
     it("should sort small datasets synchronously", async () => {
-      const response = await dataSource.fetch({
+      const response = await dataSource.query({
         range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "asc" }],
       });
@@ -80,7 +80,7 @@ describe("MutableClientDataSource", () => {
         useWorker: true,
       });
 
-      const response = await largeDataSource.fetch({
+      const response = await largeDataSource.query({
         range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "age", direction: "asc" }],
       });
@@ -106,7 +106,7 @@ describe("MutableClientDataSource", () => {
         useWorker: false, // Disable worker
       });
 
-      const response = await largeDataSource.fetch({
+      const response = await largeDataSource.query({
         range: { startRow: 0, endRow: 10 },
         sort: [{ colId: "name", direction: "desc" }],
       });
@@ -132,7 +132,7 @@ describe("MutableClientDataSource", () => {
       dataSource.updateRow(3, { age: 20 });
       await dataSource.flushTransactions();
 
-      const response = await dataSource.fetch({
+      const response = await dataSource.query({
         range: { startRow: 0, endRow: 10 },
         filter: {
           age: {
@@ -157,7 +157,7 @@ describe("MutableClientDataSource", () => {
         parallelSort: { maxWorkers: 2 }, // Custom worker count
       });
 
-      const response = await largeDataSource.fetch({
+      const response = await largeDataSource.query({
         range: { startRow: 0, endRow: 5 },
         sort: [{ colId: "name", direction: "asc" }],
       });
@@ -177,7 +177,7 @@ describe("MutableClientDataSource", () => {
         parallelSort: false, // Disable parallel sort
       });
 
-      const response = await largeDataSource.fetch({
+      const response = await largeDataSource.query({
         range: { startRow: 0, endRow: 5 },
         sort: [{ colId: "age", direction: "desc" }],
       });

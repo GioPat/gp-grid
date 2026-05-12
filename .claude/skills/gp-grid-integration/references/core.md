@@ -175,7 +175,7 @@ Implement the `DataSource<TData>` interface:
 import type { DataSource, DataSourceRequest, DataSourceResponse } from "@gp-grid/core";
 
 class GraphQLDataSource<T> implements DataSource<T> {
-  async fetch(request: DataSourceRequest): Promise<DataSourceResponse<T>> {
+  async query(request: DataSourceRequest): Promise<DataSourceResponse<T>> {
     // DataSourceRequest exposes `range: { startRow, endRow }` (endRow exclusive),
     // NOT a `pagination` field. Derive page/pageSize from the range.
     const pageSize = request.range.endRow - request.range.startRow;

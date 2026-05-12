@@ -91,7 +91,7 @@ export function createClientDataSource<TData = unknown>(
   return {
     loadMode: "all",
 
-    async fetch(
+    async query(
       request: DataSourceRequest,
     ): Promise<DataSourceResponse<TData>> {
       // Use internalData which can be cleared on destroy

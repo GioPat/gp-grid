@@ -144,10 +144,10 @@ export function createMutableClientDataSource<TData = unknown>(
   return {
     loadMode: "all",
 
-    async fetch(
+    async query(
       request: DataSourceRequest,
     ): Promise<DataSourceResponse<TData>> {
-      // Flush any pending transactions before fetching
+      // Flush any pending transactions before querying
       if (transactionManager.hasPending()) {
         emit({ type: "DATA_LOADING" });
         try {

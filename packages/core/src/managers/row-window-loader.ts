@@ -202,7 +202,7 @@ export class RowWindowLoader<TData = unknown> {
     const endRow = this.getBlockEndRow(blockIndex);
     let response: DataSourceResponse<TData>;
     try {
-      response = await this.options.getDataSource().fetch(
+      response = await this.options.getDataSource().query(
         buildDataSourceRequest({
           range: { startRow, endRow },
           sortModel: this.options.getSortModel(),

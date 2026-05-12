@@ -11,7 +11,7 @@ import type {
 // Server Data Source
 // =============================================================================
 
-export type ServerFetchFunction<TData> = (
+export type ServerQueryFunction<TData> = (
   request: DataSourceRequest,
 ) => Promise<DataSourceResponse<TData>>;
 
@@ -22,18 +22,18 @@ export interface ServerDataSourceOptions {
 
 /**
  * Creates a server-side data source that delegates all operations to the server.
- * The fetch function receives sort/filter/range params to pass to the API.
+ * The query function receives sort/filter/range params to pass to the API.
  */
 export function createServerDataSource<TData = unknown>(
-  fetchFn: ServerFetchFunction<TData>,
+  queryFn: ServerQueryFunction<TData>,
   options: ServerDataSourceOptions = {},
 ): DataSource<TData> {
   return {
     loadMode: options.loadMode ?? "paginated",
-    async fetch(
+    async query(
       request: DataSourceRequest,
     ): Promise<DataSourceResponse<TData>> {
-      return fetchFn(request);
+      return queryFn(request);
     },
   };
 }

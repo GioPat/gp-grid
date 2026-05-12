@@ -187,7 +187,7 @@ export class RowDataManager<TData = unknown> {
         columns: this.options.getColumns(),
       });
 
-      const response = await this.dataSource.fetch(request);
+      const response = await this.dataSource.query(request);
       this.cachedRows.clear();
       response.rows.forEach((row, index) => {
         this.cachedRows.set(index, row);

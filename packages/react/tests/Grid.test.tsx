@@ -457,7 +457,7 @@ describe("Grid", () => {
     it("should handle data loading gracefully", async () => {
       // Create a slow data source
       const slowDataSource = {
-        async fetch() {
+        async query() {
           await new Promise((resolve) => setTimeout(resolve, 50));
           return { rows: sampleData, totalRows: sampleData.length };
         },
