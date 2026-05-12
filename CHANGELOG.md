@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.15.0...gp-grid-v0.16.0) (2026-05-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* Change from `fetch` to `query`
+
+### ✨ Features
+
+* Change from `fetch` to `query` ([11f9a2c](https://github.com/GioPat/gp-grid/commit/11f9a2c2f97099dfe836cf0714f77d183f494dd9))
+
 ## [0.15.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.14.0...gp-grid-v0.15.0) (2026-05-11)
 
 
