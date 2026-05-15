@@ -1,6 +1,6 @@
 // packages/react/src/components/FilterPopup.tsx
 
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react";
 import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
 import { calculateFilterPopupPosition } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
@@ -33,31 +33,39 @@ export function FilterPopup({
     visibility: "hidden",
   });
 
-  // Dynamic positioning: recalculate on scroll/resize
-  useEffect(() => {
+  const updatePosition = useCallback((): void => {
     const container = containerRef.current;
     const popup = popupRef.current;
     if (!container || !popup) return;
 
+    const headerCell = container.querySelector(
+      `[data-col-index="${colIndex}"]`,
+    ) as HTMLElement | null;
+    if (!headerCell) return;
+
+    const pos = calculateFilterPopupPosition(headerCell, popup);
+    setPopupStyle({
+      position: "fixed",
+      top: pos.top,
+      left: pos.left,
+      minWidth: pos.minWidth,
+      zIndex: 10000,
+      visibility: "visible",
+    });
+  }, [containerRef, colIndex]);
+
+  // Position synchronously after commit, before paint, so the popup's first
+  // frame is at the new column's anchor — not stuck at the previous column's
+  // coordinates from stale popupStyle state.
+  useLayoutEffect(() => {
+    updatePosition();
+  }, [updatePosition]);
+
+  // Reposition on scroll/resize. Scroll events don't bubble, so listen in the
+  // capture phase on window to catch scrolls from the GridBody scroller, the
+  // page, and any wrapping scroll container in the host app.
+  useEffect(() => {
     let rafId: number | null = null;
-
-    const updatePosition = (): void => {
-      const headerCell = container.querySelector(
-        `[data-col-index="${colIndex}"]`,
-      ) as HTMLElement | null;
-      if (!headerCell || !popupRef.current) return;
-
-      const pos = calculateFilterPopupPosition(headerCell, popupRef.current);
-      setPopupStyle({
-        position: "fixed",
-        top: pos.top,
-        left: pos.left,
-        minWidth: pos.minWidth,
-        zIndex: 10000,
-        visibility: "visible",
-      });
-    };
-
     const handleScrollOrResize = (): void => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
@@ -66,19 +74,15 @@ export function FilterPopup({
       });
     };
 
-    // Initial position (after first render so popup has dimensions)
-    requestAnimationFrame(updatePosition);
-
-    // Listen for scroll on the grid container (captures body scroll)
-    container.addEventListener("scroll", handleScrollOrResize, { passive: true });
+    window.addEventListener("scroll", handleScrollOrResize, { passive: true, capture: true });
     window.addEventListener("resize", handleScrollOrResize);
 
     return () => {
-      container.removeEventListener("scroll", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScrollOrResize, { capture: true });
       window.removeEventListener("resize", handleScrollOrResize);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [containerRef, colIndex]);
+  }, [updatePosition]);
 
   // Close on click outside
   useEffect(() => {

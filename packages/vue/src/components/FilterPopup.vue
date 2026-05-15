@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watchEffect } from "vue";
 import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
 import { calculateFilterPopupPosition } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
@@ -87,22 +87,27 @@ const handleScrollOrResize = (): void => {
   });
 };
 
-onMounted(() => {
-  // Initial position after first render
-  requestAnimationFrame(updatePosition);
+// Reposition whenever colIndex changes (e.g., user clicks another column's
+// filter icon while a popup is open). flush: 'post' runs after Vue commits the
+// DOM, within the same tick — the new position lands before the browser paints,
+// so the popup doesn't briefly appear at the previous column's anchor.
+watchEffect(() => {
+  // Read reactive deps so this effect re-runs when they change.
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  props.colIndex;
+  updatePosition();
+}, { flush: 'post' });
 
-  const container = props.containerRef;
-  if (container) {
-    container.addEventListener("scroll", handleScrollOrResize, { passive: true });
-  }
+onMounted(() => {
+  // Scroll events don't bubble, so listen in the capture phase on window to
+  // catch scrolls from the grid body, the page, and any wrapping scroll
+  // container in the host app.
+  window.addEventListener("scroll", handleScrollOrResize, { passive: true, capture: true });
   window.addEventListener("resize", handleScrollOrResize);
 });
 
 onUnmounted(() => {
-  const container = props.containerRef;
-  if (container) {
-    container.removeEventListener("scroll", handleScrollOrResize);
-  }
+  window.removeEventListener("scroll", handleScrollOrResize, { capture: true });
   window.removeEventListener("resize", handleScrollOrResize);
   if (rafId !== null) cancelAnimationFrame(rafId);
 });

@@ -81,20 +81,32 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
       this.anchorEl();
       this.currentFilter();
       this.initFromCurrentFilter();
-      requestAnimationFrame(() => this.updatePosition());
+      // Update synchronously so the new column's anchor lands before paint,
+      // not one frame later (which would briefly show the popup at the
+      // previously-open column's position).
+      this.updatePosition();
     });
   }
 
   ngAfterViewInit(): void {
+    // Run once the popup element exists; the constructor effect may have run
+    // before the view was ready and bailed.
+    this.updatePosition();
     requestAnimationFrame(() => {
       document.addEventListener('pointerdown', this.onDocumentPointerDown, true);
     });
-    window.addEventListener('resize', this.onWindowResize);
+    // Scroll events don't bubble, so listen in the capture phase on window to
+    // catch scrolls from the grid body, the page, and any wrapping scroll
+    // container in the host app.
+    window.addEventListener('scroll', this.onWindowScrollOrResize, { passive: true, capture: true });
+    window.addEventListener('resize', this.onWindowScrollOrResize);
   }
 
   ngOnDestroy(): void {
     document.removeEventListener('pointerdown', this.onDocumentPointerDown, true);
-    window.removeEventListener('resize', this.onWindowResize);
+    window.removeEventListener('scroll', this.onWindowScrollOrResize, { capture: true });
+    window.removeEventListener('resize', this.onWindowScrollOrResize);
+    if (this.repositionRafId !== null) cancelAnimationFrame(this.repositionRafId);
   }
 
   @HostListener('keydown.escape')
@@ -225,8 +237,14 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     this.close.emit();
   };
 
-  private onWindowResize = (): void => {
-    this.updatePosition();
+  private repositionRafId: number | null = null;
+
+  private onWindowScrollOrResize = (): void => {
+    if (this.repositionRafId !== null) return;
+    this.repositionRafId = requestAnimationFrame(() => {
+      this.repositionRafId = null;
+      this.updatePosition();
+    });
   };
 }
 
