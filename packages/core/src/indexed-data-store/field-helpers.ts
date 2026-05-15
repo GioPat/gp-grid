@@ -21,7 +21,7 @@ export function getFieldValue<TData>(
     value = (value as Record<string, unknown>)[part];
   }
 
-  return (value ?? null) as CellValue;
+  return value as CellValue;
 }
 
 /**

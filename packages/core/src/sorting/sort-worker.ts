@@ -138,7 +138,7 @@ function getFieldValue(row: unknown, field: string): CellValue {
     value = (value as Record<string, unknown>)[part];
   }
 
-  return (value ?? null) as CellValue;
+  return value as CellValue;
 }
 
 const toDisplayString = (v: CellValue): string => {
@@ -414,7 +414,7 @@ if (workerScope.onmessage !== undefined) {
     if (type === "sort") {
       try {
         const sorted = sortData(data, sortModel);
-        workerScope.postMessage?.({ type: "sorted", id, data: sorted } as SortWorkerResponse);
+        workerScope.postMessage?.({ type: "sorted", id, data: sorted });
       } catch (error) {
         workerScope.postMessage?.({ type: "error", id, error: String(error) });
       }
