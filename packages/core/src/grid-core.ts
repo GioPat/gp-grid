@@ -361,10 +361,12 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   /**
-   * Set the width of a column and recompute layout.
+   * Set the displayed width of a column and recompute layout. `width` is the
+   * post-redistribution displayed width — the stored `column.width` is
+   * back-solved so the column ends up exactly `width` pixels wide.
    */
   setColumnWidth(colIndex: number, width: number): void {
-    applyColumnResize(colIndex, width, {
+    applyColumnResize(colIndex, width, this.viewport.getViewportWidth(), {
       batcher: this.batcher,
       slotPool: this.slotPool,
       refreshSlots: "sync",

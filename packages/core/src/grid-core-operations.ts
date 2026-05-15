@@ -38,14 +38,46 @@ const emitColumnLayoutBatch = <TData>(deps: ColumnOperationDeps<TData>): void =>
   deps.onComplete();
 };
 
+/**
+ * Convert a desired displayed width to the stored width that produces it
+ * after `calculateScaledColumnPositions` redistributes leftover viewport
+ * space across visible columns.
+ *
+ * Why: the resize handle reports the scaled (displayed) width the user
+ * dragged to, but redistribution would scale it up again on the next
+ * render, leaving the column wider than the ghost. Back-solving keeps
+ * the post-redistribution width equal to the displayed width.
+ */
+const computeStoredWidthForDisplayed = (
+  colIndex: number,
+  displayedWidth: number,
+  viewportWidth: number,
+  columns: ColumnDefinition[],
+): number => {
+  if (viewportWidth <= 0) return displayedWidth;
+  let otherTotal = 0;
+  for (let i = 0; i < columns.length; i++) {
+    if (i === colIndex) continue;
+    const col = columns[i];
+    if (!col || col.hidden) continue;
+    otherTotal += col.width;
+  }
+  if (otherTotal <= 0) return displayedWidth;
+  if (displayedWidth + otherTotal >= viewportWidth) return displayedWidth;
+  return (displayedWidth * otherTotal) / (viewportWidth - displayedWidth);
+};
+
 export const applyColumnResize = <TData>(
   colIndex: number,
-  width: number,
+  displayedWidth: number,
+  viewportWidth: number,
   deps: ColumnOperationDeps<TData>,
 ): void => {
   const column = deps.columns[colIndex];
   if (!column) return;
-  column.width = width;
+  column.width = column.hidden
+    ? displayedWidth
+    : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, deps.columns);
   emitColumnLayoutBatch({ ...deps, refreshSlots: "sync" });
 };
 

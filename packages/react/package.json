@@ -74,7 +74,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tsdown": "^0.20.3",
+    "tsdown": "^0.22.0",
     "typescript": "~5.9.0"
   }
 }
