@@ -29,7 +29,8 @@ export const filtersStyles: string = `
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow: hidden;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* Mode toggle (Values / Condition) */
