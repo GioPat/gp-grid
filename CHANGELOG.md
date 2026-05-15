@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.16.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.16.0...gp-grid-v0.16.1) (2026-05-15)
+
+
+### 🐛 Bug Fixes
+
+* enable overflow for filters popup ([a421da9](https://github.com/GioPat/gp-grid/commit/a421da9f7c305acf06ccb49577c0b92e43f729b4))
+* resizing now honors the user selection ([13f80af](https://github.com/GioPat/gp-grid/commit/13f80af8f39878397074e73fe76e5a9e301a6631))
+* scrolliing keeps the filter popup sticking ([893f1da](https://github.com/GioPat/gp-grid/commit/893f1da2afb6f62861f8bf1b703edea4f5edfa8e))
+
+
+### ♻️ Refactoring
+
+* remove useless castings ([2add130](https://github.com/GioPat/gp-grid/commit/2add13099996ea0dcc42b6fe885ac46772318093))
+
 ## [0.16.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.15.0...gp-grid-v0.16.0) (2026-05-12)
 
 
