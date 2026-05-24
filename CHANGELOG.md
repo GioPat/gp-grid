@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.17.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.16.1...gp-grid-v0.17.0) (2026-05-24)
+
+
+### ✨ Features
+
+* move all non critical styles into `:where` ([1381312](https://github.com/GioPat/gp-grid/commit/1381312b5c91927111c1f0b986cfa8cdb8b90e41))
+* peek and tooltip capability ([6e76060](https://github.com/GioPat/gp-grid/commit/6e76060407e4ac34f23bc135f3540df52555b67e))
+
+
+### 🐛 Bug Fixes
+
+* now gp-grid scan for all rows O(n), user can provide distinct values. ([e33f696](https://github.com/GioPat/gp-grid/commit/e33f696832a5af9f05964851dac2aa2ad5b9fe6f))
+
 ## [0.16.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.16.0...gp-grid-v0.16.1) (2026-05-15)
 
 
