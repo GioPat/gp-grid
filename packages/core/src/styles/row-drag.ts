@@ -6,11 +6,14 @@ export const rowDragStyles: string = `
    ============================================================================= */
 
 .gp-grid-cell--row-drag-handle {
-  cursor: grab;
   touch-action: none;
 }
 
-.gp-grid-cell--row-drag-handle:active {
+:where(.gp-grid-cell--row-drag-handle) {
+  cursor: grab;
+}
+
+:where(.gp-grid-cell--row-drag-handle:active) {
   cursor: grabbing;
 }
 
@@ -20,6 +23,9 @@ export const rowDragStyles: string = `
   justify-content: center;
   width: 100%;
   height: 100%;
+}
+
+:where(.gp-grid-row-drag-icon) {
   color: var(--gp-grid-text-secondary);
 }
 
@@ -31,14 +37,17 @@ export const rowDragStyles: string = `
 .gp-grid-row-drag-ghost {
   position: fixed;
   pointer-events: none;
-  opacity: 0.8;
   z-index: 2000;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+:where(.gp-grid-row-drag-ghost) {
+  opacity: 0.8;
   background-color: var(--gp-grid-bg, #fff);
   border: 2px solid var(--gp-grid-primary);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  box-sizing: border-box;
 }
 
 .gp-grid-row-drop-indicator {
@@ -46,9 +55,12 @@ export const rowDragStyles: string = `
   left: 0;
   width: 100%;
   height: 3px;
-  background-color: var(--gp-grid-primary);
   z-index: 1000;
   pointer-events: none;
+}
+
+:where(.gp-grid-row-drop-indicator) {
+  background-color: var(--gp-grid-primary);
   border-radius: 2px;
 }
 `;

@@ -7,17 +7,21 @@ export const filtersStyles: string = `
    ============================================================================= */
 
 .gp-grid-filter-popup {
+  max-height: 400px;
+  max-width: min(360px, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+}
+
+:where(.gp-grid-filter-popup) {
   background-color: var(--gp-grid-bg);
   border: 1px solid var(--gp-grid-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  max-height: 400px;
-  display: flex;
-  flex-direction: column;
   font-size: 13px;
 }
 
-.gp-grid-filter-header {
+:where(.gp-grid-filter-header) {
   padding: 10px 12px;
   font-weight: 600;
   border-bottom: 1px solid var(--gp-grid-border-light);
@@ -25,17 +29,23 @@ export const filtersStyles: string = `
 }
 
 .gp-grid-filter-content {
-  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   overflow-y: auto;
   min-height: 0;
+}
+
+:where(.gp-grid-filter-content) {
+  padding: 10px 12px;
+  gap: 10px;
 }
 
 /* Mode toggle (Values / Condition) */
 .gp-grid-filter-mode-toggle {
   display: flex;
+}
+
+:where(.gp-grid-filter-mode-toggle) {
   gap: 4px;
   background-color: var(--gp-grid-bg-alt);
   border-radius: 4px;
@@ -44,6 +54,9 @@ export const filtersStyles: string = `
 
 .gp-grid-filter-mode-toggle button {
   flex: 1;
+}
+
+:where(.gp-grid-filter-mode-toggle button) {
   padding: 6px 10px;
   font-size: 11px;
   font-family: inherit;
@@ -55,18 +68,18 @@ export const filtersStyles: string = `
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.gp-grid-filter-mode-toggle button:hover {
+:where(.gp-grid-filter-mode-toggle button:hover) {
   color: var(--gp-grid-text);
 }
 
-.gp-grid-filter-mode-toggle button.active {
+:where(.gp-grid-filter-mode-toggle button.active) {
   background-color: var(--gp-grid-bg);
   color: var(--gp-grid-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* Info message for too many values */
-.gp-grid-filter-info {
+:where(.gp-grid-filter-info) {
   font-size: 11px;
   color: var(--gp-grid-text-secondary);
   padding: 6px 8px;
@@ -78,6 +91,10 @@ export const filtersStyles: string = `
 .gp-grid-filter-search {
   width: 100%;
   height: 30px;
+  box-sizing: border-box;
+}
+
+:where(.gp-grid-filter-search) {
   padding: 0 10px;
   font-family: inherit;
   font-size: 12px;
@@ -85,10 +102,9 @@ export const filtersStyles: string = `
   border-radius: 4px;
   background-color: var(--gp-grid-input-bg);
   color: var(--gp-grid-text);
-  box-sizing: border-box;
 }
 
-.gp-grid-filter-search:focus {
+:where(.gp-grid-filter-search:focus) {
   outline: none;
   border-color: var(--gp-grid-primary);
 }
@@ -96,11 +112,17 @@ export const filtersStyles: string = `
 /* Select All / Deselect All actions */
 .gp-grid-filter-actions {
   display: flex;
+}
+
+:where(.gp-grid-filter-actions) {
   gap: 8px;
 }
 
 .gp-grid-filter-actions button {
   flex: 1;
+}
+
+:where(.gp-grid-filter-actions button) {
   padding: 4px 8px;
   font-size: 11px;
   font-family: inherit;
@@ -111,11 +133,11 @@ export const filtersStyles: string = `
   cursor: pointer;
 }
 
-.gp-grid-filter-actions button:hover:not(:disabled) {
+:where(.gp-grid-filter-actions button:hover:not(:disabled)) {
   background-color: var(--gp-grid-hover);
 }
 
-.gp-grid-filter-actions button:disabled {
+:where(.gp-grid-filter-actions button:disabled) {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -126,6 +148,9 @@ export const filtersStyles: string = `
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+:where(.gp-grid-filter-list) {
   gap: 4px;
   border: 1px solid var(--gp-grid-border-light);
   border-radius: 4px;
@@ -135,18 +160,24 @@ export const filtersStyles: string = `
 .gp-grid-filter-option {
   display: flex;
   align-items: center;
+}
+
+:where(.gp-grid-filter-option) {
   gap: 8px;
   padding: 4px 6px;
   border-radius: 3px;
   cursor: pointer;
 }
 
-.gp-grid-filter-option:hover {
+:where(.gp-grid-filter-option:hover) {
   background-color: var(--gp-grid-hover);
 }
 
 .gp-grid-filter-option input[type="checkbox"] {
   margin: 0;
+}
+
+:where(.gp-grid-filter-option input[type="checkbox"]) {
   cursor: pointer;
 }
 
@@ -157,7 +188,7 @@ export const filtersStyles: string = `
   white-space: nowrap;
 }
 
-.gp-grid-filter-blank {
+:where(.gp-grid-filter-blank) {
   font-style: italic;
   color: var(--gp-grid-text-muted);
 }
@@ -166,17 +197,26 @@ export const filtersStyles: string = `
 .gp-grid-filter-condition {
   display: flex;
   flex-direction: column;
+}
+
+:where(.gp-grid-filter-condition) {
   gap: 6px;
 }
 
 .gp-grid-filter-row {
   display: flex;
   align-items: center;
+}
+
+:where(.gp-grid-filter-row) {
   gap: 6px;
 }
 
 .gp-grid-filter-row select {
   height: 30px;
+}
+
+:where(.gp-grid-filter-row select) {
   padding: 0 6px;
   font-family: inherit;
   font-size: 12px;
@@ -193,6 +233,14 @@ export const filtersStyles: string = `
 .gp-grid-filter-text-input {
   flex: 1;
   height: 30px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:where(.gp-grid-filter-row input[type="number"]),
+:where(.gp-grid-filter-row input[type="date"]),
+:where(.gp-grid-filter-row input[type="text"]),
+:where(.gp-grid-filter-text-input) {
   padding: 0 8px;
   font-family: inherit;
   font-size: 12px;
@@ -200,16 +248,14 @@ export const filtersStyles: string = `
   border-radius: 4px;
   background-color: var(--gp-grid-input-bg);
   color: var(--gp-grid-text);
-  min-width: 0;
-  box-sizing: border-box;
 }
 
-.gp-grid-filter-row input:focus {
+:where(.gp-grid-filter-row input:focus) {
   outline: none;
   border-color: var(--gp-grid-primary);
 }
 
-.gp-grid-filter-to {
+:where(.gp-grid-filter-to) {
   font-size: 11px;
   color: var(--gp-grid-text-secondary);
 }
@@ -217,6 +263,9 @@ export const filtersStyles: string = `
 .gp-grid-filter-remove {
   width: 24px;
   height: 24px;
+}
+
+:where(.gp-grid-filter-remove) {
   padding: 0;
   font-size: 16px;
   line-height: 1;
@@ -227,7 +276,7 @@ export const filtersStyles: string = `
   cursor: pointer;
 }
 
-.gp-grid-filter-remove:hover {
+:where(.gp-grid-filter-remove:hover) {
   background-color: var(--gp-grid-error-bg);
   color: var(--gp-grid-error-text);
 }
@@ -235,12 +284,18 @@ export const filtersStyles: string = `
 /* AND/OR combination toggle */
 .gp-grid-filter-combination {
   display: flex;
+}
+
+:where(.gp-grid-filter-combination) {
   gap: 4px;
   margin-bottom: 4px;
 }
 
 .gp-grid-filter-combination button {
   flex: 1;
+}
+
+:where(.gp-grid-filter-combination button) {
   padding: 4px 8px;
   font-size: 10px;
   font-family: inherit;
@@ -251,7 +306,7 @@ export const filtersStyles: string = `
   cursor: pointer;
 }
 
-.gp-grid-filter-combination button.active {
+:where(.gp-grid-filter-combination button.active) {
   background-color: var(--gp-grid-primary);
   border-color: var(--gp-grid-primary);
   color: #fff;
@@ -260,6 +315,9 @@ export const filtersStyles: string = `
 /* Add condition button */
 .gp-grid-filter-add {
   width: 100%;
+}
+
+:where(.gp-grid-filter-add) {
   padding: 6px;
   font-size: 11px;
   font-family: inherit;
@@ -270,7 +328,7 @@ export const filtersStyles: string = `
   cursor: pointer;
 }
 
-.gp-grid-filter-add:hover {
+:where(.gp-grid-filter-add:hover) {
   background-color: var(--gp-grid-hover);
   border-color: var(--gp-grid-primary);
   color: var(--gp-grid-primary);
@@ -279,6 +337,9 @@ export const filtersStyles: string = `
 /* Apply / Clear buttons */
 .gp-grid-filter-buttons {
   display: flex;
+}
+
+:where(.gp-grid-filter-buttons) {
   gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--gp-grid-border-light);
@@ -287,6 +348,10 @@ export const filtersStyles: string = `
 .gp-grid-filter-btn-clear,
 .gp-grid-filter-btn-apply {
   flex: 1;
+}
+
+:where(.gp-grid-filter-btn-clear),
+:where(.gp-grid-filter-btn-apply) {
   padding: 8px 12px;
   font-size: 12px;
   font-family: inherit;
@@ -294,23 +359,23 @@ export const filtersStyles: string = `
   cursor: pointer;
 }
 
-.gp-grid-filter-btn-clear {
+:where(.gp-grid-filter-btn-clear) {
   border: 1px solid var(--gp-grid-input-border);
   background-color: var(--gp-grid-bg);
   color: var(--gp-grid-text);
 }
 
-.gp-grid-filter-btn-clear:hover {
+:where(.gp-grid-filter-btn-clear:hover) {
   background-color: var(--gp-grid-hover);
 }
 
-.gp-grid-filter-btn-apply {
+:where(.gp-grid-filter-btn-apply) {
   border: 1px solid var(--gp-grid-primary);
   background-color: var(--gp-grid-primary);
   color: #fff;
 }
 
-.gp-grid-filter-btn-apply:hover {
+:where(.gp-grid-filter-btn-apply:hover) {
   opacity: 0.9;
 }
 `;
