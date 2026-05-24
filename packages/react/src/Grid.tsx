@@ -17,7 +17,7 @@ import {
   calculateFillHandlePosition,
 } from "@gp-grid/core";
 import type { ColumnFilterModel, DataSource } from "@gp-grid/core";
-import { FilterPopup, GridHeader, GridBody } from "./components";
+import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
@@ -424,6 +424,11 @@ export function Grid<TData = unknown>(
     }
   }, []);
 
+  // Handle peek overlay close
+  const handlePeekClose = useCallback(() => {
+    coreRef.current?.stopPeek();
+  }, []);
+
   // Handle cell mouse enter (for highlighting)
   const handleCellMouseEnter = useCallback(
     (rowIndex: number, colIndex: number) => {
@@ -583,6 +588,26 @@ export function Grid<TData = unknown>(
             onClose={handleFilterPopupClose}
           />
         )}
+
+      {/* Cell Peek (read-only multi-line overlay on dblclick of non-editable cell) */}
+      {state.peekCell && (() => {
+        const peekColumn = effectiveColumns[state.peekCell.col];
+        const peekSlot = slotsArray.find(
+          (s) => s.rowIndex === state.peekCell!.row,
+        );
+        if (!peekColumn || !peekSlot) return null;
+        return (
+          <CellPeek
+            peekCell={state.peekCell}
+            column={peekColumn}
+            rowData={peekSlot.rowData}
+            containerRef={outerContainerRef}
+            cellRenderers={cellRenderers}
+            globalCellRenderer={cellRenderer}
+            onClose={handlePeekClose}
+          />
+        );
+      })()}
 
       {/* Column resize line */}
       {dragState.dragType === "column-resize" && dragState.columnResize && (() => {

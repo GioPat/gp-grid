@@ -11,20 +11,20 @@ export const scrollbarStyles: string = `
   height: 8px;
 }
 
-.gp-grid-container::-webkit-scrollbar-track {
+:where(.gp-grid-container)::-webkit-scrollbar-track {
   background-color: var(--gp-grid-scrollbar-track);
 }
 
-.gp-grid-container::-webkit-scrollbar-thumb {
+:where(.gp-grid-container)::-webkit-scrollbar-thumb {
   background-color: var(--gp-grid-scrollbar-thumb);
   border-radius: 4px;
 }
 
-.gp-grid-container::-webkit-scrollbar-thumb:hover {
+:where(.gp-grid-container)::-webkit-scrollbar-thumb:hover {
   background-color: var(--gp-grid-scrollbar-thumb-hover);
 }
 
-.gp-grid-container::-webkit-scrollbar-corner {
+:where(.gp-grid-container)::-webkit-scrollbar-corner {
   background-color: var(--gp-grid-scrollbar-track);
 }
 `;

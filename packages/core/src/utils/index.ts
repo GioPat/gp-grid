@@ -49,6 +49,8 @@ export type {
 export { calculateFilterPopupPosition } from "./popup-position";
 export type { PopupPosition } from "./popup-position";
 
+export { bindPeekSelectAll } from "./peek-select-all";
+
 export { buildDataSourceRequest } from "./data-source-request";
 export type { BuildRequestOptions } from "./data-source-request";
 

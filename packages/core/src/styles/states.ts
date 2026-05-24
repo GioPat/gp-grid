@@ -23,12 +23,15 @@ export const statesStyles: string = `
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%; 
+  height: 100%;
   pointer-events: none;
+}
+
+:where(.gp-grid-loading-overlay) {
   background-color: var(--gp-grid-loading-overlay-bg, rgba(255, 255, 255, 0.4));
 }
 
-.gp-grid-container--dark .gp-grid-loading-overlay {
+:where(.gp-grid-container--dark .gp-grid-loading-overlay) {
   background-color: var(--gp-grid-loading-overlay-bg, rgba(0, 0, 0, 0.3));
 }
 
@@ -38,6 +41,13 @@ export const statesStyles: string = `
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  z-index: 1000;
+  display: flex;
+  pointer-events: auto;
+}
+
+:where(.gp-grid-loading) {
+  align-items: center;
   padding: 12px 20px;
   background-color: var(--gp-grid-loading-bg);
   color: var(--gp-grid-loading-text);
@@ -45,20 +55,19 @@ export const statesStyles: string = `
   border: 1px solid var(--gp-grid-border);
   font-weight: 500;
   font-size: 13px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
   gap: 10px;
-  pointer-events: auto;
 }
 
 .gp-grid-loading-spinner {
   width: 16px;
   height: 16px;
+  animation: gp-grid-spin 0.7s linear infinite;
+}
+
+:where(.gp-grid-loading-spinner) {
   border: 2px solid var(--gp-grid-border);
   border-top-color: var(--gp-grid-primary);
   border-radius: 50%;
-  animation: gp-grid-spin 0.7s linear infinite;
 }
 
 @keyframes gp-grid-spin {
@@ -72,6 +81,12 @@ export const statesStyles: string = `
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  z-index: 1000;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+:where(.gp-grid-error) {
   padding: 12px 20px;
   background-color: var(--gp-grid-error-bg);
   color: var(--gp-grid-error-text);
@@ -79,11 +94,8 @@ export const statesStyles: string = `
   border: 1px solid var(--gp-grid-error-text);
   font-weight: 500;
   font-size: 13px;
-  z-index: 1000;
   max-width: 80%;
   text-align: center;
-  user-select: text;
-  -webkit-user-select: text;
   cursor: text;
 }
 
@@ -96,6 +108,9 @@ export const statesStyles: string = `
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+
+:where(.gp-grid-empty) {
   color: var(--gp-grid-text-muted);
   font-size: 14px;
   text-align: center;

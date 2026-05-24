@@ -18,6 +18,8 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  formatCellValue,
+  getFieldValue,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
@@ -194,10 +196,25 @@ const GridBodyInner = <TData = unknown>(
                     .filter(Boolean)
                     .join(" ");
 
+                  // Native tooltip: show the formatted value on hover so users
+                  // can read content that's clipped by the cell width. Opt out
+                  // per column with `tooltip: false`. Suppressed while editing
+                  // (the input is focused and has its own value).
+                  const titleText =
+                    column.tooltip === false || isEditing
+                      ? ""
+                      : formatCellValue(
+                        getFieldValue(slot.rowData, column.field),
+                        column.valueFormatter,
+                      );
+
                   return (
                     <div
                       key={`${slot.slotId}-${originalIndex}`}
                       className={cellClasses}
+                      data-cell-row={slot.rowIndex}
+                      data-cell-col={originalIndex}
+                      title={titleText || undefined}
                       style={{
                         position: "absolute",
                         left: `${columnPositions[visibleIndex]}px`,

@@ -80,6 +80,12 @@ export const applyInstruction = <TData = unknown>(
     case "STOP_EDIT":
       return { editingCell: null };
 
+    case "START_PEEK":
+      return { peekCell: { row: instruction.row, col: instruction.col } };
+
+    case "STOP_PEEK":
+      return { peekCell: null };
+
     case "SET_CONTENT_SIZE":
       return {
         contentWidth: instruction.width,

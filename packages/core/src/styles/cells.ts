@@ -33,7 +33,6 @@ export const cellStyles: string = `
   top: 0;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -43,6 +42,7 @@ export const cellStyles: string = `
 
 /* Visual properties - :where() for zero specificity, so user highlight classes always win */
 :where(.gp-grid-cell) {
+  align-items: center;
   padding: 0 12px;
   cursor: cell;
   color: var(--gp-grid-text);
@@ -85,17 +85,20 @@ export const cellStyles: string = `
   position: absolute;
   width: 8px;
   height: 8px;
-  background-color: var(--gp-grid-primary);
-  border: 2px solid var(--gp-grid-bg);
-  cursor: crosshair;
   z-index: 11;
   pointer-events: auto;
   box-sizing: border-box;
-  border-radius: 1px;
   touch-action: none;
 }
 
-.gp-grid-fill-handle:hover {
+:where(.gp-grid-fill-handle) {
+  background-color: var(--gp-grid-primary);
+  border: 2px solid var(--gp-grid-bg);
+  cursor: crosshair;
+  border-radius: 1px;
+}
+
+:where(.gp-grid-fill-handle:hover) {
   transform: scale(1.2);
 }
 
@@ -103,13 +106,15 @@ export const cellStyles: string = `
   .gp-grid-fill-handle {
     width: 24px;
     height: 24px;
+  }
+  :where(.gp-grid-fill-handle) {
     border-width: 3px;
     border-radius: 3px;
   }
 }
 
 /* Fill preview (cells being filled) */
-.gp-grid-cell.gp-grid-cell--fill-preview {
+:where(.gp-grid-cell.gp-grid-cell--fill-preview) {
   background-color: var(--gp-grid-primary-light);
   border: 1px dashed var(--gp-grid-primary);
 }
@@ -121,6 +126,9 @@ export const cellStyles: string = `
 .gp-grid-edit-input {
   width: 100%;
   height: 100%;
+}
+
+:where(.gp-grid-edit-input) {
   padding: 0 11px;
   font-family: inherit;
   font-size: inherit;
@@ -132,4 +140,36 @@ export const cellStyles: string = `
 .gp-grid-edit-input:focus {
   outline: none;
 }
+
+/* =============================================================================
+   Cell Peek (read-only multi-line overlay on dblclick of non-editable cell)
+   ============================================================================= */
+
+/* Structural: positioned absolutely by the framework wrapper; must sit above
+   selection (z:5), editing (z:10), fill handle (z:11). */
+.gp-grid-cell-peek {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  overflow: auto;
+  max-height: 320px;
+}
+
+:where(.gp-grid-cell-peek) {
+  padding: 8px 11px;
+  background-color: var(--gp-grid-bg);
+  color: var(--gp-grid-text);
+  border: 2px solid var(--gp-grid-primary);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 `;

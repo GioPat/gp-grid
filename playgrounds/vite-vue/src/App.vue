@@ -19,11 +19,29 @@ interface Person {
     id: number;
     name: string;
     age: number;
-    email: string;
+    bio: string;
+    createdAt: Date;
     status: "active" | "inactive" | "pending";
     salary: number;
     tags: string[];
 }
+
+// Long bio strings pooled so the 1.5M-row dataset doesn't allocate millions of
+// distinct strings. Each row references one of these by index modulo.
+const bioPool: string[] = [
+    "Seasoned backend engineer who spent the last decade chasing tail-latency outliers across distributed message brokers. Mentors junior engineers, writes too many internal docs, and is on a quiet mission to retire every YAML file in the company.",
+    "Joined fresh out of a bootcamp three years ago and now leads the design system working group. Holds strong opinions about color tokens, accessible focus rings, and the perfect motion duration (always 180ms, never 200).",
+    "Former data scientist turned product manager. Still keeps a Jupyter notebook open on the side. Argues that every roadmap should start with a histogram and end with a follow-up question.",
+    "Lives in three time zones and is somehow always the first to reply on Slack. Hobbies include long walks, longer postmortems, and convincing reviewers that this PR is, in fact, small.",
+    "Joined for the coffee, stayed for the codebase. Has opinions on monorepos, file organization, and whether `index.ts` should be allowed to re-export anything at all (it should not).",
+    "Quietly rewrote the deployment pipeline over a long weekend and never told anyone — found out three months later when the on-call rotation noticed the alert volume had dropped by 80%.",
+];
+
+// Date pool: small set of timestamps reused across rows to keep memory flat.
+const datePool: Date[] = Array.from(
+    { length: 60 },
+    (_, i) => new Date(Date.now() - i * 86400000 * 5),
+);
 
 // Helper functions
 function getRandomInt(min: number, max: number): number {
@@ -57,7 +75,8 @@ const generateRowData = (): Person[] =>
         id: i + 1,
         name: `Person ${names[getRandomInt(0, 2)]}`,
         age: getRandomInt(18, 90),
-        email: `person${i + 1}@example.com`,
+        bio: bioPool[i % bioPool.length],
+        createdAt: datePool[i % datePool.length],
         status: statuses[getRandomInt(0, 2)],
         salary: getRandomInt(30000, 150000),
         tags: getRandomTags(),
@@ -90,11 +109,20 @@ const columns: ColumnDefinition[] = [
         },
     },
     {
-        field: "email",
+        field: "bio",
         cellDataType: "text",
-        width: 250,
-        headerName: "Email",
-        editable: true,
+        width: 260,
+        headerName: "Bio",
+        distinctValues: bioPool,
+        // Not editable → double-click opens the read-only peek overlay
+        // (once the Vue wrapper renders one — currently behaviour-only).
+    },
+    {
+        field: "createdAt",
+        cellDataType: "dateTime",
+        width: 200,
+        headerName: "Created",
+        valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : ""),
     },
     {
         field: "status",
@@ -217,7 +245,8 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             Update Row {{ rowIdToUpdate }}
         </button>
         <p class="hint">
-            Double-click on cells to edit (Email column is editable)
+            Double-click cells to edit (Name/Tags), or Bio for a read-only peek
+            overlay
         </p>
     </div>
 

@@ -57,6 +57,7 @@ export class GpGridViewModel {
   readonly selectionRange = signal<CellRange | null>(null);
   readonly editingCell = signal<EditingCellState | null>(null);
   readonly hoverPosition = signal<CellPosition | null>(null);
+  readonly peekCell = signal<CellPosition | null>(null);
   readonly columnsOverride = signal<ColumnDefinition[] | null>(null);
   readonly dragState = signal<DragState>(INITIAL_DRAG_STATE);
   readonly contentWidth = signal<number>(0);
@@ -120,6 +121,7 @@ export class GpGridViewModel {
       setSelectionRange: (v) => this.selectionRange.set(v),
       setEditingCell: (v) => this.editingCell.set(v),
       setHoverPosition: (v) => this.hoverPosition.set(v),
+      setPeekCell: (v) => this.peekCell.set(v),
       setColumnsOverride: (v) => this.columnsOverride.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };

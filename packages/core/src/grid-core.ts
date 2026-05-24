@@ -276,6 +276,27 @@ export class GridCore<TData = unknown> {
     this.editManager.startEdit(row, col);
   }
 
+  /**
+   * Open a read-only peek overlay on a cell. The default cell renderer is
+   * shown in a multi-line container so long values are fully visible.
+   * Returns true if the peek opened (column must be `peekable !== false`
+   * and not currently being edited).
+   */
+  startPeek(row: number, col: number): boolean {
+    const column = this.columns[col];
+    if (!column || column.peekable === false) return false;
+    return this.editManager.startPeek(row, col);
+  }
+
+  /** Close any active peek overlay. */
+  stopPeek(): void {
+    this.editManager.stopPeek();
+  }
+
+  getPeekState(): { row: number; col: number } | null {
+    return this.editManager.getPeekState();
+  }
+
   updateEditValue(value: CellValue): void {
     this.editManager.updateValue(value);
   }

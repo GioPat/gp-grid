@@ -16,10 +16,29 @@ interface Person {
   name: string;
   age: number;
   city: string;
+  bio: string;
+  createdAt: Date;
 }
 
 const NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
 const CITIES = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
+
+// Long bio strings pooled so the 1.5M-row dataset doesn't allocate millions of
+// distinct strings. Each row references one of these by index modulo.
+const BIOS: string[] = [
+  "Seasoned backend engineer who spent the last decade chasing tail-latency outliers across distributed message brokers. Mentors junior engineers, writes too many internal docs, and is on a quiet mission to retire every YAML file in the company.",
+  "Joined fresh out of a bootcamp three years ago and now leads the design system working group. Holds strong opinions about color tokens, accessible focus rings, and the perfect motion duration (always 180ms, never 200).",
+  "Former data scientist turned product manager. Still keeps a Jupyter notebook open on the side. Argues that every roadmap should start with a histogram and end with a follow-up question.",
+  "Lives in three time zones and is somehow always the first to reply on Slack. Hobbies include long walks, longer postmortems, and convincing reviewers that this PR is, in fact, small.",
+  "Joined for the coffee, stayed for the codebase. Has opinions on monorepos, file organization, and whether `index.ts` should be allowed to re-export anything at all (it should not).",
+  "Quietly rewrote the deployment pipeline over a long weekend and never told anyone — found out three months later when the on-call rotation noticed the alert volume had dropped by 80%.",
+];
+
+// Date pool: small set of timestamps reused across rows to keep memory flat.
+const DATES: Date[] = Array.from(
+  { length: 60 },
+  (_, i) => new Date(Date.now() - i * 86400000 * 5),
+);
 
 const generateRows = (count: number): Person[] =>
   Array.from({ length: count }, (_, i) => ({
@@ -27,6 +46,8 @@ const generateRows = (count: number): Person[] =>
     name: NAMES[i % NAMES.length],
     age: 20 + (i % 50),
     city: CITIES[i % CITIES.length],
+    bio: BIOS[i % BIOS.length],
+    createdAt: DATES[i % DATES.length],
   }));
 
 @Component({
@@ -77,6 +98,10 @@ export class App implements AfterViewInit {
       { field: 'name', cellDataType: 'text', headerName: 'Name', width: 200, sortable: true, filterable: true, editable: true },
       { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge },
       { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor, valueFormatter: (v) => `🏙 ${String(v ?? "")}` },
+      // Long text column — not editable so double-click opens the read-only
+      // peek overlay (once the Angular wrapper renders one — currently behaviour-only).
+      { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS },
+      { field: 'createdAt', cellDataType: 'dateTime', headerName: 'Created', width: 200, sortable: true, filterable: true, valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : '') },
     ];
     this.cdr.detectChanges();
   }

@@ -8,6 +8,8 @@ import type {
 } from "./../types";
 import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
 
+const DISTINCT_SCAN_WARN_THRESHOLD = 10_000;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -40,6 +42,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   private sortModel: SortModel[] = [];
   private filterModel: FilterModel = {};
   private openFilterColIndex: number | null = null;
+  private readonly scanWarnedCols = new Set<string>();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
@@ -164,38 +167,35 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   // ===========================================================================
 
   /**
-   * Get distinct values for a column (for filter dropdowns)
-   * For array-type columns (like tags), each unique array combination is returned.
-   * Arrays are sorted internally for consistent comparison.
-   * Limited to maxValues distinct results and maxScanRows rows scanned.
+   * Get distinct values for a column (for filter dropdowns).
    *
-   * When the total exceeds maxScanRows we stride-sample across the full
-   * dataset instead of scanning the first N rows. Sequential scan was
-   * broken under an active sort: Map iteration follows insertion order,
-   * which after sort is the sorted order — so the first 100k rows only
-   * covered the "smallest" values of the column. Stride sampling covers
-   * the whole range at the cost of possibly missing rare values, which
-   * the maxValues cap would have dropped anyway.
+   * When the column defines `distinctValues`, that list is used directly
+   * (deduplicated + sorted by display string). Otherwise the manager scans
+   * every cached row to compute the set. The previous stride-sampling
+   * fallback was removed because the stride could share a factor with a
+   * repeating value pool, causing some values to be unreachable (the
+   * `bio` field in the demo dataset was a real example: stride 15 with a
+   * pool size of 6 yielded only 2 of 6 values).
+   *
+   * For datasets above {@link DISTINCT_SCAN_WARN_THRESHOLD}, a one-time
+   * console warning advises the consumer to pre-supply `distinctValues`
+   * on the column to skip the full scan.
    */
   getDistinctValuesForColumn(
     colId: string,
     maxValues: number = 500,
-    maxScanRows: number = 100000,
   ): CellValue[] {
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (!column) return [];
 
-    const cachedRows = this.options.getCachedRows();
-    const total = cachedRows.size;
-    const stride = total > maxScanRows ? Math.ceil(total / maxScanRows) : 1;
-
     const formatter = column.valueFormatter;
+
+    const sourceValues = column.distinctValues
+      ?? this.scanDistinctValues(column, maxValues);
+
     const valuesMap = new Map<string, CellValue>();
-    for (let i = 0; i < total; i += stride) {
-      const row = cachedRows.get(i);
-      if (row === undefined) continue;
-      const value = getFieldValue(row, column.field);
+    for (const value of sourceValues) {
       const [key, normalized] = this.normalizeDistinctValue(value, formatter);
       if (!valuesMap.has(key)) {
         valuesMap.set(key, normalized);
@@ -203,7 +203,6 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       }
     }
 
-    // Sort the results by their display string
     const results = Array.from(valuesMap.values());
     results.sort((a, b) => {
       const strA = formatCellValue(a, formatter);
@@ -215,6 +214,37 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     });
 
     return results;
+  }
+
+  private scanDistinctValues(
+    column: ColumnDefinition,
+    maxValues: number,
+  ): CellValue[] {
+    const cachedRows = this.options.getCachedRows();
+    const total = cachedRows.size;
+    const colId = column.colId ?? column.field;
+
+    if (total > DISTINCT_SCAN_WARN_THRESHOLD && !this.scanWarnedCols.has(colId)) {
+      this.scanWarnedCols.add(colId);
+      console.warn(
+        `[gp-grid] Scanning ${total} rows to compute distinct values for column "${colId}". `
+        + `Pre-supply ColumnDefinition.distinctValues to skip this scan.`,
+      );
+    }
+
+    const formatter = column.valueFormatter;
+    const valuesMap = new Map<string, CellValue>();
+    for (let i = 0; i < total; i++) {
+      const row = cachedRows.get(i);
+      if (row === undefined) continue;
+      const value = getFieldValue(row, column.field);
+      const [key, normalized] = this.normalizeDistinctValue(value, formatter);
+      if (!valuesMap.has(key)) {
+        valuesMap.set(key, normalized);
+        if (valuesMap.size >= maxValues) break;
+      }
+    }
+    return Array.from(valuesMap.values());
   }
 
   /**
