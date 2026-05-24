@@ -91,7 +91,7 @@ export class KeyboardHandler<TData = unknown> {
   private handleEscape(editingCell: EditingCell): KeyboardResult {
     if (editingCell) {
       this.core.cancelEdit();
-    } else if (this.core.getPeekState() !== null) {
+    } else if (this.core.getPeekState()) {
       this.core.stopPeek();
     } else {
       this.core.selection.clearSelection();

@@ -18,7 +18,7 @@ export const bindPeekSelectAll = (overlay: HTMLElement): (() => void) => {
     if (event.key !== "a" && event.key !== "A") return;
     if (!(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
-    const selection = window.getSelection();
+    const selection = globalThis.getSelection();
     if (!selection) return;
     selection.removeAllRanges();
     const range = document.createRange();
