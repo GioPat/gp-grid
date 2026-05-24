@@ -50,6 +50,7 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
   activeCell: null,
   selectionRange: null,
   editingCell: null,
+  peekCell: null,
   contentWidth: 0,
   contentHeight: args?.initialHeight ?? 0,
   viewportWidth: args?.initialWidth ?? 0,
@@ -75,6 +76,8 @@ export interface GridState<TData = unknown> {
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number; initialValue: CellValue } | null;
+  /** Cell currently shown in a read-only peek overlay (multi-line expand on double-click) */
+  peekCell: CellPosition | null;
   contentWidth: number;
   contentHeight: number;
   /** Viewport width (container's visible width) for column scaling */

@@ -30,6 +30,17 @@ export class KeyboardHandler<TData = unknown> {
   ): KeyboardResult {
     if (filterPopupOpen) return { preventDefault: false };
 
+    // Peek overlay is read-only; only intercept Escape (to close it) and let
+    // every other key reach the browser so Ctrl+A, text selection, etc. work
+    // inside the peek content.
+    if (this.core.getPeekState() !== null) {
+      if (event.key === "Escape") {
+        this.core.stopPeek();
+        return { preventDefault: true };
+      }
+      return { preventDefault: false };
+    }
+
     const editingAndNotSpecialKey =
       editingCell !== null &&
       event.key !== "Enter" &&
@@ -45,6 +56,7 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private moveFocus(direction: Direction, isShift: boolean): KeyboardResult {
+    this.core.stopPeek();
     const { selection } = this.core;
     selection.moveFocus(direction, isShift);
     const newActiveCell = selection.getActiveCell();
@@ -77,8 +89,13 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private handleEscape(editingCell: EditingCell): KeyboardResult {
-    if (editingCell) this.core.cancelEdit();
-    else this.core.selection.clearSelection();
+    if (editingCell) {
+      this.core.cancelEdit();
+    } else if (this.core.getPeekState() !== null) {
+      this.core.stopPeek();
+    } else {
+      this.core.selection.clearSelection();
+    }
     return { preventDefault: true };
   }
 

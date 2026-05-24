@@ -24,8 +24,8 @@ export const GRID_BODY_TEMPLATE = `<div
                 <div
                   [class]="cellClass(slot.rowIndex, entry.originalIndex, entry.column, slot.rowData)"
                   style="position: absolute; top: 0;"
-                  [attr.data-row-index]="slot.rowIndex"
-                  [attr.data-col-index]="entry.originalIndex"
+                  [attr.data-cell-row]="slot.rowIndex"
+                  [attr.data-cell-col]="entry.originalIndex"
                   [style.left.px]="columnPositions()[i]"
                   [style.width.px]="columnWidths()[i]"
                   [style.height.px]="rowHeight()"

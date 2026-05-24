@@ -11,6 +11,7 @@ import {
   input,
   output,
   effect,
+  computed,
 } from '@angular/core';
 import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate, HeaderSortEvent } from './components';
 import type { AngularColumnDefinition } from './types';
@@ -28,6 +29,7 @@ import {
   GridHeaderComponent,
   GridBodyComponent,
   GridOverlaysComponent,
+  CellPeekComponent,
 } from './components';
 import type {
   HeaderPointerDownEvent,
@@ -46,7 +48,7 @@ import { buildGridCore } from './gp-grid.factory';
 @Component({
   selector: 'gp-grid',
   standalone: true,
-  imports: [GridHeaderComponent, GridBodyComponent, GridOverlaysComponent],
+  imports: [GridHeaderComponent, GridBodyComponent, GridOverlaysComponent, CellPeekComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`:host { display: block; height: 100%; min-height: 0; }`],
   template: GP_GRID_TEMPLATE,
@@ -213,8 +215,22 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   };
 
   protected onCellDoubleClick(evt: CellDoubleClickEvent): void {
-    this.bindings.coreRef?.startEdit(evt.rowIndex, evt.colIndex);
+    this.bindings.coreRef?.input.handleCellDoubleClick(evt.rowIndex, evt.colIndex);
   }
+
+  protected onPeekClose(): void {
+    this.bindings.coreRef?.stopPeek();
+  }
+
+  protected peekContext = computed(() => {
+    const peek = this.vm.peekCell();
+    if (peek === null) return null;
+    const column = this.vm.effectiveColumns()[peek.col];
+    if (!column) return null;
+    const slot = [...this.vm.slots().values()].find((s) => s.rowIndex === peek.row);
+    if (!slot) return null;
+    return { peek, column, rowData: slot.rowData };
+  });
 
   protected onEditValueChange(value: string): void {
     this.bindings.coreRef?.updateEditValue(value);

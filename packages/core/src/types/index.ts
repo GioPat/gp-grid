@@ -64,6 +64,8 @@ export type {
   StartEditInstruction,
   StopEditInstruction,
   CommitEditInstruction,
+  StartPeekInstruction,
+  StopPeekInstruction,
   SetContentSizeInstruction,
   UpdateHeaderInstruction,
   OpenFilterPopupInstruction,

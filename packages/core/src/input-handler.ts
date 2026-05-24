@@ -128,6 +128,9 @@ export class InputHandler<TData = unknown> {
     if (event.button !== 0) return noopResult;
     if (this.core.getEditState() !== null) return noopResult;
 
+    // Any new cell interaction closes an open peek overlay.
+    this.core.stopPeek();
+
     const column = this.core.getColumns()[colIndex];
     const wantsRowDrag =
       (column?.rowDrag === true || this.core.isRowDragEntireRow()) &&
@@ -201,7 +204,12 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
-    this.core.startEdit(rowIndex, colIndex);
+    const column = this.core.getColumns()[colIndex];
+    if (column?.editable) {
+      this.core.startEdit(rowIndex, colIndex);
+      return;
+    }
+    this.core.startPeek(rowIndex, colIndex);
   }
 
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {

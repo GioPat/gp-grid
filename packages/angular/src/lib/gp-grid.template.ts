@@ -74,5 +74,16 @@ export const GP_GRID_TEMPLATE = `
         (filterApply)="onFilterApply($event)"
         (filterClose)="onFilterClose()"
       />
+      @if (peekContext(); as ctx) {
+        <gp-grid-cell-peek
+          [peekCell]="ctx.peek"
+          [column]="ctx.column"
+          [rowData]="ctx.rowData"
+          [containerEl]="container"
+          [cellRenderers]="cellRenderers()"
+          [globalCellRenderer]="cellRenderer()"
+          (close)="onPeekClose()"
+        />
+      }
     </div>
   `;

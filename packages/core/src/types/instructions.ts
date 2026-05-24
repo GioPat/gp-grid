@@ -104,6 +104,22 @@ export interface CommitEditInstruction {
 }
 
 // =============================================================================
+// Peek Instructions (read-only multi-line cell overlay)
+// =============================================================================
+
+/** Open a peek overlay on a cell */
+export interface StartPeekInstruction {
+  type: "START_PEEK";
+  row: number;
+  col: number;
+}
+
+/** Close the active peek overlay */
+export interface StopPeekInstruction {
+  type: "STOP_PEEK";
+}
+
+// =============================================================================
 // Scroll Instructions
 // =============================================================================
 
@@ -367,6 +383,9 @@ export type GridInstruction =
   | StartEditInstruction
   | StopEditInstruction
   | CommitEditInstruction
+  /** Peek (read-only expand) */
+  | StartPeekInstruction
+  | StopPeekInstruction
   /** Layout */
   | SetContentSizeInstruction
   | UpdateHeaderInstruction

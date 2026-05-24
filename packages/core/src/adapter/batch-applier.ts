@@ -23,6 +23,7 @@ export interface BatchChangeSetters {
   setSelectionRange: (v: CellRange | null) => void;
   setEditingCell: (v: EditingCell) => void;
   setHoverPosition: (v: CellPosition | null) => void;
+  setPeekCell: (v: CellPosition | null) => void;
   setColumnsOverride: (v: ColumnDefinition[]) => void;
   onFilterPopupChange: (v: FilterPopupState | null) => void;
 }
@@ -87,6 +88,7 @@ const applyScalarState = (
   if (changes.selectionRange !== undefined) setters.setSelectionRange(changes.selectionRange);
   if (changes.editingCell !== undefined) setters.setEditingCell(changes.editingCell);
   if (changes.hoverPosition !== undefined) setters.setHoverPosition(changes.hoverPosition);
+  if (changes.peekCell !== undefined) setters.setPeekCell(changes.peekCell);
 };
 
 const replaceMap = <K, V>(target: Map<K, V>, source: Map<K, V>): void => {

@@ -143,6 +143,8 @@ defineExpose({ bodyRef });
             v-for="({ column, originalIndex }, visibleIndex) in props.visibleColumnsWithIndices"
             :key="`${slot.slotId}-${column.colId ?? column.field}`"
             :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, props.hoverPosition)"
+            :data-cell-row="slot.rowIndex"
+            :data-cell-col="originalIndex"
             :style="{
               position: 'absolute',
               left: `${props.columnPositions[visibleIndex]}px`,

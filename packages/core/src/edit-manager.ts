@@ -1,6 +1,6 @@
 // packages/core/src/edit-manager.ts
 
-import type { EditState, CellValue, ColumnDefinition } from "./types";
+import type { EditState, CellValue, CellPosition, ColumnDefinition } from "./types";
 import { createInstructionEmitter } from "./utils";
 
 // =============================================================================
@@ -27,6 +27,7 @@ export interface EditManagerOptions {
  */
 export class EditManager {
   private editState: EditState | null = null;
+  private peekState: CellPosition | null = null;
   private readonly options: EditManagerOptions;
   private readonly emitter = createInstructionEmitter();
 
@@ -81,6 +82,11 @@ export class EditManager {
       return false;
     }
 
+    // Editing and peeking are mutually exclusive — close any open peek first.
+    if (this.peekState !== null) {
+      this.stopPeek();
+    }
+
     const initialValue = this.options.getCellValue(row, col);
     this.editState = {
       row,
@@ -97,6 +103,40 @@ export class EditManager {
     });
 
     return true;
+  }
+
+  // ===========================================================================
+  // Peek (read-only multi-line overlay)
+  // ===========================================================================
+
+  /**
+   * Get the cell currently shown in a peek overlay, or null.
+   */
+  getPeekState(): CellPosition | null {
+    return this.peekState ? { ...this.peekState } : null;
+  }
+
+  /**
+   * Open a peek overlay on a cell. Caller is responsible for guarding on
+   * `column.peekable` — the manager only refuses when an edit is in progress
+   * (edit and peek are mutually exclusive).
+   * Returns true if the peek was opened.
+   */
+  startPeek(row: number, col: number): boolean {
+    if (this.editState !== null) return false;
+
+    this.peekState = { row, col };
+    this.emit({ type: "START_PEEK", row, col });
+    return true;
+  }
+
+  /**
+   * Close any active peek overlay. No-op if none is open.
+   */
+  stopPeek(): void {
+    if (this.peekState === null) return;
+    this.peekState = null;
+    this.emit({ type: "STOP_PEEK" });
   }
 
   /**
@@ -155,5 +195,6 @@ export class EditManager {
   destroy(): void {
     this.emitter.clearListeners();
     this.editState = null;
+    this.peekState = null;
   }
 }

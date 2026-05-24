@@ -23,6 +23,7 @@ import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeader
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
+import CellPeek from "./components/CellPeek.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -194,6 +195,21 @@ function handleFilterPopupClose(): void {
     core.closeFilterPopup();
   }
 }
+
+// Handle peek overlay close
+function handlePeekClose(): void {
+  coreRef.value?.stopPeek();
+}
+
+// Resolve peek column + row data from current state
+const peekContext = computed(() => {
+  const peek = state.value.peekCell;
+  if (!peek) return null;
+  const column = effectiveColumns.value[peek.col];
+  const slot = slotsArray.value.find((s) => s.rowIndex === peek.row);
+  if (!column || !slot) return null;
+  return { peek, column, rowData: slot.rowData as Row };
+});
 
 // Handle cell mouse enter (for highlighting)
 function handleCellMouseEnter(rowIndex: number, colIndex: number): void {
@@ -493,6 +509,18 @@ defineExpose({
       :current-filter="state.filterPopup.currentFilter"
       @apply="handleFilterApply"
       @close="handleFilterPopupClose"
+    />
+
+    <!-- Cell Peek (read-only multi-line overlay on dblclick of non-editable cell) -->
+    <CellPeek
+      v-if="peekContext"
+      :peek-cell="peekContext.peek"
+      :column="peekContext.column"
+      :row-data="peekContext.rowData"
+      :container-ref="outerContainerRef"
+      :cell-renderers="cellRenderers ?? {}"
+      :global-cell-renderer="cellRenderer"
+      @close="handlePeekClose"
     />
 
     <!-- Column resize line -->

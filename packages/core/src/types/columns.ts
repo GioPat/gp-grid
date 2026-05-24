@@ -33,6 +33,19 @@ export interface ColumnDefinition {
   movable?: boolean;
   /** Whether this column acts as a drag handle for row dragging. Default: false */
   rowDrag?: boolean;
+  /**
+   * Whether double-clicking a non-editable cell opens a read-only peek overlay
+   * that wraps the value across multiple lines. Ignored when `editable` is true
+   * (double-click starts editing instead). Default: true.
+   */
+  peekable?: boolean;
+  /**
+   * Whether to set a native `title` attribute on cells in this column so the
+   * browser shows the full formatted value on hover. Useful when text is
+   * truncated by the cell width. Default: true. Set false to opt out — e.g.
+   * for cells whose custom renderer already provides its own tooltip.
+   */
+  tooltip?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);
@@ -43,6 +56,14 @@ export interface ColumnDefinition {
    * default JSON.stringify may not be suitable (e.g., display a single field of an object).
    */
   valueFormatter?: (value: CellValue) => string;
+  /**
+   * Pre-supplied set of all possible values for the filter popup's "values" mode.
+   * When provided, the grid skips scanning row data to discover distinct values —
+   * use this for large datasets to avoid an O(n) scan when the value domain is
+   * known up front (e.g., enums, fixed tag lists). Values are still de-duplicated
+   * and sorted by their display string.
+   */
+  distinctValues?: CellValue[];
 
   /**
    * Per-column override for column-level highlighting.

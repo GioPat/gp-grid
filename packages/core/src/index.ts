@@ -151,6 +151,8 @@ export type {
   StartEditInstruction,
   StopEditInstruction,
   CommitEditInstruction,
+  StartPeekInstruction,
+  StopPeekInstruction,
   SetContentSizeInstruction,
   UpdateHeaderInstruction,
   StartFillInstruction,
@@ -289,6 +291,9 @@ export type {
 /** Popup positioning helpers */
 export { calculateFilterPopupPosition } from "./utils/popup-position";
 export type { PopupPosition } from "./utils/popup-position";
+
+/** Peek overlay Ctrl/Cmd+A scoping helper. */
+export { bindPeekSelectAll } from "./utils/peek-select-all";
 
 /**
  * Framework-adapter kit. Reactivity-agnostic primitives shared by the
