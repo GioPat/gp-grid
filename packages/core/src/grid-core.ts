@@ -63,6 +63,9 @@ export class GridCore<TData = unknown> {
 
   // Viewport state
   private readonly viewport: ViewportState;
+  // Fractional DOM scrollTop set by the synthetic touch scroller (see
+  // setScrollTopOverride); null when native scroll positions are in charge.
+  private scrollTopOverride: number | null = null;
 
   // Data state
   private readonly rowData: RowDataManager<TData>;
@@ -209,7 +212,7 @@ export class GridCore<TData = unknown> {
     height: number,
   ): void {
     const { changed, viewportSizeChanged } = this.viewport.update(
-      scrollTop,
+      this.scrollTopOverride ?? scrollTop,
       scrollLeft,
       width,
       height,
@@ -475,6 +478,20 @@ export class GridCore<TData = unknown> {
 
   isScalingActive(): boolean {
     return this.scrollVirtualization.isScalingActive();
+  }
+
+  /**
+   * Override the DOM scrollTop that setViewport uses, at sub-pixel
+   * resolution. When scroll virtualization compresses the DOM scroll space,
+   * the browser quantizes scrollTop to device pixels — at high compression
+   * one DOM pixel can span a full row of logical scroll, so positions
+   * derived from native scroll events step row-by-row. The synthetic touch
+   * scroller sets its fractional position here so native scroll events
+   * (which fire with the quantized value) cannot clobber it. Pass null to
+   * return to native scroll positions.
+   */
+  setScrollTopOverride(domScrollTop: number | null): void {
+    this.scrollTopOverride = domScrollTop;
   }
 
   getNaturalHeight(): number {

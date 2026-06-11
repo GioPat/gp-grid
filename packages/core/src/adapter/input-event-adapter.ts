@@ -8,12 +8,14 @@ import type {
 import { toPointerEventData } from "./pointer-event";
 import type { AutoScrollDriver } from "./auto-scroll";
 import type { PendingRowDragController } from "./pending-row-drag";
+import type { PendingCellTapController } from "./pending-cell-tap";
 
 export interface InputEventAdapterDeps<TData = unknown> {
   getCore: () => GridCore<TData> | null;
   getBodyEl: () => HTMLElement | null;
   autoScroll: AutoScrollDriver;
   pendingRowDrag: PendingRowDragController<TData>;
+  pendingCellTap: PendingCellTapController<TData>;
   onDragStateChange: (state: DragState) => void;
 }
 
@@ -88,7 +90,7 @@ export class InputEventAdapter<TData = unknown> {
       colIndex,
       toPointerEventData(event),
     );
-    this.dispatchCellDragStart(result.startDrag, event);
+    this.dispatchCellDragStart(result, event);
     return {
       preventDefault: result.preventDefault,
       focusContainer: result.focusContainer ?? false,
@@ -205,22 +207,22 @@ export class InputEventAdapter<TData = unknown> {
     return core.pasteClipboardText(text);
   }
 
-  private dispatchCellDragStart(
-    startDrag: InputResult["startDrag"],
-    event: PointerEvent,
-  ): void {
+  private dispatchCellDragStart(result: InputResult, event: PointerEvent): void {
     const core = this.deps.getCore();
-    if (core === null || startDrag === undefined) return;
-    if (startDrag === "selection") {
+    if (core === null) return;
+    if (result.startTap === true) {
+      this.deps.pendingCellTap.start(event);
+    }
+    if (result.startDrag === "selection") {
       core.input.startSelectionDrag();
       this.deps.onDragStateChange(core.input.getDragState());
       return;
     }
-    if (startDrag === "row-drag") {
+    if (result.startDrag === "row-drag") {
       this.deps.onDragStateChange(core.input.getDragState());
       return;
     }
-    if (startDrag === "row-drag-pending") {
+    if (result.startDrag === "row-drag-pending") {
       this.deps.pendingRowDrag.start(event);
     }
   }

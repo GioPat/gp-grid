@@ -347,9 +347,12 @@ export class SlotPoolManager {
       return 0; // No wrapper offset needed without virtualization
     }
 
-    // Position wrapper at the virtual scroll position of the first visible row
-    const firstVisibleRowIndex = Math.floor(scrollTop / rowHeight);
-    const firstVisibleRowY = firstVisibleRowIndex * rowHeight;
-    return firstVisibleRowY * scrollRatio;
+    // Position the wrapper so the first visible row lands exactly at its
+    // logical position: wrapper + translateY(row) - domScrollTop must equal
+    // rowY - logicalScrollTop. The sub-row remainder is kept at logical
+    // scale — compressing it by the scroll ratio would make rows crawl
+    // between row boundaries and then snap a full row when crossing one.
+    const subRowOffset = scrollTop % rowHeight;
+    return scrollTop * scrollRatio - subRowOffset;
   }
 }

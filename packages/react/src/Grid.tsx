@@ -15,6 +15,7 @@ import {
   calculateScaledColumnPositions,
   getTotalWidth,
   calculateFillHandlePosition,
+  TouchScrollController,
 } from "@gp-grid/core";
 import type { ColumnFilterModel, DataSource } from "@gp-grid/core";
 import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
@@ -209,6 +210,7 @@ export function Grid<TData = unknown>(
     rowHeight,
     headerHeight: totalHeaderHeight,
     columnPositions,
+    columnWidths,
     visibleColumnsWithIndices,
     slots: state.slots,
     rowsWrapperOffset: state.rowsWrapperOffset,
@@ -393,6 +395,24 @@ export function Grid<TData = unknown>(
     return () => container.removeEventListener("wheel", wheelHandler);
   }, [handleWheel, wheelDampening]);
 
+  // Synthetic touch scrolling: when scroll virtualization compresses the DOM
+  // scroll space, the controller takes over touch gestures so content tracks
+  // the finger 1:1 with a consistent fling. Inert for non-scaled grids.
+  const touchScrollRef = useRef<TouchScrollController<TData> | null>(null);
+  useEffect(() => {
+    const controller = new TouchScrollController<TData>({
+      getCore: () => coreRef.current,
+      getScrollEl: () => containerRef.current,
+      isBrowser: typeof window !== "undefined",
+    });
+    touchScrollRef.current = controller;
+    controller.attach();
+    return () => {
+      controller.detach();
+      touchScrollRef.current = null;
+    };
+  }, []);
+
   // Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
   // useLayoutEffect runs before paint, ensuring container.scrollTop matches
   // the core's expectation before the browser renders the frame.
@@ -400,6 +420,7 @@ export function Grid<TData = unknown>(
     if (state.pendingScrollTop !== null) {
       const container = containerRef.current;
       if (container) {
+        touchScrollRef.current?.stop();
         container.scrollTop = state.pendingScrollTop;
       }
     }

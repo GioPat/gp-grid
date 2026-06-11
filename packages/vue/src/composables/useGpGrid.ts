@@ -12,6 +12,7 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  TouchScrollController,
 } from "@gp-grid/core";
 import type {
   RowId,
@@ -114,6 +115,13 @@ export function useGpGrid<TData = unknown>(
   const containerRef = ref<HTMLDivElement | null>(null);
   const coreRef = ref<GridCore<TData> | null>(null);
 
+  // Synthetic touch scrolling for scaled grids (attached in onMounted)
+  const touchScroll = new TouchScrollController<TData>({
+    getCore: () => coreRef.value as GridCore<TData> | null,
+    getScrollEl: () => containerRef.value,
+    isBrowser: typeof window !== "undefined",
+  });
+
   // State
   const { state, applyInstructions } = useGridState();
 
@@ -160,6 +168,7 @@ export function useGpGrid<TData = unknown>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       columnPositions,
+      columnWidths,
       visibleColumnsWithIndices,
       slots: computed(() => state.value.slots),
       rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
@@ -238,6 +247,12 @@ export function useGpGrid<TData = unknown>(
     // Initialize
     core.initialize();
 
+    // Synthetic touch scrolling: when scroll virtualization compresses the
+    // DOM scroll space, the controller takes over touch gestures so content
+    // tracks the finger 1:1 with a consistent fling. Inert otherwise.
+    touchScroll.attach();
+    onUnmounted(() => touchScroll.detach());
+
     // Initial measurement
     const container = containerRef.value;
     if (container) {
@@ -275,6 +290,7 @@ export function useGpGrid<TData = unknown>(
       if (scrollTop !== null) {
         const container = containerRef.value;
         if (container) {
+          touchScroll.stop();
           container.scrollTop = scrollTop;
         }
       }

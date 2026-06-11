@@ -13,6 +13,7 @@ import {
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
+import { DebugOverlay } from "./DebugOverlay";
 
 type DemoPage = "main" | "live-insert";
 
@@ -49,9 +50,11 @@ const getRowId = (person: Person): RowId => {
 };
 
 const onCellUpdate = (context: CellValueChangedEvent<Person>): void => {
-  console.log(`Old value was ${context.oldValue} and new value is ${context.newValue}`);
+  console.log(
+    `Old value was ${context.oldValue} and new value is ${context.newValue}`,
+  );
   return;
-}
+};
 
 // Available tag options for the multi-select
 const tagOptions = [
@@ -71,7 +74,7 @@ function getRandomInt(min: number, max: number): number {
 const names = ["Ennio", "Giovanni", "Mario", "Giuseppe"];
 const statuses: Person["status"][] = ["active", "inactive", "pending"];
 
-// Define reusable React renderers 
+// Define reusable React renderers
 const cellRenderers = {
   // Currency formatter - reusable for multiple columns
   currency: (params: CellRendererParams) => {
@@ -377,25 +380,36 @@ function MainDemo() {
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
 
-  const { dataSource, updateRow } = useGridData<Person>(
-    initialRowData,
-    { getRowId: (row) => row.id },
-  );
+  const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
+    getRowId: (row) => row.id,
+  });
 
-  const highlighting = useMemo(() => ({
-    computeRowClasses: highlightMode === "row" ? (context: { isHovered: boolean }) => {
-      if (context.isHovered) return ["row-highlight"];
-      return [];
-    } : undefined,
-    computeColumnClasses: highlightMode === "column" ? (context: { isHovered: boolean }) => {
-      if (context.isHovered) return ["column-highlight"];
-      return [];
-    } : undefined,
-    computeCellClasses: highlightMode === "cell" ? (context: { isHovered: boolean }) => {
-      if (context.isHovered) return ["cell-highlight"];
-      return [];
-    } : undefined,
-  }), [highlightMode]);
+  const highlighting = useMemo(
+    () => ({
+      computeRowClasses:
+        highlightMode === "row"
+          ? (context: { isHovered: boolean }) => {
+              if (context.isHovered) return ["row-highlight"];
+              return [];
+            }
+          : undefined,
+      computeColumnClasses:
+        highlightMode === "column"
+          ? (context: { isHovered: boolean }) => {
+              if (context.isHovered) return ["column-highlight"];
+              return [];
+            }
+          : undefined,
+      computeCellClasses:
+        highlightMode === "cell"
+          ? (context: { isHovered: boolean }) => {
+              if (context.isHovered) return ["cell-highlight"];
+              return [];
+            }
+          : undefined,
+    }),
+    [highlightMode],
+  );
 
   const handleUpdateRow = () => {
     updateRow(rowIdToUpdate, {
@@ -411,7 +425,9 @@ function MainDemo() {
       </h2>
       {/* Highlight Mode Switcher */}
       <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
-        <span style={{ color: "#9ca3af", marginRight: "8px" }}>Highlight Mode:</span>
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>
+          Highlight Mode:
+        </span>
         {(["row", "column", "cell"] as const).map((mode) => (
           <button
             key={mode}
@@ -431,7 +447,8 @@ function MainDemo() {
         ))}
       </div>
 
-      <div style={{ width: "1000px", height: "400px" }}>
+      <DebugOverlay totalRows={1500000} />
+      <div style={{ width: "500px", height: "400px" }}>
         <Grid
           highlighting={highlighting}
           getRowId={getRowId}

@@ -834,6 +834,121 @@ describe("GridCore", () => {
       }
     });
 
+    it("keeps sub-row scroll offsets smooth when scaling is active", async () => {
+      const extremeRowCount = 500_000;
+      const rowHeight = 32;
+
+      const extremeDataSource: DataSource<TestRow> = {
+        async query(request) {
+          const rows: TestRow[] = [];
+          const start = request.range.startRow;
+          const end = Math.min(request.range.endRow, extremeRowCount);
+          for (let i = start; i < end; i++) {
+            rows.push({ id: i, name: `Row ${i}`, age: 20, email: `row${i}@example.com` });
+          }
+          return { rows, totalRows: extremeRowCount };
+        },
+      };
+
+      const extremeGrid = new GridCore<TestRow>({
+        columns,
+        dataSource: extremeDataSource,
+        rowHeight,
+        headerHeight: 40,
+        overscan: 3,
+      });
+
+      const instructions: GridInstruction[] = [];
+      extremeGrid.onBatchInstruction((batch) => instructions.push(...batch));
+
+      await extremeGrid.initialize();
+      extremeGrid.setViewport(0, 0, 800, 600);
+      const ratio = extremeGrid.getScrollRatio();
+      expect(ratio).toBeLessThan(1);
+
+      // Scroll to a position that lands mid-row in logical space. The
+      // wrapper offset must preserve the sub-row remainder at LOGICAL scale
+      // (offset = domScrollTop − logicalScrollTop % rowHeight); compressing
+      // it by the ratio makes rows snap row-by-row while scrolling.
+      const logicalTarget = 1000 * rowHeight + rowHeight / 2;
+      const domTarget = logicalTarget * ratio;
+      instructions.length = 0;
+      extremeGrid.setViewport(domTarget, 0, 800, 600);
+
+      const update = instructions.find((i) => i.type === "UPDATE_VISIBLE_RANGE");
+      expect(update).toBeDefined();
+      if (update?.type === "UPDATE_VISIBLE_RANGE") {
+        const logical = domTarget / ratio;
+        expect(update.rowsWrapperOffset).toBeCloseTo(
+          domTarget - (logical % rowHeight),
+          6,
+        );
+      }
+    });
+
+    it("uses the scrollTop override at sub-pixel resolution when set", async () => {
+      const extremeRowCount = 500_000;
+      const rowHeight = 32;
+
+      const extremeDataSource: DataSource<TestRow> = {
+        async query(request) {
+          const rows: TestRow[] = [];
+          const start = request.range.startRow;
+          const end = Math.min(request.range.endRow, extremeRowCount);
+          for (let i = start; i < end; i++) {
+            rows.push({ id: i, name: `Row ${i}`, age: 20, email: `row${i}@example.com` });
+          }
+          return { rows, totalRows: extremeRowCount };
+        },
+      };
+
+      const extremeGrid = new GridCore<TestRow>({
+        columns,
+        dataSource: extremeDataSource,
+        rowHeight,
+        headerHeight: 40,
+        overscan: 3,
+      });
+
+      const instructions: GridInstruction[] = [];
+      extremeGrid.onBatchInstruction((batch) => instructions.push(...batch));
+
+      await extremeGrid.initialize();
+      extremeGrid.setViewport(0, 0, 800, 600);
+      const ratio = extremeGrid.getScrollRatio();
+
+      // The synthetic touch scroller sets a fractional override; a native
+      // scroll event with the quantized value must not clobber it.
+      const fractional = 1000.75;
+      extremeGrid.setScrollTopOverride(fractional);
+      instructions.length = 0;
+      extremeGrid.setViewport(1000, 0, 800, 600); // quantized native value
+
+      const update = instructions.find((i) => i.type === "UPDATE_VISIBLE_RANGE");
+      expect(update).toBeDefined();
+      if (update?.type === "UPDATE_VISIBLE_RANGE") {
+        const logical = fractional / ratio;
+        expect(update.rowsWrapperOffset).toBeCloseTo(
+          fractional - (logical % rowHeight),
+          6,
+        );
+      }
+
+      // Clearing the override hands control back to native scroll values.
+      extremeGrid.setScrollTopOverride(null);
+      instructions.length = 0;
+      extremeGrid.setViewport(2000, 0, 800, 600);
+      const afterClear = instructions.find((i) => i.type === "UPDATE_VISIBLE_RANGE");
+      expect(afterClear).toBeDefined();
+      if (afterClear?.type === "UPDATE_VISIBLE_RANGE") {
+        const logical = 2000 / ratio;
+        expect(afterClear.rowsWrapperOffset).toBeCloseTo(
+          2000 - (logical % rowHeight),
+          6,
+        );
+      }
+    });
+
     it("should keep translateY at 0 or above when scrolled to top", async () => {
       const extremeRowCount = 500_000;
       

@@ -19,7 +19,12 @@ import type {
   SlotData,
   VisibleColumnInfo,
 } from "@gp-grid/core";
-import { scrollCellIntoView } from "@gp-grid/core";
+import {
+  scrollCellIntoView,
+  PendingCellTapController,
+  TAP_SLOP_PX,
+  ROW_DRAG_HOLD_MS,
+} from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
 // Re-export for backwards compatibility
@@ -33,6 +38,7 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: ComputedRef<number[]>;
+  columnWidths: ComputedRef<number[]>;
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
   slots: ComputedRef<Map<string, SlotData>>;
@@ -77,6 +83,7 @@ export function useInputHandler<TData = unknown>(
     rowHeight,
     headerHeight,
     columnPositions,
+    columnWidths,
     visibleColumnsWithIndices,
     slots,
     rowsWrapperOffset,
@@ -107,6 +114,13 @@ export function useInputHandler<TData = unknown>(
   let savedContainerOverflow: string | null = null;
   // Touchmove blocker — prevents in-flight iOS scroll gestures during row drag
   const blockTouchMove = (e: TouchEvent): void => { e.preventDefault(); };
+  // Tap confirmation controller (touch): selection is deferred until the
+  // finger lifts within the tap slop, so scroll gestures never select.
+  const tapController = new PendingCellTapController<TData>({
+    getCore: () => coreRef.value,
+    isBrowser: typeof window !== "undefined",
+    onTapConfirmed: () => containerRef.value?.focus(),
+  });
 
   // Auto-scroll helpers — onTick re-processes drag so drop target stays in sync as the grid scrolls
   const { startAutoScroll, stopAutoScroll } = useAutoScroll(containerRef, () => {
@@ -279,6 +293,9 @@ export function useInputHandler<TData = unknown>(
     if (result.focusContainer) {
       containerRef.value?.focus();
     }
+    if (result.startTap) {
+      tapController.start(e);
+    }
     if (result.startDrag === "selection") {
       core.input.startSelectionDrag();
       dragState.value = core.input.getDragState();
@@ -301,9 +318,10 @@ export function useInputHandler<TData = unknown>(
       const handlePendingMove = (moveE: PointerEvent): void => {
         const dx = moveE.clientX - startX;
         const dy = moveE.clientY - startY;
-        // Allow up to 10px jitter — touch screens naturally move slightly
-        // during a hold. Only cancel if the finger clearly moved to scroll.
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        // Allow jitter up to the tap slop — touch screens naturally move
+        // slightly during a hold. Only cancel if the finger clearly moved
+        // to scroll.
+        if (Math.abs(dx) > TAP_SLOP_PX || Math.abs(dy) > TAP_SLOP_PX) {
           cancelPendingRowDrag();
           cleanup();
         }
@@ -351,7 +369,7 @@ export function useInputHandler<TData = unknown>(
           dragState.value = core.input.getDragState();
           startGlobalDragListeners();
         }
-      }, 300);
+      }, ROW_DRAG_HOLD_MS);
     }
   }
 
@@ -466,6 +484,12 @@ export function useInputHandler<TData = unknown>(
         rowHeight,
         slots.value,
         rowsWrapperOffset.value,
+        {
+          colIndex: result.scrollToCell.col,
+          visibleColumns: visibleColumnsWithIndices.value,
+          columnPositions: columnPositions.value,
+          columnWidths: columnWidths.value,
+        },
       );
     }
   }
@@ -500,6 +524,7 @@ export function useInputHandler<TData = unknown>(
     cleanupGlobalListeners?.();
     cleanupGlobalListeners = null;
     cancelPendingRowDrag();
+    tapController.cancel();
     stopAutoScroll();
     // Release any lingering scroll locks
     document.removeEventListener("touchmove", blockTouchMove);

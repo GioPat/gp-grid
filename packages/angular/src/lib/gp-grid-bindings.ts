@@ -3,7 +3,9 @@ import {
   DataSourceOwner,
   GridCore,
   InputEventAdapter,
+  PendingCellTapController,
   PendingRowDragController,
+  TouchScrollController,
   applyBatchInstructions,
   scrollCellIntoView,
 } from '@gp-grid/core';
@@ -33,6 +35,8 @@ export class GpGridBindings<TData = unknown> {
   readonly dataSourceOwner = new DataSourceOwner<TData>();
   readonly autoScroll: AutoScrollDriver;
   readonly pendingRowDrag: PendingRowDragController;
+  readonly pendingCellTap: PendingCellTapController;
+  readonly touchScroll: TouchScrollController;
   readonly input: InputEventAdapter<TData>;
 
   coreRef: GridCore<TData> | null = null;
@@ -50,11 +54,22 @@ export class GpGridBindings<TData = unknown> {
       isBrowser: this.deps.isBrowser,
       onDragConfirmed: (state) => this.deps.vm.dragState.set(state),
     });
+    this.pendingCellTap = new PendingCellTapController({
+      getCore: () => this.coreRef,
+      isBrowser: this.deps.isBrowser,
+      onTapConfirmed: () => this.deps.getContainer()?.focus(),
+    });
+    this.touchScroll = new TouchScrollController({
+      getCore: () => this.coreRef,
+      getScrollEl: this.deps.getBody,
+      isBrowser: this.deps.isBrowser,
+    });
     this.input = new InputEventAdapter<TData>({
       getCore: () => this.coreRef,
       getBodyEl: this.deps.getBody,
       autoScroll: this.autoScroll,
       pendingRowDrag: this.pendingRowDrag,
+      pendingCellTap: this.pendingCellTap,
       onDragStateChange: (state) => this.deps.vm.dragState.set(state),
     });
   }
@@ -92,12 +107,17 @@ export class GpGridBindings<TData = unknown> {
     });
     this.resizeObserver.observe(container);
     this.coreRef?.setViewport(0, 0, container.clientWidth, bodyEl.clientHeight);
+    // Synthetic touch scrolling: takes over touch gestures only when scroll
+    // virtualization compresses the DOM scroll space; inert otherwise.
+    this.touchScroll.attach();
   }
 
   destroy(): void {
     this.autoScroll.stop();
     this.pendingRowDrag.cancel();
     this.pendingRowDrag.releaseLocks();
+    this.pendingCellTap.cancel();
+    this.touchScroll.detach();
     this.unsubscribe?.();
     this.resizeObserver?.disconnect();
     this.coreRef?.destroy();
@@ -129,22 +149,29 @@ export class GpGridBindings<TData = unknown> {
     const top = this.deps.vm.pendingScrollTop();
     const body = this.deps.getBody();
     if (top !== null && body) {
+      this.touchScroll.stop();
       body.scrollTop = top;
       this.deps.vm.pendingScrollTop.set(null);
     }
   }
 
-  scrollToRow(row: number): void {
+  scrollToCell(cell: { row: number; col: number }): void {
     const core = this.coreRef;
     const body = this.deps.getBody();
     if (core === null || body === null) return;
     scrollCellIntoView(
       core,
       body,
-      row,
+      cell.row,
       this.deps.getRowHeight(),
       this.deps.vm.slots(),
       this.deps.vm.rowsWrapperOffset(),
+      {
+        colIndex: cell.col,
+        visibleColumns: this.deps.vm.visibleColumnWithIndices(),
+        columnPositions: this.deps.vm.columnPositions(),
+        columnWidths: this.deps.vm.columnWidths(),
+      },
     );
   }
 }
