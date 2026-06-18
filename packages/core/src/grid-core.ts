@@ -489,6 +489,7 @@ export class GridCore<TData = unknown> {
    * scroller sets its fractional position here so native scroll events
    * (which fire with the quantized value) cannot clobber it. Pass null to
    * return to native scroll positions.
+   * @internal
    */
   setScrollTopOverride(domScrollTop: number | null): void {
     this.scrollTopOverride = domScrollTop;

@@ -17,6 +17,11 @@ import { DebugOverlay } from "./DebugOverlay";
 
 type DemoPage = "main" | "live-insert";
 
+const shouldShowTouchDebug = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).has("touchDebug");
+};
+
 interface Person {
   id: number;
   name: string;
@@ -379,6 +384,7 @@ function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
+  const showTouchDebug = shouldShowTouchDebug();
 
   const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
     getRowId: (row) => row.id,
@@ -447,8 +453,8 @@ function MainDemo() {
         ))}
       </div>
 
-      <DebugOverlay totalRows={1500000} />
-      <div style={{ width: "500px", height: "400px" }}>
+      {showTouchDebug && <DebugOverlay totalRows={1500000} />}
+      <div className="demo-grid-shell">
         <Grid
           highlighting={highlighting}
           getRowId={getRowId}

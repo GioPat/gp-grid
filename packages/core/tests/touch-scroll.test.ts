@@ -577,36 +577,65 @@ describe("TouchScrollController", () => {
     expect(el.scrollTop).toBe(200);
   });
 
-  it("sets overscroll-behavior on attach and restores it on detach", () => {
+  it("sets touch policy while scaling is active and restores it on detach", () => {
     const { el, controller } = setup();
+    expect(el.style.touchAction).toBe("none");
     expect(el.style.overscrollBehavior).toBe("contain");
     controller.detach();
+    expect(el.style.touchAction).toBe("");
     expect(el.style.overscrollBehavior).toBe("");
   });
 
-  it("declares touch-action none while scaling is active", () => {
-    const { el, controller } = setup({ scalingActive: true });
+  it("preserves original inline touch policy on detach", () => {
+    const core = createCore({ scalingActive: true });
+    const el = createScrollEl();
+    el.style.touchAction = "pan-y";
+    el.style.overscrollBehavior = "auto";
+    const controller = new TouchScrollController({
+      getCore: () => core,
+      getScrollEl: () => el,
+      isBrowser: true,
+    });
+    controller.attach();
+
     expect(el.style.touchAction).toBe("none");
+    expect(el.style.overscrollBehavior).toBe("contain");
     controller.detach();
-    expect(el.style.touchAction).toBe("");
+    expect(el.style.touchAction).toBe("pan-y");
+    expect(el.style.overscrollBehavior).toBe("auto");
   });
 
-  it("keeps native touch-action when scaling is inactive", () => {
+  it("keeps native touch policy when scaling is inactive", () => {
     const { el } = setup({ scalingActive: false });
     expect(el.style.touchAction).toBe("");
+    expect(el.style.overscrollBehavior).toBe("");
   });
 
-  it("re-syncs touch-action with the scaling state on touchstart", () => {
+  it("re-syncs touch policy with the scaling state on touchstart", () => {
     const { core, el } = setup({ scalingActive: false });
     expect(el.style.touchAction).toBe("");
+    expect(el.style.overscrollBehavior).toBe("");
 
     getState(core).scalingActive = true;
     el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 0));
     expect(el.style.touchAction).toBe("none");
+    expect(el.style.overscrollBehavior).toBe("contain");
 
     getState(core).scalingActive = false;
     el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 100));
     expect(el.style.touchAction).toBe("");
+    expect(el.style.overscrollBehavior).toBe("");
+  });
+
+  it("re-syncs touch policy with the scaling state on wheel", () => {
+    const { core, el } = setup({ scalingActive: true });
+    expect(el.style.touchAction).toBe("none");
+    expect(el.style.overscrollBehavior).toBe("contain");
+
+    getState(core).scalingActive = false;
+    el.dispatchEvent(new Event("wheel"));
+    expect(el.style.touchAction).toBe("");
+    expect(el.style.overscrollBehavior).toBe("");
   });
 
   it("detach() removes listeners and cancels flings", () => {

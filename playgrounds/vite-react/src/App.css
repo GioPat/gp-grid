@@ -38,6 +38,24 @@
 .cell-highlight {
   background-color: rgba(245, 158, 11, 0.5) !important;
 }
+
+.demo-grid-shell {
+  width: min(100%, 1100px);
+  height: clamp(360px, 64dvh, 680px);
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  #root {
+    padding: 1rem;
+  }
+
+  .demo-grid-shell {
+    width: 100%;
+    height: clamp(320px, 68dvh, 520px);
+  }
+}
+
 @keyframes logo-spin {
   from {
     transform: rotate(0deg);

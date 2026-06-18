@@ -122,6 +122,18 @@ export class PendingRowDragController<TData = unknown> {
 
   private applyPointerCapture(capture: { pointerId: number; target: Element } | null): void {
     if (!capture) return;
-    capture.target.setPointerCapture(capture.pointerId);
+    const captured = trySetPointerCapture(capture.target, capture.pointerId);
+    if (captured) return;
+    // Pointer capture is best-effort: document-level listeners still drive
+    // the drag when capture is no longer available.
   }
 }
+
+const trySetPointerCapture = (target: Element, pointerId: number): boolean => {
+  try {
+    target.setPointerCapture(pointerId);
+    return true;
+  } catch {
+    return false;
+  }
+};

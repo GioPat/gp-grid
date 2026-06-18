@@ -102,8 +102,7 @@ export class TouchScrollController<TData = unknown> {
     this.attachedEl = el;
     this.savedOverscrollBehavior = el.style.overscrollBehavior;
     this.savedTouchAction = el.style.touchAction;
-    el.style.overscrollBehavior = "contain";
-    this.syncTouchAction();
+    this.syncTouchPolicy();
     el.addEventListener("touchstart", this.onTouchStart, { passive: true });
     el.addEventListener("wheel", this.onWheel, { passive: true });
   }
@@ -129,19 +128,20 @@ export class TouchScrollController<TData = unknown> {
   /**
    * While scroll scaling is active, panning must never be native: declare
    * `touch-action: none` so the browser cannot start a (ratio-amplified)
-   * native scroll at all. Canceling the first touchmove is not enough on
-   * Android — Chrome forces touch events non-cancelable when the main
-   * thread is janky or when a touch lands mid-fling, and an escaped
-   * gesture then accelerates without any of the synthetic speed caps.
-   * Non-scaled grids keep their default touch-action and scroll natively.
+   * native scroll at all, and contain overscroll so synthetic flings do not
+   * chain to the page. Non-scaled grids keep their original native policy.
    */
-  private syncTouchAction(): void {
+  private syncTouchPolicy(): void {
     const el = this.attachedEl;
     if (el === null) return;
     const scaling = this.deps.getCore()?.isScalingActive() === true;
-    const desired = scaling ? "none" : (this.savedTouchAction ?? "");
-    if (el.style.touchAction !== desired) {
-      el.style.touchAction = desired;
+    const desiredTouchAction = scaling ? "none" : (this.savedTouchAction ?? "");
+    const desiredOverscroll = scaling ? "contain" : (this.savedOverscrollBehavior ?? "");
+    if (el.style.touchAction !== desiredTouchAction) {
+      el.style.touchAction = desiredTouchAction;
+    }
+    if (el.style.overscrollBehavior !== desiredOverscroll) {
+      el.style.overscrollBehavior = desiredOverscroll;
     }
   }
 
@@ -222,13 +222,14 @@ export class TouchScrollController<TData = unknown> {
 
   private readonly onWheel = (): void => {
     this.stop();
-    this.syncTouchAction();
+    this.syncTouchPolicy();
   };
 
   private readonly onTouchStart = (event: Event): void => {
-    // Keep touch-action in sync with the scaling state. A change applies
-    // from the NEXT gesture (touch-action is sampled at gesture start).
-    this.syncTouchAction();
+    // Keep touch policy in sync with the scaling state. A touch-action
+    // change applies from the NEXT gesture because browsers sample it at
+    // gesture start.
+    this.syncTouchPolicy();
     if (this.gesture !== null) return; // ignore additional fingers
     // Catching the content mid-fling carries its velocity into the next
     // flick, so repeated same-direction flicks stack speed up to the cap.
