@@ -268,7 +268,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       this.vm.filterPopup() !== null,
     );
     if (result.preventDefault) event.preventDefault();
-    if (result.scrollToCell) this.bindings.scrollToRow(result.scrollToCell.row);
+    if (result.scrollToCell) this.bindings.scrollToCell(result.scrollToCell);
   }
 
   protected onPaste(event: ClipboardEvent): void {

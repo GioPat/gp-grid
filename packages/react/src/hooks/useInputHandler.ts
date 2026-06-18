@@ -9,7 +9,12 @@ import type {
   ContainerBounds,
   DragState,
 } from "@gp-grid/core";
-import { scrollCellIntoView } from "@gp-grid/core";
+import {
+  scrollCellIntoView,
+  PendingCellTapController,
+  TAP_SLOP_PX,
+  ROW_DRAG_HOLD_MS,
+} from "@gp-grid/core";
 import type { SlotData } from "../gridState/types";
 
 // =============================================================================
@@ -29,6 +34,7 @@ export interface UseInputHandlerOptions {
   rowHeight: number;
   headerHeight: number;
   columnPositions: number[];
+  columnWidths: number[];
   /** Visible columns with their original indices (for hidden column support) */
   visibleColumnsWithIndices: VisibleColumnInfo[];
   slots: Map<string, SlotData>;
@@ -77,6 +83,7 @@ export function useInputHandler<TData>(
     rowHeight,
     headerHeight,
     columnPositions,
+    columnWidths,
     visibleColumnsWithIndices,
     slots,
     rowsWrapperOffset,
@@ -94,6 +101,17 @@ export function useInputHandler<TData>(
   const savedContainerOverflowRef = useRef<string | null>(null);
   // Touchmove blocker — stable ref so addEventListener/removeEventListener use the same reference
   const blockTouchMove = useCallback((e: TouchEvent): void => { e.preventDefault(); }, []);
+  // Tap confirmation controller (touch): selection is deferred until the
+  // finger lifts within the tap slop, so scroll gestures never select.
+  const tapControllerRef = useRef<PendingCellTapController<TData> | null>(null);
+  const getTapController = useCallback((): PendingCellTapController<TData> => {
+    tapControllerRef.current ??= new PendingCellTapController<TData>({
+      getCore: () => coreRef.current,
+      isBrowser: true,
+      onTapConfirmed: () => containerRef.current?.focus(),
+    });
+    return tapControllerRef.current;
+  }, [coreRef, containerRef]);
 
   // Drag state for UI (mirrors core's InputHandler state)
   const [dragState, setDragState] = useState<DragState>({
@@ -262,6 +280,9 @@ export function useInputHandler<TData>(
       if (result.focusContainer) {
         containerRef.current?.focus();
       }
+      if (result.startTap) {
+        getTapController().start(e.nativeEvent);
+      }
       if (result.startDrag === "selection") {
         core.input.startSelectionDrag();
         setDragState(core.input.getDragState());
@@ -288,9 +309,10 @@ export function useInputHandler<TData>(
         const handlePendingMove = (moveE: PointerEvent) => {
           const dx = moveE.clientX - startX;
           const dy = moveE.clientY - startY;
-          // Allow up to 10px jitter — touch screens naturally move slightly
-          // during a hold. Only cancel if the finger clearly moved to scroll.
-          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+          // Allow jitter up to the tap slop — touch screens naturally move
+          // slightly during a hold. Only cancel if the finger clearly moved
+          // to scroll.
+          if (Math.abs(dx) > TAP_SLOP_PX || Math.abs(dy) > TAP_SLOP_PX) {
             cancelPendingRowDrag();
             cleanup();
           }
@@ -338,10 +360,10 @@ export function useInputHandler<TData>(
             setDragState(core.input.getDragState());
             startGlobalDragListeners();
           }
-        }, 300);
+        }, ROW_DRAG_HOLD_MS);
       }
     },
-    [coreRef, containerRef, startGlobalDragListeners, cancelPendingRowDrag]
+    [coreRef, containerRef, startGlobalDragListeners, cancelPendingRowDrag, getTapController]
   );
 
   const handleCellDoubleClick = useCallback(
@@ -461,11 +483,17 @@ export function useInputHandler<TData>(
           result.scrollToCell.row,
           rowHeight,
           slots,
-          rowsWrapperOffset
+          rowsWrapperOffset,
+          {
+            colIndex: result.scrollToCell.col,
+            visibleColumns: visibleColumnsWithIndices,
+            columnPositions,
+            columnWidths,
+          }
         );
       }
     },
-    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset]
+    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset, visibleColumnsWithIndices, columnPositions, columnWidths]
   );
 
   const handlePaste = useCallback(
@@ -504,6 +532,7 @@ export function useInputHandler<TData>(
     return () => {
       stopAutoScroll();
       cancelPendingRowDrag();
+      tapControllerRef.current?.cancel();
       // Release any lingering scroll locks
       document.removeEventListener("touchmove", blockTouchMove);
       if (savedContainerOverflowRef.current !== null && containerRef.current) {

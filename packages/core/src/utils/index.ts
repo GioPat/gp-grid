@@ -36,6 +36,7 @@ export type {
 } from "./event-emitter";
 
 export { findSlotForRow, scrollCellIntoView } from "./scroll-helpers";
+export type { ColumnScrollGeometry } from "./scroll-helpers";
 
 export { formatCellValue } from "./format-helpers";
 

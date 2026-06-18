@@ -22,6 +22,7 @@ import {
   SelectionDrag,
   FillDrag,
   PendingRowDragState,
+  PendingCellTapState,
   KeyboardHandler,
   computeCellTarget,
 } from "./input";
@@ -52,6 +53,7 @@ export class InputHandler<TData = unknown> {
   readonly selectionDrag: SelectionDrag<TData>;
   readonly fillDrag: FillDrag<TData>;
   private readonly pendingRowDrag = new PendingRowDragState();
+  private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
 
   constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
@@ -156,15 +158,15 @@ export class InputHandler<TData = unknown> {
       clientX: event.clientX,
       clientY: event.clientY,
     });
-    this.core.selection.startSelection(
-      { row: rowIndex, col: colIndex },
-      { shift: false, ctrl: false },
-    );
+    // Selection is deferred: the long-press confirm selects the dragged row,
+    // a quick release confirms the tap, and a scroll selects nothing.
+    this.pendingCellTap.set({ rowIndex, colIndex });
     return {
       preventDefault: false,
       stopPropagation: false,
-      focusContainer: true,
+      focusContainer: false,
       startDrag: "row-drag-pending",
+      startTap: true,
     };
   }
 
@@ -191,6 +193,19 @@ export class InputHandler<TData = unknown> {
     colIndex: number,
     event: PointerEventData,
   ): InputResult {
+    if (event.pointerType === "touch") {
+      // Defer selection until the tap is confirmed on pointerup, so a
+      // scroll gesture never selects a cell (or shows the fill handle).
+      // Touch also never starts selection-range dragging: the gesture
+      // belongs to scrolling.
+      this.pendingCellTap.set({ rowIndex, colIndex });
+      return {
+        preventDefault: false,
+        stopPropagation: false,
+        focusContainer: false,
+        startTap: true,
+      };
+    }
     this.core.selection.startSelection(
       { row: rowIndex, col: colIndex },
       { shift: event.shiftKey, ctrl: event.ctrlKey || event.metaKey },
@@ -246,12 +261,31 @@ export class InputHandler<TData = unknown> {
   confirmPendingRowDrag(): boolean {
     const pending = this.pendingRowDrag.consume();
     if (pending === null) return false;
+    this.pendingCellTap.clear();
     this.rowDrag.start(pending.rowIndex, pending.clientX, pending.clientY);
+    this.core.selection.startSelection(
+      { row: pending.rowIndex, col: pending.colIndex },
+      { shift: false, ctrl: false },
+    );
     return true;
   }
 
   cancelPendingRowDrag(): void {
     this.pendingRowDrag.clear();
+  }
+
+  confirmPendingCellTap(): boolean {
+    const pending = this.pendingCellTap.consume();
+    if (pending === null) return false;
+    this.core.selection.startSelection(
+      { row: pending.rowIndex, col: pending.colIndex },
+      { shift: false, ctrl: false },
+    );
+    return true;
+  }
+
+  cancelPendingCellTap(): void {
+    this.pendingCellTap.clear();
   }
 
   handleDragMove(

@@ -93,6 +93,33 @@ describe("PendingRowDragController", () => {
     expect(container.style.overflow).toBe("auto");
   });
 
+  it("confirms pending row drag when pointer capture fails", () => {
+    const container = document.createElement("div");
+    const target = document.createElement("div");
+    const setPointerCapture = vi.fn<(pointerId: number) => void>(() => {
+      throw new Error("Pointer released");
+    });
+    Object.defineProperty(target, "setPointerCapture", {
+      configurable: true,
+      value: setPointerCapture,
+    });
+    const onDragConfirmed = vi.fn();
+    const core = createCore();
+    const controller = new PendingRowDragController({
+      getCore: () => core,
+      getContainer: () => container,
+      isBrowser: true,
+      onDragConfirmed,
+    });
+
+    startFromElement(controller, target);
+    vi.advanceTimersByTime(300);
+
+    expect(core.input.confirmPendingRowDrag).toHaveBeenCalled();
+    expect(setPointerCapture).toHaveBeenCalledWith(5);
+    expect(onDragConfirmed).toHaveBeenCalledWith(dragState);
+  });
+
   it("cancels pending row drag when pointer movement exceeds the threshold", () => {
     const core = createCore();
     const controller = new PendingRowDragController({

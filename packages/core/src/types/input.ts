@@ -69,6 +69,12 @@ export interface InputResult {
   focusContainer?: boolean;
   /** Type of drag operation to start (framework manages global listeners) */
   startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | "row-drag-pending";
+  /**
+   * Whether the framework should track a pending cell tap (touch only).
+   * Selection is deferred until the tap is confirmed on pointerup within
+   * the tap slop, so scroll gestures never select a cell.
+   */
+  startTap?: boolean;
 }
 
 /** Result from keyboard input handler */

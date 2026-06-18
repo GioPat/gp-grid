@@ -276,6 +276,7 @@ export { applyInstruction } from "./state-reducer";
 
 /** Scroll helpers */
 export { findSlotForRow, scrollCellIntoView } from "./utils/scroll-helpers";
+export type { ColumnScrollGeometry } from "./utils/scroll-helpers";
 
 /** Format helpers */
 export { formatCellValue } from "./utils/format-helpers";
@@ -305,15 +306,22 @@ export {
   toPointerEventData,
   AutoScrollDriver,
   PendingRowDragController,
+  PendingCellTapController,
+  TouchScrollController,
   applyBatchInstructions,
   DataSourceOwner,
   InputEventAdapter,
 } from "./adapter";
 export type {
   PendingRowDragDeps,
+  PendingCellTapDeps,
+  TouchScrollDeps,
   BatchChangeSetters,
   InputEventAdapterDeps,
   CellPointerAction,
   FillPointerAction,
   DragEndResult,
 } from "./adapter";
+
+/** Shared pointer-interaction thresholds */
+export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS } from "./input";

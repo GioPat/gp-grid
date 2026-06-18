@@ -13,6 +13,7 @@ import {
   createDataSourceFromArray,
   calculateScaledColumnPositions,
   getTotalWidth,
+  TouchScrollController,
 } from "@gp-grid/core";
 import type { Component } from "vue";
 import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
@@ -83,6 +84,15 @@ const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
 const coreUnsubscribeRef = shallowRef<(() => void) | null>(null);
 
+// Synthetic touch scrolling for scaled grids: when scroll virtualization
+// compresses the DOM scroll space, the controller takes over touch gestures
+// so content tracks the finger 1:1 with a consistent fling. Inert otherwise.
+const touchScroll = new TouchScrollController<Row>({
+  getCore: () => coreRef.value,
+  getScrollEl: () => bodyContainerRef.value,
+  isBrowser: typeof window !== "undefined",
+});
+
 // Header scroll sync
 const scrollLeft = ref(0);
 
@@ -140,6 +150,7 @@ const {
   rowHeight: props.rowHeight,
   headerHeight: totalHeaderHeight.value,
   columnPositions,
+  columnWidths,
   visibleColumnsWithIndices,
   slots: computed(() => state.value.slots),
   rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
@@ -294,6 +305,8 @@ onMounted(() => {
 
   initializeCore(dataSource);
 
+  touchScroll.attach();
+
   // Set up ResizeObserver (only once, not per-core)
   const container = bodyContainerRef.value;
   if (container && typeof ResizeObserver !== "undefined") {
@@ -315,6 +328,7 @@ onMounted(() => {
 
   // Cleanup on unmount
   onUnmounted(() => {
+    touchScroll.detach();
     if (coreUnsubscribeRef.value) {
       coreUnsubscribeRef.value();
       coreUnsubscribeRef.value = null;
@@ -385,6 +399,8 @@ watch(
     if (scrollTop !== null) {
       const container = bodyContainerRef.value;
       if (container) {
+        // A programmatic scroll wins over any in-flight synthetic fling.
+        touchScroll.stop();
         container.scrollTop = scrollTop;
       }
     }

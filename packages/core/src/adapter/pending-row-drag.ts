@@ -1,5 +1,6 @@
 import type { GridCore } from "../grid-core";
 import type { DragState } from "../types/input";
+import { TAP_SLOP_PX, ROW_DRAG_HOLD_MS } from "../input/interaction-constants";
 
 export interface PendingRowDragDeps<TData = unknown> {
   getCore: () => GridCore<TData> | null;
@@ -8,8 +9,8 @@ export interface PendingRowDragDeps<TData = unknown> {
   onDragConfirmed: (state: DragState) => void;
 }
 
-const DRAG_THRESHOLD_PX = 10;
-const DRAG_HOLD_MS = 300;
+const DRAG_THRESHOLD_PX = TAP_SLOP_PX;
+const DRAG_HOLD_MS = ROW_DRAG_HOLD_MS;
 
 /**
  * Row-drag pending state machine. When a row-drag handle is pressed, we
@@ -37,7 +38,9 @@ export class PendingRowDragController<TData = unknown> {
   }
 
   start(event: PointerEvent): void {
-    this.cancel();
+    // Reset timer/capture only — the core pending record for THIS press was
+    // just set by the input handler and must survive until confirm/cancel.
+    this.reset();
     this.capture = {
       pointerId: event.pointerId,
       target: event.currentTarget as Element,
@@ -75,11 +78,15 @@ export class PendingRowDragController<TData = unknown> {
   }
 
   cancel(): void {
+    this.reset();
+    this.deps.getCore()?.input.cancelPendingRowDrag();
+  }
+
+  private reset(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    this.deps.getCore()?.input.cancelPendingRowDrag();
     this.capture = null;
   }
 
@@ -115,6 +122,18 @@ export class PendingRowDragController<TData = unknown> {
 
   private applyPointerCapture(capture: { pointerId: number; target: Element } | null): void {
     if (!capture) return;
-    capture.target.setPointerCapture(capture.pointerId);
+    const captured = trySetPointerCapture(capture.target, capture.pointerId);
+    if (captured) return;
+    // Pointer capture is best-effort: document-level listeners still drive
+    // the drag when capture is no longer available.
   }
 }
+
+const trySetPointerCapture = (target: Element, pointerId: number): boolean => {
+  try {
+    target.setPointerCapture(pointerId);
+    return true;
+  } catch {
+    return false;
+  }
+};
