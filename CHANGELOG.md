@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.17.0...gp-grid-v0.18.0) (2026-06-18)
+
+
+### ✨ Features
+
+* smooth scrolling when activating the virtual dampening ([6672e65](https://github.com/GioPat/gp-grid/commit/6672e655beb809a6d4553195e359ed5cfe083d00))
+
+
+### ♻️ Refactoring
+
+* small refactor to reduce code smells. ([681c784](https://github.com/GioPat/gp-grid/commit/681c784d1531c367228ae3850093994024e6d431))
+
 ## [0.17.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.16.1...gp-grid-v0.17.0) (2026-05-24)
 
 
