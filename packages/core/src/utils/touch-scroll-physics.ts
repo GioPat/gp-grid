@@ -66,7 +66,7 @@ export const computeReleaseVelocity = (
   samples: readonly VelocitySample[],
 ): number => {
   const first = samples[0];
-  const last = samples[samples.length - 1];
+  const last = samples.at(-1);
   if (first === undefined || last === undefined || first === last) return 0;
   const elapsed = last.time - first.time;
   if (elapsed <= 0) return 0;

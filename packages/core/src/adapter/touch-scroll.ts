@@ -31,8 +31,8 @@ interface TouchPointLike {
 }
 
 interface TouchEventLike extends Event {
-  touches: ArrayLike<TouchPointLike>;
-  changedTouches: ArrayLike<TouchPointLike>;
+  touches: ArrayLike<TouchPointLike | undefined>;
+  changedTouches: ArrayLike<TouchPointLike | undefined>;
 }
 
 interface GestureState {
@@ -230,33 +230,40 @@ export class TouchScrollController<TData = unknown> {
     // change applies from the NEXT gesture because browsers sample it at
     // gesture start.
     this.syncTouchPolicy();
-    if (this.gesture !== null) return; // ignore additional fingers
+    if (this.gesture === null) {
+      this.startTouchGesture(event);
+    }
+  };
+
+  private readonly startTouchGesture = (event: Event): void => {
     // Catching the content mid-fling carries its velocity into the next
     // flick, so repeated same-direction flicks stack speed up to the cap.
-    const carriedVelocity = this.flingFrame !== null ? this.flingVelocity : 0;
+    const carriedVelocity = this.flingFrame === null ? 0 : this.flingVelocity;
     this.stop();
     const core = this.deps.getCore();
     const el = this.attachedEl;
     if (core === null || el === null) return;
-    if (!core.isScalingActive()) return; // stay fully native
-    const target = event.target as Element | null;
-    if (target?.closest(OWN_GESTURE_SELECTOR) !== null) return;
+    if (core.isScalingActive()) {
+      const target = event.target as Element | null;
+      const ownGesture = target?.closest(OWN_GESTURE_SELECTOR);
+      if (ownGesture) return;
 
-    const touch = (event as TouchEventLike).changedTouches[0];
-    if (touch === undefined) return;
-    this.gesture = {
-      touchId: touch.identifier,
-      startClientX: touch.clientX,
-      startClientY: touch.clientY,
-      baseScrollTop: el.scrollTop,
-      baseScrollLeft: el.scrollLeft,
-      engaged: false,
-      slopOffsetX: 0,
-      slopOffsetY: 0,
-      samples: [{ time: event.timeStamp, position: 0 }],
-      carriedVelocity,
-    };
-    this.attachGestureListeners(el);
+      const touch = (event as TouchEventLike).changedTouches[0];
+      if (touch === undefined) return;
+      this.gesture = {
+        touchId: touch.identifier,
+        startClientX: touch.clientX,
+        startClientY: touch.clientY,
+        baseScrollTop: el.scrollTop,
+        baseScrollLeft: el.scrollLeft,
+        engaged: false,
+        slopOffsetX: 0,
+        slopOffsetY: 0,
+        samples: [{ time: event.timeStamp, position: 0 }],
+        carriedVelocity,
+      };
+      this.attachGestureListeners(el);
+    }
   };
 
   private attachGestureListeners(el: HTMLElement): void {
@@ -285,9 +292,8 @@ export class TouchScrollController<TData = unknown> {
     const gesture = this.gesture;
     if (gesture === null) return null;
     const touches = (event as TouchEventLike).changedTouches;
-    for (let i = 0; i < touches.length; i++) {
-      const touch = touches[i];
-      if (touch !== undefined && touch.identifier === gesture.touchId) {
+    for (const touch of Array.from(touches)) {
+      if (touch?.identifier === gesture.touchId) {
         return touch;
       }
     }

@@ -29,6 +29,9 @@ The features that the library must support are:
 - Avoid negated conditions
 - Avoid using `any`
 - Prefer function definitions as constants
+- Prefer optional chaining when reading from nullable or optional values
+- Prefer `for...of` over index-based `for` loops for simple iteration
+- Prefer `.at()` over `[array.length - n]` for relative array access
 - Avoid nested ternary operators and in general value human readability
 - Keep the cognitive complexity of function to a maximum of 15
 - The styling (CSS) is centralized in the `core` package. Use that one as much as you can. Use `:where` to enable styling rewriting from the users
