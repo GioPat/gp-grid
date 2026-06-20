@@ -54,7 +54,7 @@ for (const grid of GRIDS) {
       });
 
       // Wait for grid to be ready
-      const fullRenderTime = await waitForGridReady(page, grid);
+      const fullRenderTime = await waitForGridReady(page);
 
       // Get LCP
       const lcp = await lcpPromise;

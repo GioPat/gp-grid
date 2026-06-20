@@ -26,7 +26,7 @@ for (const grid of GRIDS) {
       await page.goto(`http://localhost:${port}?rows=${rowCount}`);
 
       // Wait for grid to be fully rendered
-      await waitForGridReady(page, grid);
+      await waitForGridReady(page);
 
       // Start CDP session for precise metrics
       const client = await page.context().newCDPSession(page);
@@ -88,7 +88,7 @@ test.describe("Quick scroll test", () => {
 
   test("gp-grid scroll 100k", async ({ page }) => {
     await page.goto("http://localhost:5100?rows=100000");
-    await waitForGridReady(page, "gp-grid");
+    await waitForGridReady(page);
 
     const metrics = await measureFPSSimple(page, 3000);
     console.log("Quick FPS result:", metrics.avgFPS);

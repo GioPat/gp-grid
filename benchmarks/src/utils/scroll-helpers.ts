@@ -29,6 +29,7 @@ export async function performScroll(
         container.querySelector(".gp-grid-container") || // gp-grid
         container.querySelector(".ag-body-viewport") ||  // AG Grid
         container.querySelector(".wtHolder") ||          // Handsontable
+        container.querySelector("smart-grid") ||         // Smart.Grid
         container;                                       // TanStack (container itself)
 
       for (let i = 0; i < steps; i++) {
@@ -53,6 +54,7 @@ export async function scrollToPosition(
       container.querySelector(".gp-grid-container") ||
       container.querySelector(".ag-body-viewport") ||
       container.querySelector(".wtHolder") ||
+      container.querySelector("smart-grid") ||
       container;
 
     scrollable.scrollTop = top;
@@ -74,6 +76,7 @@ export async function scrollToBottom(page: Page): Promise<void> {
       container.querySelector(".gp-grid-container") ||
       container.querySelector(".ag-body-viewport") ||
       container.querySelector(".wtHolder") ||
+      container.querySelector("smart-grid") ||
       container;
 
     scrollable.scrollTop = scrollable.scrollHeight;
@@ -118,6 +121,7 @@ export async function getScrollPosition(page: Page): Promise<number> {
       container.querySelector(".gp-grid-container") ||
       container.querySelector(".ag-body-viewport") ||
       container.querySelector(".wtHolder") ||
+      container.querySelector("smart-grid") ||
       container;
 
     return scrollable.scrollTop;
@@ -134,6 +138,7 @@ export async function getScrollHeight(page: Page): Promise<number> {
       container.querySelector(".gp-grid-container") ||
       container.querySelector(".ag-body-viewport") ||
       container.querySelector(".wtHolder") ||
+      container.querySelector("smart-grid") ||
       container;
 
     return scrollable.scrollHeight;

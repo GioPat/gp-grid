@@ -1,10 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import Handsontable from "handsontable";
 import "handsontable/dist/handsontable.full.min.css";
-import {
-  generateData,
-  type BenchmarkRow,
-} from "../../../src/data/generate-data";
+import { generateData } from "../../../src/data/generate-data";
 import {
   toHandsontableColumns,
   BENCHMARK_COLUMNS,
@@ -15,10 +12,13 @@ interface GridWrapperProps {
   initialRowCount: number;
 }
 
+function isReady(): boolean {
+  return document.querySelectorAll(".htCore tbody tr").length > 0;
+}
+
 export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hotRef = useRef<Handsontable | null>(null);
-  const [isReady, setIsReady] = useState(false);
   const [rowCount, setRowCount] = useState(0);
 
   // Initialize Handsontable
@@ -57,7 +57,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Load data function
   const loadData = useCallback((count: number) => {
     if (!hotRef.current) return;
-    setIsReady(false);
 
     const data = generateData(count);
     // Convert to array format for Handsontable
@@ -76,9 +75,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
 
     hotRef.current.loadData(arrayData);
     setRowCount(count);
-
-    // Small delay to ensure rendering is complete
-    setTimeout(() => setIsReady(true), 100);
   }, []);
 
   // Clear data function
@@ -86,7 +82,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     if (!hotRef.current) return;
     hotRef.current.loadData([]);
     setRowCount(0);
-    setIsReady(false);
   }, []);
 
   // Sort function - Handsontable sorts synchronously
@@ -166,12 +161,13 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       clearSort,
       filter,
       clearFilters,
-      isReady: () => isReady,
+      isReady,
       getRowCount: () => rowCount,
+      getDisplayedRowCount: () => hotRef.current?.countRows() ?? 0,
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, isReady, rowCount]);
+  }, [loadData, clearData, sort, clearSort, filter, clearFilters, rowCount]);
 
   // Initial data load
   useEffect(() => {

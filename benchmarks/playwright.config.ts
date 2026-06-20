@@ -9,6 +9,7 @@ const serverConfigs: Record<string, { command: string; port: number }> = {
   "ag-grid": { command: "pnpm dev:ag-grid", port: 5101 },
   "tanstack-table": { command: "pnpm dev:tanstack", port: 5102 },
   handsontable: { command: "pnpm dev:handsontable", port: 5103 },
+  "smart-grid": { command: "pnpm dev:smart-grid", port: 5104 },
 };
 
 // Only start the server we need, or expect them to be running already

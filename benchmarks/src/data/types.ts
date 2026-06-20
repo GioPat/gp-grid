@@ -1,12 +1,18 @@
 // Shared types for benchmarks
 
-export type GridType = "gp-grid" | "ag-grid" | "tanstack-table" | "handsontable";
+export type GridType =
+  | "gp-grid"
+  | "ag-grid"
+  | "tanstack-table"
+  | "handsontable"
+  | "smart-grid";
 
 export const GRIDS: GridType[] = [
   "gp-grid",
   "ag-grid",
   "tanstack-table",
   "handsontable",
+  "smart-grid",
 ];
 
 export const GRID_PORTS: Record<GridType, number> = {
@@ -14,6 +20,7 @@ export const GRID_PORTS: Record<GridType, number> = {
   "ag-grid": 5101,
   "tanstack-table": 5102,
   handsontable: 5103,
+  "smart-grid": 5104,
 };
 
 export function getGridPort(grid: GridType): number {
@@ -36,6 +43,7 @@ export interface BenchmarkGridApi {
   clearFilters(): Promise<void>;
   isReady(): boolean;
   getRowCount(): number;
+  getDisplayedRowCount(): number;
 }
 
 // Declare global for TypeScript

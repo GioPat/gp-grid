@@ -13,7 +13,6 @@ import { saveResult } from "../src/results/json-reporter";
 
 // Helper to measure operation time
 async function measureOperation(
-  page: import("@playwright/test").Page,
   operation: () => Promise<void>,
   waitFn: () => Promise<void>
 ): Promise<number> {
@@ -32,23 +31,21 @@ for (const grid of GRIDS) {
 
       // Navigate and wait for grid to be ready
       await page.goto(`http://localhost:${port}?rows=${rowCount}`);
-      await waitForGridReady(page, grid);
+      await waitForGridReady(page);
 
       // Allow grid to fully settle
       await page.waitForTimeout(500);
 
       // Test Sort Ascending
       const sortAscTime = await measureOperation(
-        page,
         () => page.evaluate(() => window.gridApi.sort("name", "asc")),
-        () => waitForSortComplete(page, grid)
+        () => waitForSortComplete(page)
       );
 
       // Test Sort Descending
       const sortDescTime = await measureOperation(
-        page,
         () => page.evaluate(() => window.gridApi.sort("name", "desc")),
-        () => waitForSortComplete(page, grid)
+        () => waitForSortComplete(page)
       );
 
       // Clear sort before multi-column test
@@ -58,9 +55,9 @@ for (const grid of GRIDS) {
       // Test Multi-column Sort (simulate by sorting twice)
       const multiSortStart = Date.now();
       await page.evaluate(() => window.gridApi.sort("status", "asc"));
-      await waitForSortComplete(page, grid);
+      await waitForSortComplete(page);
       await page.evaluate(() => window.gridApi.sort("salary", "desc"));
-      await waitForSortComplete(page, grid);
+      await waitForSortComplete(page);
       const multiColumnSortTime = Date.now() - multiSortStart;
 
       // Clear sort before filter tests
@@ -69,49 +66,52 @@ for (const grid of GRIDS) {
 
       // Test Text Filter (contains)
       const textFilterTime = await measureOperation(
-        page,
         () =>
           page.evaluate(() =>
             window.gridApi.filter("name", { type: "contains", value: "Alice" })
           ),
-        () => waitForFilterComplete(page, grid)
+        () => waitForFilterComplete(page, { greaterThan: 0, lessThan: rowCount })
       );
 
       // Clear filter
       await page.evaluate(() => window.gridApi.clearFilters());
-      await page.waitForTimeout(100);
+      await waitForFilterComplete(page, { equals: rowCount });
 
       // Test Number Filter (greaterThan)
       const numberFilterTime = await measureOperation(
-        page,
         () =>
           page.evaluate(() =>
             window.gridApi.filter("salary", { type: "greaterThan", value: 100000 })
           ),
-        () => waitForFilterComplete(page, grid)
+        () => waitForFilterComplete(page, { greaterThan: 0, lessThan: rowCount })
       );
 
       // Clear filter
       await page.evaluate(() => window.gridApi.clearFilters());
-      await page.waitForTimeout(100);
+      await waitForFilterComplete(page, { equals: rowCount });
 
       // Test Complex Filter (between + additional condition)
       const complexFilterStart = Date.now();
       await page.evaluate(() =>
         window.gridApi.filter("salary", { type: "between", value: [50000, 150000] })
       );
-      await waitForFilterComplete(page, grid);
+      await waitForFilterComplete(page, { greaterThan: 0, lessThan: rowCount });
+      const betweenRowCount = await page.evaluate(
+        () => window.gridApi.getDisplayedRowCount(),
+      );
       await page.evaluate(() =>
         window.gridApi.filter("status", { type: "equals", value: "active" })
       );
-      await waitForFilterComplete(page, grid);
+      await waitForFilterComplete(page, {
+        greaterThan: 0,
+        lessThan: betweenRowCount,
+      });
       const complexFilterTime = Date.now() - complexFilterStart;
 
       // Test Clear Filter
       const clearFilterTime = await measureOperation(
-        page,
         () => page.evaluate(() => window.gridApi.clearFilters()),
-        () => waitForFilterComplete(page, grid)
+        () => waitForFilterComplete(page, { equals: rowCount })
       );
 
       const metrics: SortFilterMetrics = {

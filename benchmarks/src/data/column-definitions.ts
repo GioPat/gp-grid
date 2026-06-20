@@ -162,11 +162,31 @@ const handsontableTypeMap: Record<NormalizedColumn["type"], string> = {
 };
 
 export function toHandsontableColumns(cols: NormalizedColumn[]) {
-  return cols.map((col) => ({
-    data: col.field,
+  return cols.map((col, index) => ({
+    data: index,
     title: col.headerName,
     width: col.width,
     type: handsontableTypeMap[col.type],
     readOnly: true,
+  }));
+}
+
+// Convert to Smart.Grid format
+const smartGridTypeMap: Record<NormalizedColumn["type"], string> = {
+  text: "string",
+  number: "number",
+  date: "date",
+  boolean: "bool",
+};
+
+export function toSmartGridColumns(cols: NormalizedColumn[]) {
+  return cols.map((col) => ({
+    dataField: col.field,
+    label: col.headerName,
+    width: col.width,
+    dataType: smartGridTypeMap[col.type],
+    allowSort: col.sortable,
+    allowFilter: col.filterable,
+    allowResize: false,
   }));
 }

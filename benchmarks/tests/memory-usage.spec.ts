@@ -14,7 +14,7 @@ import {
   bytesToMB,
   MemoryTracker,
 } from "../src/metrics/memory-snapshot";
-import { waitForGridReady, waitForDataLoad } from "../src/utils/wait-helpers";
+import { waitForDataLoad } from "../src/utils/wait-helpers";
 import { performScroll, scrollToTop } from "../src/utils/scroll-helpers";
 import { saveResult } from "../src/results/json-reporter";
 
