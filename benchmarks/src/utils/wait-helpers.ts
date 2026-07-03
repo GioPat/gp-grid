@@ -4,9 +4,10 @@ import type { Page } from "@playwright/test";
 
 const GRID_READY_TIMEOUT = 30_000;
 
-export async function waitForGridReady(page: Page): Promise<number> {
-  const start = Date.now();
-
+export async function waitForGridReady(
+  page: Page,
+  expectedRowCount?: number,
+): Promise<void> {
   // Wait for the grid container to be visible
   await page.waitForSelector('[data-testid="grid-container"]', {
     state: "visible",
@@ -15,13 +16,22 @@ export async function waitForGridReady(page: Page): Promise<number> {
 
   // All wrappers expose isReady as a DOM-based check, so this is grid-agnostic
   await page.waitForFunction(
-    () => {
-      return window.gridApi && window.gridApi.isReady();
+    (expected) => {
+      if (window.gridApi === undefined) {
+        return false;
+      }
+
+      const expectedRowsLoaded =
+        expected === undefined || window.gridApi.getRowCount() === expected;
+      const visibleRowsReady = expected === 0 || window.gridApi.isReady();
+
+      return expectedRowsLoaded && visibleRowsReady;
     },
+    expectedRowCount,
     { timeout: GRID_READY_TIMEOUT }
   );
 
-  return Date.now() - start;
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }
 
 export async function waitForSortComplete(page: Page): Promise<void> {
@@ -32,8 +42,7 @@ export async function waitForSortComplete(page: Page): Promise<void> {
     { timeout: GRID_READY_TIMEOUT }
   );
 
-  // Small delay to ensure rendering is complete
-  await page.waitForTimeout(50);
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }
 
 interface RowCountExpectation {
@@ -66,10 +75,7 @@ export async function waitForFilterComplete(
     { timeout: GRID_READY_TIMEOUT },
   );
 
-  // Wait through a paint after the row model reports the expected result.
-  await page.evaluate(() => new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  }));
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }
 
 export async function waitForDataLoad(
@@ -78,13 +84,17 @@ export async function waitForDataLoad(
 ): Promise<void> {
   await page.waitForFunction(
     (expected) => {
-      return (
-        window.gridApi &&
-        window.gridApi.isReady() &&
-        window.gridApi.getRowCount() === expected
-      );
+      if (window.gridApi === undefined) {
+        return false;
+      }
+
+      const expectedRowsLoaded = window.gridApi.getRowCount() === expected;
+      const visibleRowsReady = expected === 0 || window.gridApi.isReady();
+      return expectedRowsLoaded && visibleRowsReady;
     },
     expectedRowCount,
     { timeout: GRID_READY_TIMEOUT }
   );
+
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }

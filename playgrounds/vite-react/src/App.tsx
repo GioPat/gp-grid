@@ -395,23 +395,23 @@ function MainDemo() {
       computeRowClasses:
         highlightMode === "row"
           ? (context: { isHovered: boolean }) => {
-              if (context.isHovered) return ["row-highlight"];
-              return [];
-            }
+            if (context.isHovered) return ["row-highlight"];
+            return [];
+          }
           : undefined,
       computeColumnClasses:
         highlightMode === "column"
           ? (context: { isHovered: boolean }) => {
-              if (context.isHovered) return ["column-highlight"];
-              return [];
-            }
+            if (context.isHovered) return ["column-highlight"];
+            return [];
+          }
           : undefined,
       computeCellClasses:
         highlightMode === "cell"
           ? (context: { isHovered: boolean }) => {
-              if (context.isHovered) return ["cell-highlight"];
-              return [];
-            }
+            if (context.isHovered) return ["cell-highlight"];
+            return [];
+          }
           : undefined,
     }),
     [highlightMode],
@@ -460,6 +460,7 @@ function MainDemo() {
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
           columns={columns}
+          overscan={12}
           dataSource={dataSource}
           rowHeight={36}
           darkMode={true}

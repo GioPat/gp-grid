@@ -114,7 +114,3 @@ export function generateData(rowCount: number, seed = 42): BenchmarkRow[] {
 
   return data;
 }
-
-// Row counts for benchmarking
-export const ROW_COUNTS = [1_000_000] as const;
-export type RowCount = (typeof ROW_COUNTS)[number];

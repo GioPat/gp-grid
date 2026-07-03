@@ -10,10 +10,13 @@ import {
   toGpGridColumns,
   BENCHMARK_COLUMNS,
 } from "../../../src/data/column-definitions";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
 import type {
   BenchmarkGridApi,
   FilterCondition,
+  SortRule,
 } from "../../../src/data/types";
+import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
@@ -73,6 +76,18 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     if (core) {
       // Passing null direction clears all sorts when addToExisting is false (default)
       await core.setSort("", null);
+    }
+  }, []);
+
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    const core = gridRef.current?.core;
+    if (!core || rules.length === 0) return;
+
+    const [firstRule, ...remainingRules] = rules;
+    await core.setSort(firstRule.field, firstRule.direction);
+
+    for (const rule of remainingRules) {
+      await core.setSort(rule.field, rule.direction, true);
     }
   }, []);
 
@@ -154,16 +169,44 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
       isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => data.length,
+      // Above ~312k rows gp-grid compresses its DOM scroll space (ratio < 1);
+      // the scroll benchmark reads this to recover the true logical travel.
+      getScrollRatio: () => gridRef.current?.core?.getScrollRatio() ?? 1,
       getDisplayedRowCount: () => gridRef.current?.core?.getRowCount() ?? 0,
+      getDisplayedRows: (start, count) => {
+        const core = gridRef.current?.core;
+        if (!core) return [];
+
+        const rows: BenchmarkRow[] = [];
+        for (let rowIndex = start; rowIndex < start + count; rowIndex++) {
+          const row = core.getRowData(rowIndex);
+          if (row) {
+            rows.push(row);
+          }
+        }
+
+        return rows;
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, data.length]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    data.length,
+  ]);
 
   // Initial data load
   useEffect(() => {
@@ -180,6 +223,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
         dataSource={dataSource}
         rowHeight={32}
         headerHeight={40}
+        overscan={benchmarkDefaults.overscanRows}
       />
     </div>
   );

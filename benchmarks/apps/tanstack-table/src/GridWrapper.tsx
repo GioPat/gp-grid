@@ -20,7 +20,16 @@ import {
   BENCHMARK_COLUMNS,
   getTotalColumnsWidth,
 } from "../../../src/data/column-definitions";
-import type { BenchmarkGridApi, FilterCondition } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
+import type {
+  BenchmarkGridApi,
+  FilterCondition,
+  SortRule,
+} from "../../../src/data/types";
+import {
+  matchesCondition,
+  waitForBrowserIdle,
+} from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
@@ -35,23 +44,7 @@ const benchmarkFilter: FilterFn<TableFeatures, BenchmarkRow> = (
   condition: FilterCondition,
 ): boolean => {
   const value = row.getValue(columnId);
-
-  switch (condition.type) {
-    case "contains":
-      return String(value).toLowerCase().includes(String(condition.value).toLowerCase());
-    case "equals":
-      return String(value).toLowerCase() === String(condition.value).toLowerCase();
-    case "greaterThan":
-      return Number(value) > Number(condition.value);
-    case "lessThan":
-      return Number(value) < Number(condition.value);
-    case "between":
-      if (Array.isArray(condition.value)) {
-        return Number(value) >= condition.value[0]
-          && Number(value) <= condition.value[1];
-      }
-      return false;
-  }
+  return matchesCondition(value as BenchmarkRow[keyof BenchmarkRow], condition);
 };
 
 const features = tableFeatures({
@@ -94,7 +87,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     count: rows.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 20,
+    overscan: benchmarkDefaults.overscanRows,
   });
 
   const virtualRows = virtualizer.getVirtualItems();
@@ -123,6 +116,15 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     table.setSorting([]);
   }, [table]);
 
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    table.setSorting(
+      rules.map((rule) => ({
+        id: rule.field,
+        desc: rule.direction === "desc",
+      })),
+    );
+  }, [table]);
+
   // Pass the complete condition so TanStack applies the same predicate as the other grids.
   const filter = useCallback(async (field: string, condition: FilterCondition): Promise<void> => {
     const column = table.getColumn(field);
@@ -141,16 +143,34 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
       isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => data.length,
       getDisplayedRowCount: () => table.getRowModel().rows.length,
+      getDisplayedRows: (start, count) => {
+        return table
+          .getRowModel()
+          .rows.slice(start, start + count)
+          .map((row) => row.original);
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, data.length, table]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    data.length,
+    table,
+  ]);
 
   // Initial data load
   useEffect(() => {

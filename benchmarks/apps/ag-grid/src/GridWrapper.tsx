@@ -10,7 +10,13 @@ import {
   toAgGridColumns,
   BENCHMARK_COLUMNS,
 } from "../../../src/data/column-definitions";
-import type { BenchmarkGridApi, FilterCondition } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
+import type {
+  BenchmarkGridApi,
+  FilterCondition,
+  SortRule,
+} from "../../../src/data/types";
+import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -58,6 +64,19 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const clearSort = useCallback(async (): Promise<void> => {
     if (gridApiRef.current) {
       gridApiRef.current.applyColumnState({
+        defaultState: { sort: null },
+      });
+    }
+  }, []);
+
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    if (gridApiRef.current) {
+      gridApiRef.current.applyColumnState({
+        state: rules.map((rule, index) => ({
+          colId: rule.field,
+          sort: rule.direction,
+          sortIndex: index,
+        })),
         defaultState: { sort: null },
       });
     }
@@ -132,16 +151,41 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
       isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => rowData.length,
       getDisplayedRowCount: () => gridApiRef.current?.getDisplayedRowCount() ?? 0,
+      getDisplayedRows: (start, count) => {
+        const gridApi = gridApiRef.current;
+        if (!gridApi) return [];
+
+        const rows: BenchmarkRow[] = [];
+        for (let rowIndex = start; rowIndex < start + count; rowIndex++) {
+          const row = gridApi.getDisplayedRowAtIndex(rowIndex)?.data;
+          if (row) {
+            rows.push(row);
+          }
+        }
+
+        return rows;
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, rowData.length]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    rowData.length,
+  ]);
 
   // Initial data load
   useEffect(() => {
@@ -160,7 +204,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
         columnDefs={columns}
         rowHeight={32}
         headerHeight={40}
-        rowBuffer={20}
+        rowBuffer={benchmarkDefaults.overscanRows}
         onGridReady={onGridReady}
         suppressColumnVirtualisation={false}
         suppressRowVirtualisation={false}

@@ -1,112 +1,78 @@
 // Initial Render Benchmark
-// Measures time to first paint and full render with large datasets
+// Measures navigation-to-ready and browser paint metrics with large datasets.
 
-import { test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 import { GRIDS, getGridPort, type RenderMetrics } from "../src/data/types";
-import { ROW_COUNTS } from "../src/data/generate-data";
+import {
+  getBenchmarkIterations,
+  getBenchmarkRowCounts,
+} from "../src/config/benchmark-config";
 import { waitForGridReady } from "../src/utils/wait-helpers";
 import { saveResult } from "../src/results/json-reporter";
+import {
+  getBrowserVersion,
+} from "../src/utils/benchmark-assertions";
+import {
+  getPerformanceMetrics,
+  installPerformanceObservers,
+} from "../src/metrics/browser-performance";
+
+const measureInitialRender = async (
+  page: Page,
+  port: number,
+  rowCount: number,
+): Promise<RenderMetrics> => {
+  const navigationStart = Date.now();
+
+  await page.goto(`http://localhost:${port}?rows=${rowCount}`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const domContentLoaded = Date.now() - navigationStart;
+  await waitForGridReady(page, rowCount);
+  const timeToFullRender = Date.now() - navigationStart;
+
+  const paintEntries = await page.evaluate(() => {
+    const entries = performance.getEntriesByType("paint");
+    return entries.map((entry) => ({
+      name: entry.name,
+      startTime: entry.startTime,
+    }));
+  });
+  const firstContentfulPaint = paintEntries.find(
+    (entry) => entry.name === "first-contentful-paint",
+  );
+  const performanceMetrics = await getPerformanceMetrics(page);
+
+  return {
+    timeToFirstPaint: Math.round(firstContentfulPaint?.startTime ?? 0),
+    timeToFullRender,
+    domContentLoaded,
+    largestContentfulPaint: performanceMetrics.largestContentfulPaint,
+    totalBlockingTime: performanceMetrics.totalBlockingTime,
+  };
+};
 
 for (const grid of GRIDS) {
-  for (const rowCount of ROW_COUNTS) {
+  for (const rowCount of getBenchmarkRowCounts()) {
     test(`${grid} initial render with ${rowCount.toLocaleString()} rows`, async ({
       page,
     }) => {
       const port = getGridPort(grid);
+      const samples: RenderMetrics[] = [];
 
-      // Set up CDP for performance metrics
-      const client = await page.context().newCDPSession(page);
-      await client.send("Performance.enable");
+      await installPerformanceObservers(page);
 
-      // Record start time
-      const navigationStart = Date.now();
+      for (let iteration = 0; iteration < getBenchmarkIterations(); iteration++) {
+        samples.push(await measureInitialRender(page, port, rowCount));
+      }
 
-      // Navigate with data loading
-      await page.goto(`http://localhost:${port}?rows=${rowCount}`, {
-        waitUntil: "domcontentloaded",
+      const result = saveResult("render", grid, rowCount, samples, {
+        browserVersion: getBrowserVersion(page),
       });
-
-      const domContentLoaded = Date.now() - navigationStart;
-
-      // Inject PerformanceObserver for LCP
-      const lcpPromise = page.evaluate(() => {
-        return new Promise<number>((resolve) => {
-          let lcpTime = 0;
-
-          const observer = new PerformanceObserver((list) => {
-            const entries = list.getEntries();
-            if (entries.length > 0) {
-              const lastEntry = entries[entries.length - 1] as PerformanceEntry & {
-                startTime: number;
-              };
-              lcpTime = lastEntry.startTime;
-            }
-          });
-
-          observer.observe({ type: "largest-contentful-paint", buffered: true });
-
-          // Resolve after a timeout or when we think rendering is done
-          setTimeout(() => {
-            observer.disconnect();
-            resolve(lcpTime);
-          }, 10000);
-        });
-      });
-
-      // Wait for grid to be ready
-      const fullRenderTime = await waitForGridReady(page);
-
-      // Get LCP
-      const lcp = await lcpPromise;
-
-      // Get FCP from Performance API
-      const paintEntries = await page.evaluate(() => {
-        const entries = performance.getEntriesByType("paint");
-        return entries.map((e) => ({ name: e.name, startTime: e.startTime }));
-      });
-
-      const fcpEntry = paintEntries.find((e) => e.name === "first-contentful-paint");
-      const timeToFirstPaint = fcpEntry?.startTime ?? 0;
-
-      // Calculate Total Blocking Time (TBT) approximation
-      const longTasks = await page.evaluate(() => {
-        return new Promise<number>((resolve) => {
-          let tbt = 0;
-          const observer = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-              // TBT = sum of (task duration - 50ms) for tasks > 50ms
-              if (entry.duration > 50) {
-                tbt += entry.duration - 50;
-              }
-            }
-          });
-
-          try {
-            observer.observe({ type: "longtask", buffered: true });
-          } catch {
-            // longtask may not be supported
-          }
-
-          setTimeout(() => {
-            observer.disconnect();
-            resolve(tbt);
-          }, 2000);
-        });
-      });
-
-      const metrics: RenderMetrics = {
-        timeToFirstPaint: Math.round(timeToFirstPaint),
-        timeToFullRender: fullRenderTime,
-        domContentLoaded,
-        largestContentfulPaint: Math.round(lcp),
-        totalBlockingTime: Math.round(longTasks),
-      };
-
-      // Save results
-      saveResult("render", grid, rowCount, metrics);
 
       console.log(
-        `[${grid}] ${rowCount.toLocaleString()} rows - FCP: ${metrics.timeToFirstPaint}ms, Full: ${metrics.timeToFullRender}ms, LCP: ${metrics.largestContentfulPaint}ms`
+        `[${grid}] ${rowCount.toLocaleString()} rows - median FCP: ${result.metrics.timeToFirstPaint}ms, median full: ${result.metrics.timeToFullRender}ms, samples: ${samples.length}`,
       );
     });
   }
