@@ -44,6 +44,14 @@ export interface GridCoreOptions<TData = unknown> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
+  /**
+   * Maximum velocity (logical px/ms) that stacked touch flicks can
+   * accumulate while scroll virtualization is active (datasets exceeding
+   * the browser scroll limit). Higher values traverse huge datasets faster
+   * but need a larger `overscan` (10–12 recommended) so rendering keeps up.
+   * Default: 20 × rowHeight, i.e. about 20,000 rows per second.
+   */
+  maxFlingVelocity?: number;
   /** Row loading and cache behavior. Server data sources use paginated loading by default. */
   rowLoading?: RowLoadingOptions;
   /** Enable/disable sorting globally. Default: true */

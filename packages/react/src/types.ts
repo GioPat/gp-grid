@@ -64,6 +64,8 @@ export interface GridProps<TData = unknown> {
   darkMode?: boolean;
   /** Wheel scroll dampening factor when virtual scrolling is active (0-1): Default 0.1 */
   wheelDampening?: number;
+  /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. Default: 20 × rowHeight (~20,000 rows/s) */
+  maxFlingVelocity?: number;
 
   /** Renderer registries */
   cellRenderers?: Record<string, ReactCellRenderer>;

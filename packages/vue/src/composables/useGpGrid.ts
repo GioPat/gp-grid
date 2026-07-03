@@ -46,6 +46,8 @@ export interface UseGpGridOptions<TData = unknown> {
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
+  /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. Default: 20 × rowHeight (~20,000 rows/s) */
+  maxFlingVelocity?: number;
   highlighting?: HighlightingOptions<TData>;
   /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
   getRowId?: (row: TData) => RowId;
@@ -228,6 +230,7 @@ export function useGpGrid<TData = unknown>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       overscan: options.overscan ?? 3,
+      maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,

@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GridCore } from "../src/grid-core";
 import { TouchScrollController } from "../src/adapter/touch-scroll";
+import { MAX_FLING_VELOCITY } from "../src/utils/touch-scroll-physics";
 
 interface MockCoreOptions {
   scalingActive?: boolean;
   scrollRatio?: number;
   isDragging?: boolean;
+  maxFlingVelocity?: number;
+  rowHeight?: number;
 }
 
 const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
@@ -13,10 +16,14 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     scalingActive: options.scalingActive ?? true,
     scrollRatio: options.scrollRatio ?? 0.5,
     isDragging: options.isDragging ?? false,
+    maxFlingVelocity: options.maxFlingVelocity ?? MAX_FLING_VELOCITY,
+    rowHeight: options.rowHeight ?? 32,
   };
   const core = {
     isScalingActive: () => state.scalingActive,
     getScrollRatio: () => state.scrollRatio,
+    getMaxFlingVelocity: () => state.maxFlingVelocity,
+    getRowHeight: () => state.rowHeight,
     setScrollTopOverride: vi.fn(),
     setViewport: vi.fn(),
     input: {
@@ -403,8 +410,10 @@ describe("TouchScrollController", () => {
   });
 
   it("renders a fast fling every frame while the device keeps pace", () => {
-    const { core, el } = setup({ scrollRatio: 0.5 });
-    fastSwipe(el); // release at 1 px/ms, well above RENDER_VELOCITY_THRESHOLD
+    // rowHeight 2 puts the 1 px/ms release well above the row-flux
+    // throttle threshold (150 rows/s → 0.3 px/ms).
+    const { core, el } = setup({ scrollRatio: 0.5, rowHeight: 2 });
+    fastSwipe(el); // release at 1 px/ms, well above the throttle threshold
     const mocks = getMocks(core);
     mocks.setViewport.mockClear();
 
@@ -422,7 +431,8 @@ describe("TouchScrollController", () => {
   });
 
   it("falls back to throttled rendering when frames prove heavy", () => {
-    const { core, el } = setup({ scrollRatio: 0.5 });
+    // rowHeight 2 keeps the 1 px/ms release above the throttle threshold.
+    const { core, el } = setup({ scrollRatio: 0.5, rowHeight: 2 });
     fastSwipe(el); // release rendered at t=100
     const mocks = getMocks(core);
     mocks.setViewport.mockClear();
@@ -444,8 +454,24 @@ describe("TouchScrollController", () => {
     expect(el.scrollTop).toBeGreaterThan(before);
   });
 
+  it("keeps rendering every frame at low row flux even when frames are heavy", () => {
+    // 1 px/ms at 32px rows is ~31 rows/s — throttling here would advance
+    // only a few rows per 100ms render and read as rows locking.
+    const { core, el } = setup({ scrollRatio: 0.5, rowHeight: 32 });
+    fastSwipe(el);
+    const mocks = getMocks(core);
+    mocks.setViewport.mockClear();
+
+    let now = 100;
+    for (let i = 0; i < 6; i++) {
+      now += 40; // heavy ~25fps frames
+      raf.pump(now);
+    }
+    expect(mocks.setViewport.mock.calls.length).toBe(6);
+  });
+
   it("renders every frame once the fling slows below the threshold", () => {
-    const { core, el } = setup({ scrollRatio: 0.5 });
+    const { core, el } = setup({ scrollRatio: 0.5, rowHeight: 2 });
     fastSwipe(el);
     const mocks = getMocks(core);
 
@@ -482,10 +508,11 @@ describe("TouchScrollController", () => {
     const before = el.scrollTop;
     raf.pump(236);
     raf.pump(252);
-    // release 1 + carried ≈ 0.96 ≈ 1.96 → ~15.7 px/frame, clearly above
-    // the single-flick ~8 px/frame over the two pumped frames.
-    expect(el.scrollTop - before).toBeGreaterThan(25);
-    expect(el.scrollTop - before).toBeLessThanOrEqual(33);
+    // release 1 + carried ≈ 0.99 × gain 4 ≈ 4.95 → ~39.6 px on the first
+    // frame, clearly above the single-flick ~8 px/frame over the two
+    // pumped frames.
+    expect(el.scrollTop - before).toBeGreaterThan(70);
+    expect(el.scrollTop - before).toBeLessThanOrEqual(85);
   });
 
   it("discards carried velocity when the next flick reverses direction", () => {
@@ -506,26 +533,26 @@ describe("TouchScrollController", () => {
   });
 
   it("governs accumulated speed down to what the renderer sustains", () => {
-    const { el } = setup({ scrollRatio: 0.5 });
+    // Small cap so the 250px budget floor applies (a large cap scales the
+    // budget with it and would not govern a 1 px/ms release).
+    const { el } = setup({ scrollRatio: 0.5, maxFlingVelocity: 2.4 });
     // First fling rendered at a crawl: pipeline runs 600ms apart, teaching
     // the EMA that this device renders slowly (cap → 250/600 ≈ 0.42 px/ms).
     fastSwipe(el); // renders at t=100
-    raf.pump(700);
-    raf.pump(1300);
-    raf.pump(1900);
-    raf.pump(2500);
-    raf.pump(3100); // fling decays out under wall-clock time
+    for (let now = 700; now <= 7300 && raf.pending() > 0; now += 600) {
+      raf.pump(now); // fling decays out under wall-clock time
+    }
     expect(raf.pending()).toBe(0);
 
     // A new flick releases at 1 px/ms, but the governor caps it at the
     // measured sustainable speed.
-    el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 3600));
-    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 250 }], 3650));
-    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 200 }], 3700));
-    el.dispatchEvent(touchEvent("touchend", [{ clientY: 200 }], 3700));
+    el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 7600));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 250 }], 7650));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 200 }], 7700));
+    el.dispatchEvent(touchEvent("touchend", [{ clientY: 200 }], 7700));
 
     const before = el.scrollTop;
-    raf.pump(3716);
+    raf.pump(7716);
     // Governed first frame: ~0.42 · 16 · 0.5 ≈ 3.3 px, below the
     // ungoverned 0.5 · 16 · 0.5 = 4 px.
     const advance = el.scrollTop - before;

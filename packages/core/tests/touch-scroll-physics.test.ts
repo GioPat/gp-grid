@@ -5,15 +5,19 @@ import {
   computeReleaseVelocity,
   isFlingDone,
   pruneSamples,
+  renderThrottleThreshold,
   stepFling,
   updateRenderIntervalEma,
+  FLING_TIME_CONSTANT_MS,
   MAX_FLICK_VELOCITY,
   MAX_FLING_VELOCITY,
   MAX_FRAME_DT_MS,
   MAX_RENDER_INTERVAL_SAMPLE_MS,
   MIN_FLING_VELOCITY,
   RENDER_STALENESS_BUDGET_PX,
+  STACKED_FLICK_GAIN,
   STOP_FLING_VELOCITY,
+  TARGET_FRAME_MS,
   VELOCITY_WINDOW_MS,
   type VelocitySample,
 } from "../src/utils/touch-scroll-physics";
@@ -58,6 +62,16 @@ describe("touch-scroll-physics", () => {
       ];
       expect(computeReleaseVelocity(fastUp)).toBe(-MAX_FLICK_VELOCITY);
     });
+
+    it("clamps a single flick to the fling cap when configured below MAX_FLICK_VELOCITY", () => {
+      const fast: VelocitySample[] = [
+        { time: 0, position: 0 },
+        { time: 10, position: 1000 },
+      ];
+      expect(computeReleaseVelocity(fast, 1.5)).toBe(1.5);
+      // A large fling cap does not loosen the single-flick clamp.
+      expect(computeReleaseVelocity(fast, 100)).toBe(MAX_FLICK_VELOCITY);
+    });
   });
 
   describe("pruneSamples", () => {
@@ -89,12 +103,37 @@ describe("touch-scroll-physics", () => {
   });
 
   describe("combineFlingVelocities", () => {
-    it("stacks same-direction flicks and plateaus at MAX_FLING_VELOCITY", () => {
-      expect(combineFlingVelocities(0.5, 0.3)).toBeCloseTo(0.8);
-      expect(combineFlingVelocities(2, 2)).toBe(MAX_FLING_VELOCITY);
-      expect(combineFlingVelocities(-2, -2)).toBe(-MAX_FLING_VELOCITY);
+    it("compounds same-direction carried momentum and plateaus at MAX_FLING_VELOCITY", () => {
+      expect(combineFlingVelocities(0.5, 0.3)).toBeCloseTo(
+        0.5 + 0.3 * STACKED_FLICK_GAIN,
+      );
+      expect(combineFlingVelocities(2, 200)).toBe(MAX_FLING_VELOCITY);
+      expect(combineFlingVelocities(-2, -200)).toBe(-MAX_FLING_VELOCITY);
       // The plateau gives flicking headroom over a single flick.
       expect(MAX_FLING_VELOCITY).toBeGreaterThan(MAX_FLICK_VELOCITY);
+    });
+
+    it("reaches the cap within a handful of gentle flicks", () => {
+      // Simulate rapid flicking: each release at the single-flick clamp,
+      // ~200ms between catches (carried decays by the fling time constant).
+      const interFlickDecay = Math.exp(-200 / FLING_TIME_CONSTANT_MS);
+      let velocity = MAX_FLICK_VELOCITY;
+      let flicks = 1;
+      while (velocity < MAX_FLING_VELOCITY && flicks < 20) {
+        velocity = combineFlingVelocities(
+          MAX_FLICK_VELOCITY,
+          velocity * interFlickDecay,
+        );
+        flicks++;
+      }
+      expect(velocity).toBe(MAX_FLING_VELOCITY);
+      expect(flicks).toBeLessThanOrEqual(8);
+    });
+
+    it("plateaus at a configured cap instead of the default", () => {
+      expect(combineFlingVelocities(6, 6, 10)).toBe(10);
+      expect(combineFlingVelocities(-6, -6, 10)).toBe(-10);
+      expect(combineFlingVelocities(1, 0.5, 1.2)).toBe(1.2);
     });
 
     it("discards carried velocity on direction reversal", () => {
@@ -105,6 +144,13 @@ describe("touch-scroll-physics", () => {
     it("ignores zero carried velocity", () => {
       expect(combineFlingVelocities(0.5, 0)).toBe(0.5);
       expect(combineFlingVelocities(0, 1)).toBe(0);
+    });
+  });
+
+  describe("renderThrottleThreshold", () => {
+    it("scales with row height so throttling engages by row flux, not px", () => {
+      expect(renderThrottleThreshold(32)).toBeCloseTo(4.8);
+      expect(renderThrottleThreshold(20)).toBeCloseTo(3);
     });
   });
 
@@ -133,17 +179,30 @@ describe("touch-scroll-physics", () => {
   describe("computeAdaptiveVelocityCap", () => {
     it("allows the full cap with no measurements or a fast renderer", () => {
       expect(computeAdaptiveVelocityCap(null)).toBe(MAX_FLING_VELOCITY);
-      expect(computeAdaptiveVelocityCap(50)).toBe(MAX_FLING_VELOCITY);
+      // At a healthy 60fps pace the scaled budget carries the full cap.
+      expect(computeAdaptiveVelocityCap(TARGET_FRAME_MS)).toBe(
+        MAX_FLING_VELOCITY,
+      );
     });
 
-    it("caps speed by the render staleness budget on slow renderers", () => {
+    it("caps speed by the scaled staleness budget on slow renderers", () => {
+      // Budget scales with the cap: MAX_FLING_VELOCITY × TARGET_FRAME_MS px.
       expect(computeAdaptiveVelocityCap(600)).toBeCloseTo(
-        RENDER_STALENESS_BUDGET_PX / 600,
+        (MAX_FLING_VELOCITY * TARGET_FRAME_MS) / 600,
       );
     });
 
     it("never drops below the minimum fling velocity", () => {
       expect(computeAdaptiveVelocityCap(100000)).toBe(MIN_FLING_VELOCITY);
+    });
+
+    it("respects a configured fling cap on a fast renderer", () => {
+      // 250px budget / 20ms EMA = 12.5 px/ms sustainable → configured cap wins
+      expect(computeAdaptiveVelocityCap(20, 8)).toBe(8);
+      // A struggling renderer still governs below the configured cap
+      expect(computeAdaptiveVelocityCap(600, 8)).toBeCloseTo(
+        RENDER_STALENESS_BUDGET_PX / 600,
+      );
     });
   });
 
@@ -165,11 +224,11 @@ describe("touch-scroll-physics", () => {
 
     it("clamps position integration but decays velocity in wall-clock time", () => {
       const normal = stepFling({ position: 0, velocity: 1 }, MAX_FRAME_DT_MS);
-      const stalled = stepFling({ position: 0, velocity: 1 }, 5000);
+      const stalled = stepFling({ position: 0, velocity: 1 }, 15000);
       // A stalled frame must not teleport the content...
       expect(stalled.position).toBe(normal.position);
-      // ...but 5 seconds of wall time must still kill the fling — otherwise
-      // a device rendering at a few fps stretches flings out indefinitely.
+      // ...but enough wall time must still kill the fling — otherwise a
+      // device rendering at a few fps stretches flings out indefinitely.
       expect(isFlingDone(stalled.velocity)).toBe(true);
       expect(Math.abs(stalled.velocity)).toBeLessThan(Math.abs(normal.velocity));
     });

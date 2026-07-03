@@ -14,6 +14,7 @@ export interface BuildGridCoreInputs<TData> {
   rowHeight: number;
   headerHeight: number;
   overscan: number;
+  maxFlingVelocity: number | undefined;
   rowLoading: RowLoadingOptions | undefined;
   sortingEnabled: boolean;
   highlighting: HighlightingOptions<TData> | undefined;
@@ -42,6 +43,7 @@ export const buildGridCore = <TData>(
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
     overscan: inputs.overscan,
+    maxFlingVelocity: inputs.maxFlingVelocity,
     rowLoading: inputs.rowLoading,
     sortingEnabled: inputs.sortingEnabled,
     highlighting: inputs.highlighting,

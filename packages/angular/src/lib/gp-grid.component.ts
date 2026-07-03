@@ -75,6 +75,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   highlighting = input<HighlightingOptions | null>(null);
   rowDragEntireRow = input<boolean>(false);
   overscan = input<number>(3);
+  /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. */
+  maxFlingVelocity = input<number | undefined>(undefined);
   rowLoading = input<RowLoadingOptions | null>(null);
   sortingEnabled = input<boolean>(true);
   wheelDampening = input<number>(0.1);
@@ -113,6 +115,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
         overscan: this.overscan(),
+        maxFlingVelocity: this.maxFlingVelocity(),
         rowLoading: this.rowLoading() ?? undefined,
         sortingEnabled: this.sortingEnabled(),
         highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,

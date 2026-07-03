@@ -78,6 +78,8 @@ export interface GpGridProps<TData = unknown> {
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
+  /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. Default: 20 × rowHeight (~20,000 rows/s) */
+  maxFlingVelocity?: number;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   headerRenderers?: Record<string, VueHeaderRenderer>;

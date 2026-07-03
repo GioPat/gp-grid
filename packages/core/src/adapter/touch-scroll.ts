@@ -6,12 +6,13 @@ import {
   computeReleaseVelocity,
   isFlingDone,
   pruneSamples,
+  renderThrottleThreshold,
   stepFling,
   updateRenderIntervalEma,
   FAST_FLING_RENDER_INTERVAL_MS,
   HEAVY_FRAME_BUDGET_MS,
+  MAX_FLING_VELOCITY,
   MIN_FLING_VELOCITY,
-  RENDER_VELOCITY_THRESHOLD,
   type FlingState,
   type VelocitySample,
 } from "../utils/touch-scroll-physics";
@@ -183,13 +184,14 @@ export class TouchScrollController<TData = unknown> {
   /**
    * Decide whether a fast fling must fall back to throttled rendering.
    * The default is a full pipeline run every frame — a reduced cadence at
-   * medium speed reads as freeze-and-jump stutter. Only when the measured
+   * low speed reads as rows locking and snapping. Only when the measured
    * frame pace shows the device cannot sustain per-frame renders does the
    * fling latch onto the throttled cadence, and it stays latched until the
-   * fling slows below the threshold so the cadence never oscillates.
+   * fling slows below the row-flux threshold so the cadence never
+   * oscillates.
    */
-  private updateFlingThrottle(velocity: number): void {
-    if (Math.abs(velocity) <= RENDER_VELOCITY_THRESHOLD) {
+  private updateFlingThrottle(velocity: number, throttleThreshold: number): void {
+    if (Math.abs(velocity) <= throttleThreshold) {
       this.flingThrottled = false;
       return;
     }
@@ -412,14 +414,15 @@ export class TouchScrollController<TData = unknown> {
       this.applySyntheticScrollTop(core, el, pendingTarget.top, event.timeStamp);
     }
     if (!engaged) return;
-    const release = computeReleaseVelocity(samples);
+    const maxFlingVelocity = core?.getMaxFlingVelocity() ?? MAX_FLING_VELOCITY;
+    const release = computeReleaseVelocity(samples, maxFlingVelocity);
     if (Math.abs(release) < MIN_FLING_VELOCITY) {
       // The finger stopped before lifting: the content was caught, so any
       // carried velocity dies with it.
       this.releaseScrollOverride();
       return;
     }
-    this.startFling(combineFlingVelocities(release, carried));
+    this.startFling(combineFlingVelocities(release, carried, maxFlingVelocity));
   };
 
   private readonly onTouchCancel = (event: Event): void => {
@@ -434,7 +437,12 @@ export class TouchScrollController<TData = unknown> {
     const el = this.attachedEl;
     if (raf === undefined || core === null || el === null) return;
 
-    const startCap = computeAdaptiveVelocityCap(this.pipelineIntervalEmaMs);
+    const maxFlingVelocity = core.getMaxFlingVelocity();
+    const throttleThreshold = renderThrottleThreshold(core.getRowHeight());
+    const startCap = computeAdaptiveVelocityCap(
+      this.pipelineIntervalEmaMs,
+      maxFlingVelocity,
+    );
     const ratio = core.getScrollRatio();
     let state: FlingState = {
       position: el.scrollTop / ratio,
@@ -457,10 +465,13 @@ export class TouchScrollController<TData = unknown> {
       state = stepFling(state, dt);
       // Speed governor: if the measured render pace worsened mid-fling,
       // pull the velocity down to what the device can keep rendered.
-      const cap = computeAdaptiveVelocityCap(this.pipelineIntervalEmaMs);
+      const cap = computeAdaptiveVelocityCap(
+        this.pipelineIntervalEmaMs,
+        maxFlingVelocity,
+      );
       state = { ...state, velocity: clamp(state.velocity, -cap, cap) };
       this.flingVelocity = state.velocity;
-      this.updateFlingThrottle(state.velocity);
+      this.updateFlingThrottle(state.velocity, throttleThreshold);
       const target = state.position * ratio;
       const max = el.scrollHeight - el.clientHeight;
       const clamped = clamp(target, 0, max);
