@@ -60,10 +60,19 @@ const gridCell = (result) => {
   return `[${result.displayName ?? result.grid}](${result.websiteUrl})`;
 };
 
-const addNotes = (lines, results) => {
+// The per-grid fairness notes are identical across every category, so they are
+// emitted once in a single section at the end of the report rather than
+// repeated under each table.
+const addNotes = (lines, run) => {
   const notes = new Map();
+  const allResults = [
+    ...run.results.scrollPerformance,
+    ...run.results.initialRender,
+    ...run.results.sortFilter,
+    ...run.results.memoryUsage,
+  ];
 
-  for (const result of results) {
+  for (const result of allResults) {
     if (result.comment) {
       notes.set(result.displayName ?? result.grid, result.comment);
     }
@@ -73,11 +82,12 @@ const addNotes = (lines, results) => {
     return;
   }
 
+  lines.push("## Notes");
   lines.push("");
-  lines.push("Notes:");
   for (const [name, comment] of notes) {
     lines.push(`- **${name}:** ${comment}`);
   }
+  lines.push("");
 };
 
 const addTable = (lines, title, headers, results, rowBuilder) => {
@@ -94,7 +104,6 @@ const addTable = (lines, title, headers, results, rowBuilder) => {
     lines.push(`| ${rowBuilder(result).join(" | ")} |`);
   }
 
-  addNotes(lines, results);
   lines.push("");
 };
 
@@ -236,6 +245,8 @@ const generateMarkdownSummary = (run) => {
       `${result.metrics.retainedAfterClearMB}MB`,
     ],
   );
+
+  addNotes(lines, run);
 
   return lines.join("\n");
 };
