@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.19.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.18.0...gp-grid-v0.19.0) (2026-07-13)
+
+
+### ✨ Features
+
+* increase (and make it customizabile) max fling velocity ([36bd6b1](https://github.com/GioPat/gp-grid/commit/36bd6b146ee5b9baa09ed12991717cf28ff36a79))
+
+
+### 🐛 Bug Fixes
+
+* benchmark filtering when running bench cmd ([3bbb36f](https://github.com/GioPat/gp-grid/commit/3bbb36f518fe614d3576d0d1f05e2f2b8cb75d69))
+* make sorting tie-breaker deterministic ([c5897bb](https://github.com/GioPat/gp-grid/commit/c5897bbc4a54256acf29243236b6f545f6dc78b9))
+* virtual scrolling behavior on safari ([2fd6c82](https://github.com/GioPat/gp-grid/commit/2fd6c82c2e9648ab96071d4c92c4bd065917bc57))
+
+
+### ⚡Performance
+
+* avoid distinct value for some columns ([3a22c58](https://github.com/GioPat/gp-grid/commit/3a22c585c5aab0caddbd48e11b894b97339bc33a))
+
 ## [0.18.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.17.0...gp-grid-v0.18.0) (2026-06-18)
 
 
