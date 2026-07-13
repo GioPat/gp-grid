@@ -11,6 +11,8 @@ interface MockCoreOptions {
   rowHeight?: number;
 }
 
+type MockBatchListener = (instructions: { type: string }[]) => void;
+
 const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
   const state = {
     scalingActive: options.scalingActive ?? true,
@@ -19,6 +21,7 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     maxFlingVelocity: options.maxFlingVelocity ?? MAX_FLING_VELOCITY,
     rowHeight: options.rowHeight ?? 32,
   };
+  let batchListener: MockBatchListener | null = null;
   const core = {
     isScalingActive: () => state.scalingActive,
     getScrollRatio: () => state.scrollRatio,
@@ -26,13 +29,29 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     getRowHeight: () => state.rowHeight,
     setScrollTopOverride: vi.fn(),
     setViewport: vi.fn(),
+    onBatchInstruction: (listener: MockBatchListener) => {
+      batchListener = listener;
+      return () => {
+        batchListener = null;
+      };
+    },
     input: {
       getDragState: () => ({ isDragging: state.isDragging }),
     },
     __state: state,
+    __emitBatch: (instructions: { type: string }[]) =>
+      batchListener?.(instructions),
   };
   return core as unknown as GridCore<unknown>;
 };
+
+const emitBatch = (
+  core: GridCore<unknown>,
+  instructions: { type: string }[],
+): void =>
+  (core as unknown as { __emitBatch: MockBatchListener }).__emitBatch(
+    instructions,
+  );
 
 interface MockedCore {
   setScrollTopOverride: ReturnType<typeof vi.fn>;
@@ -168,17 +187,82 @@ describe("TouchScrollController", () => {
     expect(el.scrollTop).toBe(0);
   });
 
-  it("backs off when touchmove arrives non-cancelable (native scroll owns it)", () => {
-    const { el } = setup();
+  it("keeps scrolling through non-cancelable moves when nothing scrolled natively (iOS Safari under touch-action: none)", () => {
+    // iOS Safari delivers cancelable=false touchmoves under touch-action:
+    // none even though no native scroll runs. Treating that as native
+    // ownership froze the gesture: synthetic scrolling was abandoned and
+    // native scrolling was suppressed by the touch-action override.
+    const { el } = setup({ scrollRatio: 0.5 });
     el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 0));
-    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 200 }], 50, false));
-    // Gesture abandoned: later cancelable moves no longer scroll anything.
-    const later = touchEvent("touchmove", [{ clientY: 100 }], 80);
-    el.dispatchEvent(later);
+    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 280 }], 30, false));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 200 }], 60, false));
+    raf.pump(60);
+
+    // logicalDy = 100, slop offset = 20 → scrollTop = 80 * 0.5
+    expect(el.scrollTop).toBe(40);
+  });
+
+  it("backs off when the element scrolls natively under the gesture", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 0));
+    // A native scroller moved the element between our writes (e.g. the
+    // gesture began before the touch-action override was sampled).
+    el.scrollTop = 120;
+    const move = touchEvent("touchmove", [{ clientY: 200 }], 50);
+    el.dispatchEvent(move);
+    // Gesture abandoned: later moves no longer drive synthetic scrolling.
+    el.dispatchEvent(touchEvent("touchmove", [{ clientY: 100 }], 80));
     raf.pump(80);
 
-    expect(later.defaultPrevented).toBe(false);
-    expect(el.scrollTop).toBe(0);
+    expect(move.defaultPrevented).toBe(false);
+    expect(el.scrollTop).toBe(120);
+  });
+
+  it("backs off when the element scrolls horizontally under the gesture", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    el.dispatchEvent(
+      touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 0),
+    );
+    el.scrollLeft = 120;
+    const move = touchEvent(
+      "touchmove",
+      [{ clientX: 200, clientY: 300 }],
+      50,
+    );
+    el.dispatchEvent(move);
+    el.dispatchEvent(
+      touchEvent("touchmove", [{ clientX: 100, clientY: 300 }], 80),
+    );
+    raf.pump(80);
+
+    expect(move.defaultPrevented).toBe(false);
+    expect(el.scrollLeft).toBe(120);
+  });
+
+  it("does not mistake its own horizontal writes for native scrolling", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    el.dispatchEvent(
+      touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 0),
+    );
+    el.dispatchEvent(
+      touchEvent("touchmove", [{ clientX: 280, clientY: 300 }], 30),
+    );
+    raf.pump(30);
+    el.dispatchEvent(
+      touchEvent("touchmove", [{ clientX: 200, clientY: 300 }], 60),
+    );
+    raf.pump(60);
+
+    const continuedMove = touchEvent(
+      "touchmove",
+      [{ clientX: 150, clientY: 300 }],
+      90,
+    );
+    el.dispatchEvent(continuedMove);
+    raf.pump(90);
+
+    expect(continuedMove.defaultPrevented).toBe(true);
+    expect(el.scrollLeft).toBe(130);
   });
 
   it("prevents default and tracks the finger scaled by the scroll ratio", () => {
@@ -636,6 +720,62 @@ describe("TouchScrollController", () => {
     const { el } = setup({ scalingActive: false });
     expect(el.style.touchAction).toBe("");
     expect(el.style.overscrollBehavior).toBe("");
+  });
+
+  it("applies the touch policy as soon as scaling flips, before any touch", () => {
+    // iOS samples touch-action at gesture start, so waiting for the next
+    // touchstart leaves the first gesture after scaling activates native
+    // and ratio-amplified.
+    const { core, el } = setup({ scalingActive: false });
+    expect(el.style.touchAction).toBe("");
+
+    getState(core).scalingActive = true;
+    emitBatch(core, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("none");
+    expect(el.style.overscrollBehavior).toBe("contain");
+
+    getState(core).scalingActive = false;
+    emitBatch(core, [{ type: "SET_SLOT_TRANSFORM" }]);
+    // Batches without a content-size change do not re-sync the policy.
+    expect(el.style.touchAction).toBe("none");
+    emitBatch(core, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("");
+    expect(el.style.overscrollBehavior).toBe("");
+  });
+
+  it("rebinds policy updates when the host replaces the core", () => {
+    const firstCore = createCore({ scalingActive: false });
+    const secondCore = createCore({ scalingActive: false });
+    const el = createScrollEl();
+    let currentCore = firstCore;
+    const controller = new TouchScrollController({
+      getCore: () => currentCore,
+      getScrollEl: () => el,
+      isBrowser: true,
+    });
+    controller.attach();
+
+    currentCore = secondCore;
+    controller.syncCore();
+    getState(secondCore).scalingActive = true;
+    emitBatch(secondCore, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("none");
+
+    getState(secondCore).scalingActive = false;
+    emitBatch(firstCore, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("none");
+
+    emitBatch(secondCore, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("");
+  });
+
+  it("stops reacting to content-size changes after detach", () => {
+    const { core, el, controller } = setup({ scalingActive: false });
+    controller.detach();
+
+    getState(core).scalingActive = true;
+    emitBatch(core, [{ type: "SET_CONTENT_SIZE" }]);
+    expect(el.style.touchAction).toBe("");
   });
 
   it("re-syncs touch policy with the scaling state on touchstart", () => {

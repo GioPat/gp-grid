@@ -270,9 +270,22 @@ export class GridCore<TData = unknown> {
     return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
-  openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+  /**
+   * Open a column filter popup.
+   * Adapters can skip distinct-value computation when their popup only uses
+   * condition inputs, such as number and date filters.
+   */
+  openFilterPopup(
+    colIndex: number,
+    anchorRect: { top: number; left: number; width: number; height: number },
+    computeDistinctValues: boolean = true,
+  ): void {
     if (this.rowData.isLoading()) return;
-    this.sortFilter.openFilterPopup(colIndex, anchorRect);
+    this.sortFilter.openFilterPopup(
+      colIndex,
+      anchorRect,
+      computeDistinctValues,
+    );
   }
 
   closeFilterPopup(): void {

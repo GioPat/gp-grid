@@ -281,6 +281,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
   });
 
   coreRef.value = core;
+  touchScroll.syncCore();
 
   // Subscribe to batched instructions
   coreUnsubscribeRef.value = core.onBatchInstruction((instructions) => {

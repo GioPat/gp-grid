@@ -241,6 +241,7 @@ export function useGpGrid<TData = unknown>(
     });
 
     coreRef.value = core;
+    touchScroll.syncCore();
 
     // Subscribe to batched instructions
     const unsubscribe = core.onBatchInstruction((instructions) => {
