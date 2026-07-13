@@ -6,12 +6,13 @@ import {
   computeReleaseVelocity,
   isFlingDone,
   pruneSamples,
+  renderThrottleThreshold,
   stepFling,
   updateRenderIntervalEma,
   FAST_FLING_RENDER_INTERVAL_MS,
   HEAVY_FRAME_BUDGET_MS,
+  MAX_FLING_VELOCITY,
   MIN_FLING_VELOCITY,
-  RENDER_VELOCITY_THRESHOLD,
   type FlingState,
   type VelocitySample,
 } from "../utils/touch-scroll-physics";
@@ -47,11 +48,26 @@ interface GestureState {
   samples: VelocitySample[];
   /** Fling velocity still alive when this gesture caught the content */
   carriedVelocity: number;
+  /**
+   * The scroll position this controller last wrote (or found at gesture start).
+   * If the element drifts away from it, a native scroller is also driving
+   * the gesture and the controller must back off.
+   */
+  expectedScrollTop: number;
+  expectedScrollLeft: number;
 }
 
 /** Elements with their own touch capture that synthetic scrolling must skip. */
 const OWN_GESTURE_SELECTOR =
   ".gp-grid-fill-handle, .gp-grid-cell--row-drag-handle";
+
+/**
+ * Scroll-position drift (px) beyond which a native scroller must be driving
+ * the element. Our own writes only diverge from the read-back value by
+ * browser rounding (< 2px); a native pan moves the element by whole finger
+ * deltas between our frames, so it crosses this within an event or two.
+ */
+const NATIVE_SCROLL_DRIFT_PX = 4;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), Math.max(min, max));
@@ -82,6 +98,9 @@ export class TouchScrollController<TData = unknown> {
   private savedOverscrollBehavior: string | null = null;
   private savedTouchAction: string | null = null;
   private overrideActive = false;
+  /** Core whose batch instructions currently drive eager policy syncs */
+  private subscribedCore: GridCore<TData> | null = null;
+  private contentSizeUnsubscribe: (() => void) | null = null;
   /** Timestamp of the last slot/render pipeline run (drag or fling) */
   private lastPipelineRunMs: number | null = null;
   /** Smoothed interval between pipeline runs — the device's render pace */
@@ -102,7 +121,7 @@ export class TouchScrollController<TData = unknown> {
     this.attachedEl = el;
     this.savedOverscrollBehavior = el.style.overscrollBehavior;
     this.savedTouchAction = el.style.touchAction;
-    this.syncTouchPolicy();
+    this.syncCore();
     el.addEventListener("touchstart", this.onTouchStart, { passive: true });
     el.addEventListener("wheel", this.onWheel, { passive: true });
   }
@@ -110,6 +129,9 @@ export class TouchScrollController<TData = unknown> {
   detach(): void {
     this.stop();
     this.clearGesture();
+    this.contentSizeUnsubscribe?.();
+    this.contentSizeUnsubscribe = null;
+    this.subscribedCore = null;
     const el = this.attachedEl;
     if (el === null) return;
     this.attachedEl = null;
@@ -123,6 +145,36 @@ export class TouchScrollController<TData = unknown> {
       el.style.touchAction = this.savedTouchAction;
       this.savedTouchAction = null;
     }
+  }
+
+  /** Rebind policy updates after the host replaces its GridCore instance. */
+  syncCore(): void {
+    this.syncPolicySubscription();
+    this.syncTouchPolicy();
+  }
+
+  /**
+   * Keep the eager policy sync subscribed to the current core. Browsers —
+   * iOS Safari especially — sample `touch-action` at gesture start, so a
+   * policy applied inside touchstart only takes effect from the NEXT
+   * gesture. Subscribing to the core's content-size instructions applies
+   * the policy the moment scaling flips, before any finger goes down.
+   * Re-invoked through syncCore when the wrapper rebuilds the core, and from
+   * the permanent listeners as a fallback.
+   */
+  private syncPolicySubscription(): void {
+    const core = this.deps.getCore();
+    if (core === this.subscribedCore) return;
+    this.contentSizeUnsubscribe?.();
+    this.contentSizeUnsubscribe = null;
+    this.subscribedCore = core;
+    if (core === null) return;
+    this.contentSizeUnsubscribe = core.onBatchInstruction((instructions) => {
+      const contentSizeChanged = instructions.some(
+        (instruction) => instruction.type === "SET_CONTENT_SIZE",
+      );
+      if (contentSizeChanged) this.syncTouchPolicy();
+    });
   }
 
   /**
@@ -183,13 +235,14 @@ export class TouchScrollController<TData = unknown> {
   /**
    * Decide whether a fast fling must fall back to throttled rendering.
    * The default is a full pipeline run every frame — a reduced cadence at
-   * medium speed reads as freeze-and-jump stutter. Only when the measured
+   * low speed reads as rows locking and snapping. Only when the measured
    * frame pace shows the device cannot sustain per-frame renders does the
    * fling latch onto the throttled cadence, and it stays latched until the
-   * fling slows below the threshold so the cadence never oscillates.
+   * fling slows below the row-flux threshold so the cadence never
+   * oscillates.
    */
-  private updateFlingThrottle(velocity: number): void {
-    if (Math.abs(velocity) <= RENDER_VELOCITY_THRESHOLD) {
+  private updateFlingThrottle(velocity: number, throttleThreshold: number): void {
+    if (Math.abs(velocity) <= throttleThreshold) {
       this.flingThrottled = false;
       return;
     }
@@ -222,14 +275,15 @@ export class TouchScrollController<TData = unknown> {
 
   private readonly onWheel = (): void => {
     this.stop();
-    this.syncTouchPolicy();
+    this.syncCore();
   };
 
   private readonly onTouchStart = (event: Event): void => {
-    // Keep touch policy in sync with the scaling state. A touch-action
-    // change applies from the NEXT gesture because browsers sample it at
-    // gesture start.
-    this.syncTouchPolicy();
+    // Last-resort policy sync: the content-size subscription applies the
+    // policy eagerly, but the core may have appeared (or been rebuilt)
+    // since attach. A touch-action change made here only applies from the
+    // NEXT gesture because browsers sample it at gesture start.
+    this.syncCore();
     if (this.gesture === null) {
       this.startTouchGesture(event);
     }
@@ -261,6 +315,8 @@ export class TouchScrollController<TData = unknown> {
         slopOffsetY: 0,
         samples: [{ time: event.timeStamp, position: 0 }],
         carriedVelocity,
+        expectedScrollTop: el.scrollTop,
+        expectedScrollLeft: el.scrollLeft,
       };
       this.attachGestureListeners(el);
     }
@@ -315,10 +371,14 @@ export class TouchScrollController<TData = unknown> {
       this.releaseScrollOverride();
       return;
     }
-    if (!event.cancelable) {
-      // Native scrolling already owns this gesture (its first touchmove
-      // was not canceled, e.g. it began before we attached) — back off
-      // instead of fighting the native scroller frame by frame.
+    if (this.hasNativeScrollTakenOver(gesture, el)) {
+      // The element moved between our writes, so a native scroller owns
+      // this gesture (e.g. it started before the touch-action override was
+      // sampled) — back off instead of fighting it frame by frame.
+      // `event.cancelable` is deliberately NOT the ownership signal: iOS
+      // Safari delivers non-cancelable touchmoves under `touch-action:
+      // none` even though no native scroll is running, and bailing on
+      // those froze the whole gesture (nothing left to scroll it).
       this.clearGesture();
       this.releaseScrollOverride();
       return;
@@ -330,7 +390,9 @@ export class TouchScrollController<TData = unknown> {
     // silent no-op for the rest of the gesture. Taps are unaffected — they
     // produce no touchmove, and click/dblclick synthesis only depends on
     // touchstart/touchend remaining uncanceled.
-    event.preventDefault();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
 
     const logicalDx = gesture.startClientX - touch.clientX;
     const logicalDy = gesture.startClientY - touch.clientY;
@@ -368,6 +430,25 @@ export class TouchScrollController<TData = unknown> {
     this.scheduleDragApply(core, el);
   };
 
+  /**
+   * True when the scroll position no longer matches what this controller
+   * wrote: a native scroller is moving the element between our frames. Our
+   * own writes only diverge by browser rounding, well under the threshold.
+   */
+  private hasNativeScrollTakenOver(
+    gesture: GestureState,
+    el: HTMLElement,
+  ): boolean {
+    const verticalDrift = Math.abs(el.scrollTop - gesture.expectedScrollTop);
+    const horizontalDrift = Math.abs(
+      el.scrollLeft - gesture.expectedScrollLeft,
+    );
+    return (
+      verticalDrift > NATIVE_SCROLL_DRIFT_PX ||
+      horizontalDrift > NATIVE_SCROLL_DRIFT_PX
+    );
+  }
+
   private scheduleDragApply(core: GridCore<TData>, el: HTMLElement): void {
     if (this.dragFrame !== null) return;
     const raf = globalThis.requestAnimationFrame;
@@ -390,6 +471,10 @@ export class TouchScrollController<TData = unknown> {
     if (target === null) return;
     this.pendingDragTarget = null;
     el.scrollLeft = target.left;
+    if (this.gesture !== null) {
+      this.gesture.expectedScrollTop = target.top;
+      this.gesture.expectedScrollLeft = target.left;
+    }
     // While the finger is down the workload is self-limiting (content moves
     // at most one screen per gesture), so every coalesced frame runs the
     // full pipeline — throttling under the finger reads as jank, not speed.
@@ -412,14 +497,15 @@ export class TouchScrollController<TData = unknown> {
       this.applySyntheticScrollTop(core, el, pendingTarget.top, event.timeStamp);
     }
     if (!engaged) return;
-    const release = computeReleaseVelocity(samples);
+    const maxFlingVelocity = core?.getMaxFlingVelocity() ?? MAX_FLING_VELOCITY;
+    const release = computeReleaseVelocity(samples, maxFlingVelocity);
     if (Math.abs(release) < MIN_FLING_VELOCITY) {
       // The finger stopped before lifting: the content was caught, so any
       // carried velocity dies with it.
       this.releaseScrollOverride();
       return;
     }
-    this.startFling(combineFlingVelocities(release, carried));
+    this.startFling(combineFlingVelocities(release, carried, maxFlingVelocity));
   };
 
   private readonly onTouchCancel = (event: Event): void => {
@@ -434,7 +520,12 @@ export class TouchScrollController<TData = unknown> {
     const el = this.attachedEl;
     if (raf === undefined || core === null || el === null) return;
 
-    const startCap = computeAdaptiveVelocityCap(this.pipelineIntervalEmaMs);
+    const maxFlingVelocity = core.getMaxFlingVelocity();
+    const throttleThreshold = renderThrottleThreshold(core.getRowHeight());
+    const startCap = computeAdaptiveVelocityCap(
+      this.pipelineIntervalEmaMs,
+      maxFlingVelocity,
+    );
     const ratio = core.getScrollRatio();
     let state: FlingState = {
       position: el.scrollTop / ratio,
@@ -457,10 +548,13 @@ export class TouchScrollController<TData = unknown> {
       state = stepFling(state, dt);
       // Speed governor: if the measured render pace worsened mid-fling,
       // pull the velocity down to what the device can keep rendered.
-      const cap = computeAdaptiveVelocityCap(this.pipelineIntervalEmaMs);
+      const cap = computeAdaptiveVelocityCap(
+        this.pipelineIntervalEmaMs,
+        maxFlingVelocity,
+      );
       state = { ...state, velocity: clamp(state.velocity, -cap, cap) };
       this.flingVelocity = state.velocity;
-      this.updateFlingThrottle(state.velocity);
+      this.updateFlingThrottle(state.velocity, throttleThreshold);
       const target = state.position * ratio;
       const max = el.scrollHeight - el.clientHeight;
       const clamped = clamp(target, 0, max);

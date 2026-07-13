@@ -10,7 +10,13 @@ import {
   toAgGridColumns,
   BENCHMARK_COLUMNS,
 } from "../../../src/data/column-definitions";
-import type { BenchmarkGridApi, FilterCondition } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
+import type {
+  BenchmarkGridApi,
+  FilterCondition,
+  SortRule,
+} from "../../../src/data/types";
+import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -19,33 +25,22 @@ interface GridWrapperProps {
   initialRowCount: number;
 }
 
+function isReady(): boolean {
+  return document.querySelectorAll(".ag-row").length > 0;
+}
+
 export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const [rowData, setRowData] = useState<BenchmarkRow[]>([]);
-  const [isReady, setIsReady] = useState(false);
   const gridApiRef = useRef<GridApi | null>(null);
 
   const columns = useMemo(() => toAgGridColumns(BENCHMARK_COLUMNS), []);
 
   const onGridReady = useCallback((event: GridReadyEvent) => {
     gridApiRef.current = event.api;
-    if (rowData.length > 0) {
-      setIsReady(true);
-    }
-  }, [rowData.length]);
-
-  // Track when data changes to set ready state
-  useEffect(() => {
-    if (rowData.length > 0 && gridApiRef.current) {
-      const timer = setTimeout(() => setIsReady(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setIsReady(false);
-    }
-  }, [rowData]);
+  }, []);
 
   // Load data function
   const loadData = useCallback((count: number) => {
-    setIsReady(false);
     const newData = generateData(count);
     setRowData(newData);
   }, []);
@@ -53,7 +48,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Clear data function
   const clearData = useCallback(() => {
     setRowData([]);
-    setIsReady(false);
   }, []);
 
   // Sort function - AG Grid sorts synchronously
@@ -75,64 +69,73 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     }
   }, []);
 
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    if (gridApiRef.current) {
+      gridApiRef.current.applyColumnState({
+        state: rules.map((rule, index) => ({
+          colId: rule.field,
+          sort: rule.direction,
+          sortIndex: index,
+        })),
+        defaultState: { sort: null },
+      });
+    }
+  }, []);
+
   // Filter function - AG Grid filters synchronously
   const filter = useCallback(async (field: string, condition: FilterCondition): Promise<void> => {
-    if (!gridApiRef.current) return;
+    const gridApi = gridApiRef.current;
+    if (!gridApi) return;
 
-    let filterModel: Record<string, unknown> = {};
+    let fieldFilter: Record<string, unknown> | undefined;
 
     switch (condition.type) {
       case "contains":
-        filterModel = {
-          [field]: {
-            filterType: "text",
-            type: "contains",
-            filter: condition.value,
-          },
+        fieldFilter = {
+          filterType: "text",
+          type: "contains",
+          filter: condition.value,
         };
         break;
       case "equals":
-        filterModel = {
-          [field]: {
-            filterType: "text",
-            type: "equals",
-            filter: condition.value,
-          },
+        fieldFilter = {
+          filterType: "text",
+          type: "equals",
+          filter: condition.value,
         };
         break;
       case "greaterThan":
-        filterModel = {
-          [field]: {
-            filterType: "number",
-            type: "greaterThan",
-            filter: condition.value,
-          },
+        fieldFilter = {
+          filterType: "number",
+          type: "greaterThan",
+          filter: condition.value,
         };
         break;
       case "lessThan":
-        filterModel = {
-          [field]: {
-            filterType: "number",
-            type: "lessThan",
-            filter: condition.value,
-          },
+        fieldFilter = {
+          filterType: "number",
+          type: "lessThan",
+          filter: condition.value,
         };
         break;
       case "between":
         if (Array.isArray(condition.value)) {
-          filterModel = {
-            [field]: {
-              filterType: "number",
-              type: "inRange",
-              filter: condition.value[0],
-              filterTo: condition.value[1],
-            },
+          fieldFilter = {
+            filterType: "number",
+            type: "inRange",
+            filter: condition.value[0],
+            filterTo: condition.value[1],
           };
         }
         break;
     }
 
-    gridApiRef.current.setFilterModel(filterModel);
+    if (fieldFilter) {
+      gridApi.setFilterModel({
+        ...gridApi.getFilterModel(),
+        [field]: fieldFilter,
+      });
+    }
   }, []);
 
   // Clear filters function
@@ -148,15 +151,41 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
-      isReady: () => isReady,
+      isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => rowData.length,
+      getDisplayedRowCount: () => gridApiRef.current?.getDisplayedRowCount() ?? 0,
+      getDisplayedRows: (start, count) => {
+        const gridApi = gridApiRef.current;
+        if (!gridApi) return [];
+
+        const rows: BenchmarkRow[] = [];
+        for (let rowIndex = start; rowIndex < start + count; rowIndex++) {
+          const row = gridApi.getDisplayedRowAtIndex(rowIndex)?.data;
+          if (row) {
+            rows.push(row);
+          }
+        }
+
+        return rows;
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, isReady, rowData.length]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    rowData.length,
+  ]);
 
   // Initial data load
   useEffect(() => {
@@ -175,7 +204,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
         columnDefs={columns}
         rowHeight={32}
         headerHeight={40}
-        rowBuffer={20}
+        rowBuffer={benchmarkDefaults.overscanRows}
         onGridReady={onGridReady}
         suppressColumnVirtualisation={false}
         suppressRowVirtualisation={false}

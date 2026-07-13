@@ -276,7 +276,8 @@ function sortIndices(values, direction) {
     const va = values[a], vb = values[b];
     if (va < vb) return -1 * mult;
     if (va > vb) return 1 * mult;
-    return 0;
+    // Stable tie-break: preserve original (local) index order.
+    return a - b;
   });
   return indices;
 }
@@ -290,7 +291,8 @@ function sortMultiColumn(columns, directions) {
       if (va < vb) return -1 * directions[c];
       if (va > vb) return 1 * directions[c];
     }
-    return 0;
+    // Stable tie-break: preserve original (local) index order.
+    return a - b;
   });
   return indices;
 }
@@ -305,7 +307,8 @@ function sortStringHashes(hashChunks, direction) {
       if (va < vb) return -1 * mult;
       if (va > vb) return 1 * mult;
     }
-    return 0;
+    // Stable tie-break: preserve original (local) index order.
+    return a - b;
   });
   return { indices, collisionRuns: detectCollisionRuns(indices, hashChunks) };
 }

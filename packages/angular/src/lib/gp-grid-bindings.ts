@@ -76,6 +76,7 @@ export class GpGridBindings<TData = unknown> {
 
   attach(core: GridCore<TData>): void {
     this.coreRef = core;
+    this.touchScroll.syncCore();
     this.unsubscribe = core.onBatchInstruction((instructions) => {
       const vm = this.deps.vm;
       const maps = applyBatchInstructions(

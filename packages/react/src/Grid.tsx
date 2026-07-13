@@ -51,6 +51,7 @@ export function Grid<TData = unknown>(
     sortingEnabled = true,
     darkMode = false,
     wheelDampening = 0.1,
+    maxFlingVelocity,
     cellRenderers = {},
     editRenderers = {},
     headerRenderers = {},
@@ -73,6 +74,7 @@ export function Grid<TData = unknown>(
   const outerContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const coreRef = useRef<GridCore<TData> | null>(null);
+  const touchScrollRef = useRef<TouchScrollController<TData> | null>(null);
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
   const hasInitializedRef = useRef(false);
   const [state, dispatch] = useReducer(
@@ -231,6 +233,7 @@ export function Grid<TData = unknown>(
       rowHeight,
       headerHeight: totalHeaderHeight,
       overscan,
+      maxFlingVelocity,
       rowLoading,
       sortingEnabled,
       highlighting: highlightingRef.current,
@@ -245,6 +248,7 @@ export function Grid<TData = unknown>(
     });
 
     coreRef.current = core;
+    touchScrollRef.current?.syncCore();
 
     // Set input handler deps immediately after creation
     // This ensures scaled column positions are used even when the core is recreated
@@ -301,6 +305,7 @@ export function Grid<TData = unknown>(
     rowHeight,
     totalHeaderHeight,
     overscan,
+    maxFlingVelocity,
     rowLoading,
     sortingEnabled,
     gridRef,
@@ -398,7 +403,6 @@ export function Grid<TData = unknown>(
   // Synthetic touch scrolling: when scroll virtualization compresses the DOM
   // scroll space, the controller takes over touch gestures so content tracks
   // the finger 1:1 with a consistent fling. Inert for non-scaled grids.
-  const touchScrollRef = useRef<TouchScrollController<TData> | null>(null);
   useEffect(() => {
     const controller = new TouchScrollController<TData>({
       getCore: () => coreRef.current,

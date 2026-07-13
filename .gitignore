@@ -32,4 +32,4 @@ dist-ssr
 
 # Benchmarks
 benchmarks/results/*
-benchmarks/test-results
+benchmarks/test-results*

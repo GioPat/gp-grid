@@ -1,0 +1,7 @@
+{
+  "gp-grid": ["@gp-grid/react"],
+  "ag-grid": ["ag-grid-community", "ag-grid-react"],
+  "tanstack-table": ["@tanstack/react-table", "@tanstack/react-virtual"],
+  "handsontable": ["handsontable"],
+  "smart-grid": ["smart-webcomponents-react"]
+}

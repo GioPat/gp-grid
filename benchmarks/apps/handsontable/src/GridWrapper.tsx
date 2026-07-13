@@ -1,6 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import Handsontable from "handsontable";
-import "handsontable/dist/handsontable.full.min.css";
+// Handsontable 15+ ships its stylesheet as a base file plus a separate theme;
+// the old single `dist/handsontable.full.min.css` bundle is no longer exported.
+// The grid renders unstyled (collapsed rows) without an applied theme, so the
+// base CSS, the theme CSS, and the matching `themeName` option must agree.
+import "handsontable/styles/handsontable.min.css";
+import "handsontable/styles/ht-theme-main.min.css";
 import {
   generateData,
   type BenchmarkRow,
@@ -9,16 +14,44 @@ import {
   toHandsontableColumns,
   BENCHMARK_COLUMNS,
 } from "../../../src/data/column-definitions";
-import type { BenchmarkGridApi, FilterCondition } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
+import type {
+  BenchmarkGridApi,
+  FilterCondition,
+  SortRule,
+} from "../../../src/data/types";
+import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
 }
 
+function isReady(): boolean {
+  return document.querySelectorAll(".htCore tbody tr").length > 0;
+}
+
+const rowFromValues = (values: unknown[]): BenchmarkRow | null => {
+  if (values.length < BENCHMARK_COLUMNS.length) {
+    return null;
+  }
+
+  return {
+    id: Number(values[0]),
+    name: String(values[1]),
+    age: Number(values[2]),
+    email: String(values[3]),
+    status: values[4] as BenchmarkRow["status"],
+    salary: Number(values[5]),
+    department: String(values[6]),
+    hireDate: values[7] instanceof Date ? values[7] : new Date(String(values[7])),
+    isManager: Boolean(values[8]),
+    rating: Number(values[9]),
+  };
+};
+
 export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hotRef = useRef<Handsontable | null>(null);
-  const [isReady, setIsReady] = useState(false);
   const [rowCount, setRowCount] = useState(0);
 
   // Initialize Handsontable
@@ -32,17 +65,22 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     const hot = new Handsontable(containerRef.current, {
       data: [],
       columns,
+      themeName: "ht-theme-main",
       rowHeaders: false,
       colHeaders,
       width: "100%",
       height: "100%",
       rowHeights: 32,
       colWidths,
-      columnSorting: true,
+      // multiColumnSorting (not columnSorting) so multi-column sort is honored;
+      // the two plugins conflict, and the single-column plugin silently
+      // truncates a multi-rule sort to its first rule. This plugin also handles
+      // single-column sorts, so it covers every sort case in the benchmark.
+      multiColumnSorting: true,
       filters: true,
       dropdownMenu: false,
       licenseKey: "non-commercial-and-evaluation",
-      viewportRowRenderingOffset: 20,
+      viewportRowRenderingOffset: benchmarkDefaults.overscanRows,
       viewportColumnRenderingOffset: 10,
     });
 
@@ -57,28 +95,10 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Load data function
   const loadData = useCallback((count: number) => {
     if (!hotRef.current) return;
-    setIsReady(false);
 
     const data = generateData(count);
-    // Convert to array format for Handsontable
-    const arrayData = data.map((row) => [
-      row.id,
-      row.name,
-      row.age,
-      row.email,
-      row.status,
-      row.salary,
-      row.department,
-      row.hireDate,
-      row.isManager,
-      row.rating,
-    ]);
-
-    hotRef.current.loadData(arrayData);
+    hotRef.current.loadData(data);
     setRowCount(count);
-
-    // Small delay to ensure rendering is complete
-    setTimeout(() => setIsReady(true), 100);
   }, []);
 
   // Clear data function
@@ -86,7 +106,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     if (!hotRef.current) return;
     hotRef.current.loadData([]);
     setRowCount(0);
-    setIsReady(false);
   }, []);
 
   // Sort function - Handsontable sorts synchronously
@@ -96,7 +115,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     const colIndex = BENCHMARK_COLUMNS.findIndex((c) => c.field === field);
     if (colIndex === -1) return;
 
-    const columnSorting = hotRef.current.getPlugin("columnSorting");
+    const columnSorting = hotRef.current.getPlugin("multiColumnSorting");
     columnSorting.sort({
       column: colIndex,
       sortOrder: direction === "asc" ? "asc" : "desc",
@@ -106,8 +125,29 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Clear sort function
   const clearSort = useCallback(async (): Promise<void> => {
     if (!hotRef.current) return;
-    const columnSorting = hotRef.current.getPlugin("columnSorting");
+    const columnSorting = hotRef.current.getPlugin("multiColumnSorting");
     columnSorting.clearSort();
+  }, []);
+
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    if (!hotRef.current) return;
+
+    const columnSorting = hotRef.current.getPlugin("multiColumnSorting");
+    columnSorting.sort(
+      rules
+        .map((rule) => {
+          const column = BENCHMARK_COLUMNS.findIndex((c) => c.field === rule.field);
+          return column >= 0
+            ? {
+                column,
+                sortOrder: rule.direction,
+              }
+            : null;
+        })
+        .filter((config): config is { column: number; sortOrder: "asc" | "desc" } => {
+          return config !== null;
+        }),
+    );
   }, []);
 
   // Filter function - Handsontable filters synchronously
@@ -163,15 +203,41 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
-      isReady: () => isReady,
+      isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => rowCount,
+      getDisplayedRowCount: () => hotRef.current?.countRows() ?? 0,
+      getDisplayedRows: (start, count) => {
+        const hot = hotRef.current;
+        if (!hot) return [];
+
+        const rows: BenchmarkRow[] = [];
+        for (let rowIndex = start; rowIndex < start + count; rowIndex++) {
+          const row = rowFromValues(hot.getDataAtRow(rowIndex));
+          if (row) {
+            rows.push(row);
+          }
+        }
+
+        return rows;
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, isReady, rowCount]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    rowCount,
+  ]);
 
   // Initial data load
   useEffect(() => {

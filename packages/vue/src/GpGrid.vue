@@ -38,6 +38,8 @@ const props = withDefaults(
     sortingEnabled?: boolean;
     darkMode?: boolean;
     wheelDampening?: number;
+    /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. Default: 20 × rowHeight (~20,000 rows/s) */
+    maxFlingVelocity?: number;
     cellRenderers?: Record<string, VueCellRenderer>;
     editRenderers?: Record<string, VueEditRenderer>;
     headerRenderers?: Record<string, VueHeaderRenderer>;
@@ -264,6 +266,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowHeight: props.rowHeight,
     headerHeight: totalHeaderHeight.value,
     overscan: props.overscan,
+    maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
@@ -278,6 +281,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
   });
 
   coreRef.value = core;
+  touchScroll.syncCore();
 
   // Subscribe to batched instructions
   coreUnsubscribeRef.value = core.onBatchInstruction((instructions) => {

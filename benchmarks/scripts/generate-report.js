@@ -1,296 +1,392 @@
 #!/usr/bin/env node
 
-// Generate benchmark report from collected results
-
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "../results");
+const RUNS_DIR = path.join(RESULTS_DIR, "runs");
+const ACTIVE_RUN_FILE = path.join(RESULTS_DIR, "current-run.json");
 
-function loadAllResults() {
-  const run = {
-    timestamp: new Date().toISOString(),
-    environment: {
-      os: process.platform,
-      nodeVersion: process.version,
-      chromeVersion: "unknown",
-    },
-    results: {
-      scrollPerformance: [],
-      initialRender: [],
-      sortFilter: [],
-      memoryUsage: [],
-    },
+const categoryPrefixes = {
+  scrollPerformance: "scroll-",
+  initialRender: "render-",
+  sortFilter: "sort-",
+  memoryUsage: "memory-",
+};
+
+const loadActiveManifest = () => {
+  if (fs.existsSync(ACTIVE_RUN_FILE)) {
+    return JSON.parse(fs.readFileSync(ACTIVE_RUN_FILE, "utf-8"));
+  }
+
+  throw new Error("No active benchmark run found. Run `pnpm bench:start` first.");
+};
+
+const loadResults = (runDir, prefix) => {
+  return fs
+    .readdirSync(runDir)
+    .filter((file) => file.startsWith(prefix) && file.endsWith(".json"))
+    .map((file) => JSON.parse(fs.readFileSync(path.join(runDir, file), "utf-8")))
+    .sort((a, b) => a.rowCount - b.rowCount || a.grid.localeCompare(b.grid));
+};
+
+const loadRun = () => {
+  const manifest = loadActiveManifest();
+  const runDir = path.join(RUNS_DIR, manifest.runId);
+
+  const results = {
+    scrollPerformance: loadResults(runDir, categoryPrefixes.scrollPerformance),
+    initialRender: loadResults(runDir, categoryPrefixes.initialRender),
+    sortFilter: loadResults(runDir, categoryPrefixes.sortFilter),
+    memoryUsage: loadResults(runDir, categoryPrefixes.memoryUsage),
   };
 
-  if (!fs.existsSync(RESULTS_DIR)) {
-    console.log("No results directory found.");
-    return run;
-  }
+  return {
+    ...manifest,
+    results,
+    runDir,
+  };
+};
 
-  const files = fs.readdirSync(RESULTS_DIR).filter((f) => f.endsWith(".json"));
-
-  for (const file of files) {
-    if (file === "benchmark-report.json" || file === "playwright-report.json") {
-      continue;
-    }
-
-    const filepath = path.join(RESULTS_DIR, file);
-    const content = fs.readFileSync(filepath, "utf-8");
-    const result = JSON.parse(content);
-
-    if (file.startsWith("scroll-")) {
-      run.results.scrollPerformance.push(result);
-    } else if (file.startsWith("render-")) {
-      run.results.initialRender.push(result);
-    } else if (file.startsWith("sort-")) {
-      run.results.sortFilter.push(result);
-    } else if (file.startsWith("memory-")) {
-      run.results.memoryUsage.push(result);
-    }
-  }
-
-  return run;
-}
-
-// Group results by row count
-function groupByRowCount(results) {
-  const grouped = {};
-  for (const r of results) {
-    if (!grouped[r.rowCount]) {
-      grouped[r.rowCount] = [];
-    }
-    grouped[r.rowCount].push(r);
-  }
-  // Sort each group by grid name
-  for (const key of Object.keys(grouped)) {
-    grouped[key].sort((a, b) => a.grid.localeCompare(b.grid));
-  }
-  return grouped;
-}
-
-// Format row count for display
-function formatRowCount(count) {
+const formatRowCount = (count) => {
   if (count >= 1_000_000) return `${count / 1_000_000}M`;
   if (count >= 1_000) return `${count / 1_000}K`;
   return count.toString();
-}
+};
 
-function generateMarkdownSummary(run) {
+const gridCell = (result) => {
+  return `[${result.displayName ?? result.grid}](${result.websiteUrl})`;
+};
+
+// The per-grid fairness notes are identical across every category, so they are
+// emitted once in a single section at the end of the report rather than
+// repeated under each table.
+const addNotes = (lines, run) => {
+  const notes = new Map();
+  const allResults = [
+    ...run.results.scrollPerformance,
+    ...run.results.initialRender,
+    ...run.results.sortFilter,
+    ...run.results.memoryUsage,
+  ];
+
+  for (const result of allResults) {
+    if (result.comment) {
+      notes.set(result.displayName ?? result.grid, result.comment);
+    }
+  }
+
+  if (notes.size === 0) {
+    return;
+  }
+
+  lines.push("## Notes");
+  lines.push("");
+  for (const [name, comment] of notes) {
+    lines.push(`- **${name}:** ${comment}`);
+  }
+  lines.push("");
+};
+
+const addTable = (lines, title, headers, results, rowBuilder) => {
+  if (results.length === 0) {
+    return;
+  }
+
+  lines.push(`## ${title}`);
+  lines.push("");
+  lines.push(`| ${headers.join(" | ")} |`);
+  lines.push(`| ${headers.map(() => "---").join(" | ")} |`);
+
+  for (const result of results) {
+    lines.push(`| ${rowBuilder(result).join(" | ")} |`);
+  }
+
+  lines.push("");
+};
+
+const addVersionsTable = (lines, libraryVersions) => {
+  if (!libraryVersions) {
+    return;
+  }
+
+  lines.push("## Library Versions");
+  lines.push("");
+  lines.push("| Grid | Package | Version |");
+  lines.push("| --- | --- | --- |");
+
+  for (const [grid, entry] of Object.entries(libraryVersions)) {
+    for (const [pkg, version] of Object.entries(entry.packages)) {
+      const label = entry.gitCommit ? `${version} (${entry.gitCommit})` : version;
+      lines.push(`| ${grid} | \`${pkg}\` | ${label} |`);
+    }
+  }
+
+  lines.push("");
+};
+
+const generateMarkdownSummary = (run) => {
   const lines = [];
+  const environment = run.environment;
+  const config = run.config;
 
   lines.push("# gp-grid Benchmark Results");
   lines.push("");
-  lines.push(`**Date:** ${run.timestamp}\n`);
-  lines.push(`**Platform:** ${run.environment.os}\n`);
-  lines.push(`**Node:** ${run.environment.nodeVersion}\n`);
-  lines.push("");
-  lines.push("---");
-  lines.push("");
-
-  // Scroll Performance
-  if (run.results.scrollPerformance.length > 0) {
-    lines.push("## Scroll Performance");
-    lines.push("");
-    lines.push("| Metric | Higher/Lower is Better |");
-    lines.push("|--------|------------------------|");
-    lines.push("| Avg FPS | ⬆️ Higher is better |");
-    lines.push("| Min FPS | ⬆️ Higher is better |");
-    lines.push("| Frame Drops | ⬇️ Lower is better |");
-    lines.push("| P95 FPS | ⬆️ Higher is better |");
-    lines.push("");
-
-    const grouped = groupByRowCount(run.results.scrollPerformance);
-    const rowCounts = Object.keys(grouped)
-      .map(Number)
-      .sort((a, b) => a - b);
-
-    for (const rowCount of rowCounts) {
-      const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
-      lines.push("<table>\n  <thead>\n    <tr>");
-      lines.push(
-        "      <th>Grid</th>\n      <th>Avg FPS </th>\n      <th>Min FPS </th>\n      <th>Frame Drops </th>\n      <th>P95 FPS </th>",
-      );
-      lines.push("    </tr>\n  </thead>");
-      lines.push("  <tbody>");
-      for (const r of results) {
-        lines.push(
-          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
-        );
-        lines.push(
-          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.avgFPS}</td>\n      <td>${r.metrics.minFPS}</td>\n      <td>${r.metrics.frameDropCount}</td>\n      <td>${r.metrics.percentile95FPS}</td>`,
-        );
-        lines.push("    </tr>");
-      }
-      lines.push("  </tbody>\n</table>\n");
-    }
-  }
-
-  // Initial Render
-  if (run.results.initialRender.length > 0) {
-    lines.push("## Initial Render");
-    lines.push("");
-    lines.push("| Metric | Higher/Lower is Better |");
-    lines.push("|--------|------------------------|");
-    lines.push("| First Paint | ⬇️ Lower is better |");
-    lines.push("| Full Render | ⬇️ Lower is better |");
-    lines.push("| LCP | ⬇️ Lower is better |");
-    lines.push("| TBT | ⬇️ Lower is better |");
-    lines.push("");
-
-    const grouped = groupByRowCount(run.results.initialRender);
-    const rowCounts = Object.keys(grouped)
-      .map(Number)
-      .sort((a, b) => a - b);
-
-    for (const rowCount of rowCounts) {
-      const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
-      lines.push("<table>\n  <thead>\n    <tr>");
-      lines.push(
-        "      <th>Grid</th>\n      <th>First Paint </th>\n      <th>Full Render </th>\n      <th>LCP </th>\n      <th>TBT </th>",
-      );
-      lines.push("    </tr>\n  </thead>");
-      lines.push("  <tbody>");
-      for (const r of results) {
-        lines.push(
-          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
-        );
-        lines.push(
-          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.timeToFirstPaint}ms</td>\n      <td>${r.metrics.timeToFullRender}ms</td>\n      <td>${r.metrics.largestContentfulPaint}ms</td>\n      <td>${r.metrics.totalBlockingTime}ms</td>`,
-        );
-        lines.push("    </tr>");
-      }
-      lines.push("  </tbody>\n</table>\n");
-    }
-  }
-
-  // Sort/Filter Performance
-  if (run.results.sortFilter.length > 0) {
-    lines.push("## Sort/Filter Performance");
-    lines.push("");
-    lines.push("| Metric | Higher/Lower is Better |");
-    lines.push("|--------|------------------------|");
-    lines.push("| All timing metrics | ⬇️ Lower is better |");
-    lines.push("");
-
-    const grouped = groupByRowCount(run.results.sortFilter);
-    const rowCounts = Object.keys(grouped)
-      .map(Number)
-      .sort((a, b) => a - b);
-
-    for (const rowCount of rowCounts) {
-      const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
-      lines.push("<table>\n  <thead>\n    <tr>");
-      lines.push(
-        "      <th>Grid</th>\n      <th>Sort Asc </th>\n      <th>Sort Desc </th>\n      <th>Text Filter </th>\n      <th>Number Filter </th>",
-      );
-      lines.push("    </tr>\n  </thead>");
-      lines.push("  <tbody>");
-      for (const r of results) {
-        lines.push(
-          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
-        );
-        lines.push(
-          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.sortAscTime}ms</td>\n      <td>${r.metrics.sortDescTime}ms</td>\n      <td>${r.metrics.textFilterTime}ms</td>\n      <td>${r.metrics.numberFilterTime}ms</td>`,
-        );
-        lines.push("    </tr>");
-      }
-      lines.push("  </tbody>\n</table>\n");
-    }
-  }
-
-  // Memory Usage
-  if (run.results.memoryUsage.length > 0) {
-    lines.push("## Memory Usage");
-    lines.push("");
-    lines.push("| Metric | Higher/Lower is Better |");
-    lines.push("|--------|------------------------|");
-    lines.push("| After Load | ⬇️ Lower is better |");
-    lines.push("| Peak | ⬇️ Lower is better |");
-    lines.push("| Growth Rate | ⬇️ Lower is better |");
-    lines.push("| Retained | ⬇️ Lower is better |");
-    lines.push("");
-
-    const grouped = groupByRowCount(run.results.memoryUsage);
-    const rowCounts = Object.keys(grouped)
-      .map(Number)
-      .sort((a, b) => a - b);
-
-    for (const rowCount of rowCounts) {
-      const results = grouped[rowCount];
-      lines.push(`### ${formatRowCount(rowCount)} Rows\n`);
-      lines.push("<table>\n  <thead>\n    <tr>");
-      lines.push(
-        "      <th>Grid</th>\n      <th>After Load </th>\n      <th>Peak </th>\n      <th>Growth (MB/1K) </th>\n      <th>Retained </th>",
-      );
-      lines.push("    </tr>\n  </thead>");
-      lines.push("  <tbody>");
-      for (const r of results) {
-        lines.push(
-          `    <tr ${r.grid === "gp-grid" ? 'className="gp-grid-highlight"' : ""}>`,
-        );
-        lines.push(
-          `      <td>**${r.grid}**</td>\n      <td>${r.metrics.afterDataLoadHeapSizeMB}MB</td>\n      <td>${r.metrics.peakHeapSizeMB}MB</td>\n      <td>${r.metrics.heapGrowthRateMBPer1KRows}</td>\n      <td>${r.metrics.retainedAfterClearMB}MB</td>`,
-        );
-        lines.push("    </tr>");
-      }
-      lines.push("  </tbody>\n</table>\n");
-    }
-  }
-
-  // Summary section
-  lines.push("---");
-  lines.push("");
-  lines.push("## Legend");
-  lines.push("");
+  lines.push(`**Run:** ${run.runId}`);
+  lines.push(`**Date:** ${run.timestamp}`);
+  lines.push(`**Machine:** ${environment.cpuModel}`);
   lines.push(
-    "- ⬆️ **Higher is better** - For these metrics, larger values indicate better performance",
+    `**Environment:** ${environment.os}, ${environment.logicalCpuCount} logical CPUs, ${environment.totalMemoryMB} MB RAM`,
   );
   lines.push(
-    "- ⬇️ **Lower is better** - For these metrics, smaller values indicate better performance",
+    `**Runtime:** Node ${environment.nodeVersion}, Chrome ${environment.chromeVersion}`,
+  );
+  lines.push(
+    `**Config:** ${config.iterations} iterations, ${config.playwrightWorkers} Playwright worker, retries ${config.retries}, overscan ${config.overscanRows ?? "n/a"} rows, ${config.viewport.width}x${config.viewport.height}, headless ${config.headless}`,
   );
   lines.push("");
-  lines.push("### Metrics Explained");
-  lines.push("");
-  lines.push("| Metric | Description |");
-  lines.push("|--------|-------------|");
-  lines.push("| **Avg FPS** | Average frames per second during scroll |");
-  lines.push("| **Min FPS** | Minimum FPS observed (worst case) |");
-  lines.push("| **Frame Drops** | Number of frames that took >25ms |");
-  lines.push("| **P95 FPS** | 95th percentile FPS (excludes outliers) |");
-  lines.push("| **First Paint** | Time to first contentful paint |");
-  lines.push("| **Full Render** | Time until grid is fully interactive |");
-  lines.push("| **LCP** | Largest Contentful Paint |");
-  lines.push("| **TBT** | Total Blocking Time |");
-  lines.push("| **After Load** | Heap size after data is loaded |");
-  lines.push("| **Peak** | Maximum heap size during operation |");
-  lines.push("| **Growth Rate** | Memory increase per 1000 rows |");
-  lines.push("| **Retained** | Memory not released after clearing data |");
-  lines.push("");
+
+  addVersionsTable(lines, run.libraryVersions);
+
+  addTable(
+    lines,
+    "Scroll Performance",
+    [
+      "Grid",
+      "Mode",
+      "Rows",
+      "Avg FPS",
+      "P05 FPS",
+      "P95 Frame Time",
+      "Frame Drops",
+      "Scroll Delta",
+      "Scroll px/s",
+    ],
+    run.results.scrollPerformance,
+    (result) => [
+      gridCell(result),
+      result.implementationMode,
+      formatRowCount(result.rowCount),
+      result.metrics.avgFPS,
+      result.metrics.p05FPS,
+      `${result.metrics.p95FrameTimeMs}ms`,
+      result.metrics.frameDropCount,
+      `${result.metrics.actualScrollDeltaPx}px`,
+      `${result.metrics.scrollPxPerSecond ?? "n/a"}`,
+    ],
+  );
+
+  addTable(
+    lines,
+    "Initial Render",
+    ["Grid", "Mode", "Rows", "FCP", "Full Render", "LCP", "TBT"],
+    run.results.initialRender,
+    (result) => [
+      gridCell(result),
+      result.implementationMode,
+      formatRowCount(result.rowCount),
+      `${result.metrics.timeToFirstPaint}ms`,
+      `${result.metrics.timeToFullRender}ms`,
+      `${result.metrics.largestContentfulPaint}ms`,
+      `${result.metrics.totalBlockingTime}ms`,
+    ],
+  );
+
+  addTable(
+    lines,
+    "Sort/Filter Performance",
+    [
+      "Grid",
+      "Mode",
+      "Rows",
+      "Sort Asc",
+      "Sort Desc",
+      "Multi Sort",
+      "Text Filter",
+      "Number Filter",
+    ],
+    run.results.sortFilter,
+    (result) => [
+      gridCell(result),
+      result.implementationMode,
+      formatRowCount(result.rowCount),
+      `${result.metrics.sortAscTime}ms`,
+      `${result.metrics.sortDescTime}ms`,
+      `${result.metrics.multiColumnSortTime}ms`,
+      `${result.metrics.textFilterTime}ms`,
+      `${result.metrics.numberFilterTime}ms`,
+    ],
+  );
+
+  addTable(
+    lines,
+    "Memory Usage",
+    [
+      "Grid",
+      "Mode",
+      "Rows",
+      "After Load",
+      "Peak",
+      "After Scroll",
+      "Growth / 1K",
+      "Retained",
+    ],
+    run.results.memoryUsage,
+    (result) => [
+      gridCell(result),
+      result.implementationMode,
+      formatRowCount(result.rowCount),
+      `${result.metrics.afterDataLoadHeapSizeMB}MB`,
+      `${result.metrics.peakHeapSizeMB}MB`,
+      `${result.metrics.afterScrollHeapSizeMB}MB`,
+      `${result.metrics.heapGrowthRateMBPer1KRows}MB`,
+      `${result.metrics.retainedAfterClearMB}MB`,
+    ],
+  );
+
+  addNotes(lines, run);
 
   return lines.join("\n");
-}
+};
 
-// Main
+// Emit a flat, docs-consumable JSON. The gp-grid-docs benchmarks page renders
+// this directly (one 1M-row table per category, plus the run header, library
+// versions and fairness notes), so every value is pre-shaped here rather than
+// re-derived in the docs: FPS as numbers, timings/heap as unit-suffixed strings,
+// grid identified by its display name (the docs highlight key is "gp-grid").
+const ms = (value) => `${value}ms`;
+const mb = (value) => `${value}MB`;
+
+const firstRowCount = (run) => {
+  for (const category of Object.values(run.results)) {
+    if (category.length > 0) {
+      return category[0].rowCount;
+    }
+  }
+  return null;
+};
+
+const collectDocsNotes = (run) => {
+  const notes = new Map();
+  for (const category of Object.values(run.results)) {
+    for (const result of category) {
+      if (result.comment) {
+        notes.set(result.displayName ?? result.grid, result.comment);
+      }
+    }
+  }
+  return Array.from(notes, ([grid, comment]) => ({ grid, comment }));
+};
+
+const collectDocsVersions = (libraryVersions) => {
+  if (!libraryVersions) {
+    return [];
+  }
+  const rows = [];
+  for (const [grid, entry] of Object.entries(libraryVersions)) {
+    for (const [pkg, version] of Object.entries(entry.packages)) {
+      rows.push({ grid, package: pkg, version, gitCommit: entry.gitCommit ?? null });
+    }
+  }
+  return rows;
+};
+
+const docsScrollRow = (result) => ({
+  grid: result.displayName ?? result.grid,
+  mode: result.implementationMode,
+  avgFps: result.metrics.avgFPS,
+  p05Fps: result.metrics.p05FPS,
+  p95FrameTimeMs: result.metrics.p95FrameTimeMs,
+  frameDrops: result.metrics.frameDropCount,
+  scrollDeltaPx: result.metrics.actualScrollDeltaPx,
+});
+
+const docsRenderRow = (result) => ({
+  grid: result.displayName ?? result.grid,
+  mode: result.implementationMode,
+  firstPaint: ms(result.metrics.timeToFirstPaint),
+  fullRender: ms(result.metrics.timeToFullRender),
+  lcp: ms(result.metrics.largestContentfulPaint),
+  tbt: ms(result.metrics.totalBlockingTime),
+});
+
+const docsSortFilterRow = (result) => ({
+  grid: result.displayName ?? result.grid,
+  mode: result.implementationMode,
+  sortAsc: ms(result.metrics.sortAscTime),
+  sortDesc: ms(result.metrics.sortDescTime),
+  multiSort: ms(result.metrics.multiColumnSortTime),
+  textFilter: ms(result.metrics.textFilterTime),
+  numberFilter: ms(result.metrics.numberFilterTime),
+});
+
+const docsMemoryRow = (result) => ({
+  grid: result.displayName ?? result.grid,
+  mode: result.implementationMode,
+  afterLoad: mb(result.metrics.afterDataLoadHeapSizeMB),
+  peak: mb(result.metrics.peakHeapSizeMB),
+  growth: result.metrics.heapGrowthRateMBPer1KRows,
+  retained: mb(result.metrics.retainedAfterClearMB),
+});
+
+const buildDocsData = (run) => {
+  const environment = run.environment;
+  const config = run.config;
+
+  return {
+    meta: {
+      runId: run.runId,
+      timestamp: run.timestamp,
+      machine: environment.cpuModel,
+      os: environment.os,
+      logicalCpuCount: environment.logicalCpuCount,
+      totalMemoryMB: environment.totalMemoryMB,
+      nodeVersion: environment.nodeVersion,
+      chromeVersion: environment.chromeVersion,
+      iterations: config.iterations,
+      overscanRows: config.overscanRows ?? null,
+      viewport: config.viewport,
+      rowCount: firstRowCount(run),
+    },
+    versions: collectDocsVersions(run.libraryVersions),
+    notes: collectDocsNotes(run),
+    scroll: run.results.scrollPerformance.map(docsScrollRow),
+    render: run.results.initialRender.map(docsRenderRow),
+    sortFilter: run.results.sortFilter.map(docsSortFilterRow),
+    memory: run.results.memoryUsage.map(docsMemoryRow),
+  };
+};
+
 console.log("Generating benchmark report...");
 
-const run = loadAllResults();
-
-// Save JSON report
-const jsonPath = path.join(RESULTS_DIR, "benchmark-report.json");
-fs.writeFileSync(jsonPath, JSON.stringify(run, null, 2));
-console.log(`JSON report saved to: ${jsonPath}`);
-
-// Save Markdown report
+const run = loadRun();
+const jsonReport = {
+  runId: run.runId,
+  timestamp: run.timestamp,
+  environment: run.environment,
+  config: run.config,
+  libraryVersions: run.libraryVersions,
+  results: run.results,
+};
 const markdown = generateMarkdownSummary(run);
-const mdPath = path.join(RESULTS_DIR, "BENCHMARK-RESULTS.mdx");
-fs.writeFileSync(mdPath, markdown);
-console.log(`MDX report saved to: ${mdPath}`);
 
-// Print summary
-console.log("\n" + markdown);
+const jsonPath = path.join(run.runDir, "benchmark-report.json");
+const mdPath = path.join(run.runDir, "BENCHMARK-RESULTS.mdx");
+fs.writeFileSync(jsonPath, JSON.stringify(jsonReport, null, 2));
+fs.writeFileSync(mdPath, markdown);
+fs.writeFileSync(path.join(RESULTS_DIR, "benchmark-report.json"), JSON.stringify(jsonReport, null, 2));
+fs.writeFileSync(path.join(RESULTS_DIR, "BENCHMARK-RESULTS.mdx"), markdown);
+
+const docsData = buildDocsData(run);
+const docsDataString = JSON.stringify(docsData, null, 2);
+const docsDataPath = path.join(run.runDir, "benchmark-data.json");
+fs.writeFileSync(docsDataPath, docsDataString);
+fs.writeFileSync(path.join(RESULTS_DIR, "benchmark-data.json"), docsDataString);
+
+console.log(`JSON report saved to: ${jsonPath}`);
+console.log(`MDX report saved to: ${mdPath}`);
+console.log(`Docs data saved to: ${docsDataPath}`);
+console.log("");
+console.log(markdown);

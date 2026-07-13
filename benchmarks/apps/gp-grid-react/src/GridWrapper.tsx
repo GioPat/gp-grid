@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Grid, createClientDataSource } from "@gp-grid/react";
+import "@gp-grid/react/dist/styles.css";
 import type { GridRef, FilterCondition as CoreFilterCondition, ColumnDefinition, DataSource } from "@gp-grid/react";
 import {
   generateData,
@@ -9,18 +10,24 @@ import {
   toGpGridColumns,
   BENCHMARK_COLUMNS,
 } from "../../../src/data/column-definitions";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
 import type {
   BenchmarkGridApi,
   FilterCondition,
+  SortRule,
 } from "../../../src/data/types";
+import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
 }
 
+function isReady(): boolean {
+  return document.querySelectorAll(".gp-grid-row").length > 0;
+}
+
 export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
-  const [isReady, setIsReady] = useState(false);
   const gridRef = useRef<GridRef<BenchmarkRow> | null>(null);
   const prevDataSourceRef = useRef<DataSource<BenchmarkRow> | null>(null);
 
@@ -42,27 +49,8 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     prevDataSourceRef.current = dataSource;
   }, [dataSource]);
 
-  // Track when data source changes to set ready state
-  useEffect(() => {
-    if (data.length > 0) {
-      // Wait for grid to render rows
-      const checkReady = () => {
-        const rows = document.querySelectorAll(".gp-grid-row");
-        if (rows.length > 0) {
-          setIsReady(true);
-        } else {
-          requestAnimationFrame(checkReady);
-        }
-      };
-      requestAnimationFrame(checkReady);
-    } else {
-      setIsReady(false);
-    }
-  }, [data]);
-
   // Load data function
   const loadData = useCallback((count: number) => {
-    setIsReady(false);
     const newData = generateData(count);
     setData(newData);
   }, []);
@@ -70,7 +58,6 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Clear data function
   const clearData = useCallback(() => {
     setData([]);
-    setIsReady(false);
   }, []);
 
   // Sort function using GridCore API - returns Promise for accurate timing
@@ -89,6 +76,18 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     if (core) {
       // Passing null direction clears all sorts when addToExisting is false (default)
       await core.setSort("", null);
+    }
+  }, []);
+
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    const core = gridRef.current?.core;
+    if (!core || rules.length === 0) return;
+
+    const [firstRule, ...remainingRules] = rules;
+    await core.setSort(firstRule.field, firstRule.direction);
+
+    for (const rule of remainingRules) {
+      await core.setSort(rule.field, rule.direction, true);
     }
   }, []);
 
@@ -157,12 +156,12 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const clearFilters = useCallback(async (): Promise<void> => {
     const core = gridRef.current?.core;
     if (core) {
-      // Clear filter for each column sequentially
-      for (const col of columns) {
-        await core.setFilter(col.field, null);
+      // Only active filters need clearing; each call refreshes the data source.
+      for (const field of Object.keys(core.getFilterModel())) {
+        await core.setFilter(field, null);
       }
     }
-  }, [columns]);
+  }, []);
 
   // Expose grid API to window for benchmark control
   useEffect(() => {
@@ -170,11 +169,31 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
-      isReady: () => isReady,
+      isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => data.length,
+      // Above ~312k rows gp-grid compresses its DOM scroll space (ratio < 1);
+      // the scroll benchmark reads this to recover the true logical travel.
+      getScrollRatio: () => gridRef.current?.core?.getScrollRatio() ?? 1,
+      getDisplayedRowCount: () => gridRef.current?.core?.getRowCount() ?? 0,
+      getDisplayedRows: (start, count) => {
+        const core = gridRef.current?.core;
+        if (!core) return [];
+
+        const rows: BenchmarkRow[] = [];
+        for (let rowIndex = start; rowIndex < start + count; rowIndex++) {
+          const row = core.getRowData(rowIndex);
+          if (row) {
+            rows.push(row);
+          }
+        }
+
+        return rows;
+      },
     };
 
     window.gridApi = api;
@@ -182,10 +201,10 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     loadData,
     clearData,
     sort,
+    sortMany,
     clearSort,
     filter,
     clearFilters,
-    isReady,
     data.length,
   ]);
 
@@ -204,6 +223,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
         dataSource={dataSource}
         rowHeight={32}
         headerHeight={40}
+        overscan={benchmarkDefaults.overscanRows}
       />
     </div>
   );

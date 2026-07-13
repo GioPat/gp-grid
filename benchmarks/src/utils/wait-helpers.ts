@@ -1,73 +1,40 @@
 // Helpers to wait for grid ready state across different libraries
 
 import type { Page } from "@playwright/test";
-import type { GridType } from "../data/types";
 
 const GRID_READY_TIMEOUT = 30_000;
 
 export async function waitForGridReady(
   page: Page,
-  grid: GridType
-): Promise<number> {
-  const start = Date.now();
-
-  // First, wait for the grid container to be visible
+  expectedRowCount?: number,
+): Promise<void> {
+  // Wait for the grid container to be visible
   await page.waitForSelector('[data-testid="grid-container"]', {
     state: "visible",
     timeout: GRID_READY_TIMEOUT,
   });
 
-  // Then wait for grid API to report ready
+  // All wrappers expose isReady as a DOM-based check, so this is grid-agnostic
   await page.waitForFunction(
-    () => {
-      return window.gridApi && window.gridApi.isReady();
+    (expected) => {
+      if (window.gridApi === undefined) {
+        return false;
+      }
+
+      const expectedRowsLoaded =
+        expected === undefined || window.gridApi.getRowCount() === expected;
+      const visibleRowsReady = expected === 0 || window.gridApi.isReady();
+
+      return expectedRowsLoaded && visibleRowsReady;
     },
+    expectedRowCount,
     { timeout: GRID_READY_TIMEOUT }
   );
 
-  // Library-specific additional waits
-  switch (grid) {
-    case "gp-grid":
-      // Wait for row slots to be rendered
-      await page.waitForSelector('.gp-grid-row', {
-        state: "attached",
-        timeout: GRID_READY_TIMEOUT,
-      });
-      break;
-
-    case "ag-grid":
-      // Wait for AG Grid rows
-      await page.waitForSelector(".ag-row", {
-        state: "attached",
-        timeout: GRID_READY_TIMEOUT,
-      });
-      break;
-
-    case "tanstack-table":
-      // Wait for virtual rows
-      await page.waitForSelector('[data-row-index]', {
-        state: "attached",
-        timeout: GRID_READY_TIMEOUT,
-      });
-      break;
-
-    case "handsontable":
-      // Wait for Handsontable cells
-      await page.waitForSelector(".htCore td", {
-        state: "attached",
-        timeout: GRID_READY_TIMEOUT,
-      });
-      break;
-  }
-
-  return Date.now() - start;
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }
 
-export async function waitForSortComplete(
-  page: Page,
-  _grid: GridType
-): Promise<void> {
-  // Wait for any loading indicators to disappear
+export async function waitForSortComplete(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       return window.gridApi && window.gridApi.isReady();
@@ -75,22 +42,40 @@ export async function waitForSortComplete(
     { timeout: GRID_READY_TIMEOUT }
   );
 
-  // Small delay to ensure rendering is complete
-  await page.waitForTimeout(50);
+  await page.evaluate(() => window.gridApi.waitForIdle());
+}
+
+interface RowCountExpectation {
+  equals?: number;
+  greaterThan?: number;
+  lessThan?: number;
 }
 
 export async function waitForFilterComplete(
   page: Page,
-  _grid: GridType
+  expectation: RowCountExpectation,
 ): Promise<void> {
   await page.waitForFunction(
-    () => {
-      return window.gridApi && window.gridApi.isReady();
+    (expected) => {
+      if (!window.gridApi?.isReady()) return false;
+
+      const count = window.gridApi.getDisplayedRowCount();
+      if (expected.equals !== undefined && count !== expected.equals) {
+        return false;
+      }
+      if (expected.greaterThan !== undefined && count <= expected.greaterThan) {
+        return false;
+      }
+      if (expected.lessThan !== undefined && count >= expected.lessThan) {
+        return false;
+      }
+      return true;
     },
-    { timeout: GRID_READY_TIMEOUT }
+    expectation,
+    { timeout: GRID_READY_TIMEOUT },
   );
 
-  await page.waitForTimeout(50);
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }
 
 export async function waitForDataLoad(
@@ -99,13 +84,17 @@ export async function waitForDataLoad(
 ): Promise<void> {
   await page.waitForFunction(
     (expected) => {
-      return (
-        window.gridApi &&
-        window.gridApi.isReady() &&
-        window.gridApi.getRowCount() === expected
-      );
+      if (window.gridApi === undefined) {
+        return false;
+      }
+
+      const expectedRowsLoaded = window.gridApi.getRowCount() === expected;
+      const visibleRowsReady = expected === 0 || window.gridApi.isReady();
+      return expectedRowsLoaded && visibleRowsReady;
     },
     expectedRowCount,
     { timeout: GRID_READY_TIMEOUT }
   );
+
+  await page.evaluate(() => window.gridApi.waitForIdle());
 }

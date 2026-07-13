@@ -44,6 +44,18 @@ import {
 } from "./grid-core-operations";
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+// With scroll virtualization active a fast fling traverses several rows per
+// frame; overscan below this leaves blank rows behind the fling.
+const RECOMMENDED_SCALED_OVERSCAN = 10;
+
+// Default momentum ceiling for the synthetic touch scroller, expressed in
+// rows per second and converted to logical px/ms via the row height.
+const DEFAULT_FLING_ROWS_PER_SECOND = 20_000;
+
+// =============================================================================
 // GridCore
 // =============================================================================
 
@@ -53,6 +65,7 @@ export class GridCore<TData = unknown> {
   private readonly rowHeight: number;
   private readonly headerHeight: number;
   private readonly overscan: number;
+  private readonly maxFlingVelocity: number;
   private readonly sortingEnabled: boolean;
   private readonly getRowId?: (row: TData) => RowId;
   private readonly onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
@@ -91,12 +104,15 @@ export class GridCore<TData = unknown> {
 
   // Lifecycle state
   private isDestroyed: boolean = false;
+  private hasWarnedAboutScaledOverscan: boolean = false;
 
   constructor(options: GridCoreOptions<TData>) {
     this.columns = options.columns;
     this.rowHeight = options.rowHeight;
     this.headerHeight = options.headerHeight ?? options.rowHeight;
     this.overscan = options.overscan ?? 3;
+    this.maxFlingVelocity = options.maxFlingVelocity ??
+      (DEFAULT_FLING_ROWS_PER_SECOND * this.rowHeight) / 1000;
     this.sortingEnabled = options.sortingEnabled ?? true;
     this.getRowId = options.getRowId;
     this.onCellValueChanged = options.onCellValueChanged;
@@ -254,9 +270,22 @@ export class GridCore<TData = unknown> {
     return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
-  openFilterPopup(colIndex: number, anchorRect: { top: number; left: number; width: number; height: number }): void {
+  /**
+   * Open a column filter popup.
+   * Adapters can skip distinct-value computation when their popup only uses
+   * condition inputs, such as number and date filters.
+   */
+  openFilterPopup(
+    colIndex: number,
+    anchorRect: { top: number; left: number; width: number; height: number },
+    computeDistinctValues: boolean = true,
+  ): void {
     if (this.rowData.isLoading()) return;
-    this.sortFilter.openFilterPopup(colIndex, anchorRect);
+    this.sortFilter.openFilterPopup(
+      colIndex,
+      anchorRect,
+      computeDistinctValues,
+    );
   }
 
   closeFilterPopup(): void {
@@ -362,6 +391,24 @@ export class GridCore<TData = unknown> {
       viewport: this.viewport,
       columnPositions: this.columnPositions,
     });
+    this.warnIfOverscanTooLowForScaling();
+  }
+
+  /**
+   * One-time advisory when scroll virtualization kicks in with a small
+   * overscan: momentum flings move several rows per frame at that scale,
+   * and a small overscan shows blank rows behind the fling.
+   */
+  private warnIfOverscanTooLowForScaling(): void {
+    if (this.hasWarnedAboutScaledOverscan) return;
+    if (this.scrollVirtualization.isScalingActive() === false) return;
+    this.hasWarnedAboutScaledOverscan = true;
+    if (this.overscan >= RECOMMENDED_SCALED_OVERSCAN) return;
+    console.warn(
+      `[gp-grid] Scroll virtualization is active (${this.rowData.getTotalRows().toLocaleString()} rows) ` +
+      `but overscan is ${this.overscan}. Fast momentum scrolling can outrun rendering and show blank rows ` +
+      `at this scale — set the overscan option to 10–12.`,
+    );
   }
 
   private emitHeaders(): void {
@@ -478,6 +525,14 @@ export class GridCore<TData = unknown> {
 
   isScalingActive(): boolean {
     return this.scrollVirtualization.isScalingActive();
+  }
+
+  /**
+   * Maximum accumulated touch-fling velocity (logical px/ms) used by the
+   * synthetic scroller while scroll virtualization is active.
+   */
+  getMaxFlingVelocity(): number {
+    return this.maxFlingVelocity;
   }
 
   /**

@@ -220,6 +220,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
             :columns="columns"
+            :overscan="12"
             :data-source="dataSource"
             :row-height="36"
             :header-height="40"

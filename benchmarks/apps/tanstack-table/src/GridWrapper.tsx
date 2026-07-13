@@ -1,12 +1,14 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  flexRender,
-  type SortingState,
-  type ColumnFiltersState,
+  useTable,
+  tableFeatures,
+  columnFilteringFeature,
+  rowSortingFeature,
+  columnSizingFeature,
+  createFilteredRowModel,
+  createSortedRowModel,
+  type FilterFn,
+  type TableFeatures,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -18,7 +20,16 @@ import {
   BENCHMARK_COLUMNS,
   getTotalColumnsWidth,
 } from "../../../src/data/column-definitions";
-import type { BenchmarkGridApi, FilterCondition } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
+import type {
+  BenchmarkGridApi,
+  FilterCondition,
+  SortRule,
+} from "../../../src/data/types";
+import {
+  matchesCondition,
+  waitForBrowserIdle,
+} from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
@@ -27,28 +38,47 @@ interface GridWrapperProps {
 const ROW_HEIGHT = 32;
 const HEADER_HEIGHT = 40;
 
+const benchmarkFilter: FilterFn<TableFeatures, BenchmarkRow> = (
+  row,
+  columnId,
+  condition: FilterCondition,
+): boolean => {
+  const value = row.getValue(columnId);
+  return matchesCondition(value as BenchmarkRow[keyof BenchmarkRow], condition);
+};
+
+const features = tableFeatures({
+  columnFilteringFeature,
+  rowSortingFeature,
+  columnSizingFeature,
+  filteredRowModel: createFilteredRowModel(),
+  sortedRowModel: createSortedRowModel(),
+});
+
+function isReady(): boolean {
+  return document.querySelectorAll('[data-row-index]').length > 0;
+}
+
 export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [isReady, setIsReady] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const columns = useMemo(() => toTanStackColumns(BENCHMARK_COLUMNS), []);
+  const columns = useMemo(
+    () => toTanStackColumns(BENCHMARK_COLUMNS).map((column) => ({
+      ...column,
+      filterFn: benchmarkFilter,
+    })),
+    [],
+  );
   const totalWidth = useMemo(
     () => getTotalColumnsWidth(BENCHMARK_COLUMNS),
     []
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data,
     columns,
-    state: { sorting, columnFilters },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   });
 
   const { rows } = table.getRowModel();
@@ -57,25 +87,14 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     count: rows.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 20,
+    overscan: benchmarkDefaults.overscanRows,
   });
 
   const virtualRows = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
-  // Track when data changes to set ready state
-  useEffect(() => {
-    if (data.length > 0) {
-      const timer = setTimeout(() => setIsReady(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setIsReady(false);
-    }
-  }, [data]);
-
   // Load data function
   const loadData = useCallback((count: number) => {
-    setIsReady(false);
     const newData = generateData(count);
     setData(newData);
   }, []);
@@ -83,33 +102,40 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
   // Clear data function
   const clearData = useCallback(() => {
     setData([]);
-    setSorting([]);
-    setColumnFilters([]);
-    setIsReady(false);
-  }, []);
+    table.setSorting([]);
+    table.setColumnFilters([]);
+  }, [table]);
 
-  // Sort function - TanStack sorts via React state
+  // Sort function - TanStack sorts synchronously
   const sort = useCallback(async (field: string, direction: "asc" | "desc"): Promise<void> => {
-    setSorting([{ id: field, desc: direction === "desc" }]);
-  }, []);
+    table.setSorting([{ id: field, desc: direction === "desc" }]);
+  }, [table]);
 
   // Clear sort function
   const clearSort = useCallback(async (): Promise<void> => {
-    setSorting([]);
-  }, []);
+    table.setSorting([]);
+  }, [table]);
 
-  // Filter function - TanStack filters via React state
+  const sortMany = useCallback(async (rules: SortRule[]): Promise<void> => {
+    table.setSorting(
+      rules.map((rule) => ({
+        id: rule.field,
+        desc: rule.direction === "desc",
+      })),
+    );
+  }, [table]);
+
+  // Pass the complete condition so TanStack applies the same predicate as the other grids.
   const filter = useCallback(async (field: string, condition: FilterCondition): Promise<void> => {
-    setColumnFilters((prev) => {
-      const filtered = prev.filter((f) => f.id !== field);
-      return [...filtered, { id: field, value: condition.value }];
-    });
-  }, []);
+    const column = table.getColumn(field);
+    if (!column) return;
+    column.setFilterValue(condition);
+  }, [table]);
 
   // Clear filters function
   const clearFilters = useCallback(async (): Promise<void> => {
-    setColumnFilters([]);
-  }, []);
+    table.setColumnFilters([]);
+  }, [table]);
 
   // Expose grid API to window for benchmark control
   useEffect(() => {
@@ -117,15 +143,34 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       loadData,
       clearData,
       sort,
+      sortMany,
       clearSort,
       filter,
       clearFilters,
-      isReady: () => isReady,
+      isReady,
+      waitForIdle: waitForBrowserIdle,
       getRowCount: () => data.length,
+      getDisplayedRowCount: () => table.getRowModel().rows.length,
+      getDisplayedRows: (start, count) => {
+        return table
+          .getRowModel()
+          .rows.slice(start, start + count)
+          .map((row) => row.original);
+      },
     };
 
     window.gridApi = api;
-  }, [loadData, clearData, sort, clearSort, filter, clearFilters, isReady, data.length]);
+  }, [
+    loadData,
+    clearData,
+    sort,
+    sortMany,
+    clearSort,
+    filter,
+    clearFilters,
+    data.length,
+    table,
+  ]);
 
   // Initial data load
   useEffect(() => {
@@ -174,10 +219,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
               >
                 {header.isPlaceholder
                   ? null
-                  : flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
+                  : <table.FlexRender header={header} />}
               </div>
             ))
           )}
@@ -208,7 +250,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
                   borderBottom: "1px solid #e5e7eb",
                 }}
               >
-                {row.getVisibleCells().map((cell) => (
+                {row.getAllCells().map((cell) => (
                   <div
                     key={cell.id}
                     style={{
@@ -223,7 +265,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
                       alignItems: "center",
                     }}
                   >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    <table.FlexRender cell={cell} />
                   </div>
                 ))}
               </div>

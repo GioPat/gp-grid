@@ -1,96 +1,92 @@
 // Scroll Performance Benchmark
-// Measures FPS, frame drops, and scroll latency during continuous scrolling
+// Measures animation-frame pacing during user-like wheel scrolling.
 
-import { test } from "@playwright/test";
-import { GRIDS, getGridPort } from "../src/data/types";
-import { ROW_COUNTS } from "../src/data/generate-data";
-import { FPSTracker, measureFPSSimple } from "../src/metrics/fps-tracker";
+import { expect, test, type Page } from "@playwright/test";
+import {
+  GRIDS,
+  getGridPort,
+  type GridType,
+  type ScrollMetrics,
+} from "../src/data/types";
+import {
+  getBenchmarkIterations,
+  getBenchmarkRowCounts,
+} from "../src/config/benchmark-config";
+import {
+  buildScrollMetrics,
+  startFPSSampling,
+  stopFPSSampling,
+} from "../src/metrics/browser-performance";
 import { waitForGridReady } from "../src/utils/wait-helpers";
-import { performScroll, scrollToTop } from "../src/utils/scroll-helpers";
+import { performMeasuredScroll, scrollToTop } from "../src/utils/scroll-helpers";
 import { saveResult } from "../src/results/json-reporter";
+import { getBrowserVersion } from "../src/utils/benchmark-assertions";
 
-// Test configuration
-const WARMUP_DURATION = 1000; // 1 second warmup
+const WARMUP_DURATION = 1000;
 const WARMUP_DISTANCE = 5000;
-const MEASURE_DURATION = 5000; // 5 seconds measurement
+const MEASURE_DURATION = 5000;
 const MEASURE_DISTANCE = 50000;
+// The scroll comparison is only fair if every grid actually travels a similar
+// distance under identical wheel input. Requiring at least this fraction of the
+// requested distance guards against a grid whose custom scrollbar swallows or
+// rescales wheel events (which would otherwise post an inflated FPS for doing
+// far less work).
+const MIN_SCROLL_FIDELITY = 0.8;
+
+const measureScroll = async (
+  page: Page,
+  grid: GridType,
+  port: number,
+  rowCount: number,
+): Promise<ScrollMetrics> => {
+  await page.goto(`http://localhost:${port}?rows=${rowCount}`);
+  await waitForGridReady(page, rowCount);
+
+  await performMeasuredScroll(page, grid, {
+    duration: WARMUP_DURATION,
+    distance: WARMUP_DISTANCE,
+  });
+
+  await scrollToTop(page);
+  await page.evaluate(() => window.gridApi.waitForIdle());
+
+  await startFPSSampling(page);
+  const scrollResult = await performMeasuredScroll(page, grid, {
+    duration: MEASURE_DURATION,
+    distance: MEASURE_DISTANCE,
+  });
+  const fpsMetrics = await stopFPSSampling(page);
+
+  expect(Math.abs(scrollResult.actualDelta)).toBeGreaterThanOrEqual(
+    MEASURE_DISTANCE * MIN_SCROLL_FIDELITY,
+  );
+
+  return buildScrollMetrics(
+    fpsMetrics,
+    scrollResult.durationMs,
+    scrollResult.actualDelta,
+  );
+};
 
 for (const grid of GRIDS) {
-  for (const rowCount of ROW_COUNTS) {
+  for (const rowCount of getBenchmarkRowCounts()) {
     test(`${grid} scroll performance with ${rowCount.toLocaleString()} rows`, async ({
       page,
     }) => {
       const port = getGridPort(grid);
+      const samples: ScrollMetrics[] = [];
 
-      // Navigate to grid app with row count
-      await page.goto(`http://localhost:${port}?rows=${rowCount}`);
+      for (let iteration = 0; iteration < getBenchmarkIterations(); iteration++) {
+        samples.push(await measureScroll(page, grid, port, rowCount));
+      }
 
-      // Wait for grid to be fully rendered
-      await waitForGridReady(page, grid);
-
-      // Start CDP session for precise metrics
-      const client = await page.context().newCDPSession(page);
-
-      // Warmup scroll (helps JIT compilation and cache warming)
-      await performScroll(page, {
-        duration: WARMUP_DURATION,
-        distance: WARMUP_DISTANCE,
+      const result = saveResult("scroll", grid, rowCount, samples, {
+        browserVersion: getBrowserVersion(page),
       });
-
-      // Return to top
-      await scrollToTop(page);
-      await page.waitForTimeout(500); // Settle
-
-      // Begin actual measurement
-      const fpsTracker = new FPSTracker(client);
-      await fpsTracker.start();
-
-      // Perform controlled scroll
-      const scrollStart = Date.now();
-      await performScroll(page, {
-        duration: MEASURE_DURATION,
-        distance: MEASURE_DISTANCE,
-      });
-      const scrollLatency = Date.now() - scrollStart;
-
-      // Stop measurement and get metrics
-      const cdpMetrics = await fpsTracker.stop();
-
-      // Also get simple FPS measurement for comparison
-      await scrollToTop(page);
-      await page.waitForTimeout(200);
-      const simpleMetrics = await measureFPSSimple(page, 2000);
-
-      // Use the better metrics source
-      const metrics = {
-        avgFPS: cdpMetrics.avgFPS || simpleMetrics.avgFPS,
-        minFPS: cdpMetrics.minFPS || Math.min(...simpleMetrics.samples.slice(0, 100)),
-        maxFPS: cdpMetrics.maxFPS || Math.max(...simpleMetrics.samples.slice(0, 100)),
-        frameDropCount: cdpMetrics.frameDropCount,
-        percentile95FPS: cdpMetrics.percentile95FPS || simpleMetrics.avgFPS * 0.9,
-        scrollLatencyMs: scrollLatency,
-        totalFrames: cdpMetrics.totalFrames || simpleMetrics.samples.length,
-      };
-
-      // Save results
-      saveResult("scroll", grid, rowCount, metrics);
 
       console.log(
-        `[${grid}] ${rowCount.toLocaleString()} rows - Avg FPS: ${metrics.avgFPS}, Min: ${metrics.minFPS}, Drops: ${metrics.frameDropCount}`
+        `[${grid}] ${rowCount.toLocaleString()} rows - median FPS: ${result.metrics.avgFPS}, p05: ${result.metrics.p05FPS}, samples: ${samples.length}`,
       );
     });
   }
 }
-
-// Single grid test for quick iteration
-test.describe("Quick scroll test", () => {
-  test.skip(); // Skip by default, enable manually
-
-  test("gp-grid scroll 100k", async ({ page }) => {
-    await page.goto("http://localhost:5100?rows=100000");
-    await waitForGridReady(page, "gp-grid");
-
-    const metrics = await measureFPSSimple(page, 3000);
-    console.log("Quick FPS result:", metrics.avgFPS);
-  });
-});

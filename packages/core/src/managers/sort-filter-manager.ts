@@ -277,10 +277,13 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
   /**
    * Open filter popup for a column (toggles if already open for same column)
+   *
+   * @param computeDistinctValues Whether the adapter's popup needs a values list.
    */
   openFilterPopup(
     colIndex: number,
     anchorRect: { top: number; left: number; width: number; height: number },
+    computeDistinctValues: boolean = true,
   ): void {
     // If clicking on the same column's filter icon, close the popup
     if (this.openFilterColIndex === colIndex) {
@@ -293,7 +296,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     if (!column || !this.isColumnFilterable(colIndex)) return;
 
     const colId = column.colId ?? column.field;
-    const distinctValues = this.getDistinctValuesForColumn(colId);
+    let distinctValues: CellValue[] = [];
+    if (computeDistinctValues) {
+      distinctValues = this.getDistinctValuesForColumn(colId);
+    }
 
     this.openFilterColIndex = colIndex;
     this.emit({

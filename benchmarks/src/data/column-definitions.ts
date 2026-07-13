@@ -170,3 +170,40 @@ export function toHandsontableColumns(cols: NormalizedColumn[]) {
     readOnly: true,
   }));
 }
+
+// Convert to Smart.Grid format
+const smartGridTypeMap: Record<NormalizedColumn["type"], string> = {
+  text: "string",
+  number: "number",
+  date: "date",
+  boolean: "bool",
+};
+
+export function toSmartGridColumns(cols: NormalizedColumn[]) {
+  return cols.map((col) => ({
+    dataField: col.field,
+    label: col.headerName,
+    width: col.width,
+    dataType: smartGridTypeMap[col.type],
+    allowSort: col.sortable,
+    allowFilter: col.filterable,
+    allowResize: false,
+  }));
+}
+
+// Smart.Grid DataAdapter field types (note: distinct from the column dataType
+// map above — the adapter uses "boolean", the column uses "bool").
+const smartGridFieldTypeMap: Record<NormalizedColumn["type"], string> = {
+  text: "string",
+  number: "number",
+  date: "date",
+  boolean: "boolean",
+};
+
+// Build Smart.Grid DataAdapter `dataFields` (e.g. "id: number"). Declaring the
+// field types up front lets the adapter bind, sort and filter large datasets
+// efficiently; binding a raw untyped array instead forces Smart.Grid to infer
+// types by scanning every row, which is pathologically slow at 1M rows.
+export function toSmartGridDataFields(cols: NormalizedColumn[]): string[] {
+  return cols.map((col) => `${col.field}: ${smartGridFieldTypeMap[col.type]}`);
+}

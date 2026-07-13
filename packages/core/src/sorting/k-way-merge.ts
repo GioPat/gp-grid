@@ -192,7 +192,15 @@ export function kWayMerge(
 
   const result = new Uint32Array(totalLength);
   const multiplier = direction === 'asc' ? 1 : -1;
-  const heap = new BinaryHeap<HeapEntry>((a, b) => (a.value - b.value) * multiplier);
+  // Tie-break on the original global index so that rows with equal sort keys
+  // keep their input order (stable sort), matching the synchronous applySort.
+  // Tie-break on the original global index so that rows with equal sort keys
+  // keep their input order (stable sort), matching the synchronous applySort.
+  const heap = new BinaryHeap<HeapEntry>((a, b) => {
+    const diff = (a.value - b.value) * multiplier;
+    if (diff !== 0) return diff;
+    return a.globalIndex - b.globalIndex;
+  });
 
   // Initialize heap with first element from each non-empty chunk
   for (let i = 0; i < chunks.length; i++) {
@@ -270,7 +278,8 @@ export function kWayMergeMultiColumn(
       const diff = (a.values[i]! - b.values[i]!) * directions[i]!;
       if (diff !== 0) return diff;
     }
-    return 0;
+    // Tie-break on the original global index to keep the sort stable.
+    return a.globalIndex - b.globalIndex;
   });
 
   // Initialize heap with first element from each non-empty chunk
