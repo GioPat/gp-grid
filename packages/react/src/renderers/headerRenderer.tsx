@@ -4,6 +4,15 @@ import React from "react";
 import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
 import type { ReactHeaderRenderer } from "../types";
 
+const needsDistinctValues = (column: ColumnDefinition): boolean => {
+  const dataType = column.cellDataType;
+  return (
+    dataType === "text" ||
+    dataType === "boolean" ||
+    dataType === "object"
+  );
+};
+
 export interface RenderHeaderOptions<TData> {
   column: ColumnDefinition;
   colIndex: number;
@@ -59,12 +68,16 @@ export function renderHeader<TData>(
         ) as HTMLElement | null;
         if (headerCell) {
           const rect = headerCell.getBoundingClientRect();
-          core.openFilterPopup(colIndex, {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-          });
+          core.openFilterPopup(
+            colIndex,
+            {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            },
+            needsDistinctValues(column),
+          );
         }
       }
     },

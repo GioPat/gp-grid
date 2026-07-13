@@ -5,6 +5,15 @@ import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } 
 import type { VueHeaderRenderer } from "../types";
 import { invokeRenderer } from "./utils";
 
+const needsDistinctValues = (column: ColumnDefinition): boolean => {
+  const dataType = column.cellDataType;
+  return (
+    dataType === "text" ||
+    dataType === "boolean" ||
+    dataType === "object"
+  );
+};
+
 export interface RenderHeaderOptions {
   column: ColumnDefinition;
   colIndex: number;
@@ -58,12 +67,16 @@ export function renderHeader(
         ) as HTMLElement | null;
         if (headerCell) {
           const rect = headerCell.getBoundingClientRect();
-          core.openFilterPopup(colIndex, {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-          });
+          core.openFilterPopup(
+            colIndex,
+            {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            },
+            needsDistinctValues(column),
+          );
         }
       }
     },
