@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { ScrollMetrics } from "../data/types";
+import { ROW_HEIGHT_PX } from "../config/benchmark-config";
 
 interface BrowserPerformanceMetrics {
   largestContentfulPaint: number;
@@ -189,5 +190,6 @@ export const buildScrollMetrics = (
     scrollDurationMs,
     actualScrollDeltaPx: Math.round(actualScrollDeltaPx),
     scrollPxPerSecond,
+    rowsTraversed: Math.round(Math.abs(actualScrollDeltaPx) / ROW_HEIGHT_PX),
   };
 };

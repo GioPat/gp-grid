@@ -47,7 +47,7 @@ export const GRID_METADATA: Record<GridType, GridMetadata> = {
     websiteUrl: "https://www.gp-grid.io",
     implementationMode: "native-grid",
     comment:
-      "Above ~312,000 rows gp-grid caps its DOM scroll container at 10,000,000px and compresses the scroll space, so a mouse wheel moves only a fraction of its delta. At those sizes the scroll benchmark drives gp-grid's scroller programmatically to cover the same logical distance as the wheel-driven grids and reports the delta in logical (content) pixels; below that threshold it scrolls natively via the wheel like the other grids.",
+      "Above ~312,000 rows gp-grid caps its DOM scroll container at 10,000,000px, compresses the scroll space, and dampens wheel deltas before applying them, so the shared wheel input traverses fewer rows than on the natively-scrolling grids (see Rows Traversed). Below that threshold it scrolls natively via the wheel like the other grids. Its scroll delta is reported in logical (content) pixels.",
   },
   "ag-grid": {
     displayName: "AG Grid",
@@ -73,7 +73,7 @@ export const GRID_METADATA: Record<GridType, GridMetadata> = {
     websiteUrl: "https://www.htmlelements.com/react/demos/grid/overview/",
     implementationMode: "app-side-virtual-data",
     comment:
-      "Uses Smart.Grid virtualDataSource; sort/filter processing is performed by the benchmark adapter over the full in-memory dataset, then Smart.Grid renders the requested virtual window. Smart.Grid exposes no configurable row overscan, so the shared overscan setting does not apply to it. Its custom scrollbar rescales mouse-wheel input to a fraction of the requested delta, so the scroll benchmark drives Smart.Grid through its own scroll API to cover the same virtual distance as the wheel-driven grids; the FPS is therefore measured over an equal scroll workload but via a programmatic scroll rather than wheel input.",
+      "Uses Smart.Grid virtualDataSource; sort/filter processing is performed by the benchmark adapter over the full in-memory dataset, then Smart.Grid renders the requested virtual window. Smart.Grid exposes no configurable row overscan, so the shared overscan setting does not apply to it. Its custom scrollbar rescales mouse-wheel input to fixed line steps rather than the event's delta, so under the shared wheel input it traverses a different number of rows than the natively-scrolling grids (see Rows Traversed).",
   },
 };
 
@@ -127,6 +127,10 @@ export interface ScrollMetrics {
   scrollDurationMs: number;
   actualScrollDeltaPx: number;
   scrollPxPerSecond: number;
+  // How many rows the measured wheel pass actually covered (logical scroll
+  // delta / shared row height). All grids receive the identical wheel input;
+  // this reports how far each grid's scroll model translated it.
+  rowsTraversed: number;
   totalFrames: number;
 }
 
@@ -178,6 +182,7 @@ export interface RunEnvironment {
 export interface RunConfig {
   rowCounts: number[];
   iterations: number;
+  rowHeightPx: number;
   playwrightWorkers: number;
   retries: number;
   overscanRows: number;
@@ -189,12 +194,17 @@ export interface RunConfig {
 }
 
 // Exact resolved versions of the libraries under test, so a published run is
-// reproducible. `packages` maps each installed npm package name to its version;
-// `gitCommit` pins gp-grid's source (npm range alone cannot, since it builds
-// from the workspace).
+// reproducible. `packages` maps each installed npm package name to its version.
 export interface GridLibraryVersion {
   packages: Record<string, string>;
-  gitCommit?: string;
+}
+
+export interface GridPackageSize {
+  packages: string[];
+  // Exact version each package was sized at, read from the installed manifest.
+  versions: Record<string, string>;
+  minifiedBytes: number;
+  gzipBytes: number;
 }
 
 export interface RunManifest {
@@ -203,6 +213,9 @@ export interface RunManifest {
   environment: RunEnvironment;
   config: RunConfig;
   libraryVersions: Record<GridType, GridLibraryVersion>;
+  // Optional so result readers remain compatible with runs created before
+  // package-size measurement was added.
+  packageSizes?: Record<GridType, GridPackageSize>;
 }
 
 export interface BenchmarkResult<T> {
@@ -225,6 +238,8 @@ export interface BenchmarkRun {
   timestamp: string;
   environment: RunEnvironment;
   config: RunConfig;
+  libraryVersions: Record<GridType, GridLibraryVersion>;
+  packageSizes?: Record<GridType, GridPackageSize>;
   results: {
     scrollPerformance: BenchmarkResult<ScrollMetrics>[];
     initialRender: BenchmarkResult<RenderMetrics>[];

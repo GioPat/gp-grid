@@ -3,6 +3,9 @@
 import benchmarkDefaults from "./benchmark-defaults.json" with { type: "json" };
 
 export const PLAYWRIGHT_WORKERS = benchmarkDefaults.playwrightWorkers;
+// Every benchmark app renders rows at this height; the scroll benchmark divides
+// the measured logical scroll delta by it to report rows traversed.
+export const ROW_HEIGHT_PX = benchmarkDefaults.rowHeightPx;
 export const PLAYWRIGHT_RETRIES = benchmarkDefaults.retries;
 export const OVERSCAN_ROWS = benchmarkDefaults.overscanRows;
 export const VIEWPORT = benchmarkDefaults.viewport;

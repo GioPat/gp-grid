@@ -35,7 +35,7 @@ interface GridWrapperProps {
   initialRowCount: number;
 }
 
-const ROW_HEIGHT = 32;
+const ROW_HEIGHT = benchmarkDefaults.rowHeightPx;
 const HEADER_HEIGHT = 40;
 
 const benchmarkFilter: FilterFn<TableFeatures, BenchmarkRow> = (

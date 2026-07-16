@@ -70,7 +70,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       colHeaders,
       width: "100%",
       height: "100%",
-      rowHeights: 32,
+      rowHeights: benchmarkDefaults.rowHeightPx,
       colWidths,
       // multiColumnSorting (not columnSorting) so multi-column sort is honored;
       // the two plugins conflict, and the single-column plugin silently

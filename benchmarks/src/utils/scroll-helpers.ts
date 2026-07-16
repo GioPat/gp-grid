@@ -85,143 +85,6 @@ export async function performProgrammaticScroll(
   );
 }
 
-export const performScroll = performProgrammaticScroll;
-
-// Drive Smart.Grid's measured scroll through its own scroll API rather than the
-// mouse wheel. Smart.Grid's custom scrollbar rescales wheel input to a fraction
-// of the requested delta (~14%: it steps by a fixed line amount and ignores the
-// event's magnitude), so a wheel-driven pass repaints far less canvas than the
-// natively-scrolling grids and its FPS would be measured over a much shorter
-// distance. Stepping setVerticalScrollValue at ~60fps covers the same virtual
-// distance as the wheel path while still triggering a real repaint (and rAF
-// frame) per step, keeping the FPS comparison over an equal scroll workload.
-async function performSmartGridScroll(
-  page: Page,
-  options: ScrollOptions,
-): Promise<ScrollResult> {
-  const { duration, distance } = options;
-  const steps = Math.ceil(duration / 16); // ~60fps
-  const stepDistance = distance / steps;
-  const stepDuration = duration / steps;
-  const startedAt = Date.now();
-
-  const positions = await page.evaluate(
-    async ({ steps, stepDistance, stepDuration }) => {
-      const container = document.querySelector('[data-testid="grid-container"]');
-      const smartGrid = container?.querySelector(
-        "smart-grid",
-      ) as SmartGridElement | null;
-      if (!smartGrid?.setVerticalScrollValue) {
-        return { start: 0, end: 0 };
-      }
-
-      const start = smartGrid.getVerticalScrollValue?.() ?? 0;
-      for (let i = 0; i < steps; i++) {
-        const current = smartGrid.getVerticalScrollValue?.() ?? 0;
-        smartGrid.setVerticalScrollValue(current + stepDistance);
-        await new Promise((r) => setTimeout(r, stepDuration));
-      }
-      const end = smartGrid.getVerticalScrollValue?.() ?? 0;
-      return { start, end };
-    },
-    { steps, stepDistance, stepDuration },
-  );
-
-  return {
-    startPosition: positions.start,
-    endPosition: positions.end,
-    actualDelta: positions.end - positions.start,
-    durationMs: Date.now() - startedAt,
-  };
-}
-
-// Drive gp-grid's measured scroll. Below ~312k rows gp-grid scrolls natively, so
-// the realistic wheel path is used unchanged. Above that threshold gp-grid caps
-// its DOM scroll container at 10,000,000px and compresses the scroll space
-// (ratio < 1): a mouse wheel then moves the DOM scrollTop by only a fraction of
-// its delta, so a wheel-driven pass would travel far less logical distance than
-// the natively-scrolling grids and fail the fidelity guard. In that regime the
-// scroller is stepped programmatically to cover the same LOGICAL distance the
-// wheel-driven grids travel, and the delta is reported in logical (content) px
-// (DOM delta ÷ ratio), keeping the FPS comparison over an equal scroll workload.
-async function performGpGridMeasuredScroll(
-  page: Page,
-  options: ScrollOptions,
-): Promise<ScrollResult> {
-  const ratio = await page.evaluate(
-    () => window.gridApi.getScrollRatio?.() ?? 1,
-  );
-  if (ratio >= 1) {
-    return performWheelScroll(page, options);
-  }
-
-  const { duration, distance } = options;
-  const steps = Math.ceil(duration / 16); // ~60fps
-  // A logical step of (distance / steps) maps to (× ratio) DOM pixels.
-  const domStep = (distance / steps) * ratio;
-  const stepDuration = duration / steps;
-  const startedAt = Date.now();
-
-  const positions = await page.evaluate(
-    async ({ steps, domStep, stepDuration }) => {
-      const container = document.querySelector('[data-testid="grid-container"]');
-      if (!container) {
-        return { start: 0, end: 0 };
-      }
-      // gp-grid's scroll body is the unclassed overflow:auto child of the
-      // container. Pick the child with the largest vertical overflow so the
-      // header's 1px sub-pixel overflow does not shadow the scroll body.
-      const gpContainer = container.querySelector(".gp-grid-container");
-      const scrollable = gpContainer
-        ? Array.from(gpContainer.children)
-            .filter((child) => child.scrollHeight > child.clientHeight)
-            .sort(
-              (a, b) =>
-                b.scrollHeight -
-                b.clientHeight -
-                (a.scrollHeight - a.clientHeight),
-            )[0]
-        : null;
-      if (!scrollable) {
-        return { start: 0, end: 0 };
-      }
-
-      const start = scrollable.scrollTop;
-      for (let i = 0; i < steps; i++) {
-        scrollable.scrollTop += domStep;
-        await new Promise((r) => setTimeout(r, stepDuration));
-      }
-      return { start, end: scrollable.scrollTop };
-    },
-    { steps, domStep, stepDuration },
-  );
-
-  return {
-    startPosition: positions.start / ratio,
-    endPosition: positions.end / ratio,
-    actualDelta: (positions.end - positions.start) / ratio,
-    durationMs: Date.now() - startedAt,
-  };
-}
-
-// Perform the measured scroll for a grid: wheel input for the natively-scrolling
-// grids, and a scroll-API/programmatic pass for grids whose custom or compressed
-// scroll model makes raw wheel input non-comparable (Smart.Grid, gp-grid at
-// large row counts). See performSmartGridScroll / performGpGridMeasuredScroll.
-export async function performMeasuredScroll(
-  page: Page,
-  grid: string,
-  options: ScrollOptions,
-): Promise<ScrollResult> {
-  if (grid === "smart-grid") {
-    return performSmartGridScroll(page, options);
-  }
-  if (grid === "gp-grid") {
-    return performGpGridMeasuredScroll(page, options);
-  }
-  return performWheelScroll(page, options);
-}
-
 // Scroll to a specific position
 export async function scrollToPosition(
   page: Page,
@@ -304,7 +167,24 @@ export async function scrollToBottom(page: Page): Promise<void> {
   });
 }
 
-// Perform scroll with wheel events (more realistic)
+// The measured scroll reports its travel in logical (content) pixels so rows
+// traversed is comparable across grids. Most grids scroll natively (logical ==
+// DOM scrollTop) and Smart.Grid's scroll API already reports virtual pixels;
+// gp-grid is the only grid whose DOM scroll space is compressed (ratio < 1) at
+// large row counts, so its DOM position is divided by the ratio to recover the
+// logical travel.
+async function getLogicalScrollPosition(page: Page): Promise<number> {
+  const domPosition = await getScrollPosition(page);
+  const ratio = await page.evaluate(
+    () => window.gridApi.getScrollRatio?.() ?? 1,
+  );
+  return domPosition / ratio;
+}
+
+// Perform scroll with wheel events. This is the measured scroll for EVERY grid:
+// all grids receive the identical wheel input, and how far each one actually
+// travels under it (custom scrollbars and dampened wheel handling rescale the
+// deltas) is reported via actualDelta rather than being equalized.
 export async function performWheelScroll(
   page: Page,
   options: ScrollOptions
@@ -313,7 +193,7 @@ export async function performWheelScroll(
   const steps = Math.ceil(duration / 16);
   const deltaY = distance / steps;
   const stepDuration = duration / steps;
-  const startPosition = await getScrollPosition(page);
+  const startPosition = await getLogicalScrollPosition(page);
   const startedAt = Date.now();
 
   const container = await page.$('[data-testid="grid-container"]');
@@ -347,7 +227,7 @@ export async function performWheelScroll(
     await page.waitForTimeout(stepDuration);
   }
 
-  const endPosition = await getScrollPosition(page);
+  const endPosition = await getLogicalScrollPosition(page);
 
   return {
     startPosition,

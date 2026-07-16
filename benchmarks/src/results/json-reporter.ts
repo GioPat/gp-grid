@@ -88,6 +88,8 @@ export const loadAllResults = (): BenchmarkRun => {
     timestamp: manifest.timestamp,
     environment: manifest.environment,
     config: manifest.config,
+    libraryVersions: manifest.libraryVersions,
+    packageSizes: manifest.packageSizes,
     results: {
       scrollPerformance: loadResultsByCategory<ScrollMetrics>(
         files,

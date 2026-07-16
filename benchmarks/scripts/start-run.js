@@ -3,10 +3,10 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import benchmarkDefaults from "../src/config/benchmark-defaults.json" with { type: "json" };
 import gridPackages from "../src/config/grid-packages.json" with { type: "json" };
+import { collectPackageSizes } from "./collect-package-sizes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "../results");
@@ -26,19 +26,6 @@ const readPackageVersion = (packageName) => {
   }
 };
 
-// gp-grid builds from the workspace, so its npm version alone does not pin the
-// source; the short commit does.
-const readGpGridCommit = () => {
-  try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: __dirname,
-      encoding: "utf-8",
-    }).trim();
-  } catch {
-    return undefined;
-  }
-};
-
 const collectLibraryVersions = () => {
   const versions = {};
   for (const [grid, packageNames] of Object.entries(gridPackages)) {
@@ -46,8 +33,7 @@ const collectLibraryVersions = () => {
     for (const name of packageNames) {
       packages[name] = readPackageVersion(name);
     }
-    const commit = grid === "gp-grid" ? readGpGridCommit() : undefined;
-    versions[grid] = commit ? { packages, gitCommit: commit } : { packages };
+    versions[grid] = { packages };
   }
   return versions;
 };
@@ -96,6 +82,7 @@ const manifest = {
       process.env.BENCH_ITERATIONS,
       benchmarkDefaults.iterations,
     ),
+    rowHeightPx: benchmarkDefaults.rowHeightPx,
     playwrightWorkers: benchmarkDefaults.playwrightWorkers,
     retries: benchmarkDefaults.retries,
     overscanRows: benchmarkDefaults.overscanRows,
@@ -103,6 +90,7 @@ const manifest = {
     headless: benchmarkDefaults.headless,
   },
   libraryVersions: collectLibraryVersions(),
+  packageSizes: await collectPackageSizes(gridPackages),
 };
 
 const runDir = path.join(RUNS_DIR, runId);

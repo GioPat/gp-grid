@@ -221,7 +221,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
         gridRef={gridRef}
         columns={columns}
         dataSource={dataSource}
-        rowHeight={32}
+        rowHeight={benchmarkDefaults.rowHeightPx}
         headerHeight={40}
         overscan={benchmarkDefaults.overscanRows}
       />

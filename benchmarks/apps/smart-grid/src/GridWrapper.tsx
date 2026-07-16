@@ -21,6 +21,7 @@ import {
 } from "./data-view";
 import { waitForBrowserIdle } from "../../../src/data/row-processing";
 import type { SortRule } from "../../../src/data/types";
+import benchmarkDefaults from "../../../src/config/benchmark-defaults.json";
 
 interface GridWrapperProps {
   initialRowCount: number;
@@ -267,7 +268,7 @@ export const GridWrapper = ({ initialRowCount }: GridWrapperProps) => {
         ref={gridRef}
         dataSource={dataSource}
         columns={columns}
-        layout={{ rowHeight: 32 }}
+        layout={{ rowHeight: benchmarkDefaults.rowHeightPx }}
         sorting={{ enabled: true, mode: "many" }}
         filtering={{ enabled: true }}
         scrolling="virtual"

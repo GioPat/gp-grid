@@ -1,6 +1,9 @@
 {
-  "iterations": 5,
-  "rowCounts": [1000000],
+  "iterations": 10,
+  "rowCounts": [
+    1000000
+  ],
+  "rowHeightPx": 32,
   "playwrightWorkers": 1,
   "retries": 0,
   "overscanRows": 10,

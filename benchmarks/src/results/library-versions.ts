@@ -1,6 +1,5 @@
 import * as fs from "fs";
 import * as path from "path";
-import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import { GRIDS, type GridType, type GridLibraryVersion } from "../data/types";
 // Node ESM loader requires the import attribute (this runs under Playwright/Node,
@@ -30,28 +29,13 @@ const readPackageVersion = (packageName: string): string => {
   }
 };
 
-// gp-grid is built from the workspace, so its npm version alone does not pin the
-// source; the short commit does. Returns undefined outside a git checkout.
-const readGpGridCommit = (): string | undefined => {
-  try {
-    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: BENCHMARKS_ROOT,
-      encoding: "utf-8",
-    });
-    return sha.trim();
-  } catch {
-    return undefined;
-  }
-};
-
 const buildEntry = (grid: GridType): GridLibraryVersion => {
   const packages: Record<string, string> = {};
   for (const name of GRID_PACKAGES[grid]) {
     packages[name] = readPackageVersion(name);
   }
 
-  const commit = grid === "gp-grid" ? readGpGridCommit() : undefined;
-  return commit ? { packages, gitCommit: commit } : { packages };
+  return { packages };
 };
 
 export const collectLibraryVersions = (): Record<

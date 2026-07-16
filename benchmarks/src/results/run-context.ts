@@ -7,6 +7,7 @@ import {
   OVERSCAN_ROWS,
   PLAYWRIGHT_RETRIES,
   PLAYWRIGHT_WORKERS,
+  ROW_HEIGHT_PX,
   VIEWPORT,
   getBenchmarkIterations,
   getBenchmarkRowCounts,
@@ -55,6 +56,7 @@ const createManifest = (chromeVersion?: string): RunManifest => {
     config: {
       rowCounts: getBenchmarkRowCounts(),
       iterations: getBenchmarkIterations(),
+      rowHeightPx: ROW_HEIGHT_PX,
       playwrightWorkers: PLAYWRIGHT_WORKERS,
       retries: PLAYWRIGHT_RETRIES,
       overscanRows: OVERSCAN_ROWS,

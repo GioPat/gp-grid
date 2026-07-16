@@ -202,7 +202,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       <AgGridReact
         rowData={rowData}
         columnDefs={columns}
-        rowHeight={32}
+        rowHeight={benchmarkDefaults.rowHeightPx}
         headerHeight={40}
         rowBuffer={benchmarkDefaults.overscanRows}
         onGridReady={onGridReady}
