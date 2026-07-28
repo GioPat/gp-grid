@@ -11,24 +11,23 @@ import {
   ElementRef,
   HostListener,
 } from '@angular/core';
-import { calculateFilterPopupPosition } from '@gp-grid/core';
+import { calculateFilterPopupPosition, groupDistinctValues, isBlankCellValue } from '@gp-grid/core';
 import type {
   ColumnDefinition,
   CellValue,
   ColumnFilterModel,
+  DistinctValueEntry,
 } from '@gp-grid/core';
 import { FILTER_POPUP_TEMPLATE } from './filter-popup.template';
 import {
   MAX_CHECKBOX_VALUES,
   NUMBER_OPERATORS,
   TEXT_OPERATORS,
-  type FilterEntry,
   type FilterMode,
   type NumberConditionState,
   type TextConditionState,
   buildNumberFilter,
   buildTextFilter,
-  computeUniqueValues,
   defaultNumberCondition,
   defaultTextCondition,
   initNumberConditions,
@@ -65,7 +64,8 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
 
   filterMode: FilterMode = 'values';
   searchText = '';
-  selectedValues = new Set<string>();
+  // Ticked display labels; raw values are resolved on apply (buildTextFilter).
+  selectedLabels = new Set<string>();
   includeBlanks = true;
   textConditions: TextConditionState[] = [defaultTextCondition()];
   numberConditions: NumberConditionState[] = [defaultNumberCondition()];
@@ -122,36 +122,38 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     return this.uniqueEntries().length <= MAX_CHECKBOX_VALUES;
   }
 
-  uniqueEntries(): FilterEntry[] {
-    return computeUniqueValues(this.distinctValues(), this.column().valueFormatter);
+  uniqueEntries(): DistinctValueEntry[] {
+    return groupDistinctValues(this.distinctValues(), this.column().valueFormatter);
   }
 
-  uniqueValues(): string[] {
-    return this.uniqueEntries().map(e => e.key);
+  // Empty arrays count too (tags column with no tags), so the "(Blanks)"
+  // opt-out renders whenever blank rows exist — and only then.
+  hasBlanks(): boolean {
+    return this.distinctValues().some(isBlankCellValue);
   }
 
-  filteredUniqueEntries(): FilterEntry[] {
+  filteredUniqueEntries(): DistinctValueEntry[] {
     const search = this.searchText.toLowerCase();
     if (!search) return this.uniqueEntries();
     return this.uniqueEntries().filter(e => e.label.toLowerCase().includes(search));
   }
 
-  toggleValue(val: string, checked: boolean): void {
+  toggleValue(label: string, checked: boolean): void {
     if (checked) {
-      this.selectedValues.add(val);
+      this.selectedLabels.add(label);
     } else {
-      this.selectedValues.delete(val);
+      this.selectedLabels.delete(label);
     }
   }
 
   selectAll(): void {
     this.includeBlanks = true;
-    for (const v of this.uniqueValues()) this.selectedValues.add(v);
+    for (const entry of this.uniqueEntries()) this.selectedLabels.add(entry.label);
   }
 
   deselectAll(): void {
     this.includeBlanks = false;
-    this.selectedValues.clear();
+    this.selectedLabels.clear();
   }
 
   onTextOperatorChange(index: number, value: string): void {
@@ -201,8 +203,8 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     if (this.isNumberColumn()) return buildNumberFilter(this.numberConditions);
     return buildTextFilter({
       filterMode: this.filterMode,
-      uniqueValues: this.uniqueValues(),
-      selectedValues: this.selectedValues,
+      entries: this.uniqueEntries(),
+      selectedLabels: this.selectedLabels,
       includeBlanks: this.includeBlanks,
       textConditions: this.textConditions,
     });
@@ -214,9 +216,9 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
       this.numberConditions = initNumberConditions(filter);
       return;
     }
-    const state = initTextState(filter, this.uniqueValues());
+    const state = initTextState(filter, this.uniqueEntries());
     this.filterMode = state.filterMode;
-    this.selectedValues = state.selectedValues;
+    this.selectedLabels = state.selectedLabels;
     this.includeBlanks = state.includeBlanks;
     this.textConditions = state.textConditions;
   }

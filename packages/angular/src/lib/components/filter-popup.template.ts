@@ -100,19 +100,21 @@ export const FILTER_POPUP_TEMPLATE = `
           <button type="button" (click)="deselectAll()">Deselect All</button>
         </div>
         <div class="gp-grid-filter-list">
-          <label class="gp-grid-filter-option">
-            <input
-              type="checkbox"
-              [checked]="includeBlanks"
-              (change)="includeBlanks = $any($event.target).checked" />
-            <span class="gp-grid-filter-blank">(Blanks)</span>
-          </label>
-          @for (entry of filteredUniqueEntries(); track entry.key) {
+          @if (hasBlanks()) {
             <label class="gp-grid-filter-option">
               <input
                 type="checkbox"
-                [checked]="selectedValues.has(entry.key)"
-                (change)="toggleValue(entry.key, $any($event.target).checked)" />
+                [checked]="includeBlanks"
+                (change)="includeBlanks = $any($event.target).checked" />
+              <span class="gp-grid-filter-blank">(Blanks)</span>
+            </label>
+          }
+          @for (entry of filteredUniqueEntries(); track entry.label) {
+            <label class="gp-grid-filter-option">
+              <input
+                type="checkbox"
+                [checked]="selectedLabels.has(entry.label)"
+                (change)="toggleValue(entry.label, $any($event.target).checked)" />
               <span>{{ entry.label }}</span>
             </label>
           }

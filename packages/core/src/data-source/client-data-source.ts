@@ -50,9 +50,9 @@ export interface ClientDataSourceOptions<TData> {
   /** Custom field accessor for nested properties */
   getFieldValue?: (row: TData, field: string) => CellValue;
   /**
-   * Lookup for a field's valueFormatter. Lets text filter conditions compare
-   * against the displayed (formatted) value so that what the user sees in the
-   * grid matches what the filter popup selects against.
+   * Lookup for a field's valueFormatter. Lets free-text filter conditions
+   * compare against the displayed (formatted) value the user typed against.
+   * Values-mode `selectedValues` compare raw values and never use it.
    */
   getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined;
   /** Use Web Worker for sorting large datasets (default: true) */

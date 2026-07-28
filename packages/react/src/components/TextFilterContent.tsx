@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
+import { groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
 
 export interface TextFilterContentProps {
   distinctValues: CellValue[];
@@ -39,40 +40,13 @@ export function TextFilterContent({
   onApply,
   onClose,
 }: TextFilterContentProps): React.ReactNode {
-  // Stored key used both in selectedValues and by evaluateTextCondition at
-  // filter-time. When a valueFormatter exists we key by its output so two
-  // distinct raw values that render identically collapse into a single entry
-  // (and the filter applied on that entry matches every row formatting to it).
-  const valueToKey = useCallback((v: CellValue): string => {
-    if (valueFormatter) return valueFormatter(v);
-    if (Array.isArray(v)) return v.join(', ');
-    return String(v ?? '');
-  }, [valueFormatter]);
-
-  // Display label shown to the user — same as the key so the user sees what
-  // they select against.
-  const valueToLabel = useCallback((v: CellValue): string => valueToKey(v), [valueToKey]);
-
-  // Distinct entries: key for selectedValues, label for display.
-  // distinctValues are already sorted by grid-core.
-  const uniqueEntries = useMemo(() => {
-    const seen = new Set<string>();
-    const entries: { key: string; label: string }[] = [];
-    for (const v of distinctValues) {
-      if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
-      const key = valueToKey(v);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      entries.push({ key, label: valueToLabel(v) });
-    }
-    entries.sort((a, b) => {
-      const numA = parseFloat(a.label);
-      const numB = parseFloat(b.label);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
-    });
-    return entries;
-  }, [distinctValues, valueToKey, valueToLabel]);
+  // Checkbox rows: one entry per display label, carrying every raw value
+  // that formats to it. The filter model stores the RAW values; labels only
+  // exist inside this popup.
+  const uniqueEntries = useMemo(
+    () => groupDistinctValues(distinctValues, valueFormatter),
+    [distinctValues, valueFormatter],
+  );
 
   const hasTooManyValues = uniqueEntries.length > MAX_VALUES_FOR_LIST;
 
@@ -92,11 +66,13 @@ export function TextFilterContent({
   const [mode, setMode] = useState<FilterMode>(initialMode);
 
   // ============= VALUES MODE STATE =============
+  // Local checkbox state tracks LABELS; raw values are resolved on apply.
   const initialSelected = useMemo(() => {
     if (!currentFilter?.conditions[0]) return new Set<string>();
     const cond = currentFilter.conditions[0] as TextFilterCondition;
-    return cond.selectedValues ?? new Set<string>();
-  }, [currentFilter]);
+    if (!cond.selectedValues) return new Set<string>();
+    return labelsForSelectedValues(uniqueEntries, cond.selectedValues);
+  }, [currentFilter, uniqueEntries]);
 
   const initialIncludeBlanks = useMemo(() => {
     if (!currentFilter?.conditions[0]) return true;
@@ -105,7 +81,7 @@ export function TextFilterContent({
   }, [currentFilter]);
 
   const [searchText, setSearchText] = useState("");
-  const [selectedValues, setSelectedValues] = useState<Set<string>>(initialSelected);
+  const [selectedLabels, setSelectedLabels] = useState<Set<string>>(initialSelected);
   const [includeBlanks, setIncludeBlanks] = useState(initialIncludeBlanks);
 
   // ============= CONDITION MODE STATE =============
@@ -138,32 +114,34 @@ export function TextFilterContent({
     return uniqueEntries.filter((e) => e.label.toLowerCase().includes(lower));
   }, [uniqueEntries, searchText]);
 
+  // Empty arrays count too (tags column with no tags), so the "(Blanks)"
+  // opt-out renders whenever blank rows exist.
   const hasBlanks = useMemo(() => {
-    return distinctValues.some((v) => v == null || v === "");
+    return distinctValues.some(isBlankCellValue);
   }, [distinctValues]);
 
   const allSelected = useMemo(() => {
-    const allNonBlank = displayEntries.every((e) => selectedValues.has(e.key));
+    const allNonBlank = displayEntries.every((e) => selectedLabels.has(e.label));
     return allNonBlank && (!hasBlanks || includeBlanks);
-  }, [displayEntries, selectedValues, hasBlanks, includeBlanks]);
+  }, [displayEntries, selectedLabels, hasBlanks, includeBlanks]);
 
   const handleSelectAll = useCallback(() => {
-    setSelectedValues(new Set(displayEntries.map((e) => e.key)));
+    setSelectedLabels(new Set(displayEntries.map((e) => e.label)));
     if (hasBlanks) setIncludeBlanks(true);
   }, [displayEntries, hasBlanks]);
 
   const handleDeselectAll = useCallback(() => {
-    setSelectedValues(new Set());
+    setSelectedLabels(new Set());
     setIncludeBlanks(false);
   }, []);
 
-  const handleValueToggle = useCallback((value: string) => {
-    setSelectedValues((prev) => {
+  const handleValueToggle = useCallback((label: string) => {
+    setSelectedLabels((prev) => {
       const next = new Set(prev);
-      if (next.has(value)) {
-        next.delete(value);
+      if (next.has(label)) {
+        next.delete(label);
       } else {
-        next.add(value);
+        next.add(label);
       }
       return next;
     });
@@ -189,8 +167,8 @@ export function TextFilterContent({
   // ============= APPLY LOGIC =============
   const handleApply = useCallback(() => {
     if (mode === "values") {
-      // Values mode - use selectedValues
-      const allNonBlankSelected = uniqueEntries.every((e) => selectedValues.has(e.key));
+      // Values mode - resolve ticked labels to their raw values
+      const allNonBlankSelected = uniqueEntries.every((e) => selectedLabels.has(e.label));
       const isAllSelected = allNonBlankSelected && (!hasBlanks || includeBlanks);
 
       if (isAllSelected) {
@@ -203,7 +181,7 @@ export function TextFilterContent({
           {
             type: "text",
             operator: "equals",
-            selectedValues: selectedValues,
+            selectedValues: rawValuesForLabels(uniqueEntries, selectedLabels),
             includeBlank: includeBlanks,
           },
         ],
@@ -233,7 +211,7 @@ export function TextFilterContent({
       };
       onApply(filter);
     }
-  }, [mode, uniqueEntries, selectedValues, includeBlanks, hasBlanks, conditions, onApply]);
+  }, [mode, uniqueEntries, selectedLabels, includeBlanks, hasBlanks, conditions, onApply]);
 
   const handleClear = useCallback(() => {
     onApply(null);
@@ -307,11 +285,11 @@ export function TextFilterContent({
 
             {/* Values */}
             {displayEntries.map((entry) => (
-              <label key={entry.key} className="gp-grid-filter-option">
+              <label key={entry.label} className="gp-grid-filter-option">
                 <input
                   type="checkbox"
-                  checked={selectedValues.has(entry.key)}
-                  onChange={() => handleValueToggle(entry.key)}
+                  checked={selectedLabels.has(entry.label)}
+                  onChange={() => handleValueToggle(entry.label)}
                 />
                 <span>{entry.label}</span>
               </label>

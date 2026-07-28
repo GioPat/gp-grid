@@ -7,6 +7,7 @@ import type {
   ColumnFilterModel,
 } from "./../types";
 import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
+import { rawValueKey } from "../filtering/distinct-entries";
 
 const DISTINCT_SCAN_WARN_THRESHOLD = 10_000;
 
@@ -43,6 +44,8 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   private filterModel: FilterModel = {};
   private openFilterColIndex: number | null = null;
   private readonly scanWarnedCols = new Set<string>();
+  private readonly truncationWarnedCols = new Set<string>();
+  private readonly typeMismatchWarnedCols = new Set<string>();
 
   // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
@@ -119,11 +122,55 @@ export class SortFilterManager<TData = Record<string, unknown>> {
         combination: "and",
       };
     } else {
+      this.warnTypeMismatchedSelectedValues(colId, column, filter);
       this.filterModel[colId] = filter;
     }
 
     await this.options.onSortFilterChange();
     this.options.onDataRefreshed();
+  }
+
+  /**
+   * Lint for hand-constructed filter models: values-mode `selectedValues`
+   * match by strict raw identity (`"5"` never matches `5`, an ISO string
+   * never matches a `Date`), so an all-string selection on a column whose
+   * raw type is not a string will match nothing. This typically comes from
+   * a lossy round-trip — filter state restored via `JSON.parse` or built
+   * from URL params, where numbers and Dates arrive as strings. The mistake
+   * is otherwise silent because `Set<string>` typechecks against
+   * `Set<CellValue>`; warn once per column.
+   */
+  private warnTypeMismatchedSelectedValues(
+    colId: string,
+    column: ColumnDefinition | undefined,
+    filter: ColumnFilterModel,
+  ): void {
+    const dataType = column?.cellDataType;
+    const rawTypeIsString =
+      dataType !== "number" &&
+      dataType !== "boolean" &&
+      dataType !== "date" &&
+      dataType !== "dateTime";
+    if (rawTypeIsString) return;
+    if (this.typeMismatchWarnedCols.has(colId)) return;
+
+    const hasStringOnlySelection = filter.conditions.some(
+      (condition) =>
+        condition.type === "text" &&
+        condition.selectedValues !== undefined &&
+        condition.selectedValues.size > 0 &&
+        [...condition.selectedValues].every((v) => typeof v === "string"),
+    );
+    if (hasStringOnlySelection === false) return;
+
+    this.typeMismatchWarnedCols.add(colId);
+    console.warn(
+      `[gp-grid] Filter on column "${colId}" (cellDataType "${dataType}") has `
+      + `selectedValues containing only strings. Values-mode filters match raw `
+      + `values by strict identity, so this selection will likely match nothing. `
+      + `If this model was restored from JSON or URL params, revive the values `
+      + `to their raw types (e.g. Number(v), new Date(v)) before applying it.`,
+    );
   }
 
   getFilterModel(): FilterModel {
@@ -180,6 +227,13 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * For datasets above {@link DISTINCT_SCAN_WARN_THRESHOLD}, a one-time
    * console warning advises the consumer to pre-supply `distinctValues`
    * on the column to skip the full scan.
+   *
+   * Values are deduplicated by RAW identity ({@link rawValueKey}), not by
+   * display label: when a `valueFormatter` collapses several raw values into
+   * one label, every raw value survives so the popup can select them all.
+   * Consequently `maxValues` caps raw values, not labels. If the cap
+   * truncates the domain of a formatted column, a one-time warning is
+   * emitted because ticking a label can no longer cover unscanned raws.
    */
   getDistinctValuesForColumn(
     colId: string,
@@ -196,10 +250,13 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
     const valuesMap = new Map<string, CellValue>();
     for (const value of sourceValues) {
-      const [key, normalized] = this.normalizeDistinctValue(value, formatter);
+      if (valuesMap.size >= maxValues) {
+        this.warnTruncatedFormattedDomain(colId, formatter);
+        break;
+      }
+      const [key, normalized] = this.normalizeDistinctValue(value);
       if (!valuesMap.has(key)) {
         valuesMap.set(key, normalized);
-        if (valuesMap.size >= maxValues) break;
       }
     }
 
@@ -232,16 +289,18 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       );
     }
 
-    const formatter = column.valueFormatter;
     const valuesMap = new Map<string, CellValue>();
     for (let i = 0; i < total; i++) {
       const row = cachedRows.get(i);
       if (row === undefined) continue;
+      if (valuesMap.size >= maxValues) {
+        this.warnTruncatedFormattedDomain(colId, column.valueFormatter);
+        break;
+      }
       const value = getFieldValue(row, column.field);
-      const [key, normalized] = this.normalizeDistinctValue(value, formatter);
+      const [key, normalized] = this.normalizeDistinctValue(value);
       if (!valuesMap.has(key)) {
         valuesMap.set(key, normalized);
-        if (valuesMap.size >= maxValues) break;
       }
     }
     return Array.from(valuesMap.values());
@@ -249,14 +308,13 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
   /**
    * Normalize a cell value into a dedup key and the value to store.
-   * Arrays are sorted lexicographically so different orderings produce the same key.
-   * When a formatter is provided it is applied to the key so that two raw values
-   * that render identically are treated as the same distinct entry.
+   * Arrays are sorted lexicographically so different orderings produce the
+   * same key. The key is the RAW identity ({@link rawValueKey}) — display
+   * formatting is intentionally not part of it, so raw values that share a
+   * label all survive deduplication and the values-mode filter can select
+   * every one of them.
    */
-  private normalizeDistinctValue(
-    value: CellValue,
-    formatter?: (v: CellValue) => string,
-  ): [string, CellValue] {
+  private normalizeDistinctValue(value: CellValue): [string, CellValue] {
     if (Array.isArray(value)) {
       const sorted = [...value].sort((a, b) => {
         const sa = String(a);
@@ -264,11 +322,31 @@ export class SortFilterManager<TData = Record<string, unknown>> {
         if (sa === sb) return 0;
         return sa < sb ? -1 : 1;
       });
-      const key = formatter ? formatter(sorted) : JSON.stringify(sorted);
-      return [key, sorted];
+      return [rawValueKey(sorted), sorted];
     }
-    const key = formatter ? formatter(value) : JSON.stringify(value);
-    return [key, value];
+    return [rawValueKey(value), value];
+  }
+
+  /**
+   * Values-mode filtering matches raw values, so when the distinct scan of a
+   * formatted column is cut off at the cap, ticking a label cannot cover the
+   * raw values that were never scanned — rows rendering that label would be
+   * silently hidden. Warn once per column and advise supplying the full raw
+   * domain via `ColumnDefinition.distinctValues`.
+   */
+  private warnTruncatedFormattedDomain(
+    colId: string,
+    formatter: ((v: CellValue) => string) | undefined,
+  ): void {
+    if (formatter === undefined) return;
+    if (this.truncationWarnedCols.has(colId)) return;
+    this.truncationWarnedCols.add(colId);
+    console.warn(
+      `[gp-grid] Distinct values for column "${colId}" were truncated at the cap, `
+      + `and the column has a valueFormatter. Values-mode filters match raw values, `
+      + `so selecting a label may miss rows whose raw values were not scanned. `
+      + `Pre-supply ColumnDefinition.distinctValues with the full raw domain.`,
+    );
   }
 
   // ===========================================================================

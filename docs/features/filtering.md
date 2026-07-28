@@ -81,9 +81,35 @@ type FilterCondition =
 interface TextFilterCondition {
   type: 'text';
   operator: TextFilterOperator;
-  selectedValues?: Set<string>;
+  selectedValues?: Set<CellValue>;
   includeBlank?: boolean;
 }
+```
+
+### Values mode stores raw values
+
+`selectedValues` holds **raw** cell values, never formatted labels. A
+`valueFormatter` only affects what the filter popup displays: entries are
+grouped by label, and ticking a label selects every raw value behind it.
+Server-side data sources therefore receive raw values in
+`request.filter` — adding a formatter never changes what is sent to the
+server. When serializing a request for a server, convert the `Set` to an
+array (`[...selectedValues]`); `JSON.stringify` on a `Set` produces `{}`.
+
+Two caveats:
+
+- When a formatter collapses many raw values into one label on a
+  high-cardinality column, supply the full raw domain via
+  `ColumnDefinition.distinctValues`. Values-mode filtering matches raw
+  values, so raws the grid never discovered cannot be selected (the grid
+  warns in the console when its distinct scan is truncated for a formatted
+  column).
+- Free-text condition operators (`contains`, `equals`, ...) still compare
+  against the **formatted** value on client data sources — users type the
+  text they see. A server backend matching the typed text against raw data
+  may behave differently for formatted columns.
+
+```typescript
 
 // Number filter
 interface NumberFilterCondition {

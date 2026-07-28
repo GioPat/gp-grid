@@ -14,6 +14,7 @@ import type {
   FilterModel,
 } from "../types";
 import { formatCellValue } from "../utils/format-helpers";
+import { isBlankCellValue, rawValueKey } from "./distinct-entries";
 
 // =============================================================================
 // Helper Functions
@@ -30,16 +31,9 @@ export function isSameDay(date1: Date, date2: Date): boolean {
   );
 }
 
-/**
- * Check if a cell value is considered blank.
- */
-function isBlankValue(cellValue: CellValue): boolean {
-  return (
-    cellValue == null ||
-    cellValue === "" ||
-    (Array.isArray(cellValue) && cellValue.length === 0)
-  );
-}
+// Blank detection is shared with the popup helpers (`isBlankCellValue` in
+// distinct-entries.ts) so the "(Blanks)" checkbox and the filter evaluation
+// always agree on what counts as blank.
 
 // =============================================================================
 // Text Filter Conditions
@@ -60,38 +54,55 @@ const TEXT_OPERATORS: Record<
 };
 
 /**
+ * Keyed form of a values-mode `selectedValues` set, cached per Set instance.
+ * Values-mode evaluation runs once per row over potentially millions of rows,
+ * so the selected set is keyed once instead of per row. Filter models are
+ * treated as immutable (replace the Set to change the selection); the size
+ * guard additionally rebuilds the keys if a consumer grew or shrank the Set
+ * in place.
+ */
+const selectedKeysCache = new WeakMap<
+  ReadonlySet<CellValue>,
+  { size: number; keys: Set<string> }
+>();
+
+const getSelectedValueKeys = (
+  selectedValues: ReadonlySet<CellValue>,
+): Set<string> => {
+  const cached = selectedKeysCache.get(selectedValues);
+  if (cached !== undefined && cached.size === selectedValues.size) {
+    return cached.keys;
+  }
+  const keys = new Set<string>();
+  for (const value of selectedValues) keys.add(rawValueKey(value));
+  selectedKeysCache.set(selectedValues, { size: selectedValues.size, keys });
+  return keys;
+};
+
+/**
  * Evaluate a text filter condition against a cell value.
- * When `formatter` is provided, the cell value is compared via its formatted
- * form so values-mode selections and condition-mode inputs align with what
- * the grid displays.
+ *
+ * Values mode (`selectedValues`) compares RAW values via {@link rawValueKey};
+ * the formatter is never consulted, so the filter model matches what a
+ * server-side data source receives. The `formatter` only applies to free-text
+ * condition operators (contains, equals, ...), where the user types the text
+ * they see on screen.
  */
 export function evaluateTextCondition(
   cellValue: CellValue,
   condition: TextFilterCondition,
   formatter?: (v: CellValue) => string,
 ): boolean {
-  const isBlank = isBlankValue(cellValue);
+  const isBlank = isBlankCellValue(cellValue);
 
-  // Handle selectedValues (checkbox-style filtering)
-  if (condition.selectedValues && condition.selectedValues.size > 0) {
-    const includesBlank = condition.includeBlank === true && isBlank;
-
-    // Handle array values (e.g., tags column) - convert to sorted string for comparison
-    if (Array.isArray(cellValue)) {
-      // Must use the same simple lexicographic sort as getDistinctValuesForColumn
-      // so that the generated key matches what was stored in condition.selectedValues.
-      const sortedArray = [...cellValue].sort((a, b) => {
-        const sa = String(a);
-        const sb = String(b);
-        if (sa === sb) return 0;
-        return sa < sb ? -1 : 1;
-      });
-      const arrayStr = formatter ? formatter(sortedArray) : sortedArray.join(", ");
-      return condition.selectedValues.has(arrayStr) || includesBlank;
-    }
-
-    const cellStr = formatCellValue(cellValue, formatter);
-    return condition.selectedValues.has(cellStr) || includesBlank;
+  // Values mode (checkbox-style filtering): raw-value membership. The mere
+  // presence of the set selects values mode — an empty set is a valid
+  // selection (e.g. only "(Blanks)" ticked) and must not fall through to the
+  // free-text operator, which would match everything for `contains`.
+  if (condition.selectedValues !== undefined) {
+    if (isBlank) return condition.includeBlank === true;
+    const selectedKeys = getSelectedValueKeys(condition.selectedValues);
+    return selectedKeys.has(rawValueKey(cellValue));
   }
 
   const strValue = formatCellValue(cellValue, formatter).toLowerCase();
@@ -255,8 +266,9 @@ export function evaluateColumnFilter(
 
 /**
  * Check if a row passes all filters in a filter model.
- * `getValueFormatter` — when provided — lets text conditions compare the
- * formatted (displayed) cell value instead of the raw string.
+ * `getValueFormatter` — when provided — lets free-text condition operators
+ * compare the formatted (displayed) cell value instead of the raw string.
+ * Values-mode `selectedValues` always compare raw values and ignore it.
  */
 export function rowPassesFilter<TData>(
   row: TData,
@@ -291,8 +303,9 @@ export function rowPassesFilter<TData>(
 /**
  * Apply filters to a data array.
  * Supports both new ColumnFilterModel format and legacy string format.
- * `getValueFormatter` — when provided — lets text conditions compare the
- * formatted (displayed) cell value instead of the raw string.
+ * `getValueFormatter` — when provided — lets free-text condition operators
+ * compare the formatted (displayed) cell value instead of the raw string.
+ * Values-mode `selectedValues` always compare raw values and ignore it.
  */
 export function applyFilters<TData>(
   data: TData[],

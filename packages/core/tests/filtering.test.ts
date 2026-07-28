@@ -12,6 +12,7 @@ import {
   applyFilters,
 } from "../src/filtering";
 import type {
+  CellValue,
   TextFilterCondition,
   NumberFilterCondition,
   DateFilterCondition,
@@ -79,21 +80,52 @@ describe("evaluateTextCondition — operator table", () => {
 });
 
 describe("evaluateTextCondition — selectedValues (checkbox) branch", () => {
-  it("matches when the cell's stringified value is in the set", () => {
-    const condition: TextFilterCondition = {
-      type: "text",
-      operator: "contains", // ignored when selectedValues is present
-      selectedValues: new Set(["Alice", "Bob"]),
-    };
+  const valuesCondition = (selectedValues: Set<CellValue>): TextFilterCondition => ({
+    type: "text",
+    operator: "contains", // ignored when selectedValues is present
+    selectedValues,
+  });
+
+  it("matches when the cell's raw value is in the set", () => {
+    const condition = valuesCondition(new Set<CellValue>(["Alice", "Bob"]));
     expect(evaluateTextCondition("Alice", condition)).toBe(true);
     expect(evaluateTextCondition("Carol", condition)).toBe(false);
+  });
+
+  it("non-string raws match by raw identity: 5 matches 5, not \"5\"", () => {
+    const condition = valuesCondition(new Set<CellValue>([5]));
+    expect(evaluateTextCondition(5, condition)).toBe(true);
+    expect(evaluateTextCondition("5", condition)).toBe(false);
+
+    const stringCondition = valuesCondition(new Set<CellValue>(["5"]));
+    expect(evaluateTextCondition(5, stringCondition)).toBe(false);
+  });
+
+  it("the formatter is ignored in values mode — raw values, not labels, match", () => {
+    const formatter = (): string => "LABEL";
+    const labelCondition = valuesCondition(new Set<CellValue>(["LABEL"]));
+    expect(evaluateTextCondition("a", labelCondition, formatter)).toBe(false);
+
+    const rawCondition = valuesCondition(new Set<CellValue>(["a"]));
+    expect(evaluateTextCondition("a", rawCondition, formatter)).toBe(true);
+  });
+
+  it("label collisions: every selected raw value matches independently", () => {
+    // Two dates sharing a "January" label both travel in the model as raws.
+    const jan3 = new Date("2026-01-03");
+    const jan20 = new Date("2026-01-20");
+    const condition = valuesCondition(new Set<CellValue>([jan3, jan20]));
+    // Equal-time Date instances match even if they are different objects.
+    expect(evaluateTextCondition(new Date("2026-01-03"), condition)).toBe(true);
+    expect(evaluateTextCondition(new Date("2026-01-20"), condition)).toBe(true);
+    expect(evaluateTextCondition(new Date("2026-02-01"), condition)).toBe(false);
   });
 
   it("includeBlank: controls whether blank cells pass", () => {
     const withBlank: TextFilterCondition = {
       type: "text",
       operator: "contains",
-      selectedValues: new Set(["Alice"]),
+      selectedValues: new Set<CellValue>(["Alice"]),
       includeBlank: true,
     };
     expect(evaluateTextCondition(null, withBlank)).toBe(true);
@@ -104,7 +136,7 @@ describe("evaluateTextCondition — selectedValues (checkbox) branch", () => {
     const withoutBlank: TextFilterCondition = {
       type: "text",
       operator: "contains",
-      selectedValues: new Set(["Alice"]),
+      selectedValues: new Set<CellValue>(["Alice"]),
       includeBlank: false,
     };
     expect(evaluateTextCondition(null, withoutBlank)).toBe(false);
@@ -112,17 +144,37 @@ describe("evaluateTextCondition — selectedValues (checkbox) branch", () => {
     expect(evaluateTextCondition("Alice", withoutBlank)).toBe(true);
   });
 
-  it("array cells: matches against sorted-joined key", () => {
-    // The condition.selectedValues was built from keys produced by
-    // getDistinctValuesForColumn with the same sort rule.
-    const condition: TextFilterCondition = {
+  it("empty selectedValues stays in values mode: only blanks can pass", () => {
+    // Popup state after "Deselect All" + ticking "(Blanks)". Must not fall
+    // through to the free-text operator (contains "" matches everything).
+    const blanksOnly: TextFilterCondition = {
       type: "text",
       operator: "contains",
-      selectedValues: new Set(["apple, banana"]),
+      selectedValues: new Set<CellValue>(),
+      includeBlank: true,
     };
-    // Input order should not matter — sort produces stable key.
+    expect(evaluateTextCondition(null, blanksOnly)).toBe(true);
+    expect(evaluateTextCondition("", blanksOnly)).toBe(true);
+    expect(evaluateTextCondition([], blanksOnly)).toBe(true);
+    expect(evaluateTextCondition("Alice", blanksOnly)).toBe(false);
+
+    const nothingSelected: TextFilterCondition = {
+      type: "text",
+      operator: "contains",
+      selectedValues: new Set<CellValue>(),
+      includeBlank: false,
+    };
+    expect(evaluateTextCondition(null, nothingSelected)).toBe(false);
+    expect(evaluateTextCondition("Alice", nothingSelected)).toBe(false);
+  });
+
+  it("array cells: raw arrays match regardless of element order", () => {
+    const condition = valuesCondition(new Set<CellValue>([["apple", "banana"]]));
     expect(evaluateTextCondition(["banana", "apple"], condition)).toBe(true);
     expect(evaluateTextCondition(["cherry"], condition)).toBe(false);
+    // The old formatted-label form no longer matches.
+    const joinedCondition = valuesCondition(new Set<CellValue>(["apple, banana"]));
+    expect(evaluateTextCondition(["banana", "apple"], joinedCondition)).toBe(false);
   });
 });
 

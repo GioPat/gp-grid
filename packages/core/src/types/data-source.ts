@@ -25,8 +25,10 @@ export interface DataSourceRequest {
   filter?: FilterModel;
   /**
    * Per-field value formatters, derived from column definitions.
-   * Client data sources use these so text filters compare against the
-   * displayed (formatted) value. Server-side data sources may ignore them.
+   * Client data sources use these only for free-text condition operators
+   * (contains, equals, ...) so they match the displayed value the user
+   * typed against. Values-mode `selectedValues` always hold raw values and
+   * ignore them. Server-side data sources may ignore them entirely.
    */
   valueFormatters?: Record<string, (v: CellValue) => string>;
 }

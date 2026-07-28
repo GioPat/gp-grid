@@ -122,12 +122,12 @@ interface ColumnFilterModel {
 
 // FilterCondition is a tagged union — read .value from the right branch
 type FilterCondition =
-  | { type: "text";   operator: TextFilterOperator;   value?: string;        selectedValues?: Set<string>; includeBlank?: boolean; nextOperator?: "and" | "or" }
+  | { type: "text";   operator: TextFilterOperator;   value?: string;        selectedValues?: Set<CellValue>; includeBlank?: boolean; nextOperator?: "and" | "or" }
   | { type: "number"; operator: NumberFilterOperator; value?: number; valueTo?: number; nextOperator?: "and" | "or" }
   | { type: "date";   operator: DateFilterOperator;   value?: Date | string; valueTo?: Date | string;       nextOperator?: "and" | "or" };
 ```
 
-Do **not** do `String(req.filter[field])` — the value is a `ColumnFilterModel` object, so `String(...)` produces `"[object Object]"`. Read `req.filter[field].conditions[0].value` (or iterate `conditions` and `selectedValues` if your backend supports compound filters). Example serializer:
+Do **not** do `String(req.filter[field])` — the value is a `ColumnFilterModel` object, so `String(...)` produces `"[object Object]"`. Read `req.filter[field].conditions[0].value` (or iterate `conditions` and `selectedValues` if your backend supports compound filters). `selectedValues` holds **raw** cell values (a `valueFormatter` never changes what the server receives) and is a `Set` — spread it into an array before serializing (`[...condition.selectedValues]`), because `JSON.stringify` on a `Set` produces `{}`. Example serializer:
 
 ```ts
 const params = new URLSearchParams();

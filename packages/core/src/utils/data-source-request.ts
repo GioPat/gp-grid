@@ -13,7 +13,8 @@ export interface BuildRequestOptions {
   filterModel: FilterModel;
   /**
    * Columns whose valueFormatter should travel with the request so that
-   * client-side filtering can match the displayed value.
+   * client-side free-text condition filtering can match the displayed value.
+   * Values-mode `selectedValues` compare raw values and do not use them.
    */
   columns?: ColumnDefinition[];
 }
