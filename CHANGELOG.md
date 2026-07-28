@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.20.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.19.0...gp-grid-v0.20.0) (2026-07-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **filtering:** TextFilterCondition.selectedValues is now Set<CellValue> containing raw values, not formatted labels. Server backends matching against formatter output must compare raw values instead; persisted filter models built from labels no longer match.
+
+### ✨ Features
+
+* **filtering:** store raw values in values-mode filter model ([4dda741](https://github.com/GioPat/gp-grid/commit/4dda741ff238d193d6f47279d6b9e6ba1c3eed9d))
+
 ## [0.19.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.18.0...gp-grid-v0.19.0) (2026-07-13)
 
 
