@@ -3,7 +3,9 @@ import type { ScrollMetrics } from "../data/types";
 import { ROW_HEIGHT_PX } from "../config/benchmark-config";
 
 interface BrowserPerformanceMetrics {
-  largestContentfulPaint: number;
+  // null means the browser never reported an LCP candidate for the page,
+  // which must not be conflated with a 0ms paint.
+  largestContentfulPaint: number | null;
   totalBlockingTime: number;
 }
 
@@ -12,7 +14,7 @@ interface BrowserFpsMetrics {
   minFPS: number;
   maxFPS: number;
   frameDropCount: number;
-  p05FPS: number;
+  low5FPS: number;
   p95FrameTimeMs: number;
   totalFrames: number;
 }
@@ -21,14 +23,17 @@ export const installPerformanceObservers = async (page: Page): Promise<void> => 
   await page.addInitScript(() => {
     type BenchmarkWindow = Window & {
       __benchmarkPerformanceMetrics?: {
-        largestContentfulPaint: number;
+        largestContentfulPaint: number | null;
         totalBlockingTime: number;
       };
+      __benchmarkLcpObserver?: PerformanceObserver;
     };
 
     const benchmarkWindow = window as BenchmarkWindow;
     benchmarkWindow.__benchmarkPerformanceMetrics = {
-      largestContentfulPaint: 0,
+      // null until the browser reports a candidate, so an unobserved LCP is
+      // distinguishable from a real 0ms paint.
+      largestContentfulPaint: null,
       totalBlockingTime: 0,
     };
 
@@ -41,8 +46,12 @@ export const installPerformanceObservers = async (page: Page): Promise<void> => 
         }
       });
       lcpObserver.observe({ type: "largest-contentful-paint", buffered: true });
+      // Kept so the metric read can drain not-yet-dispatched entries: observer
+      // callbacks are queued as tasks, so under main-thread jank a candidate
+      // that already painted may still be pending when the test reads the value.
+      benchmarkWindow.__benchmarkLcpObserver = lcpObserver;
     } catch {
-      // LCP is browser-dependent; keep the default zero value when unsupported.
+      // LCP is browser-dependent; keep the default null value when unsupported.
     }
 
     try {
@@ -67,14 +76,25 @@ export const getPerformanceMetrics = async (
   return page.evaluate(() => {
     type BenchmarkWindow = Window & {
       __benchmarkPerformanceMetrics?: {
-        largestContentfulPaint: number;
+        largestContentfulPaint: number | null;
         totalBlockingTime: number;
       };
+      __benchmarkLcpObserver?: PerformanceObserver;
     };
 
-    const metrics = (window as BenchmarkWindow).__benchmarkPerformanceMetrics;
+    const benchmarkWindow = window as BenchmarkWindow;
+    const metrics = benchmarkWindow.__benchmarkPerformanceMetrics;
+
+    // Synchronously drain entries whose observer callback has not run yet;
+    // otherwise grids that jank the main thread during render read a stale
+    // (or missing) LCP even though the paint already happened.
+    const pendingEntry = benchmarkWindow.__benchmarkLcpObserver
+      ?.takeRecords()
+      .at(-1);
+    const lcp = pendingEntry?.startTime ?? metrics?.largestContentfulPaint ?? null;
+
     return {
-      largestContentfulPaint: Math.round(metrics?.largestContentfulPaint ?? 0),
+      largestContentfulPaint: lcp === null ? null : Math.round(lcp),
       totalBlockingTime: Math.round(metrics?.totalBlockingTime ?? 0),
     };
   });
@@ -164,12 +184,24 @@ export const stopFPSSampling = async (page: Page): Promise<BrowserFpsMetrics> =>
   );
   const avgFPS = totalDurationMs > 0 ? (1000 * totalFrames) / totalDurationMs : 0;
 
+  // "5% low" FPS as used in frame-pacing benchmarks: the frame rate over the
+  // slowest 5% of frames (1000 / mean of their durations). A raw 5th
+  // percentile of instantaneous per-frame FPS can sit ABOVE the time-weighted
+  // average when a few very long stalls drag the average down, which reads as
+  // broken aggregation; the 5%-low is mathematically never above avgFPS.
+  const slowestDurations = [...positiveDurations].sort((a, b) => b - a);
+  const lowSampleCount = Math.max(1, Math.floor(slowestDurations.length * 0.05));
+  const lowDurations = slowestDurations.slice(0, lowSampleCount);
+  const lowMeanDuration =
+    lowDurations.reduce((total, value) => total + value, 0) / lowDurations.length;
+  const low5FPS = totalFrames > 0 ? 1000 / lowMeanDuration : 0;
+
   return {
     avgFPS: Math.round(avgFPS * 10) / 10,
     minFPS: Math.round(percentile(fpsSamples, 0) * 10) / 10,
     maxFPS: Math.round(percentile(fpsSamples, 0.999) * 10) / 10,
     frameDropCount: frameDurations.filter((duration) => duration > 25).length,
-    p05FPS: Math.round(percentile(fpsSamples, 0.05) * 10) / 10,
+    low5FPS: Math.round(low5FPS * 10) / 10,
     p95FrameTimeMs: Math.round(percentile(frameDurations, 0.95) * 10) / 10,
     totalFrames,
   };

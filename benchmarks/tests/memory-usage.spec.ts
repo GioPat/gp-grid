@@ -71,6 +71,18 @@ const measureMemory = async (
     window.gridApi.clearData();
   });
   await waitForDataLoad(page, 0);
+
+  // React-based wrappers keep the pre-clear state reachable until the NEXT
+  // commit (fiber double buffering and lazily recomputed row-model memos), so
+  // measuring right after the clearing render can report the entire dataset as
+  // "retained" even though one more render releases it. Force that extra
+  // commit — loadData(0) builds a fresh empty dataset — so retainedAfterClearMB
+  // reflects what the grid library actually holds onto.
+  await page.evaluate(() => {
+    window.gridApi.loadData(0);
+  });
+  await waitForDataLoad(page, 0);
+
   await forceGC(client);
   const afterClearHeap = await getHeapSize(client);
 

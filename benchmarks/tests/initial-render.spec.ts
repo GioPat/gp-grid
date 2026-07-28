@@ -17,6 +17,10 @@ import {
   installPerformanceObservers,
 } from "../src/metrics/browser-performance";
 
+// Quiet window after the grid reports ready, so LCP candidates that paint
+// right at readiness are attributed to this load before the metrics are read.
+const PAINT_SETTLE_MS = 500;
+
 const measureInitialRender = async (
   page: Page,
   port: number,
@@ -31,6 +35,10 @@ const measureInitialRender = async (
   const domContentLoaded = Date.now() - navigationStart;
   await waitForGridReady(page, rowCount);
   const timeToFullRender = Date.now() - navigationStart;
+
+  // Measured durations are already captured; this wait only lets late paint
+  // work (and its performance entries) land before the metrics are read.
+  await page.waitForTimeout(PAINT_SETTLE_MS);
 
   const paintEntries = await page.evaluate(() => {
     const entries = performance.getEntriesByType("paint");

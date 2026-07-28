@@ -10,6 +10,12 @@ const toNumericMetricMap = <T extends object>(sample: T): NumericMetricMap => {
   return Object.fromEntries(entries);
 };
 
+// Aggregating samples (median of an even count, means) reintroduces float
+// noise like 44.349999999999994; cap every published stat at two decimals.
+const round2 = (value: number): number => {
+  return Math.round(value * 100) / 100;
+};
+
 const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -42,10 +48,10 @@ export const calculateMetricStats = <T extends object>(samples: T[]): MetricStat
     if (values.length > 0) {
       const sum = values.reduce((total, value) => total + value, 0);
       stats[metricName] = {
-        min: Math.min(...values),
-        max: Math.max(...values),
-        median: median(values),
-        mean: sum / values.length,
+        min: round2(Math.min(...values)),
+        max: round2(Math.max(...values)),
+        median: round2(median(values)),
+        mean: round2(sum / values.length),
       };
     }
   }

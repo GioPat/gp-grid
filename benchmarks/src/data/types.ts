@@ -73,7 +73,7 @@ export const GRID_METADATA: Record<GridType, GridMetadata> = {
     websiteUrl: "https://www.htmlelements.com/react/demos/grid/overview/",
     implementationMode: "app-side-virtual-data",
     comment:
-      "Uses Smart.Grid virtualDataSource; sort/filter processing is performed by the benchmark adapter over the full in-memory dataset, then Smart.Grid renders the requested virtual window. Smart.Grid exposes no configurable row overscan, so the shared overscan setting does not apply to it. Its custom scrollbar rescales mouse-wheel input to fixed line steps rather than the event's delta, so under the shared wheel input it traverses a different number of rows than the natively-scrolling grids (see Rows Traversed).",
+      "Uses Smart.Grid virtualDataSource; sort/filter processing is performed by the benchmark adapter over the full in-memory dataset, then Smart.Grid renders the requested virtual window. Smart.Grid exposes no configurable row overscan, so the shared overscan setting does not apply to it. Its custom scrollbar rescales mouse-wheel input to fixed line steps rather than the event's delta, so under the shared wheel input it traverses a different number of rows than the natively-scrolling grids (see Rows Traversed). After the dataset is cleared, Smart.Grid keeps the previously served rows referenced internally — clearRows(), an emptied dataSource, and refresh() do not release them — so its Retained memory reflects the library holding the old dataset until the grid instance is destroyed.",
   },
 };
 
@@ -122,7 +122,8 @@ export interface ScrollMetrics {
   minFPS: number;
   maxFPS: number;
   frameDropCount: number;
-  p05FPS: number;
+  // "5% low" FPS: frame rate over the slowest 5% of frames. Never above avgFPS.
+  low5FPS: number;
   p95FrameTimeMs: number;
   scrollDurationMs: number;
   actualScrollDeltaPx: number;
@@ -138,7 +139,8 @@ export interface RenderMetrics {
   timeToFirstPaint: number;
   timeToFullRender: number;
   domContentLoaded: number;
-  largestContentfulPaint: number;
+  // null when the browser never reported an LCP candidate for the page.
+  largestContentfulPaint: number | null;
   totalBlockingTime: number;
 }
 

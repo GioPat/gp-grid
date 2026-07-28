@@ -85,7 +85,7 @@ for (const grid of GRIDS) {
       });
 
       console.log(
-        `[${grid}] ${rowCount.toLocaleString()} rows - median FPS: ${result.metrics.avgFPS}, p05: ${result.metrics.p05FPS}, samples: ${samples.length}`,
+        `[${grid}] ${rowCount.toLocaleString()} rows - median FPS: ${result.metrics.avgFPS}, 5% low: ${result.metrics.low5FPS}, samples: ${samples.length}`,
       );
     });
   }
