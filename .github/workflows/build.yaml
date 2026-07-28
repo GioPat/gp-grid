@@ -23,7 +23,7 @@ jobs:
       - run: pnpm --filter @gp-grid/core build
       - run: pnpm test:coverage
       - name: SonarQube Scan - Core
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_CORE }}
         with:
@@ -36,7 +36,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.typescript.tsconfigPaths=packages/core/tsconfig.json
       - name: SonarQube Scan - React
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_REACT }}
         with:
@@ -49,7 +49,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.typescript.tsconfigPaths=packages/react/tsconfig.json
       - name: SonarQube Scan - Vue
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_VUE }}
         with:
