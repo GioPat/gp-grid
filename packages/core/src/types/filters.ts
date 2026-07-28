@@ -1,6 +1,8 @@
 // packages/core/src/types/filters.ts
 // Filter types
 
+import type { CellValue } from "./basic";
+
 /** Text filter operators */
 export type TextFilterOperator =
   | "contains"
@@ -42,8 +44,16 @@ export interface TextFilterCondition {
   type: "text";
   operator: TextFilterOperator;
   value?: string;
-  /** Selected distinct values for checkbox-style filtering */
-  selectedValues?: Set<string>;
+  /**
+   * Raw cell values selected in values (checkbox) mode.
+   *
+   * These are raw values, never formatted labels: server-side data sources
+   * receive them as-is in `DataSourceRequest.filter`, and display formatting
+   * (`ColumnDefinition.valueFormatter`) never enters the filter model. Treat
+   * the set as immutable — replace it to change the selection. When
+   * serializing a request for a server, convert the Set to an array.
+   */
+  selectedValues?: Set<CellValue>;
   /** Include blank values */
   includeBlank?: boolean;
   /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */

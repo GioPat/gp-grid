@@ -189,7 +189,7 @@ const buildSections = (run) => [
       "Mode",
       "Rows",
       "Avg FPS",
-      "P05 FPS",
+      "5% Low FPS",
       "P95 Frame Time",
       "Frame Drops",
       "Rows Traversed",
@@ -201,7 +201,8 @@ const buildSections = (run) => [
       result.implementationMode,
       formatRowCount(result.rowCount),
       result.metrics.avgFPS,
-      result.metrics.p05FPS,
+      // Older runs recorded a raw 5th percentile of instantaneous FPS instead.
+      result.metrics.low5FPS ?? result.metrics.p05FPS,
       `${result.metrics.p95FrameTimeMs}ms`,
       result.metrics.frameDropCount,
       result.metrics.rowsTraversed ?? "n/a",
@@ -218,7 +219,10 @@ const buildSections = (run) => [
       formatRowCount(result.rowCount),
       `${result.metrics.timeToFirstPaint}ms`,
       `${result.metrics.timeToFullRender}ms`,
-      `${result.metrics.largestContentfulPaint}ms`,
+      // null means the browser reported no LCP candidate for the page.
+      result.metrics.largestContentfulPaint == null
+        ? "n/a"
+        : `${result.metrics.largestContentfulPaint}ms`,
       `${result.metrics.totalBlockingTime}ms`,
     ]),
   },

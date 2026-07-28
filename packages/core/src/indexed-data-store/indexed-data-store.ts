@@ -29,8 +29,9 @@ export interface IndexedDataStoreOptions<TData> {
   /** Custom field accessor for nested properties */
   getFieldValue?: (row: TData, field: string) => CellValue;
   /**
-   * Lookup for a field's valueFormatter. Lets text filter conditions compare
-   * against the displayed (formatted) value.
+   * Lookup for a field's valueFormatter. Lets free-text filter conditions
+   * compare against the displayed (formatted) value. Values-mode
+   * `selectedValues` compare raw values and never use it.
    */
   getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined;
 }

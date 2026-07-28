@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
+import { groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const MAX_VALUES_FOR_LIST = 100;
@@ -29,41 +30,12 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-// Stored key used both in selectedValues and by evaluateTextCondition at
-// filter-time. When a valueFormatter exists we key by its output so two
-// distinct raw values that render identically collapse into a single entry
-// (and the filter applied on that entry matches every row formatting to it).
-function valueToKey(v: CellValue): string {
-  if (props.valueFormatter) return props.valueFormatter(v);
-  if (Array.isArray(v)) return v.join(", ");
-  return String(v ?? "");
-}
-
-// Display label shown to the user — same as the key so the user sees what
-// they select against.
-function valueToLabel(v: CellValue): string {
-  return valueToKey(v);
-}
-
-// Distinct entries: key for selectedValues, label for display.
-const uniqueEntries = computed(() => {
-  const seen = new Set<string>();
-  const entries: { key: string; label: string }[] = [];
-  for (const v of props.distinctValues) {
-    if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
-    const key = valueToKey(v);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    entries.push({ key, label: valueToLabel(v) });
-  }
-  entries.sort((a, b) => {
-    const numA = parseFloat(a.label);
-    const numB = parseFloat(b.label);
-    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
-  });
-  return entries;
-});
+// Checkbox rows: one entry per display label, carrying every raw value that
+// formats to it. The filter model stores the RAW values; labels only exist
+// inside this popup.
+const uniqueEntries = computed(() =>
+  groupDistinctValues(props.distinctValues, props.valueFormatter),
+);
 
 const hasTooManyValues = computed(() => uniqueEntries.value.length > MAX_VALUES_FOR_LIST);
 
@@ -82,10 +54,12 @@ const initialMode = computed((): FilterMode => {
 const mode = ref<FilterMode>(initialMode.value);
 
 // ============= VALUES MODE STATE =============
+// Local checkbox state tracks LABELS; raw values are resolved on apply.
 const initialSelected = computed(() => {
   if (!props.currentFilter?.conditions[0]) return new Set<string>();
   const cond = props.currentFilter.conditions[0] as TextFilterCondition;
-  return cond.selectedValues ?? new Set<string>();
+  if (!cond.selectedValues) return new Set<string>();
+  return labelsForSelectedValues(uniqueEntries.value, cond.selectedValues);
 });
 
 const initialIncludeBlanks = computed(() => {
@@ -95,7 +69,7 @@ const initialIncludeBlanks = computed(() => {
 });
 
 const searchText = ref("");
-const selectedValues = ref<Set<string>>(new Set(initialSelected.value));
+const selectedLabels = ref<Set<string>>(new Set(initialSelected.value));
 const includeBlanks = ref(initialIncludeBlanks.value);
 
 // ============= CONDITION MODE STATE =============
@@ -132,39 +106,41 @@ const displayEntries = computed(() => {
   return uniqueEntries.value.filter((e) => e.label.toLowerCase().includes(lower));
 });
 
+// Empty arrays count too (tags column with no tags), so the "(Blanks)"
+// opt-out renders whenever blank rows exist.
 const hasBlanks = computed(() => {
-  return props.distinctValues.some((v) => v == null || v === "");
+  return props.distinctValues.some(isBlankCellValue);
 });
 
 const allSelected = computed(() => {
-  const allNonBlank = displayEntries.value.every((e) => selectedValues.value.has(e.key));
+  const allNonBlank = displayEntries.value.every((e) => selectedLabels.value.has(e.label));
   return allNonBlank && (!hasBlanks.value || includeBlanks.value);
 });
 
 function handleSelectAll(): void {
-  selectedValues.value = new Set(displayEntries.value.map((e) => e.key));
+  selectedLabels.value = new Set(displayEntries.value.map((e) => e.label));
   if (hasBlanks.value) includeBlanks.value = true;
 }
 
 function handleDeselectAll(): void {
-  selectedValues.value = new Set();
+  selectedLabels.value = new Set();
   includeBlanks.value = false;
 }
 
-function handleValueToggle(value: string): void {
-  const next = new Set(selectedValues.value);
-  if (next.has(value)) {
-    next.delete(value);
+function handleValueToggle(label: string): void {
+  const next = new Set(selectedLabels.value);
+  if (next.has(label)) {
+    next.delete(label);
   } else {
-    next.add(value);
+    next.add(label);
   }
-  selectedValues.value = next;
+  selectedLabels.value = next;
 }
 
 // ============= APPLY LOGIC =============
 function handleApply(): void {
   if (mode.value === "values") {
-    const allNonBlankSelected = uniqueEntries.value.every((e) => selectedValues.value.has(e.key));
+    const allNonBlankSelected = uniqueEntries.value.every((e) => selectedLabels.value.has(e.label));
     const isAllSelected = allNonBlankSelected && (!hasBlanks.value || includeBlanks.value);
 
     if (isAllSelected) {
@@ -177,7 +153,7 @@ function handleApply(): void {
         {
           type: "text",
           operator: "equals",
-          selectedValues: selectedValues.value,
+          selectedValues: rawValuesForLabels(uniqueEntries.value, selectedLabels.value),
           includeBlank: includeBlanks.value,
         },
       ],
@@ -274,13 +250,13 @@ function handleClear(): void {
         <!-- Values -->
         <label
           v-for="entry in displayEntries"
-          :key="entry.key"
+          :key="entry.label"
           class="gp-grid-filter-option"
         >
           <input
             type="checkbox"
-            :checked="selectedValues.has(entry.key)"
-            @change="handleValueToggle(entry.key)"
+            :checked="selectedLabels.has(entry.label)"
+            @change="handleValueToggle(entry.label)"
           />
           <span>{{ entry.label }}</span>
         </label>

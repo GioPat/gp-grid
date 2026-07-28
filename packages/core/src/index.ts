@@ -71,6 +71,16 @@ export {
   isSameDay,
 } from "./indexed-data-store/index";
 
+/** Values-mode filter popup helpers (raw values grouped under display labels) */
+export {
+  rawValueKey,
+  groupDistinctValues,
+  labelsForSelectedValues,
+  rawValuesForLabels,
+  isBlankCellValue,
+} from "./filtering/distinct-entries";
+export type { DistinctValueEntry } from "./filtering/distinct-entries";
+
 /** Field helpers (from indexed-data-store) */
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
 export type {

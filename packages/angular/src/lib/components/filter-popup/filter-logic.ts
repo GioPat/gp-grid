@@ -1,11 +1,13 @@
 import type {
   ColumnDefinition,
   ColumnFilterModel,
+  DistinctValueEntry,
   NumberFilterCondition,
   NumberFilterOperator,
   TextFilterCondition,
   TextFilterOperator,
 } from '@gp-grid/core';
+import { labelsForSelectedValues, rawValuesForLabels } from '@gp-grid/core';
 
 export interface TextConditionState {
   operator: string;
@@ -69,53 +71,33 @@ export const defaultNumberCondition = (): NumberConditionState => ({
   nextOperator: 'and',
 });
 
-export interface FilterEntry {
-  key: string;
-  label: string;
-}
-
-export const computeUniqueValues = (
-  distinctValues: ReadonlyArray<unknown>,
-  formatter?: (v: unknown) => string,
-): FilterEntry[] => {
-  const seen = new Set<string>();
-  const result: FilterEntry[] = [];
-  for (const val of distinctValues) {
-    if (val === null || val === undefined || val === '') continue;
-    // Key by formatter output when available so filter-time comparison
-    // (which also goes through the formatter) matches what the user selects.
-    const key = formatter ? formatter(val) : String(val);
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push({ key, label: key });
-    }
-  }
-  return result.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
-};
+// Popup checkbox state tracks display LABELS; the filter model stores RAW
+// values (resolved via rawValuesForLabels on apply). Entry grouping lives in
+// core (`groupDistinctValues`), shared with the react/vue wrappers.
 
 export interface TextInitState {
   filterMode: FilterMode;
-  selectedValues: Set<string>;
+  selectedLabels: Set<string>;
   includeBlanks: boolean;
   textConditions: TextConditionState[];
 }
 
 export const initTextState = (
   filter: ColumnFilterModel | undefined,
-  uniqueValues: string[],
+  entries: ReadonlyArray<DistinctValueEntry>,
 ): TextInitState => {
-  if (!filter) return defaultTextState(uniqueValues);
+  if (!filter) return defaultTextState(entries);
 
   const textConds = filter.conditions.filter(
     (c): c is TextFilterCondition => c.type === 'text'
   );
-  if (textConds.length === 0) return defaultTextState(uniqueValues);
+  if (textConds.length === 0) return defaultTextState(entries);
 
   const firstCond = textConds[0];
   if (firstCond?.selectedValues !== undefined) {
     return {
       filterMode: 'values',
-      selectedValues: new Set(firstCond.selectedValues),
+      selectedLabels: labelsForSelectedValues(entries, firstCond.selectedValues),
       includeBlanks: firstCond.includeBlank ?? true,
       textConditions: [defaultTextCondition()],
     };
@@ -123,7 +105,7 @@ export const initTextState = (
 
   return {
     filterMode: 'condition',
-    selectedValues: new Set(uniqueValues),
+    selectedLabels: new Set(entries.map(e => e.label)),
     includeBlanks: true,
     textConditions: textConds.map((c, i) => ({
       operator: c.operator,
@@ -133,9 +115,9 @@ export const initTextState = (
   };
 };
 
-const defaultTextState = (uniqueValues: string[]): TextInitState => ({
+const defaultTextState = (entries: ReadonlyArray<DistinctValueEntry>): TextInitState => ({
   filterMode: 'values',
-  selectedValues: new Set(uniqueValues),
+  selectedLabels: new Set(entries.map(e => e.label)),
   includeBlanks: true,
   textConditions: [defaultTextCondition()],
 });
@@ -160,8 +142,8 @@ export const initNumberConditions = (
 
 export interface TextFilterInput {
   filterMode: FilterMode;
-  uniqueValues: string[];
-  selectedValues: Set<string>;
+  entries: ReadonlyArray<DistinctValueEntry>;
+  selectedLabels: Set<string>;
   includeBlanks: boolean;
   textConditions: TextConditionState[];
 }
@@ -174,14 +156,14 @@ export const buildTextFilter = (input: TextFilterInput): ColumnFilterModel | nul
 };
 
 const buildValuesFilter = (input: TextFilterInput): ColumnFilterModel | null => {
-  const allSelected = input.uniqueValues.every(v => input.selectedValues.has(v));
+  const allSelected = input.entries.every(e => input.selectedLabels.has(e.label));
   if (allSelected && input.includeBlanks) return null;
 
   return {
     conditions: [{
       type: 'text',
-      operator: 'contains',
-      selectedValues: new Set(input.selectedValues),
+      operator: 'equals',
+      selectedValues: rawValuesForLabels(input.entries, input.selectedLabels),
       includeBlank: input.includeBlanks,
     }],
     combination: 'or',

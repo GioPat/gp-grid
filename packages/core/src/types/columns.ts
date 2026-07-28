@@ -54,6 +54,9 @@ export interface ColumnDefinition {
    * Converts a cell value to its display string. Used by the default cell renderer
    * when no `cellRenderer` is provided. Useful for `object`-type columns where the
    * default JSON.stringify may not be suitable (e.g., display a single field of an object).
+   *
+   * Display-only: the values-mode filter groups checkbox entries by this label,
+   * but the filter model (and any server request) always carries RAW values.
    */
   valueFormatter?: (value: CellValue) => string;
   /**
@@ -62,6 +65,11 @@ export interface ColumnDefinition {
    * use this for large datasets to avoid an O(n) scan when the value domain is
    * known up front (e.g., enums, fixed tag lists). Values are still de-duplicated
    * and sorted by their display string.
+   *
+   * Supply RAW values. When the column also has a `valueFormatter` that collapses
+   * several raw values into one label, this list must contain the FULL raw domain:
+   * values-mode filtering matches raw values, so raws missing from this list can
+   * never be selected and their rows would be hidden by a values filter.
    */
   distinctValues?: CellValue[];
 

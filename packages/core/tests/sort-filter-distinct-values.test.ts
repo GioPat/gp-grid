@@ -5,9 +5,9 @@
 // meant the filter popup showed only the beginning of the alphabet.
 // The fix stride-samples across the full dataset; these tests guard it.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { SortFilterManager } from "../src/managers/sort-filter-manager";
-import type { ColumnDefinition } from "../src/types";
+import type { CellValue, ColumnDefinition } from "../src/types";
 
 interface Row {
   id: number;
@@ -97,5 +97,59 @@ describe("getDistinctValuesForColumn — stride sampling under sort", () => {
     const mgr = buildManager(cachedRows);
     const distinct = mgr.getDistinctValuesForColumn("color");
     expect(distinct).toEqual(["c1", "c2", "c10"]);
+  });
+});
+
+describe("getDistinctValuesForColumn — raw values under a valueFormatter", () => {
+  // First letter as label: "aa" and "ab" collapse to the same label "a".
+  const firstLetter = (v: CellValue): string => String(v).slice(0, 1);
+
+  const buildFormattedManager = (cachedRows: Map<number, Row>): SortFilterManager<Row> => {
+    const formattedColumns: ColumnDefinition[] = [
+      { field: "id", cellDataType: "number", width: 80 },
+      { field: "color", cellDataType: "text", width: 120, valueFormatter: firstLetter },
+    ];
+    return new SortFilterManager<Row>({
+      getColumns: () => formattedColumns,
+      isSortingEnabled: () => true,
+      getCachedRows: () => cachedRows,
+      onSortFilterChange: async () => {},
+      onDataRefreshed: () => {},
+    });
+  };
+
+  it("keeps every raw value when the formatter collapses several into one label", () => {
+    const cachedRows = buildSortedByColor(30, ["aa", "ab", "bb"]);
+    const mgr = buildFormattedManager(cachedRows);
+    const distinct = mgr.getDistinctValuesForColumn("color");
+    // Dedup is by raw identity, not label: both "a"-labelled raws survive
+    // so the popup can select all rows behind the "a" checkbox.
+    expect(distinct).toContain("aa");
+    expect(distinct).toContain("ab");
+    expect(distinct).toContain("bb");
+    expect(distinct).toHaveLength(3);
+  });
+
+  it("warns once when the cap truncates the raw domain of a formatted column", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const cachedRows = buildSortedByColor(30, ["aa", "ab", "ac", "bb"]);
+      const mgr = buildFormattedManager(cachedRows);
+      const distinct = mgr.getDistinctValuesForColumn("color", 2);
+      expect(distinct).toHaveLength(2);
+      const truncationWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === "string" && call[0].includes("truncated"),
+      );
+      expect(truncationWarnings).toHaveLength(1);
+      // A second call must not warn again for the same column.
+      mgr.getDistinctValuesForColumn("color", 2);
+      expect(
+        warnSpy.mock.calls.filter(
+          (call) => typeof call[0] === "string" && call[0].includes("truncated"),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
