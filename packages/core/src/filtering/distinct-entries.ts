@@ -14,22 +14,30 @@ export interface DistinctValueEntry {
   values: CellValue[];
 }
 
+/**
+ * Sort array elements by their canonical {@link rawValueKey} so element order
+ * never affects an array's identity. Keys are used instead of raw
+ * stringification because object elements would all collapse to
+ * `[object Object]` and sort non-deterministically. Mutually recursive with
+ * `rawValueKey` for nested arrays; both are only called at runtime.
+ */
 const sortArrayLexicographic = (value: CellValue[]): CellValue[] => {
-  return [...value].sort((a, b) => {
-    const sa = String(a);
-    const sb = String(b);
-    if (sa === sb) return 0;
-    return sa < sb ? -1 : 1;
-  });
+  return value
+    .map((item) => ({ item, key: rawValueKey(item) }))
+    .sort((a, b) => {
+      if (a.key === b.key) return 0;
+      return a.key < b.key ? -1 : 1;
+    })
+    .map((keyed) => keyed.item);
 };
 
 /**
  * Canonical identity key for a raw cell value, used to compare values-mode
  * selections against cell values without ever consulting a formatter.
  *
- * Type-prefixed so raw `5` and raw `"5"` never collide. Arrays are sorted
- * lexicographically first so element order is irrelevant (same rule as the
- * distinct-value scan). Objects rely on JSON.stringify, so key order matters
+ * Type-prefixed so raw `5` and raw `"5"` never collide. Arrays are sorted by
+ * their elements' own keys first so element order is irrelevant (same rule as
+ * the distinct-value scan). Objects rely on JSON.stringify, so key order matters
  * for them — a pre-existing limitation of distinct-value identity.
  */
 export const rawValueKey = (value: CellValue): string => {
@@ -53,8 +61,8 @@ export const isBlankCellValue = (value: CellValue): boolean => {
 };
 
 const compareLabels = (a: string, b: string): number => {
-  const numA = parseFloat(a);
-  const numB = parseFloat(b);
+  const numA = Number.parseFloat(a);
+  const numB = Number.parseFloat(b);
   if (Number.isNaN(numA) === false && Number.isNaN(numB) === false) return numA - numB;
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 };

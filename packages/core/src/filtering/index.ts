@@ -70,7 +70,7 @@ const getSelectedValueKeys = (
   selectedValues: ReadonlySet<CellValue>,
 ): Set<string> => {
   const cached = selectedKeysCache.get(selectedValues);
-  if (cached !== undefined && cached.size === selectedValues.size) {
+  if (cached?.size === selectedValues.size) {
     return cached.keys;
   }
   const keys = new Set<string>();
