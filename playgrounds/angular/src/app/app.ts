@@ -7,6 +7,7 @@ import type {
   CellRendererTemplate,
   EditRendererParams,
   EditRendererTemplate,
+  GridLabels,
   HeaderRendererTemplate,
   HighlightingOptions,
 } from '@gp-grid/angular';
@@ -85,6 +86,14 @@ export class App implements AfterViewInit {
     computeColumnClasses: (ctx) => (ctx.isHovered ? ['pg-col--hover'] : []),
   };
 
+  // Localized labels demo — override only what you need; the rest fall back to
+  // the English defaults.
+  gridLabels: Partial<GridLabels> = {
+    and: 'E',
+    filterTitle: 'Filtra: {column}',
+    apply: 'Applica',
+  };
+
   constructor() {
     effect(() => {
       if (!this.isBrowser) return;
@@ -98,9 +107,11 @@ export class App implements AfterViewInit {
       { field: 'name', cellDataType: 'text', headerName: 'Name', width: 200, sortable: true, filterable: true, editable: true },
       { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge },
       { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor, valueFormatter: (v) => `🏙 ${String(v ?? "")}` },
-      // Long text column — not editable so double-click opens the read-only
-      // peek overlay (once the Angular wrapper renders one — currently behaviour-only).
-      { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS },
+      // Long text column — wrapText lets it flow onto new lines (clipped to the
+      // fixed row height) instead of truncating with an ellipsis. Not editable so
+      // double-click opens the read-only peek overlay (once the Angular wrapper
+      // renders one — currently behaviour-only).
+      { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS, wrapText: true },
       { field: 'createdAt', cellDataType: 'dateTime', headerName: 'Created', width: 200, sortable: true, filterable: true, valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : '') },
     ];
     this.cdr.detectChanges();

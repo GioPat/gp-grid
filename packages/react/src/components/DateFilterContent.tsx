@@ -1,23 +1,15 @@
 // packages/react/src/components/DateFilterContent.tsx
 
 import React, { useState, useCallback, useMemo } from "react";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "@gp-grid/core";
+import { getDateOperatorOptions } from "@gp-grid/core";
+import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator, GridLabels } from "@gp-grid/core";
 
 export interface DateFilterContentProps {
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
   onApply: (filter: ColumnFilterModel | null) => void;
   onClose: () => void;
 }
-
-const OPERATORS: { value: DateFilterOperator; label: string }[] = [
-  { value: "=", label: "=" },
-  { value: "!=", label: "\u2260" },
-  { value: ">", label: ">" },
-  { value: "<", label: "<" },
-  { value: "between", label: "\u2194" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Not blank" },
-];
 
 interface Condition {
   operator: DateFilterOperator;
@@ -36,9 +28,12 @@ function formatDateForInput(date: Date | string | undefined): string {
 
 export function DateFilterContent({
   currentFilter,
+  labels,
   onApply,
   onClose,
 }: DateFilterContentProps): React.ReactNode {
+  const operators = useMemo(() => getDateOperatorOptions(labels), [labels]);
+
   const initialConditions = useMemo((): Condition[] => {
     if (!currentFilter?.conditions.length) {
       return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
@@ -115,14 +110,14 @@ export function DateFilterContent({
                 className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
                 onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
               >
-                AND
+                {labels.and}
               </button>
               <button
                 type="button"
                 className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
                 onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
               >
-                OR
+                {labels.or}
               </button>
             </div>
           )}
@@ -132,7 +127,7 @@ export function DateFilterContent({
               value={cond.operator}
               onChange={(e) => updateCondition(index, { operator: e.target.value as DateFilterOperator })}
             >
-              {OPERATORS.map((op) => (
+              {operators.map((op) => (
                 <option key={op.value} value={op.value}>
                   {op.label}
                 </option>
@@ -149,7 +144,7 @@ export function DateFilterContent({
 
             {cond.operator === "between" && (
               <>
-                <span className="gp-grid-filter-to">to</span>
+                <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
                 <input
                   type="date"
                   value={cond.valueTo}
@@ -164,7 +159,7 @@ export function DateFilterContent({
                 className="gp-grid-filter-remove"
                 onClick={() => removeCondition(index)}
               >
-                ×
+                {labels.removeCondition}
               </button>
             )}
           </div>
@@ -172,15 +167,15 @@ export function DateFilterContent({
       ))}
 
       <button type="button" className="gp-grid-filter-add" onClick={addCondition}>
-        + Add condition
+        {labels.addCondition}
       </button>
 
       <div className="gp-grid-filter-buttons">
         <button type="button" className="gp-grid-filter-btn-clear" onClick={handleClear}>
-          Clear
+          {labels.clear}
         </button>
         <button type="button" className="gp-grid-filter-btn-apply" onClick={handleApply}>
-          Apply
+          {labels.apply}
         </button>
       </div>
     </div>

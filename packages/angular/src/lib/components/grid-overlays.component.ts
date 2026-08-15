@@ -10,8 +10,10 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   DragState,
+  GridLabels,
   VisibleColumnInfo,
 } from '@gp-grid/core';
+import { defaultGridLabels, formatLabel } from '@gp-grid/core';
 import { FilterPopupComponent } from './filter-popup.component';
 
 export interface ActiveFilterPopup {
@@ -30,6 +32,7 @@ const TEMPLATE = `
       [anchorEl]="fp.anchorEl!"
       [distinctValues]="fp.distinctValues"
       [currentFilter]="fp.currentFilter"
+      [labels]="labels()"
       (apply)="filterApply.emit($event)"
       (close)="filterClose.emit()"
     />
@@ -48,7 +51,7 @@ const TEMPLATE = `
     </div>
   }
   @if (errorMessage(); as msg) {
-    <div class="gp-grid-error">Error: {{ msg }}</div>
+    <div class="gp-grid-error">{{ errorLabel(msg) }}</div>
   }
   @if (columnMove(); as cm) {
     <div
@@ -87,6 +90,7 @@ export class GridOverlaysComponent {
   filterPopup = input<ActiveFilterPopup | null>(null);
   isLoading = input<boolean>(false);
   errorMessage = input<string | null>(null);
+  labels = input<GridLabels>(defaultGridLabels);
   headerHeight = input.required<number>();
   rowHeight = input.required<number>();
   dragState = input.required<DragState>();
@@ -98,6 +102,10 @@ export class GridOverlaysComponent {
 
   filterApply = output<{ colId: string; filter: ColumnFilterModel | null }>();
   filterClose = output<void>();
+
+  protected errorLabel(message: string): string {
+    return formatLabel(this.labels().errorPrefix, { message });
+  }
 
   protected isResizing = computed(() => this.dragState().dragType === 'column-resize');
 

@@ -131,6 +131,9 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  // Localization
+  GridLabels,
+  GridFilterOperatorLabels,
   // UI State (shared with React)
   SlotData,
   HeaderData,

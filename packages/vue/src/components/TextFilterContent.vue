@@ -1,21 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
-import { groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
+import type { CellValue, ColumnFilterModel, GridLabels, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
+import { formatLabel, getTextOperatorOptions, groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
 
 const MAX_VALUES_FOR_LIST = 100;
-
-const OPERATORS: { value: TextFilterOperator; label: string }[] = [
-  { value: "contains", label: "Contains" },
-  { value: "notContains", label: "Does not contain" },
-  { value: "equals", label: "Equals" },
-  { value: "notEquals", label: "Does not equal" },
-  { value: "startsWith", label: "Starts with" },
-  { value: "endsWith", label: "Ends with" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Is not blank" },
-];
 
 type FilterMode = "values" | "condition";
 
@@ -23,12 +12,15 @@ const props = defineProps<{
   distinctValues: CellValue[];
   valueFormatter?: (v: CellValue) => string;
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
 }>();
 
 const emit = defineEmits<{
   apply: [filter: ColumnFilterModel | null];
   close: [];
 }>();
+
+const operators = computed(() => getTextOperatorOptions(props.labels));
 
 // Checkbox rows: one entry per display label, carrying every raw value that
 // formats to it. The filter model stores the RAW values; labels only exist
@@ -198,20 +190,20 @@ function handleClear(): void {
         :class="{ active: mode === 'values' }"
         @click="mode = 'values'"
       >
-        Values
+        {{ labels.valuesMode }}
       </button>
       <button
         type="button"
         :class="{ active: mode === 'condition' }"
         @click="mode = 'condition'"
       >
-        Condition
+        {{ labels.conditionMode }}
       </button>
     </div>
 
     <!-- Too many values message -->
     <div v-if="hasTooManyValues && mode === 'condition'" class="gp-grid-filter-info">
-      Too many unique values ({{ uniqueEntries.length }}). Use conditions to filter.
+      {{ formatLabel(labels.tooManyValues, { count: uniqueEntries.length }) }}
     </div>
 
     <!-- VALUES MODE -->
@@ -221,17 +213,17 @@ function handleClear(): void {
         v-model="searchText"
         class="gp-grid-filter-search"
         type="text"
-        placeholder="Search..."
+        :placeholder="labels.searchPlaceholder"
         autofocus
       />
 
       <!-- Select all / Deselect all -->
       <div class="gp-grid-filter-actions">
         <button type="button" :disabled="allSelected" @click="handleSelectAll">
-          Select All
+          {{ labels.selectAll }}
         </button>
         <button type="button" @click="handleDeselectAll">
-          Deselect All
+          {{ labels.deselectAll }}
         </button>
       </div>
 
@@ -244,7 +236,7 @@ function handleClear(): void {
             :checked="includeBlanks"
             @change="includeBlanks = !includeBlanks"
           />
-          <span class="gp-grid-filter-blank">(Blanks)</span>
+          <span class="gp-grid-filter-blank">{{ labels.blanks }}</span>
         </label>
 
         <!-- Values -->
@@ -277,14 +269,14 @@ function handleClear(): void {
             :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
             @click="updateCondition(index - 1, { nextOperator: 'and' })"
           >
-            AND
+            {{ labels.and }}
           </button>
           <button
             type="button"
             :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
             @click="updateCondition(index - 1, { nextOperator: 'or' })"
           >
-            OR
+            {{ labels.or }}
           </button>
         </div>
 
@@ -295,7 +287,7 @@ function handleClear(): void {
             :autofocus="index === 0"
             @change="updateCondition(index, { operator: ($event.target as HTMLSelectElement).value as TextFilterOperator })"
           >
-            <option v-for="op in OPERATORS" :key="op.value" :value="op.value">
+            <option v-for="op in operators" :key="op.value" :value="op.value">
               {{ op.label }}
             </option>
           </select>
@@ -305,7 +297,7 @@ function handleClear(): void {
             v-if="cond.operator !== 'blank' && cond.operator !== 'notBlank'"
             type="text"
             :value="cond.value"
-            placeholder="Value"
+            :placeholder="labels.valuePlaceholder"
             class="gp-grid-filter-text-input"
             @input="updateCondition(index, { value: ($event.target as HTMLInputElement).value })"
           />
@@ -317,24 +309,24 @@ function handleClear(): void {
             class="gp-grid-filter-remove"
             @click="removeCondition(index)"
           >
-            &times;
+            {{ labels.removeCondition }}
           </button>
         </div>
       </div>
 
       <!-- Add condition button -->
       <button type="button" class="gp-grid-filter-add" @click="addCondition('contains')">
-        + Add condition
+        {{ labels.addCondition }}
       </button>
     </template>
 
     <!-- Apply/Clear buttons -->
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" @click="handleClear">
-        Clear
+        {{ labels.clear }}
       </button>
       <button type="button" class="gp-grid-filter-btn-apply" @click="handleApply">
-        Apply
+        {{ labels.apply }}
       </button>
     </div>
   </div>

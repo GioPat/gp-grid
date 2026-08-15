@@ -1,8 +1,8 @@
 // packages/react/src/components/FilterPopup.tsx
 
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react";
-import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
-import { calculateFilterPopupPosition } from "@gp-grid/core";
+import type { ColumnDefinition, CellValue, ColumnFilterModel, GridLabels } from "@gp-grid/core";
+import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";
@@ -13,6 +13,7 @@ export interface FilterPopupProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
   onApply: (colId: string, filter: ColumnFilterModel | null) => void;
   onClose: () => void;
 }
@@ -23,6 +24,7 @@ export function FilterPopup({
   containerRef,
   distinctValues,
   currentFilter,
+  labels,
   onApply,
   onClose,
 }: FilterPopupProps): React.ReactNode {
@@ -137,7 +139,7 @@ export function FilterPopup({
   return (
     <div ref={popupRef} className="gp-grid-filter-popup" style={popupStyle}>
       <div className="gp-grid-filter-header">
-        Filter: {column.headerName ?? column.field}
+        {formatLabel(labels.filterTitle, { column: column.headerName ?? column.field })}
       </div>
 
       {isTextType && (
@@ -145,6 +147,7 @@ export function FilterPopup({
           distinctValues={distinctValues}
           valueFormatter={column.valueFormatter}
           currentFilter={currentFilter}
+          labels={labels}
           onApply={handleApply}
           onClose={onClose}
         />
@@ -153,6 +156,7 @@ export function FilterPopup({
       {isNumberType && (
         <NumberFilterContent
           currentFilter={currentFilter}
+          labels={labels}
           onApply={handleApply}
           onClose={onClose}
         />
@@ -161,6 +165,7 @@ export function FilterPopup({
       {isDateType && (
         <DateFilterContent
           currentFilter={currentFilter}
+          labels={labels}
           onApply={handleApply}
           onClose={onClose}
         />
@@ -171,6 +176,7 @@ export function FilterPopup({
           distinctValues={distinctValues}
           valueFormatter={column.valueFormatter}
           currentFilter={currentFilter}
+          labels={labels}
           onApply={handleApply}
           onClose={onClose}
         />

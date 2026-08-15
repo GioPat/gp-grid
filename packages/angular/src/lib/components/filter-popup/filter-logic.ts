@@ -24,29 +24,6 @@ export interface NumberConditionState {
 
 export type FilterMode = 'values' | 'condition';
 
-export const TEXT_OPERATORS: ReadonlyArray<{ value: TextFilterOperator; label: string }> = [
-  { value: 'contains', label: 'Contains' },
-  { value: 'notContains', label: 'Does not contain' },
-  { value: 'equals', label: 'Equals' },
-  { value: 'notEquals', label: 'Does not equal' },
-  { value: 'startsWith', label: 'Starts with' },
-  { value: 'endsWith', label: 'Ends with' },
-  { value: 'blank', label: 'Is blank' },
-  { value: 'notBlank', label: 'Is not blank' },
-] as const;
-
-export const NUMBER_OPERATORS: ReadonlyArray<{ value: NumberFilterOperator; label: string }> = [
-  { value: '=', label: 'Equals' },
-  { value: '!=', label: 'Does not equal' },
-  { value: '>', label: 'Greater than' },
-  { value: '<', label: 'Less than' },
-  { value: '>=', label: 'Greater than or equal' },
-  { value: '<=', label: 'Less than or equal' },
-  { value: 'between', label: 'Between' },
-  { value: 'blank', label: 'Is blank' },
-  { value: 'notBlank', label: 'Is not blank' },
-] as const;
-
 const VALUE_LESS_TEXT_OPERATORS: ReadonlyArray<string> = ['blank', 'notBlank'];
 const VALUE_LESS_NUMBER_OPERATORS: ReadonlyArray<string> = ['blank', 'notBlank'];
 

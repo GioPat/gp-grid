@@ -60,7 +60,7 @@ export const GRID_BODY_TEMPLATE = `<div
                         [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }">
                       </ng-container>
                     } @else {
-                      {{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }}
+                      <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }}</span>
                     }
                   }
                 </div>
@@ -87,7 +87,7 @@ export const GRID_BODY_TEMPLATE = `<div
       </div>
     </div>
     @if (totalRows() === 0) {
-      <div class="gp-grid-empty">No data to display</div>
+      <div class="gp-grid-empty">{{ labels().emptyState }}</div>
     }
   </div>
 `;

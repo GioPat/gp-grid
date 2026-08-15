@@ -66,6 +66,11 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     return globalCellRenderer(params);
   }
 
-  // Default text rendering — re-format to string in case rawValue has no formatter
-  return formatCellValue(rawValue, column.valueFormatter);
+  // Default text rendering — re-format to string in case rawValue has no formatter.
+  // Wrapped in `.gp-grid-cell-content` so the ellipsis / wrapText styles apply.
+  return (
+    <span className="gp-grid-cell-content">
+      {formatCellValue(rawValue, column.valueFormatter)}
+    </span>
+  );
 }

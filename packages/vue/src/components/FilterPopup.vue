@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watchEffect } from "vue";
-import type { ColumnDefinition, CellValue, ColumnFilterModel } from "@gp-grid/core";
-import { calculateFilterPopupPosition } from "@gp-grid/core";
+import type { ColumnDefinition, CellValue, ColumnFilterModel, GridLabels } from "@gp-grid/core";
+import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
 import TextFilterContent from "./TextFilterContent.vue";
 import NumberFilterContent from "./NumberFilterContent.vue";
@@ -13,6 +13,7 @@ const props = defineProps<{
   containerRef: HTMLDivElement | null;
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
 }>();
 
 const emit = defineEmits<{
@@ -126,13 +127,14 @@ const popupStyle = computed(() => ({
 <template>
   <div ref="popupRef" class="gp-grid-filter-popup" :style="popupStyle">
     <div class="gp-grid-filter-header">
-      Filter: {{ column.headerName ?? column.field }}
+      {{ formatLabel(labels.filterTitle, { column: column.headerName ?? column.field }) }}
     </div>
 
     <!-- Number filter -->
     <NumberFilterContent
       v-if="isNumberType"
       :current-filter="currentFilter"
+      :labels="labels"
       @apply="handleApply"
       @close="handleClose"
     />
@@ -141,6 +143,7 @@ const popupStyle = computed(() => ({
     <DateFilterContent
       v-else-if="isDateType"
       :current-filter="currentFilter"
+      :labels="labels"
       @apply="handleApply"
       @close="handleClose"
     />
@@ -151,6 +154,7 @@ const popupStyle = computed(() => ({
       :distinct-values="distinctValues"
       :value-formatter="column.valueFormatter"
       :current-filter="currentFilter"
+      :labels="labels"
       @apply="handleApply"
       @close="handleClose"
     />

@@ -18,6 +18,8 @@ import {
   EditRendererParams,
   FillHandlePosition,
   DragState,
+  GridLabels,
+  defaultGridLabels,
 } from "@gp-grid/core";
 import { GRID_BODY_TEMPLATE } from "./grid-body.template";
 
@@ -91,6 +93,7 @@ export class GridBodyComponent {
   computeCellClasses = input<CellClassFn | null>(null);
   fillHandlePosition = input<FillHandlePosition | null>(null);
   dragState = input<DragState | null>(null);
+  labels = input<GridLabels>(defaultGridLabels);
 
   scrolled = output<number>();
   cellPointerDown = output<CellPointerDownEvent>();
@@ -238,20 +241,25 @@ export class GridBodyComponent {
       ds?.fillSourceRange ?? null,
       ds?.fillTarget ?? null,
     );
+    const editing = isCellEditing(rowIndex, colIndex, editingCell);
     const base = buildCellClasses(
       isCellActive(rowIndex, colIndex, this.activeCell()),
       isCellSelected(rowIndex, colIndex, this.selectionRange()),
-      isCellEditing(rowIndex, colIndex, editingCell),
+      editing,
       inFillPreview,
     );
     const withHandle = column.rowDrag === true
       ? `${base} gp-grid-cell--row-drag-handle`
       : base;
+    // Wrap only affects the default text content, so skip it in edit mode.
+    const withWrap = column.wrapText === true && !editing
+      ? `${withHandle} gp-grid-cell--wrap`
+      : withHandle;
     const fn = this.computeCellClasses();
-    if (fn === null) return withHandle;
+    if (fn === null) return withWrap;
     const extra = fn(rowIndex, colIndex, column, rowData);
-    if (extra.length === 0) return withHandle;
-    return `${withHandle} ${extra.join(' ')}`;
+    if (extra.length === 0) return withWrap;
+    return `${withWrap} ${extra.join(' ')}`;
   }
 
   protected rowClass(rowIndex: number, rowData: unknown): string {

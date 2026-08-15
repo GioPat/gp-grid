@@ -21,10 +21,12 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   DataSource,
+  GridLabels,
   HighlightingOptions,
   RowLoadingOptions,
   RowId,
 } from '@gp-grid/core';
+import { resolveGridLabels } from '@gp-grid/core';
 import {
   GridHeaderComponent,
   GridBodyComponent,
@@ -84,6 +86,9 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
+  labels = input<Partial<GridLabels>>({});
+
+  protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
 
   protected readonly vm = new GpGridViewModel({
     getColumns: () => this.columns(),
