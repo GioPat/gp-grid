@@ -1,6 +1,6 @@
 // packages/vue/src/renderers/cellRenderer.ts
 
-import { createTextVNode, type VNode } from "vue";
+import { h, type VNode } from "vue";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
 import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
@@ -68,6 +68,11 @@ export function renderCell(options: RenderCellOptions): VNode {
     return invokeRenderer(globalCellRenderer, params);
   }
 
-  // Default text rendering — re-format to string in case rawValue has no formatter
-  return createTextVNode(formatCellValue(rawValue, column.valueFormatter));
+  // Default text rendering — re-format to string in case rawValue has no formatter.
+  // Wrapped in `.gp-grid-cell-content` so the ellipsis / wrapText styles apply.
+  return h(
+    "span",
+    { class: "gp-grid-cell-content" },
+    formatCellValue(rawValue, column.valueFormatter),
+  );
 }

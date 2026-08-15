@@ -41,6 +41,21 @@ function App() {
 }
 ```
 
+## Cell text overflow
+
+By default, cell text that exceeds the column width is truncated with an
+ellipsis (`…`); hovering the cell shows the full value in a native tooltip.
+To wrap long text onto additional lines instead, set `wrapText: true` on a
+column. Wrapped text is clipped to the fixed row height (rows do not
+auto-grow), so combine it with the built-in peek overlay (double-click a
+non-editable cell) to read the full value.
+
+```tsx
+const columns = [
+  { field: 'description', cellDataType: 'text', width: 240, wrapText: true },
+];
+```
+
 ## Packages
 
 - **@gp-grid/core**: Framework-agnostic core library

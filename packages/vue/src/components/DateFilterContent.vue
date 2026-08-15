@@ -1,26 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator } from "@gp-grid/core";
+import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator, GridLabels } from "@gp-grid/core";
+import { getDateOperatorOptions } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
-
-const OPERATORS: { value: DateFilterOperator; label: string }[] = [
-  { value: "=", label: "=" },
-  { value: "!=", label: "\u2260" },
-  { value: ">", label: ">" },
-  { value: "<", label: "<" },
-  { value: "between", label: "\u2194" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Not blank" },
-];
 
 const props = defineProps<{
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
 }>();
 
 const emit = defineEmits<{
   apply: [filter: ColumnFilterModel | null];
   close: [];
 }>();
+
+const operators = computed(() => getDateOperatorOptions(props.labels));
 
 // Convert Date to YYYY-MM-DD string for input
 function formatDateForInput(date: Date | string | undefined): string {
@@ -99,14 +93,14 @@ function handleClear(): void {
           :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
           @click="updateCondition(index - 1, { nextOperator: 'and' })"
         >
-          AND
+          {{ labels.and }}
         </button>
         <button
           type="button"
           :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
           @click="updateCondition(index - 1, { nextOperator: 'or' })"
         >
-          OR
+          {{ labels.or }}
         </button>
       </div>
 
@@ -116,7 +110,7 @@ function handleClear(): void {
           :value="cond.operator"
           @change="updateCondition(index, { operator: ($event.target as HTMLSelectElement).value as DateFilterOperator })"
         >
-          <option v-for="op in OPERATORS" :key="op.value" :value="op.value">
+          <option v-for="op in operators" :key="op.value" :value="op.value">
             {{ op.label }}
           </option>
         </select>
@@ -131,7 +125,7 @@ function handleClear(): void {
 
         <!-- Second date input for "between" -->
         <template v-if="cond.operator === 'between'">
-          <span class="gp-grid-filter-to">to</span>
+          <span class="gp-grid-filter-to">{{ labels.betweenSeparator }}</span>
           <input
             type="date"
             :value="cond.valueTo"
@@ -146,23 +140,23 @@ function handleClear(): void {
           class="gp-grid-filter-remove"
           @click="removeCondition(index)"
         >
-          &times;
+          {{ labels.removeCondition }}
         </button>
       </div>
     </div>
 
     <!-- Add condition button -->
     <button type="button" class="gp-grid-filter-add" @click="addCondition('=')">
-      + Add condition
+      {{ labels.addCondition }}
     </button>
 
     <!-- Apply/Clear buttons -->
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" @click="handleClear">
-        Clear
+        {{ labels.clear }}
       </button>
       <button type="button" class="gp-grid-filter-btn-apply" @click="handleApply">
-        Apply
+        {{ labels.apply }}
       </button>
     </div>
   </div>

@@ -46,6 +46,14 @@ export interface ColumnDefinition {
    * for cells whose custom renderer already provides its own tooltip.
    */
   tooltip?: boolean;
+  /**
+   * Whether long cell text wraps onto additional lines instead of being
+   * truncated with an ellipsis. Wrapped text is clipped to the fixed row
+   * height (rows do not auto-grow) — use `peekable` (double-click) or the
+   * native `tooltip` to read the full value. Only affects the default text
+   * renderer, not custom `cellRenderer` output. Default: false.
+   */
+  wrapText?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);

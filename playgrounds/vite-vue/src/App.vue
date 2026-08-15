@@ -5,6 +5,7 @@ import {
     useGridData,
     type ColumnDefinition,
     type HighlightingOptions,
+    type GridLabels,
 } from "@gp-grid/vue";
 import Currency from "./renderers/Currency.vue";
 import StatusBadge from "./renderers/StatusBadge.vue";
@@ -114,6 +115,9 @@ const columns: ColumnDefinition[] = [
         width: 260,
         headerName: "Bio",
         distinctValues: bioPool,
+        // wrapText: long text flows onto new lines (clipped to the fixed row
+        // height) instead of truncating with an ellipsis.
+        wrapText: true,
         // Not editable → double-click opens the read-only peek overlay
         // (once the Vue wrapper renders one — currently behaviour-only).
     },
@@ -155,6 +159,14 @@ const { dataSource, updateRow } = useGridData<Person>(generateRowData(), {
 });
 
 const rowIdToUpdate = ref(1);
+
+// Localized labels demo — override only what you need; the rest fall back to
+// the English defaults.
+const gridLabels: Partial<GridLabels> = {
+    and: "E",
+    filterTitle: "Filtra: {column}",
+    apply: "Applica",
+};
 
 const handleUpdateRow = () => {
     updateRow(rowIdToUpdate.value, {
@@ -220,6 +232,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
             :columns="columns"
+            :labels="gridLabels"
             :overscan="12"
             :data-source="dataSource"
             :row-height="36"

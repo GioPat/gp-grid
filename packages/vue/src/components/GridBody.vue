@@ -9,6 +9,7 @@ import type {
   DragState,
   SlotData,
   FillHandlePosition,
+  GridLabels,
   VisibleColumnInfo,
 } from "@gp-grid/core";
 import {
@@ -17,6 +18,7 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  formatLabel,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
@@ -36,6 +38,7 @@ const props = defineProps<{
   error: string | null;
   isLoading: boolean;
   totalRows: number;
+  labels: GridLabels;
   slotsArray: SlotData[];
   visibleColumnsWithIndices: VisibleColumnInfo[];
   columnPositions: number[];
@@ -90,11 +93,15 @@ const getCellClasses = (
     props.coreRef?.highlight?.computeCombinedCellClasses(rowIndex, colIndex, column, rowData) ?? [];
 
   const isRowDragHandle = column.rowDrag === true;
+  // Wrap only affects the default text content, so it is irrelevant (and would
+  // clash with the edit input) in edit mode.
+  const wrapText = column.wrapText === true && !isEditing;
 
   return [
     baseCellClasses,
     ...highlightCellClasses,
     isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
+    wrapText ? "gp-grid-cell--wrap" : "",
   ].filter(Boolean).join(" ");
 };
 
@@ -217,7 +224,7 @@ defineExpose({ bodyRef });
 
     <!-- Error message -->
     <div v-if="props.error" class="gp-grid-error">
-      Error: {{ props.error }}
+      {{ formatLabel(props.labels.errorPrefix, { message: props.error }) }}
     </div>
 
     <!-- Empty state -->
@@ -225,7 +232,7 @@ defineExpose({ bodyRef });
       v-if="!props.isLoading && !props.error && props.totalRows === 0"
       class="gp-grid-empty"
     >
-      No data to display
+      {{ props.labels.emptyState }}
     </div>
   </div>
 </template>

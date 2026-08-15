@@ -1,29 +1,19 @@
 // packages/react/src/components/TextFilterContent.tsx
 
 import React, { useState, useMemo, useCallback } from "react";
-import type { CellValue, ColumnFilterModel, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
-import { groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
+import type { CellValue, ColumnFilterModel, GridLabels, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
+import { formatLabel, getTextOperatorOptions, groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
 
 export interface TextFilterContentProps {
   distinctValues: CellValue[];
   valueFormatter?: (v: CellValue) => string;
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
   onApply: (filter: ColumnFilterModel | null) => void;
   onClose: () => void;
 }
 
 const MAX_VALUES_FOR_LIST = 100;
-
-const OPERATORS: { value: TextFilterOperator; label: string }[] = [
-  { value: "contains", label: "Contains" },
-  { value: "notContains", label: "Does not contain" },
-  { value: "equals", label: "Equals" },
-  { value: "notEquals", label: "Does not equal" },
-  { value: "startsWith", label: "Starts with" },
-  { value: "endsWith", label: "Ends with" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Is not blank" },
-];
 
 interface Condition {
   operator: TextFilterOperator;
@@ -37,9 +27,12 @@ export function TextFilterContent({
   distinctValues,
   valueFormatter,
   currentFilter,
+  labels,
   onApply,
   onClose,
 }: TextFilterContentProps): React.ReactNode {
+  const operators = useMemo(() => getTextOperatorOptions(labels), [labels]);
+
   // Checkbox rows: one entry per display label, carrying every raw value
   // that formats to it. The filter model stores the RAW values; labels only
   // exist inside this popup.
@@ -227,14 +220,14 @@ export function TextFilterContent({
             className={mode === "values" ? "active" : ""}
             onClick={() => setMode("values")}
           >
-            Values
+            {labels.valuesMode}
           </button>
           <button
             type="button"
             className={mode === "condition" ? "active" : ""}
             onClick={() => setMode("condition")}
           >
-            Condition
+            {labels.conditionMode}
           </button>
         </div>
       )}
@@ -242,7 +235,7 @@ export function TextFilterContent({
       {/* Too many values message */}
       {hasTooManyValues && mode === "condition" && (
         <div className="gp-grid-filter-info">
-          Too many unique values ({uniqueEntries.length}). Use conditions to filter.
+          {formatLabel(labels.tooManyValues, { count: uniqueEntries.length })}
         </div>
       )}
 
@@ -253,7 +246,7 @@ export function TextFilterContent({
           <input
             className="gp-grid-filter-search"
             type="text"
-            placeholder="Search..."
+            placeholder={labels.searchPlaceholder}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             autoFocus
@@ -262,10 +255,10 @@ export function TextFilterContent({
           {/* Select all / Deselect all */}
           <div className="gp-grid-filter-actions">
             <button type="button" onClick={handleSelectAll} disabled={allSelected}>
-              Select All
+              {labels.selectAll}
             </button>
             <button type="button" onClick={handleDeselectAll}>
-              Deselect All
+              {labels.deselectAll}
             </button>
           </div>
 
@@ -279,7 +272,7 @@ export function TextFilterContent({
                   checked={includeBlanks}
                   onChange={() => setIncludeBlanks(!includeBlanks)}
                 />
-                <span className="gp-grid-filter-blank">(Blanks)</span>
+                <span className="gp-grid-filter-blank">{labels.blanks}</span>
               </label>
             )}
 
@@ -310,14 +303,14 @@ export function TextFilterContent({
                     className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
                     onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
                   >
-                    AND
+                    {labels.and}
                   </button>
                   <button
                     type="button"
                     className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
                     onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
                   >
-                    OR
+                    {labels.or}
                   </button>
                 </div>
               )}
@@ -328,7 +321,7 @@ export function TextFilterContent({
                   onChange={(e) => updateCondition(index, { operator: e.target.value as TextFilterOperator })}
                   autoFocus={index === 0}
                 >
-                  {OPERATORS.map((op) => (
+                  {operators.map((op) => (
                     <option key={op.value} value={op.value}>
                       {op.label}
                     </option>
@@ -340,7 +333,7 @@ export function TextFilterContent({
                     type="text"
                     value={cond.value}
                     onChange={(e) => updateCondition(index, { value: e.target.value })}
-                    placeholder="Value"
+                    placeholder={labels.valuePlaceholder}
                     className="gp-grid-filter-text-input"
                   />
                 )}
@@ -351,7 +344,7 @@ export function TextFilterContent({
                     className="gp-grid-filter-remove"
                     onClick={() => removeCondition(index)}
                   >
-                    ×
+                    {labels.removeCondition}
                   </button>
                 )}
               </div>
@@ -359,7 +352,7 @@ export function TextFilterContent({
           ))}
 
           <button type="button" className="gp-grid-filter-add" onClick={addCondition}>
-            + Add condition
+            {labels.addCondition}
           </button>
         </>
       )}
@@ -367,10 +360,10 @@ export function TextFilterContent({
       {/* Apply / Clear buttons */}
       <div className="gp-grid-filter-buttons">
         <button type="button" className="gp-grid-filter-btn-clear" onClick={handleClear}>
-          Clear
+          {labels.clear}
         </button>
         <button type="button" className="gp-grid-filter-btn-apply" onClick={handleApply}>
-          Apply
+          {labels.apply}
         </button>
       </div>
     </div>

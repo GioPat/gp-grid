@@ -14,9 +14,10 @@ import {
   calculateScaledColumnPositions,
   getTotalWidth,
   TouchScrollController,
+  resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, GridLabels, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -66,6 +67,8 @@ const props = withDefaults(
     onColumnResized?: (colIndex: number, newWidth: number) => void;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+    /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
+    labels?: Partial<GridLabels>;
   }>(),
   {
     overscan: 3,
@@ -106,6 +109,7 @@ const { state, applyInstructions, reset: resetState } = useGridState({
 
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
+const resolvedLabels = computed(() => resolveGridLabels(props.labels));
 
 // Effective columns: use core-updated columns (after resize/move) or fall back to props.
 // Cast user props to core's ColumnDefinition for internal plumbing — the Vue-widened
@@ -471,6 +475,7 @@ defineExpose({
       :error="state.error"
       :is-loading="state.isLoading"
       :total-rows="state.totalRows"
+      :labels="resolvedLabels"
       :slots-array="slotsArray"
       :visible-columns-with-indices="visibleColumnsWithIndices"
       :column-positions="columnPositions"
@@ -527,6 +532,7 @@ defineExpose({
       :container-ref="outerContainerRef"
       :distinct-values="state.filterPopup.distinctValues"
       :current-filter="state.filterPopup.currentFilter"
+      :labels="resolvedLabels"
       @apply="handleFilterApply"
       @close="handleFilterPopupClose"
     />

@@ -24,6 +24,10 @@ All notable changes to gp-grid will be documented in this file.
 - Multiple conditions with AND/OR combination
 - Advanced filter model (`ColumnFilterModel`) with typed conditions
 
+#### Text wrapping
+- Fixed long cell text hard-clipping mid-character: default cells now truncate with an ellipsis (`…`).
+- Per-column `wrapText` option to wrap long cell text onto multiple lines (clipped to the fixed row height).
+
 ### Changed
 - `FilterModel` type changed from `Record<string, string>` to `Record<string, ColumnFilterModel>`
 - Header rendering now includes sort/filter indicators and icons

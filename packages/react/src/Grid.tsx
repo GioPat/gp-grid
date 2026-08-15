@@ -16,8 +16,9 @@ import {
   getTotalWidth,
   calculateFillHandlePosition,
   TouchScrollController,
+  resolveGridLabels,
 } from "@gp-grid/core";
-import type { ColumnFilterModel, DataSource } from "@gp-grid/core";
+import type { ColumnFilterModel, DataSource, GridLabels } from "@gp-grid/core";
 import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
@@ -69,7 +70,13 @@ export function Grid<TData = unknown>(
     onRowDragEnd,
     onColumnResized,
     onColumnMoved,
+    labels,
   } = props;
+
+  const resolvedLabels = useMemo<GridLabels>(
+    () => resolveGridLabels(labels),
+    [labels],
+  );
 
   const outerContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -557,6 +564,7 @@ export function Grid<TData = unknown>(
         error={state.error}
         isLoading={state.isLoading}
         totalRows={state.totalRows}
+        labels={resolvedLabels}
         slotsArray={slotsArray}
         visibleColumnsWithIndices={visibleColumnsWithIndices}
         columnPositions={columnPositions}
@@ -609,6 +617,7 @@ export function Grid<TData = unknown>(
             containerRef={outerContainerRef}
             distinctValues={state.filterPopup.distinctValues}
             currentFilter={state.filterPopup.currentFilter}
+            labels={resolvedLabels}
             onApply={handleFilterApply}
             onClose={handleFilterPopupClose}
           />

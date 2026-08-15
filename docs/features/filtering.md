@@ -38,15 +38,15 @@ For `number` column type. Operators:
 
 | Operator | Display | Description |
 |----------|---------|-------------|
-| `=` | = | Equal to |
-| `!=` | ≠ | Not equal to |
-| `>` | > | Greater than |
-| `<` | < | Less than |
-| `>=` | ≥ | Greater or equal |
-| `<=` | ≤ | Less or equal |
-| `between` | ↔ | Between two values |
+| `=` | Equals | Equal to |
+| `!=` | Does not equal | Not equal to |
+| `>` | Greater than | Greater than |
+| `<` | Less than | Less than |
+| `>=` | Greater than or equal | Greater or equal |
+| `<=` | Less than or equal | Less or equal |
+| `between` | Between | Between two values |
 | `blank` | Is blank | Null/undefined values |
-| `notBlank` | Not blank | Non-null values |
+| `notBlank` | Is not blank | Non-null values |
 
 ### Date Filter
 
@@ -161,3 +161,48 @@ core.hasActiveFilter(colId: string): boolean;
 ## Keyboard Shortcuts
 
 - **Escape**: Close filter popup without applying
+
+## Localization (labels)
+
+Every user-visible string in the grid is sourced from a shared `GridLabels`
+object (English defaults live in `@gp-grid/core`). Override any of them with
+the `labels` prop — pass a partial object, and `operators` is deep-merged so
+you can override a single operator label without touching the rest.
+
+```tsx
+<Grid
+  columns={columns}
+  rowData={rows}
+  rowHeight={32}
+  labels={{
+    emptyState: 'No rows to show',
+    operators: { greaterThan: 'Superiore a' },
+  }}
+/>
+```
+
+Vue: `:labels="{ emptyState: 'No rows to show' }"`.
+Angular: `[labels]="{ emptyState: 'No rows to show' }"`.
+
+`GridLabels` fields:
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `filterTitle` | `Filter: {column}` | `{column}` → header name |
+| `and` / `or` | `AND` / `OR` | Condition combination toggles |
+| `valuePlaceholder` | `Value` | Filter value input placeholder |
+| `betweenSeparator` | `to` | Between-operator separator |
+| `addCondition` | `+ Add condition` | |
+| `removeCondition` | `×` | |
+| `clear` / `apply` | `Clear` / `Apply` | |
+| `valuesMode` / `conditionMode` | `Values` / `Condition` | Text filter mode toggle |
+| `searchPlaceholder` | `Search...` | |
+| `selectAll` / `deselectAll` | `Select All` / `Deselect All` | |
+| `blanks` | `(Blanks)` | |
+| `tooManyValues` | `Too many unique values ({count}). Use conditions to filter.` | `{count}` → entry count |
+| `emptyState` | `No data to display` | |
+| `errorPrefix` | `Error: {message}` | `{message}` → error text |
+
+`labels.operators` keys: `contains`, `notContains`, `startsWith`, `endsWith`,
+`equals`, `notEquals`, `greaterThan`, `lessThan`, `greaterThanOrEqual`,
+`lessThanOrEqual`, `between`, `blank`, `notBlank`.

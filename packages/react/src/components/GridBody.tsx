@@ -10,6 +10,7 @@ import type {
   DragState,
   SlotData,
   FillHandlePosition,
+  GridLabels,
   VisibleColumnInfo,
 } from "@gp-grid/core";
 import {
@@ -19,6 +20,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
   formatCellValue,
+  formatLabel,
   getFieldValue,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
@@ -38,6 +40,7 @@ export interface GridBodyProps<TData = unknown> {
   error: string | null;
   isLoading: boolean;
   totalRows: number;
+  labels: GridLabels;
   slotsArray: SlotData<TData>[];
   visibleColumnsWithIndices: VisibleColumnInfo[];
   columnPositions: number[];
@@ -74,6 +77,7 @@ const GridBodyInner = <TData = unknown>(
     error,
     isLoading,
     totalRows,
+    labels,
     slotsArray,
     visibleColumnsWithIndices,
     columnPositions,
@@ -187,11 +191,15 @@ const GridBodyInner = <TData = unknown>(
                     ) ?? [];
 
                   const isRowDragHandle = column.rowDrag === true;
+                  // Wrap only affects the default text content, so it is
+                  // irrelevant (and would clash with the edit input) in edit mode.
+                  const wrapText = column.wrapText === true && !isEditing;
 
                   const cellClasses = [
                     baseCellClasses,
                     ...highlightCellClasses,
                     isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
+                    wrapText ? "gp-grid-cell--wrap" : "",
                   ]
                     .filter(Boolean)
                     .join(" ");
@@ -290,12 +298,12 @@ const GridBodyInner = <TData = unknown>(
 
       {/* Error message */}
       {error && (
-        <div className="gp-grid-error">Error: {error}</div>
+        <div className="gp-grid-error">{formatLabel(labels.errorPrefix, { message: error })}</div>
       )}
 
       {/* Empty state */}
       {!isLoading && !error && totalRows === 0 && (
-        <div className="gp-grid-empty">No data to display</div>
+        <div className="gp-grid-empty">{labels.emptyState}</div>
       )}
     </div>
   );

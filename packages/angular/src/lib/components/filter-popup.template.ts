@@ -12,7 +12,7 @@ export const FILTER_POPUP_TEMPLATE = `
   (click)="$event.stopPropagation()">
 
   <div class="gp-grid-filter-header">
-    Filter: {{ column().headerName ?? column().field }}
+    {{ filterTitle() }}
   </div>
 
   <div [class]="'gp-grid-filter-content ' + (isNumberColumn() ? 'gp-grid-filter-number' : 'gp-grid-filter-text')">
@@ -25,13 +25,13 @@ export const FILTER_POPUP_TEMPLATE = `
                 type="button"
                 [class.active]="numberConditions[i - 1]?.nextOperator === 'and'"
                 (click)="setNumberNextOp(i - 1, 'and')">
-                AND
+                {{ labels().and }}
               </button>
               <button
                 type="button"
                 [class.active]="numberConditions[i - 1]?.nextOperator === 'or'"
                 (click)="setNumberNextOp(i - 1, 'or')">
-                OR
+                {{ labels().or }}
               </button>
             </div>
           }
@@ -39,7 +39,7 @@ export const FILTER_POPUP_TEMPLATE = `
             <select
               [value]="cond.operator"
               (change)="onNumberOperatorChange(i, $any($event.target).value)">
-              @for (op of numberOperators; track op.value) {
+              @for (op of numberOperators(); track op.value) {
                 <option [value]="op.value">{{ op.label }}</option>
               }
             </select>
@@ -48,27 +48,27 @@ export const FILTER_POPUP_TEMPLATE = `
                 type="number"
                 [value]="cond.value"
                 (input)="cond.value = $any($event.target).value"
-                placeholder="Value" />
+                [placeholder]="labels().valuePlaceholder" />
               @if (cond.operator === 'between') {
-                <span class="gp-grid-filter-to">to</span>
+                <span class="gp-grid-filter-to">{{ labels().betweenSeparator }}</span>
                 <input
                   type="number"
                   [value]="cond.valueTo"
                   (input)="cond.valueTo = $any($event.target).value"
-                  placeholder="Value" />
+                  [placeholder]="labels().valuePlaceholder" />
               }
             }
             @if (numberConditions.length > 1) {
               <button
                 type="button"
                 class="gp-grid-filter-remove"
-                (click)="removeNumberCondition(i)">×</button>
+                (click)="removeNumberCondition(i)">{{ labels().removeCondition }}</button>
             }
           </div>
         </div>
       }
       <button type="button" class="gp-grid-filter-add" (click)="addNumberCondition()">
-        + Add condition
+        {{ labels().addCondition }}
       </button>
   } @else {
       @if (showValuesMode()) {
@@ -77,13 +77,13 @@ export const FILTER_POPUP_TEMPLATE = `
             type="button"
             [class.active]="filterMode === 'values'"
             (click)="filterMode = 'values'">
-            Values
+            {{ labels().valuesMode }}
           </button>
           <button
             type="button"
             [class.active]="filterMode === 'condition'"
             (click)="filterMode = 'condition'">
-            Condition
+            {{ labels().conditionMode }}
           </button>
         </div>
       }
@@ -94,10 +94,10 @@ export const FILTER_POPUP_TEMPLATE = `
           type="text"
           [value]="searchText"
           (input)="searchText = $any($event.target).value"
-          placeholder="Search..." />
+          [placeholder]="labels().searchPlaceholder" />
         <div class="gp-grid-filter-actions">
-          <button type="button" (click)="selectAll()">Select All</button>
-          <button type="button" (click)="deselectAll()">Deselect All</button>
+          <button type="button" (click)="selectAll()">{{ labels().selectAll }}</button>
+          <button type="button" (click)="deselectAll()">{{ labels().deselectAll }}</button>
         </div>
         <div class="gp-grid-filter-list">
           @if (hasBlanks()) {
@@ -106,7 +106,7 @@ export const FILTER_POPUP_TEMPLATE = `
                 type="checkbox"
                 [checked]="includeBlanks"
                 (change)="includeBlanks = $any($event.target).checked" />
-              <span class="gp-grid-filter-blank">(Blanks)</span>
+              <span class="gp-grid-filter-blank">{{ labels().blanks }}</span>
             </label>
           }
           @for (entry of filteredUniqueEntries(); track entry.label) {
@@ -130,13 +130,13 @@ export const FILTER_POPUP_TEMPLATE = `
                   type="button"
                   [class.active]="textConditions[i - 1]?.nextOperator === 'and'"
                   (click)="setTextNextOp(i - 1, 'and')">
-                  AND
+                  {{ labels().and }}
                 </button>
                 <button
                   type="button"
                   [class.active]="textConditions[i - 1]?.nextOperator === 'or'"
                   (click)="setTextNextOp(i - 1, 'or')">
-                  OR
+                  {{ labels().or }}
                 </button>
               </div>
             }
@@ -144,7 +144,7 @@ export const FILTER_POPUP_TEMPLATE = `
               <select
                 [value]="cond.operator"
                 (change)="onTextOperatorChange(i, $any($event.target).value)">
-                @for (op of textOperators; track op.value) {
+                @for (op of textOperators(); track op.value) {
                   <option [value]="op.value">{{ op.label }}</option>
                 }
               </select>
@@ -154,29 +154,29 @@ export const FILTER_POPUP_TEMPLATE = `
                   type="text"
                   [value]="cond.value"
                   (input)="cond.value = $any($event.target).value"
-                  placeholder="Value" />
+                  [placeholder]="labels().valuePlaceholder" />
               }
               @if (textConditions.length > 1) {
                 <button
                   type="button"
                   class="gp-grid-filter-remove"
-                  (click)="removeTextCondition(i)">×</button>
+                  (click)="removeTextCondition(i)">{{ labels().removeCondition }}</button>
               }
             </div>
           </div>
         }
         <button type="button" class="gp-grid-filter-add" (click)="addTextCondition()">
-          + Add condition
+          {{ labels().addCondition }}
         </button>
       }
   }
 
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" (click)="handleClear()">
-        Clear
+        {{ labels().clear }}
       </button>
       <button type="button" class="gp-grid-filter-btn-apply" (click)="handleApply()">
-        Apply
+        {{ labels().apply }}
       </button>
     </div>
   </div>

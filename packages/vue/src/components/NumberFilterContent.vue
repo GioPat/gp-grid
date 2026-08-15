@@ -1,28 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
+import type { ColumnFilterModel, GridLabels, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
+import { getNumberOperatorOptions } from "@gp-grid/core";
 import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
-
-const OPERATORS: { value: NumberFilterOperator; label: string }[] = [
-  { value: "=", label: "=" },
-  { value: "!=", label: "\u2260" },
-  { value: ">", label: ">" },
-  { value: "<", label: "<" },
-  { value: ">=", label: "\u2265" },
-  { value: "<=", label: "\u2264" },
-  { value: "between", label: "\u2194" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Not blank" },
-];
 
 const props = defineProps<{
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
 }>();
 
 const emit = defineEmits<{
   apply: [filter: ColumnFilterModel | null];
   close: [];
 }>();
+
+const operators = computed(() => getNumberOperatorOptions(props.labels));
 
 // Parse initial conditions from current filter
 const initialConditions = computed((): LocalFilterCondition<NumberFilterOperator>[] => {
@@ -93,14 +85,14 @@ function handleClear(): void {
           :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
           @click="updateCondition(index - 1, { nextOperator: 'and' })"
         >
-          AND
+          {{ labels.and }}
         </button>
         <button
           type="button"
           :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
           @click="updateCondition(index - 1, { nextOperator: 'or' })"
         >
-          OR
+          {{ labels.or }}
         </button>
       </div>
 
@@ -110,7 +102,7 @@ function handleClear(): void {
           :value="cond.operator"
           @change="updateCondition(index, { operator: ($event.target as HTMLSelectElement).value as NumberFilterOperator })"
         >
-          <option v-for="op in OPERATORS" :key="op.value" :value="op.value">
+          <option v-for="op in operators" :key="op.value" :value="op.value">
             {{ op.label }}
           </option>
         </select>
@@ -120,17 +112,17 @@ function handleClear(): void {
           v-if="cond.operator !== 'blank' && cond.operator !== 'notBlank'"
           type="number"
           :value="cond.value"
-          placeholder="Value"
+          :placeholder="labels.valuePlaceholder"
           @input="updateCondition(index, { value: ($event.target as HTMLInputElement).value })"
         />
 
         <!-- Second number input for "between" -->
         <template v-if="cond.operator === 'between'">
-          <span class="gp-grid-filter-to">to</span>
+          <span class="gp-grid-filter-to">{{ labels.betweenSeparator }}</span>
           <input
             type="number"
             :value="cond.valueTo"
-            placeholder="Value"
+            :placeholder="labels.valuePlaceholder"
             @input="updateCondition(index, { valueTo: ($event.target as HTMLInputElement).value })"
           />
         </template>
@@ -142,23 +134,23 @@ function handleClear(): void {
           class="gp-grid-filter-remove"
           @click="removeCondition(index)"
         >
-          &times;
+          {{ labels.removeCondition }}
         </button>
       </div>
     </div>
 
     <!-- Add condition button -->
     <button type="button" class="gp-grid-filter-add" @click="addCondition('=')">
-      + Add condition
+      {{ labels.addCondition }}
     </button>
 
     <!-- Apply/Clear buttons -->
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" @click="handleClear">
-        Clear
+        {{ labels.clear }}
       </button>
       <button type="button" class="gp-grid-filter-btn-apply" @click="handleApply">
-        Apply
+        {{ labels.apply }}
       </button>
     </div>
   </div>

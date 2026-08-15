@@ -11,18 +11,25 @@ import {
   ElementRef,
   HostListener,
 } from '@angular/core';
-import { calculateFilterPopupPosition, groupDistinctValues, isBlankCellValue } from '@gp-grid/core';
+import {
+  calculateFilterPopupPosition,
+  groupDistinctValues,
+  isBlankCellValue,
+  defaultGridLabels,
+  formatLabel,
+  getTextOperatorOptions,
+  getNumberOperatorOptions,
+} from '@gp-grid/core';
 import type {
   ColumnDefinition,
   CellValue,
   ColumnFilterModel,
   DistinctValueEntry,
+  GridLabels,
 } from '@gp-grid/core';
 import { FILTER_POPUP_TEMPLATE } from './filter-popup.template';
 import {
   MAX_CHECKBOX_VALUES,
-  NUMBER_OPERATORS,
-  TEXT_OPERATORS,
   type FilterMode,
   type NumberConditionState,
   type TextConditionState,
@@ -53,6 +60,7 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   anchorEl = input.required<HTMLElement>();
   distinctValues = input.required<CellValue[]>();
   currentFilter = input<ColumnFilterModel | undefined>(undefined);
+  labels = input<GridLabels>(defaultGridLabels);
 
   apply = output<{ colId: string; filter: ColumnFilterModel | null }>();
   close = output<void>();
@@ -70,8 +78,20 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   textConditions: TextConditionState[] = [defaultTextCondition()];
   numberConditions: NumberConditionState[] = [defaultNumberCondition()];
 
-  readonly textOperators = TEXT_OPERATORS;
-  readonly numberOperators = NUMBER_OPERATORS;
+  protected textOperators(): ReturnType<typeof getTextOperatorOptions> {
+    return getTextOperatorOptions(this.labels());
+  }
+
+  protected numberOperators(): ReturnType<typeof getNumberOperatorOptions> {
+    return getNumberOperatorOptions(this.labels());
+  }
+
+  protected filterTitle(): string {
+    const column = this.column();
+    return formatLabel(this.labels().filterTitle, {
+      column: column.headerName ?? column.field,
+    });
+  }
 
   protected readonly isValueLessTextOp = isValueLessTextOp;
   protected readonly isValueLessNumberOp = isValueLessNumberOp;

@@ -1,25 +1,15 @@
 // packages/react/src/components/NumberFilterContent.tsx
 
 import React, { useState, useCallback, useMemo } from "react";
-import type { ColumnFilterModel, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
+import { getNumberOperatorOptions } from "@gp-grid/core";
+import type { ColumnFilterModel, GridLabels, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
 
 export interface NumberFilterContentProps {
   currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
   onApply: (filter: ColumnFilterModel | null) => void;
   onClose: () => void;
 }
-
-const OPERATORS: { value: NumberFilterOperator; label: string }[] = [
-  { value: "=", label: "=" },
-  { value: "!=", label: "\u2260" },
-  { value: ">", label: ">" },
-  { value: "<", label: "<" },
-  { value: ">=", label: "\u2265" },
-  { value: "<=", label: "\u2264" },
-  { value: "between", label: "\u2194" },
-  { value: "blank", label: "Is blank" },
-  { value: "notBlank", label: "Not blank" },
-];
 
 interface Condition {
   operator: NumberFilterOperator;
@@ -30,9 +20,12 @@ interface Condition {
 
 export function NumberFilterContent({
   currentFilter,
+  labels,
   onApply,
   onClose,
 }: NumberFilterContentProps): React.ReactNode {
+  const operators = useMemo(() => getNumberOperatorOptions(labels), [labels]);
+
   // Initialize from current filter
   const initialConditions = useMemo((): Condition[] => {
     if (!currentFilter?.conditions.length) {
@@ -111,14 +104,14 @@ export function NumberFilterContent({
                 className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
                 onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
               >
-                AND
+                {labels.and}
               </button>
               <button
                 type="button"
                 className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
                 onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
               >
-                OR
+                {labels.or}
               </button>
             </div>
           )}
@@ -128,7 +121,7 @@ export function NumberFilterContent({
               value={cond.operator}
               onChange={(e) => updateCondition(index, { operator: e.target.value as NumberFilterOperator })}
             >
-              {OPERATORS.map((op) => (
+              {operators.map((op) => (
                 <option key={op.value} value={op.value}>
                   {op.label}
                 </option>
@@ -140,18 +133,18 @@ export function NumberFilterContent({
                 type="number"
                 value={cond.value}
                 onChange={(e) => updateCondition(index, { value: e.target.value })}
-                placeholder="Value"
+                placeholder={labels.valuePlaceholder}
               />
             )}
 
             {cond.operator === "between" && (
               <>
-                <span className="gp-grid-filter-to">to</span>
+                <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
                 <input
                   type="number"
                   value={cond.valueTo}
                   onChange={(e) => updateCondition(index, { valueTo: e.target.value })}
-                  placeholder="Value"
+                  placeholder={labels.valuePlaceholder}
                 />
               </>
             )}
@@ -162,7 +155,7 @@ export function NumberFilterContent({
                 className="gp-grid-filter-remove"
                 onClick={() => removeCondition(index)}
               >
-                ×
+                {labels.removeCondition}
               </button>
             )}
           </div>
@@ -170,15 +163,15 @@ export function NumberFilterContent({
       ))}
 
       <button type="button" className="gp-grid-filter-add" onClick={addCondition}>
-        + Add condition
+        {labels.addCondition}
       </button>
 
       <div className="gp-grid-filter-buttons">
         <button type="button" className="gp-grid-filter-btn-clear" onClick={handleClear}>
-          Clear
+          {labels.clear}
         </button>
         <button type="button" className="gp-grid-filter-btn-apply" onClick={handleApply}>
-          Apply
+          {labels.apply}
         </button>
       </div>
     </div>

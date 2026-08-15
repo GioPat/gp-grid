@@ -306,6 +306,21 @@ export type { PopupPosition } from "./utils/popup-position";
 /** Peek overlay Ctrl/Cmd+A scoping helper. */
 export { bindPeekSelectAll } from "./utils/peek-select-all";
 
+/** Localization: shared label model and helpers */
+export {
+  defaultGridLabels,
+  resolveGridLabels,
+  formatLabel,
+  getTextOperatorOptions,
+  getNumberOperatorOptions,
+  getDateOperatorOptions,
+} from "./i18n";
+export type {
+  GridLabels,
+  GridFilterOperatorLabels,
+  FilterOperatorOption,
+} from "./i18n";
+
 /**
  * Framework-adapter kit. Reactivity-agnostic primitives shared by the
  * react/vue/angular wrappers so pointer-event serialization, batch state

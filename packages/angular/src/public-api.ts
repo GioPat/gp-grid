@@ -49,6 +49,10 @@ export type {
   HighlightingOptions,
   HighlightContext,
 
+  // Localization
+  GridLabels,
+  GridFilterOperatorLabels,
+
   // Instructions (for advanced use cases)
   GridInstruction,
 } from '@gp-grid/core';

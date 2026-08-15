@@ -49,6 +49,7 @@ export const GP_GRID_TEMPLATE = `
         [computeCellClasses]="computeCellClassesFn"
         [fillHandlePosition]="vm.fillHandlePosition()"
         [dragState]="vm.dragState()"
+        [labels]="resolvedLabels()"
         (scrolled)="onBodyScroll($event)"
         (cellPointerDown)="onCellPointerDown($event)"
         (cellPointerEnter)="onCellPointerEnter($event)"
@@ -61,6 +62,7 @@ export const GP_GRID_TEMPLATE = `
       />
       <gp-grid-overlays
         [filterPopup]="vm.filterPopup()"
+        [labels]="resolvedLabels()"
         [isLoading]="vm.isLoading()"
         [errorMessage]="vm.errorMessage()"
         [headerHeight]="headerHeight()"

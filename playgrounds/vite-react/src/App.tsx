@@ -10,6 +10,7 @@ import {
   type EditRendererParams,
   type RowId,
   type CellValueChangedEvent,
+  type GridLabels,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
@@ -319,8 +320,11 @@ const columns: ColumnDefinition[] = [
     width: 260,
     headerName: "Bio",
     distinctValues: bioPool,
-    // Not editable → double-click opens the read-only peek overlay so
-    // the full multi-line value can be read without changing row height.
+    // wrapText: long text flows onto new lines (clipped to the fixed row
+    // height) instead of truncating with an ellipsis.
+    wrapText: true,
+    // Not editable → double-click opens the read-only peek overlay so the
+    // full value can be read without changing row height.
   },
   {
     field: "createdAt",
@@ -424,6 +428,12 @@ function MainDemo() {
     });
   };
 
+  const gridLabels: Partial<GridLabels> = {
+    and: "E d citemmurt",
+    filterTitle: "Filtra: {column}",
+    apply: "Applica",
+  };
+
   return (
     <>
       <h2 style={{ marginBottom: "16px", color: "#f3f4f6" }}>
@@ -460,6 +470,7 @@ function MainDemo() {
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
           columns={columns}
+          labels={gridLabels}
           overscan={12}
           dataSource={dataSource}
           rowHeight={36}

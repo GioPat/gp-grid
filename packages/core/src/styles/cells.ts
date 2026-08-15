@@ -34,10 +34,32 @@ export const cellStyles: string = `
   box-sizing: border-box;
   display: flex;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Default cell content wrapper - the framework adapters wrap plain-text values
+   in this element so text-overflow can apply (it has no effect on the flex
+   container itself, which previously caused long text to hard-clip). */
+.gp-grid-cell-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Wrapped cell content - ColumnDefinition.wrapText: true.
+   Text flows onto additional lines and is clipped to the fixed row height. */
+.gp-grid-cell--wrap {
+  align-items: flex-start;
+}
+
+.gp-grid-cell--wrap .gp-grid-cell-content {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 
 /* Visual properties - :where() for zero specificity, so user highlight classes always win */

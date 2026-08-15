@@ -9,6 +9,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   GridCore,
+  GridLabels,
   HighlightingOptions,
   RowLoadingOptions,
 } from "@gp-grid/core";
@@ -106,4 +107,6 @@ export interface GridProps<TData = unknown> {
   onColumnResized?: (colIndex: number, newWidth: number) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
+  labels?: Partial<GridLabels>;
 }

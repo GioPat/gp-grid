@@ -7,6 +7,7 @@ import type {
   CellRendererParams,
   CellValueChangedEvent,
   EditRendererParams,
+  GridLabels,
   HeaderRendererParams,
   DataSource,
   RowLoadingOptions,
@@ -92,4 +93,6 @@ export interface GpGridProps<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
+  /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
+  labels?: Partial<GridLabels>;
 }

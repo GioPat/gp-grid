@@ -52,6 +52,10 @@ export type {
   EditRendererParams,
   HeaderRendererParams,
 
+  // Localization
+  GridLabels,
+  GridFilterOperatorLabels,
+
   // Instructions (for advanced use cases)
   GridInstruction,
 } from "@gp-grid/core";
