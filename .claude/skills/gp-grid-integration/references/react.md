@@ -327,6 +327,33 @@ const headerRenderers = {
 
 For row drag, `onRowDragEnd` fires after the user drops. The consumer is responsible for actually reordering the underlying data — gp-grid does not mutate the array. With `useGridData` you'd typically rebuild and re-set, or use `removeRows` + `addRows`.
 
+## Localization and text wrapping
+
+Override any user-visible string with the `labels` prop (`Partial<GridLabels>`); unspecified labels keep their English defaults:
+
+```tsx
+import { Grid, type GridLabels } from "@gp-grid/react";
+
+const labels: Partial<GridLabels> = {
+  filterTitle: "Filtra: {column}", // {column} is replaced with the header name
+  and: "E",
+  apply: "Applica",
+  emptyState: "Nessun dato",
+};
+
+<Grid columns={columns} rowData={rows} rowHeight={36} labels={labels} />;
+```
+
+`GridLabels` covers the whole filter popup plus the grid chrome (empty state, error prefix). The nested `operators` object holds the filter dropdown labels (`contains`, `startsWith`, `between`, …); it is typed as a complete `GridFilterOperatorLabels`, so to change a single operator spread the English defaults: `operators: { ...defaultGridLabels.operators, contains: "Contiene" }` (import `defaultGridLabels` from `@gp-grid/core`).
+
+Long text: by default a cell truncates with an ellipsis and shows the full value in a native tooltip. Add `wrapText: true` to a column to wrap onto new lines instead (clipped to the fixed row height):
+
+```tsx
+const columns: ColumnDefinition[] = [
+  { field: "bio", cellDataType: "text", width: 300, wrapText: true },
+];
+```
+
 ## Programmatic API (`gridRef`)
 
 ```tsx
@@ -425,6 +452,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
+| `labels` | `Partial<GridLabels>` | English defaults | override filter/grid text (localization) |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |

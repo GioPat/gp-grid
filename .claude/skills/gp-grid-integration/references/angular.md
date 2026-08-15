@@ -404,6 +404,36 @@ Output payloads:
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference).
 
+## Localization and text wrapping
+
+Override any user-visible string with the `labels` input (`Partial<GridLabels>`); unspecified labels keep their English defaults:
+
+```ts
+import { GpGridComponent } from "@gp-grid/angular";
+import type { GridLabels } from "@gp-grid/angular";
+
+protected readonly labels: Partial<GridLabels> = {
+  filterTitle: "Filtra: {column}", // {column} is replaced with the header name
+  and: "E",
+  apply: "Applica",
+  emptyState: "Nessun dato",
+};
+```
+
+```html
+<gp-grid [columns]="columns" [rows]="rows" [rowHeight]="36" [labels]="labels" />
+```
+
+`GridLabels` covers the whole filter popup plus the grid chrome (empty state, error prefix). The nested `operators` object holds the filter dropdown labels (`contains`, `startsWith`, `between`, …); it is typed as a complete `GridFilterOperatorLabels`, so to change a single operator spread the English defaults: `operators: { ...defaultGridLabels.operators, contains: "Contiene" }` (import `defaultGridLabels` from `@gp-grid/core`).
+
+Long text: by default a cell truncates with an ellipsis and shows the full value in a native tooltip. Add `wrapText: true` to a column to wrap onto new lines instead (clipped to the fixed row height):
+
+```ts
+const columns: AngularColumnDefinition[] = [
+  { field: "bio", cellDataType: "text", width: 300, wrapText: true },
+];
+```
+
 ## Programmatic API
 
 Get the `GridCore` via `@ViewChild`. The component holds an internal `bindings.coreRef`; for now, the public path is to read it from a wrapper / proxy you maintain, or escalate by using `ViewChild` + accessing the underlying core through the component's bindings (the long-term API for this is evolving — check `packages/angular/src/lib/gp-grid.component.ts` for current exposure).
@@ -461,6 +491,7 @@ Inputs:
 | `[rowLoading]` | `RowLoadingOptions \| null` | `null` |
 | `[sortingEnabled]` | `boolean` | `true` |
 | `[wheelDampening]` | `number` | `0.1` |
+| `[labels]` | `Partial<GridLabels>` | English defaults |
 
 Outputs:
 

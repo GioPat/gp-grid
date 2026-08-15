@@ -272,6 +272,37 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
 
 `getRowId` is required when `onCellValueChanged` is set.
 
+## Localization and text wrapping
+
+Override any user-visible string with the `labels` prop (`Partial<GridLabels>`); unspecified labels keep their English defaults:
+
+```vue
+<script setup lang="ts">
+import { GpGrid, type GridLabels } from "@gp-grid/vue";
+
+const labels: Partial<GridLabels> = {
+  filterTitle: "Filtra: {column}", // {column} is replaced with the header name
+  and: "E",
+  apply: "Applica",
+  emptyState: "Nessun dato",
+};
+</script>
+
+<template>
+  <GpGrid :columns="columns" :row-data="rows" :row-height="36" :labels="labels" />
+</template>
+```
+
+`GridLabels` covers the whole filter popup plus the grid chrome (empty state, error prefix). The nested `operators` object holds the filter dropdown labels (`contains`, `startsWith`, `between`, …); it is typed as a complete `GridFilterOperatorLabels`, so to change a single operator spread the English defaults: `operators: { ...defaultGridLabels.operators, contains: "Contiene" }` (import `defaultGridLabels` from `@gp-grid/core`).
+
+Long text: by default a cell truncates with an ellipsis and shows the full value in a native tooltip. Add `wrapText: true` to a column to wrap onto new lines instead (clipped to the fixed row height):
+
+```ts
+const columns: ColumnDefinition[] = [
+  { field: "bio", cellDataType: "text", width: 300, wrapText: true },
+];
+```
+
 ## Programmatic API
 
 The component exposes its `core` via `defineExpose`. Bind a template ref:
@@ -353,6 +384,7 @@ The wrapper watches both props. If either changes, it calls `core.setDataSource(
 | `:header-renderer` | `VueHeaderRenderer` | — |
 | `:initial-width` / `:initial-height` | `number` | — |
 | `:highlighting` | `HighlightingOptions<TData>` | — |
+| `:labels` | `Partial<GridLabels>` | English defaults |
 | `:get-row-id` | `(row: TData) => RowId` | — |
 | `:on-cell-value-changed` | `(e: CellValueChangedEvent<TData>) => void` | — |
 | `:loading-component` | `Component<{ isLoading: boolean }>` | spinner |
