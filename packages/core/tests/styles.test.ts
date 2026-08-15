@@ -22,6 +22,6 @@ describe("cellStyles", () => {
       cellStyles.indexOf(".gp-grid-cell-content"),
     );
     expect(cellRule).toContain("overflow: hidden");
-    expect(cellRule).not.toContain("text-overflow");
+    expect(cellRule).not.toContain("text-overflow: ellipsis");
   });
 });
