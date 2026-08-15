@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.20.0...gp-grid-v0.21.0) (2026-08-15)
+
+
+### ✨ Features
+
+* allow replacing grid labels with custom ones ([bc7f99e](https://github.com/GioPat/gp-grid/commit/bc7f99ef87c2a898c55dd020c7565e1fee33a6a2))
+* allow replacing grid labels with custom ones ([9f98924](https://github.com/GioPat/gp-grid/commit/9f9892444b1b852f0e07ff933dd703d80f316468))
+
 ## [0.20.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.19.0...gp-grid-v0.20.0) (2026-07-28)
 
 
