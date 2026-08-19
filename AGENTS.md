@@ -35,7 +35,7 @@ See `package.json`
 - Avoid nested ternary operators and in general value human readability
 - Keep the cognitive complexity of function to a maximum of 15
 - The styling (CSS) is centralized in the `core` package. Use that one as much as you can. Use `:where` to enable styling rewriting from the users
-- Reduce inline styling
+- Profiling harness (CPU profiles / DevTools traces of the playgrounds) is at `profiling`; no profiling code lives in `packages/*` — spans are runtime wrappers in `playgrounds/*/src/profiling/`
 
 ## Gotchas
 

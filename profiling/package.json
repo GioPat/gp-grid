@@ -1,0 +1,18 @@
+{
+  "name": "gp-grid-profiling",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Flamegraph/CPU-profile harness for gp-grid: drives the playgrounds with Playwright and captures CDP profiles and DevTools traces.",
+  "scripts": {
+    "profile": "tsx src/cli.ts",
+    "report": "tsx src/report.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.9.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3"
+  }
+}

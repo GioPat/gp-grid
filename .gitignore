@@ -33,3 +33,6 @@ dist-ssr
 # Benchmarks
 benchmarks/results/*
 benchmarks/test-results*
+
+# Profiling
+profiling/results/*

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
@@ -11,10 +11,17 @@ import {
   type RowId,
   type CellValueChangedEvent,
   type GridLabels,
+  type GridRef,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
 import { DebugOverlay } from "./DebugOverlay";
+import { readProfilingParams } from "./profiling/hooks";
+import { ProfiledGrid } from "./profiling/ProfiledGrid";
+
+// `?rows=N` and `?profiling=1` — see ./profiling/hooks.ts.
+const profilingParams = readProfilingParams();
+const rowCount = profilingParams.rows;
 
 type DemoPage = "main" | "live-insert";
 
@@ -369,7 +376,7 @@ const getRandomTags = (): string[] => {
 
 // Generate sample data
 const generateRowData = (): Person[] =>
-  Array.from({ length: 1500000 }, (_, i) => ({
+  Array.from({ length: rowCount }, (_, i) => ({
     id: i + 1,
     name: `Person ${names[getRandomInt(0, 2)]}`,
     age: getRandomInt(18, 90),
@@ -389,6 +396,7 @@ function MainDemo() {
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
   const showTouchDebug = shouldShowTouchDebug();
+  const gridRef = useRef<GridRef<Person> | null>(null);
 
   const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
     getRowId: (row) => row.id,
@@ -437,7 +445,7 @@ function MainDemo() {
   return (
     <>
       <h2 style={{ marginBottom: "16px", color: "#f3f4f6" }}>
-        Large Dataset Demo (1.5M rows)
+        Large Dataset Demo ({rowCount.toLocaleString("en-US")} rows)
       </h2>
       {/* Highlight Mode Switcher */}
       <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
@@ -463,24 +471,27 @@ function MainDemo() {
         ))}
       </div>
 
-      {showTouchDebug && <DebugOverlay totalRows={1500000} />}
-      <div className="demo-grid-shell">
-        <Grid
-          highlighting={highlighting}
-          getRowId={getRowId}
-          onCellValueChanged={onCellUpdate}
-          columns={columns}
-          labels={gridLabels}
-          overscan={12}
-          dataSource={dataSource}
-          rowHeight={36}
-          darkMode={true}
-          headerHeight={40}
-          cellRenderers={cellRenderers}
-          editRenderers={editRenderers}
-          rowDragEntireRow
-          onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
-        />
+      {showTouchDebug && <DebugOverlay totalRows={rowCount} />}
+      <div className="demo-grid-shell" data-testid="grid-container">
+        <ProfiledGrid params={profilingParams} gridRef={gridRef}>
+          <Grid
+            gridRef={gridRef}
+            highlighting={highlighting}
+            getRowId={getRowId}
+            onCellValueChanged={onCellUpdate}
+            columns={columns}
+            labels={gridLabels}
+            overscan={12}
+            dataSource={dataSource}
+            rowHeight={36}
+            darkMode={true}
+            headerHeight={40}
+            cellRenderers={cellRenderers}
+            editRenderers={editRenderers}
+            rowDragEntireRow
+            onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
+          />
+        </ProfiledGrid>
       </div>
       <div
         className="card"
@@ -494,7 +505,7 @@ function MainDemo() {
           value={rowIdToUpdate}
           onChange={(e) => setRowIdToUpdate(Number(e.target.value))}
           min={1}
-          max={1500000}
+          max={rowCount}
           style={{
             width: "100px",
             padding: "8px",
