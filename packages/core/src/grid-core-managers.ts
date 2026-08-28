@@ -10,7 +10,6 @@ import { EditManager } from "./edit-manager";
 import {
   HighlightManager,
   InstructionBatcher,
-  RowMutationManager,
   ScrollVirtualizationManager,
   SortFilterManager,
   ViewportState,
@@ -26,9 +25,7 @@ export interface GridManagersDeps<TData> {
   highlighting: HighlightingOptions<TData> | undefined;
   getColumns: () => ColumnDefinition[];
   getCachedRows: () => Map<number, TData>;
-  setCachedRows: (rows: Map<number, TData>) => void;
   getTotalRows: () => number;
-  setTotalRows: (n: number) => void;
   getRowHeight: () => number;
   getHeaderHeight: () => number;
   getOverscan: () => number;
@@ -38,7 +35,6 @@ export interface GridManagersDeps<TData> {
   emitContentSize: () => void;
   emitHeaders: () => void;
   fetchData: () => Promise<void>;
-  clearSelectionIfInvalid: (maxRow: number) => void;
 }
 
 export interface GridManagers<TData> {
@@ -50,7 +46,6 @@ export interface GridManagers<TData> {
   slotPool: SlotPoolManager;
   editManager: EditManager;
   sortFilter: SortFilterManager<TData>;
-  rowMutation: RowMutationManager<TData>;
 }
 
 export const buildGridManagers = <TData>(
@@ -155,18 +150,6 @@ export const buildGridManagers = <TData>(
   });
   sortFilter.onInstruction((instruction) => batcher.emit(instruction));
 
-  const rowMutation = new RowMutationManager<TData>({
-    getCachedRows: deps.getCachedRows,
-    setCachedRows: deps.setCachedRows,
-    getTotalRows: deps.getTotalRows,
-    setTotalRows: deps.setTotalRows,
-    updateSlot: (rowIndex) => slotPool.updateSlot(rowIndex),
-    refreshAllSlots: () => slotPool.refreshAllSlots(),
-    emitContentSize: deps.emitContentSize,
-    clearSelectionIfInvalid: deps.clearSelectionIfInvalid,
-  });
-  rowMutation.onInstruction((instruction) => batcher.emit(instruction));
-
   return {
     selection,
     highlight,
@@ -176,6 +159,5 @@ export const buildGridManagers = <TData>(
     slotPool,
     editManager,
     sortFilter,
-    rowMutation,
   };
 };

@@ -33,27 +33,24 @@ export interface MultiColumnSortedChunk {
   offset: number;
 }
 
+/** The minimum a chunk must expose for the merge driver to walk it. */
+interface MergeableChunk {
+  indices: Uint32Array;
+  offset: number;
+}
+
 /**
- * Entry in the min/max heap for k-way merge.
+ * Entry in the min/max heap for k-way merge. The payload is whatever the
+ * caller compares on: a single value, or one value per sort column.
  */
-interface HeapEntry {
+interface HeapEntry<TPayload> {
   /** Which chunk this entry came from */
   chunkIndex: number;
   /** Current position within the chunk */
   positionInChunk: number;
-  /** Value for comparison */
-  value: number;
+  /** Value(s) for comparison */
+  payload: TPayload;
   /** Original global index */
-  globalIndex: number;
-}
-
-/**
- * Entry for multi-column heap.
- */
-interface MultiColumnHeapEntry {
-  chunkIndex: number;
-  positionInChunk: number;
-  values: number[];
   globalIndex: number;
 }
 
@@ -154,6 +151,75 @@ const getColumnValuesAt = (
   return values;
 };
 
+/** Rebase a lone chunk's local indices onto the global array. */
+const mergeSingleChunk = (chunk: MergeableChunk): Uint32Array => {
+  const result = new Uint32Array(chunk.indices.length);
+  for (let i = 0; i < chunk.indices.length; i++) {
+    result[i] = chunk.indices[i]! + chunk.offset;
+  }
+  return result;
+};
+
+const totalIndexCount = (chunks: readonly MergeableChunk[]): number => {
+  let total = 0;
+  for (const chunk of chunks) {
+    total += chunk.indices.length;
+  }
+  return total;
+};
+
+/**
+ * Heap-driven k-way merge, shared by the single- and multi-column entry points.
+ * The caller supplies how to read a comparison payload out of a chunk and how
+ * to order two payloads; heap seeding, draining and rebasing local indices onto
+ * the global array are identical between them.
+ *
+ * Ties always break on the original global index so that rows with equal sort
+ * keys keep their input order (stable sort), matching the synchronous applySort.
+ */
+const mergeChunks = <TChunk extends MergeableChunk, TPayload>(
+  chunks: TChunk[],
+  readPayload: (chunk: TChunk, position: number) => TPayload,
+  comparePayloads: (a: TPayload, b: TPayload) => number,
+): Uint32Array => {
+  const result = new Uint32Array(totalIndexCount(chunks));
+  const heap = new BinaryHeap<HeapEntry<TPayload>>((a, b) => {
+    const diff = comparePayloads(a.payload, b.payload);
+    if (diff !== 0) return diff;
+    return a.globalIndex - b.globalIndex;
+  });
+
+  const pushPosition = (chunkIndex: number, positionInChunk: number): void => {
+    const chunk = chunks[chunkIndex]!;
+    heap.push({
+      chunkIndex,
+      positionInChunk,
+      payload: readPayload(chunk, positionInChunk),
+      globalIndex: chunk.indices[positionInChunk]! + chunk.offset,
+    });
+  };
+
+  // Seed the heap with the first element of each non-empty chunk
+  for (let i = 0; i < chunks.length; i++) {
+    if (chunks[i]!.indices.length > 0) {
+      pushPosition(i, 0);
+    }
+  }
+
+  let resultIndex = 0;
+  while (heap.size() > 0) {
+    const entry = heap.pop()!;
+    result[resultIndex++] = entry.globalIndex;
+
+    const nextPosition = entry.positionInChunk + 1;
+    if (nextPosition < chunks[entry.chunkIndex]!.indices.length) {
+      pushPosition(entry.chunkIndex, nextPosition);
+    }
+  }
+
+  return result;
+};
+
 // =============================================================================
 // K-Way Merge Functions
 // =============================================================================
@@ -175,69 +241,16 @@ export function kWayMerge(
   }
 
   if (chunks.length === 1) {
-    // Single chunk - just adjust indices to global
-    const chunk = chunks[0]!;
-    const result = new Uint32Array(chunk.indices.length);
-    for (let i = 0; i < chunk.indices.length; i++) {
-      result[i] = chunk.indices[i]! + chunk.offset;
-    }
-    return result;
+    return mergeSingleChunk(chunks[0]!);
   }
 
-  // Calculate total length
-  let totalLength = 0;
-  for (const chunk of chunks) {
-    totalLength += chunk.indices.length;
-  }
-
-  const result = new Uint32Array(totalLength);
   const multiplier = direction === 'asc' ? 1 : -1;
-  // Tie-break on the original global index so that rows with equal sort keys
-  // keep their input order (stable sort), matching the synchronous applySort.
-  // Tie-break on the original global index so that rows with equal sort keys
-  // keep their input order (stable sort), matching the synchronous applySort.
-  const heap = new BinaryHeap<HeapEntry>((a, b) => {
-    const diff = (a.value - b.value) * multiplier;
-    if (diff !== 0) return diff;
-    return a.globalIndex - b.globalIndex;
-  });
 
-  // Initialize heap with first element from each non-empty chunk
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]!;
-    if (chunk.indices.length > 0) {
-      const localIndex = chunk.indices[0]!;
-      heap.push({
-        chunkIndex: i,
-        positionInChunk: 0,
-        value: chunk.values[0]!,
-        globalIndex: localIndex + chunk.offset,
-      });
-    }
-  }
-
-  // Merge
-  let resultIndex = 0;
-  while (heap.size() > 0) {
-    const entry = heap.pop()!;
-    result[resultIndex++] = entry.globalIndex;
-
-    // Push next element from the same chunk
-    const chunk = chunks[entry.chunkIndex]!;
-    const nextPosition = entry.positionInChunk + 1;
-
-    if (nextPosition < chunk.indices.length) {
-      const localIndex = chunk.indices[nextPosition]!;
-      heap.push({
-        chunkIndex: entry.chunkIndex,
-        positionInChunk: nextPosition,
-        value: chunk.values[nextPosition]!,
-        globalIndex: localIndex + chunk.offset,
-      });
-    }
-  }
-
-  return result;
+  return mergeChunks(
+    chunks,
+    (chunk, position) => chunk.values[position]!,
+    (a, b) => (a - b) * multiplier,
+  );
 }
 
 /**
@@ -254,127 +267,22 @@ export function kWayMergeMultiColumn(
   }
 
   if (chunks.length === 1) {
-    const chunk = chunks[0]!;
-    const result = new Uint32Array(chunk.indices.length);
-    for (let i = 0; i < chunk.indices.length; i++) {
-      result[i] = chunk.indices[i]! + chunk.offset;
-    }
-    return result;
+    return mergeSingleChunk(chunks[0]!);
   }
 
   // Use directions from first chunk (all chunks have same directions)
   const directions = chunks[0]!.directions;
   const numColumns = directions.length;
 
-  // Calculate total length
-  let totalLength = 0;
-  for (const chunk of chunks) {
-    totalLength += chunk.indices.length;
-  }
-
-  const result = new Uint32Array(totalLength);
-  const heap = new BinaryHeap<MultiColumnHeapEntry>((a, b) => {
-    for (let i = 0; i < directions.length; i++) {
-      const diff = (a.values[i]! - b.values[i]!) * directions[i]!;
-      if (diff !== 0) return diff;
-    }
-    // Tie-break on the original global index to keep the sort stable.
-    return a.globalIndex - b.globalIndex;
-  });
-
-  // Initialize heap with first element from each non-empty chunk
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]!;
-    if (chunk.indices.length > 0) {
-      const localIndex = chunk.indices[0]!;
-      heap.push({
-        chunkIndex: i,
-        positionInChunk: 0,
-        values: getColumnValuesAt(chunk, 0, numColumns),
-        globalIndex: localIndex + chunk.offset,
-      });
-    }
-  }
-
-  // Merge
-  let resultIndex = 0;
-  while (heap.size() > 0) {
-    const entry = heap.pop()!;
-    result[resultIndex++] = entry.globalIndex;
-
-    const chunk = chunks[entry.chunkIndex]!;
-    const nextPosition = entry.positionInChunk + 1;
-
-    if (nextPosition < chunk.indices.length) {
-      const localIndex = chunk.indices[nextPosition]!;
-      heap.push({
-        chunkIndex: entry.chunkIndex,
-        positionInChunk: nextPosition,
-        values: getColumnValuesAt(chunk, nextPosition, numColumns),
-        globalIndex: localIndex + chunk.offset,
-      });
-    }
-  }
-
-  return result;
-}
-
-/**
- * Detect collision runs at chunk boundaries after merge.
- * This is used for string sorting where hashes may collide across chunks.
- *
- * @param chunks - Original sorted chunks with their hash values
- * @param _direction - Sort direction
- * @returns Array of boundary collision positions [start1, end1, start2, end2, ...]
- */
-export function detectBoundaryCollisions(
-  chunks: SortedChunk[],
-  _direction: SortDirection
-): Uint32Array {
-  if (chunks.length <= 1) {
-    return new Uint32Array(0);
-  }
-
-  const collisions: number[] = [];
-  let globalPosition = 0;
-
-  for (let i = 0; i < chunks.length - 1; i++) {
-    const currentChunk = chunks[i]!;
-    const nextChunk = chunks[i + 1]!;
-
-    if (currentChunk.indices.length === 0 || nextChunk.indices.length === 0) {
-      globalPosition += currentChunk.indices.length;
-      continue;
-    }
-
-    // Get last value of current chunk and first value of next chunk
-    const lastPos = currentChunk.indices.length - 1;
-    const lastValue = currentChunk.values[lastPos];
-    const firstValue = nextChunk.values[0];
-
-    // If they're equal (or very close for floating point), it's a boundary collision
-    if (lastValue === firstValue) {
-      // Find the extent of the collision run
-      // Look backwards in current chunk
-      let startInCurrent = lastPos;
-      while (startInCurrent > 0 && currentChunk.values[startInCurrent - 1] === lastValue) {
-        startInCurrent--;
+  return mergeChunks(
+    chunks,
+    (chunk, position) => getColumnValuesAt(chunk, position, numColumns),
+    (a, b) => {
+      for (let i = 0; i < numColumns; i++) {
+        const diff = (a[i]! - b[i]!) * directions[i]!;
+        if (diff !== 0) return diff;
       }
-
-      // Look forwards in next chunk
-      let endInNext = 0;
-      while (endInNext < nextChunk.indices.length - 1 && nextChunk.values[endInNext + 1] === firstValue) {
-        endInNext++;
-      }
-
-      // Record the collision run (global positions)
-      const collisionStart = globalPosition + startInCurrent;
-      const collisionEnd = globalPosition + currentChunk.indices.length + endInNext + 1;
-      collisions.push(collisionStart, collisionEnd);
-    }
-
-    globalPosition += currentChunk.indices.length;
-  }
-
-  return new Uint32Array(collisions);
+      return 0;
+    },
+  );
 }

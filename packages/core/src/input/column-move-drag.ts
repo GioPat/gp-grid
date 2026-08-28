@@ -12,21 +12,15 @@ import { findColumnAtX } from "../utils";
 import {
   AUTO_SCROLL_SPEED,
   AUTO_SCROLL_THRESHOLD,
-  DRAG_THRESHOLD,
 } from "./auto-scroll-util";
+import { DragGesture } from "./drag-gesture";
 
 export class ColumnMoveDrag<TData = unknown> {
-  private active = false;
+  private readonly gesture = new DragGesture();
   private sourceColIndex = -1;
-  private startX = 0;
-  private startY = 0;
-  private thresholdMet = false;
   private shiftKey = false;
   private ghostWidth = 0;
   private ghostHeight = 0;
-  private currentX = 0;
-  private currentY = 0;
-  private dropTargetIndex: number | null = null;
   private readonly core: GridCore<TData>;
   private deps: InputHandlerDeps;
 
@@ -40,11 +34,11 @@ export class ColumnMoveDrag<TData = unknown> {
   }
 
   get isActive(): boolean {
-    return this.active;
+    return this.gesture.active;
   }
 
   get isDraggingForDisplay(): boolean {
-    return this.active && this.thresholdMet;
+    return this.gesture.isDraggingForDisplay;
   }
 
   start(
@@ -61,17 +55,11 @@ export class ColumnMoveDrag<TData = unknown> {
       return { preventDefault: false, stopPropagation: false };
     }
 
-    this.active = true;
     this.sourceColIndex = colIndex;
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    this.thresholdMet = false;
     this.shiftKey = event.shiftKey;
     this.ghostWidth = colWidth;
     this.ghostHeight = colHeight;
-    this.currentX = event.clientX;
-    this.currentY = event.clientY;
-    this.dropTargetIndex = null;
+    this.gesture.begin(event.clientX, event.clientY);
 
     return {
       preventDefault: true,
@@ -81,26 +69,17 @@ export class ColumnMoveDrag<TData = unknown> {
   }
 
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult | null {
-    const dx = event.clientX - this.startX;
-    const dy = event.clientY - this.startY;
-
-    if (this.thresholdMet === false) {
-      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
-      if (thresholdCrossed === false) return null;
-      this.thresholdMet = true;
-    }
-
-    this.currentX = event.clientX;
-    this.currentY = event.clientY;
+    if (this.gesture.track(event) === false) return null;
 
     const { left, width, scrollLeft } = bounds;
     const mouseX = event.clientX - left + scrollLeft;
     const columnPositions = this.deps.getColumnPositions();
     const columnCount = this.deps.getColumnCount();
-    this.dropTargetIndex = Math.max(
+    const dropTargetIndex = Math.max(
       0,
       Math.min(findColumnAtX(mouseX, columnPositions), columnCount),
     );
+    this.gesture.dropTargetIndex = dropTargetIndex;
 
     const mouseXInContainer = event.clientX - left;
     let scrollDx = 0;
@@ -111,11 +90,11 @@ export class ColumnMoveDrag<TData = unknown> {
     }
     const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
 
-    return { targetRow: 0, targetCol: this.dropTargetIndex ?? 0, autoScroll };
+    return { targetRow: 0, targetCol: dropTargetIndex, autoScroll };
   }
 
   end(cycleSortDirection: (current: SortDirection | null | undefined) => SortDirection | null): void {
-    if (this.thresholdMet) {
+    if (this.gesture.thresholdMet) {
       this.commitMove();
     } else {
       this.treatAsHeaderClick(cycleSortDirection);
@@ -124,13 +103,14 @@ export class ColumnMoveDrag<TData = unknown> {
   }
 
   private commitMove(): void {
-    if (this.dropTargetIndex === null) return;
+    const { dropTargetIndex } = this.gesture;
+    if (dropTargetIndex === null) return;
     const fromOriginal = this.sourceColIndex;
     const toOriginal = this.deps.getOriginalColumnIndex
       ? this.deps.getOriginalColumnIndex(
-          Math.min(this.dropTargetIndex, this.deps.getColumnCount() - 1),
+          Math.min(dropTargetIndex, this.deps.getColumnCount() - 1),
         )
-      : this.dropTargetIndex;
+      : dropTargetIndex;
     if (fromOriginal !== toOriginal) {
       this.core.moveColumn(fromOriginal, toOriginal);
     }
@@ -149,20 +129,19 @@ export class ColumnMoveDrag<TData = unknown> {
   }
 
   private reset(): void {
-    this.active = false;
     this.sourceColIndex = -1;
-    this.thresholdMet = false;
     this.shiftKey = false;
-    this.dropTargetIndex = null;
+    this.gesture.reset();
   }
 
   getState(): ColumnMoveDragState | null {
-    if (this.active === false) return null;
+    if (this.gesture.active === false) return null;
+    const { currentX, currentY, dropTargetIndex } = this.gesture;
     return {
       sourceColIndex: this.sourceColIndex,
-      currentX: this.currentX,
-      currentY: this.currentY,
-      dropTargetIndex: this.dropTargetIndex,
+      currentX,
+      currentY,
+      dropTargetIndex,
       ghostWidth: this.ghostWidth,
       ghostHeight: this.ghostHeight,
     };

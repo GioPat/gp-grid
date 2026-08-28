@@ -1,18 +1,9 @@
 // @gp-grid/core/src/sorting/sort-worker.ts
 // Web Worker for sorting large datasets off the main thread
 
-import type { SortModel, CellValue } from "../types";
-
 // =============================================================================
 // Worker Message Types
 // =============================================================================
-
-export interface SortWorkerRequest {
-  type: "sort";
-  id: number;
-  data: unknown[];
-  sortModel: SortModel[];
-}
 
 export interface SortIndicesRequest {
   type: "sortIndices";
@@ -28,12 +19,6 @@ export interface SortMultiColumnRequest {
   columns: Float64Array[];
   /** Direction for each column: 1 for asc, -1 for desc */
   directions: Int8Array;
-}
-
-export interface SortWorkerResponse {
-  type: "sorted";
-  id: number;
-  data: unknown[];
 }
 
 export interface SortIndicesResponse {
@@ -124,64 +109,6 @@ export interface SortMultiColumnChunkResponse {
 }
 
 // =============================================================================
-// Sorting Functions (duplicated from data-source.ts for worker isolation)
-// =============================================================================
-
-function getFieldValue(row: unknown, field: string): CellValue {
-  const parts = field.split(".");
-  let value: unknown = row;
-
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") {
-      return null;
-    }
-    value = (value as Record<string, unknown>)[part];
-  }
-
-  return value as CellValue;
-}
-
-const toDisplayString = (v: CellValue): string => {
-  if (v == null) return "";
-  if (Array.isArray(v)) return v.join(", ");
-  if (typeof v === "object" && !(v instanceof Date)) return JSON.stringify(v);
-  return String(v);
-};
-
-function compareValues(a: CellValue, b: CellValue): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-
-  const aNum = Number(a);
-  const bNum = Number(b);
-  if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
-    return aNum - bNum;
-  }
-
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() - b.getTime();
-  }
-
-  return toDisplayString(a).localeCompare(toDisplayString(b));
-}
-
-function sortData<T>(data: T[], sortModel: SortModel[]): T[] {
-  return [...data].sort((a, b) => {
-    for (const { colId, direction } of sortModel) {
-      const aVal = getFieldValue(a, colId);
-      const bVal = getFieldValue(b, colId);
-      const comparison = compareValues(aVal, bVal);
-
-      if (comparison !== 0) {
-        return direction === "asc" ? comparison : -comparison;
-      }
-    }
-    return 0;
-  });
-}
-
-// =============================================================================
 // Worker Code String (for inline worker creation)
 // =============================================================================
 
@@ -194,44 +121,6 @@ function sortData<T>(data: T[], sortModel: SortModel[]): T[] {
  */
 export const SORT_WORKER_CODE = `
 // ---- Shared helpers (inlined for worker isolation) ----------------------
-function getFieldValue(row, field) {
-  const parts = field.split(".");
-  let value = row;
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") return null;
-    value = value[part];
-  }
-  return value ?? null;
-}
-
-function toDisplayString(v) {
-  if (v == null) return "";
-  if (Array.isArray(v)) return v.join(", ");
-  if (typeof v === "object" && !(v instanceof Date)) return JSON.stringify(v);
-  return String(v);
-}
-
-function compareValues(a, b) {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  const aNum = Number(a);
-  const bNum = Number(b);
-  if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-  if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
-  return toDisplayString(a).localeCompare(toDisplayString(b));
-}
-
-function sortData(data, sortModel) {
-  return [...data].sort((a, b) => {
-    for (const { colId, direction } of sortModel) {
-      const cmp = compareValues(getFieldValue(a, colId), getFieldValue(b, colId));
-      if (cmp !== 0) return direction === "asc" ? cmp : -cmp;
-    }
-    return 0;
-  });
-}
-
 function initIndices(len) {
   const indices = new Uint32Array(len);
   for (let i = 0; i < len; i++) indices[i] = i;
@@ -335,10 +224,6 @@ function sortMultiColumnChunk(columns, directions) {
 
 // ---- Dispatch table: type → handler(data) → { type, payload, transfer }
 const HANDLERS = {
-  sort: (d) => ({
-    type: "sorted",
-    payload: { data: sortData(d.data, d.sortModel) },
-  }),
   sortIndices: (d) => {
     const indices = sortIndices(d.values, d.direction);
     return { type: "sortedIndices", payload: { indices }, transfer: [indices.buffer] };
@@ -398,29 +283,3 @@ self.onmessage = function(e) {
   }
 };
 `;
-
-// =============================================================================
-// Export for use as module worker (if bundler supports it)
-// =============================================================================
-
-// This handles incoming messages when running as a module worker
-interface WorkerGlobalScopeMinimal {
-  onmessage: ((e: MessageEvent) => void) | null;
-  postMessage(message: unknown): void;
-}
-
-const workerScope = globalThis as unknown as Partial<WorkerGlobalScopeMinimal>;
-if (workerScope.onmessage !== undefined) {
-  workerScope.onmessage = (e: MessageEvent<SortWorkerRequest>) => {
-    const { type, id, data, sortModel } = e.data;
-
-    if (type === "sort") {
-      try {
-        const sorted = sortData(data, sortModel);
-        workerScope.postMessage?.({ type: "sorted", id, data: sorted });
-      } catch (error) {
-        workerScope.postMessage?.({ type: "error", id, error: String(error) });
-      }
-    }
-  };
-}

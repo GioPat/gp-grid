@@ -3,7 +3,12 @@
   "score_cap": 90,
   "exclude_directories": [
     "__fixtures__",
-    "tests"
+    "tests",
+    "playgrounds",
+    "benchmarks",
+    "packages/react",
+    "packages/vue",
+    "packages/angular"
   ],
   "exclude_filenames": [
     "*test.{ts,tsx}"

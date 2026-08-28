@@ -1,9 +1,5 @@
 export { HighlightManager } from "./highlight-manager";
 export {
-  RowMutationManager,
-  type RowMutationManagerOptions,
-} from "./row-mutation-manager";
-export {
   RowDataManager,
   type RowDataManagerOptions,
 } from "./row-data-manager";

@@ -7,29 +7,9 @@
 /** Grid Core orchestrator */
 export { GridCore } from "./grid-core";
 
-/** Managers */
-export { SelectionManager } from "./selection";
-export { FillManager } from "./fill";
-export { SlotPoolManager } from "./slot-pool";
-export { EditManager } from "./edit-manager";
+/** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";
-export {
-  HighlightManager,
-  RowDataManager,
-  SortFilterManager,
-  RowMutationManager,
-  ScrollVirtualizationManager,
-  TransactionManager,
-  type RowMutationManagerOptions,
-  type RowDataManagerOptions,
-  type SortFilterManagerOptions,
-  type ScrollVirtualizationManagerOptions,
-} from "./managers";
-
-/** Manager types */
-export type { SlotPoolManagerOptions } from "./slot-pool";
-export type { BatchInstructionListener as SlotPoolBatchListener } from "./utils";
-export type { EditManagerOptions } from "./edit-manager";
+export { TransactionManager } from "./managers";
 
 /** Data sources */
 export {
@@ -49,17 +29,7 @@ export type {
   DataChangeListener,
   ServerDataSourceOptions,
 } from "./data-source";
-export type {
-  IndexedDataStoreOptions,
-  RowSortCache,
-} from "./indexed-data-store/index";
-
-/** Sorting utilities (from indexed-data-store) */
-export {
-  stringToSortableNumber,
-  compareValues,
-  computeValueHash,
-} from "./indexed-data-store/index";
+export type { IndexedDataStoreOptions } from "./indexed-data-store/index";
 
 /** Filtering utilities (from indexed-data-store) */
 export {
@@ -89,24 +59,8 @@ export type {
   TransactionManagerOptions,
 } from "./managers";
 
-/** Sorting utilities (worker pool, parallel sorting, k-way merge) */
-export {
-  // Parallel sort manager
-  ParallelSortManager,
-  // Worker pool
-  WorkerPool,
-  // K-way merge
-  kWayMerge,
-  kWayMergeMultiColumn,
-  detectBoundaryCollisions,
-} from "./sorting";
-
-export type {
-  ParallelSortOptions,
-  WorkerPoolOptions,
-  SortedChunk,
-  MultiColumnSortedChunk,
-} from "./sorting";
+/** Parallel (worker) sorting configuration accepted by the data sources */
+export type { ParallelSortOptions } from "./sorting";
 
 /** Types */
 export type {
@@ -174,23 +128,7 @@ export type {
   DataLoadingInstruction,
   DataLoadedInstruction,
   DataErrorInstruction,
-  RowsAddedInstruction,
-  RowsRemovedInstruction,
-  RowsUpdatedInstruction,
-  TransactionProcessedInstruction,
   ColumnsChangedInstruction,
-  StartColumnResizeInstruction,
-  UpdateColumnResizeInstruction,
-  CommitColumnResizeInstruction,
-  CancelColumnResizeInstruction,
-  StartColumnMoveInstruction,
-  UpdateColumnMoveInstruction,
-  CommitColumnMoveInstruction,
-  CancelColumnMoveInstruction,
-  StartRowDragInstruction,
-  UpdateRowDragInstruction,
-  CommitRowDragInstruction,
-  CancelRowDragInstruction,
 
   /** Options */
   GridCoreOptions,
@@ -238,16 +176,6 @@ export type {
 
 /** Styles */
 export { gridStyles } from "./styles";
-export {
-  variablesStyles,
-  containerStyles,
-  headerStyles,
-  cellStyles,
-  statesStyles,
-  scrollbarStyles,
-  filtersStyles,
-  rowDragStyles,
-} from "./styles";
 
 /** Positioning utilities */
 export {
@@ -265,9 +193,6 @@ export {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
-  // Highlighting helpers
-  isRowInSelectionRange,
-  isColumnInSelectionRange,
 } from "./utils/classNames";
 
 /** UI State types (shared between framework wrappers) */
@@ -285,7 +210,7 @@ export { createInitialState } from "./types/ui-state";
 export { applyInstruction } from "./state-reducer";
 
 /** Scroll helpers */
-export { findSlotForRow, scrollCellIntoView } from "./utils/scroll-helpers";
+export { scrollCellIntoView } from "./utils/scroll-helpers";
 export type { ColumnScrollGeometry } from "./utils/scroll-helpers";
 
 /** Format helpers */

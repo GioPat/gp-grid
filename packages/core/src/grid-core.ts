@@ -21,7 +21,6 @@ import type { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
 import type {
   HighlightManager,
-  RowMutationManager,
   ScrollVirtualizationManager,
   SortFilterManager,
   ViewportState,
@@ -89,7 +88,6 @@ export class GridCore<TData = unknown> {
   public readonly input: InputHandler<TData>;
   public readonly highlight: HighlightManager<TData> | null;
   public readonly sortFilter: SortFilterManager<TData>;
-  public readonly rowMutation: RowMutationManager<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
 
@@ -152,9 +150,7 @@ export class GridCore<TData = unknown> {
       highlighting: options.highlighting,
       getColumns: () => this.columns,
       getCachedRows: () => this.rowData.getCachedRows(),
-      setCachedRows: (rows) => this.rowData.setCachedRows(rows),
       getTotalRows: () => this.rowData.getTotalRows(),
-      setTotalRows: (count) => this.rowData.setTotalRows(count),
       getRowHeight: () => this.rowHeight,
       getHeaderHeight: () => this.headerHeight,
       getOverscan: () => this.overscan,
@@ -164,7 +160,6 @@ export class GridCore<TData = unknown> {
       emitContentSize: () => this.emitContentSize(),
       emitHeaders: () => this.emitHeaders(),
       fetchData: () => this.rowData.loadInitial(),
-      clearSelectionIfInvalid: (maxValidRow) => this.clearSelectionIfInvalid(maxValidRow),
     });
     this.selection = managers.selection;
     this.highlight = managers.highlight;
@@ -174,7 +169,6 @@ export class GridCore<TData = unknown> {
     this.slotPool = managers.slotPool;
     this.editManager = managers.editManager;
     this.sortFilter = managers.sortFilter;
-    this.rowMutation = managers.rowMutation;
     viewport = this.viewport;
     slotPool = this.slotPool;
     sortFilter = this.sortFilter;
@@ -261,13 +255,6 @@ export class GridCore<TData = unknown> {
 
   hasActiveFilter(colId: string): boolean {
     return this.sortFilter.hasActiveFilter(colId);
-  }
-
-  getDistinctValuesForColumn(
-    colId: string,
-    maxValues: number = 500,
-  ): CellValue[] {
-    return this.sortFilter.getDistinctValuesForColumn(colId, maxValues);
   }
 
   /**
@@ -550,10 +537,6 @@ export class GridCore<TData = unknown> {
     this.scrollTopOverride = domScrollTop;
   }
 
-  getNaturalHeight(): number {
-    return this.scrollVirtualization.getNaturalHeight();
-  }
-
   getScrollRatio(): number {
     return this.scrollVirtualization.getScrollRatio();
   }
@@ -562,6 +545,7 @@ export class GridCore<TData = unknown> {
     return this.scrollVirtualization.getVisibleRowRange();
   }
 
+  /** Used structurally by `scrollCellIntoView` in the framework wrappers. */
   getScrollTopForRow(rowIndex: number): number {
     return this.scrollVirtualization.getScrollTopForRow(rowIndex);
   }
@@ -623,47 +607,6 @@ export class GridCore<TData = unknown> {
     this.slotPool.refreshAllSlots();
   }
 
-  // ===========================================================================
-  // Row Mutation API (facade methods delegating to RowMutationManager)
-  // ===========================================================================
-
-  /**
-   * Add rows to the grid at the specified index.
-   * If no index is provided, rows are added at the end.
-   */
-  addRows(rows: TData[], index?: number): void {
-    this.rowMutation.addRows(rows, index);
-  }
-
-  /**
-   * Update existing rows with partial data.
-   */
-  updateRows(updates: Array<{ index: number; data: Partial<TData> }>): void {
-    this.rowMutation.updateRows(updates);
-  }
-
-  /**
-   * Delete rows at the specified indices.
-   */
-  deleteRows(indices: number[]): void {
-    this.rowMutation.deleteRows(indices);
-  }
-
-  /**
-   * Get a row by index.
-   */
-  getRow(index: number): TData | undefined {
-    return this.rowMutation.getRow(index);
-  }
-
-  /**
-   * Set a complete row at the specified index.
-   * Use this for complete row replacement. For partial updates, use updateRows.
-   */
-  setRow(index: number, data: TData): void {
-    this.rowMutation.setRow(index, data);
-  }
-
   /**
    * Update the data source and refresh.
    * Preserves grid state (sort, filter, scroll position).
@@ -702,7 +645,6 @@ export class GridCore<TData = unknown> {
     this.slotPool.destroy();
     this.highlight?.destroy();
     this.sortFilter.destroy();
-    this.rowMutation.destroy();
     this.rowData.destroy();
 
     // Clear listeners
