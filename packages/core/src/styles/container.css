@@ -1,7 +1,4 @@
-// packages/core/src/styles/container.ts
 
-// Grid container base styles
-export const containerStyles: string = `
 /* =============================================================================
    GP Grid - Clean Flat Design
    ============================================================================= */
@@ -31,4 +28,3 @@ export const containerStyles: string = `
 :where(.gp-grid-container:focus) {
   border-color: var(--gp-grid-primary);
 }
-`;

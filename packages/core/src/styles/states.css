@@ -1,7 +1,4 @@
-// packages/core/src/styles/states.ts
 
-// Loading, error, and empty state styles
-export const statesStyles: string = `
 /* =============================================================================
    Loading & Error States
    ============================================================================= */
@@ -115,4 +112,3 @@ export const statesStyles: string = `
   font-size: 14px;
   text-align: center;
 }
-`;

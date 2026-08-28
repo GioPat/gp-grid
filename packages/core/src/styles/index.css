@@ -1,0 +1,13 @@
+/* packages/core/src/styles/index.css
+   Entry point for the grid stylesheet. Bundled + minified into
+   dist/styles.css by tsdown.config.ts (Lightning CSS). Order matters:
+   variables first, then layout, then feature modules. */
+
+@import "./variables.css";
+@import "./container.css";
+@import "./header.css";
+@import "./cells.css";
+@import "./states.css";
+@import "./scrollbar.css";
+@import "./filters.css";
+@import "./row-drag.css";

@@ -2,7 +2,7 @@
 // Orchestrates parallel sorting using worker pool and k-way merge
 
 import { WorkerPool } from './worker-pool';
-import { SORT_WORKER_CODE } from './sort-worker';
+import { SORT_WORKER_CODE } from './sort-worker-code';
 import type {
   SortChunkRequest,
   SortChunkResponse,
@@ -16,7 +16,7 @@ import type {
   SortStringHashesResponse,
   SortMultiColumnRequest,
   SortMultiColumnResponse,
-} from './sort-worker';
+} from './sort-worker-messages';
 import {
   kWayMerge,
   kWayMergeMultiColumn,

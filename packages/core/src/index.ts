@@ -236,19 +236,6 @@ export type {
 // Shared UI Utilities (for framework wrappers)
 // =============================================================================
 
-/** Styles */
-export { gridStyles } from "./styles";
-export {
-  variablesStyles,
-  containerStyles,
-  headerStyles,
-  cellStyles,
-  statesStyles,
-  scrollbarStyles,
-  filtersStyles,
-  rowDragStyles,
-} from "./styles";
-
 /** Positioning utilities */
 export {
   calculateColumnPositions,

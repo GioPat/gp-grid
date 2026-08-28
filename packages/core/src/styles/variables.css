@@ -1,7 +1,4 @@
-// packages/core/src/styles/variables.ts
 
-// CSS Variables for theming (light and dark modes)
-export const variablesStyles: string = `
 /* =============================================================================
    GP Grid - CSS Variables for Theming
    ============================================================================= */
@@ -85,4 +82,3 @@ export const variablesStyles: string = `
   --gp-grid-scrollbar-thumb: #373a40;
   --gp-grid-scrollbar-thumb-hover: #4a4d52;
 }
-`;

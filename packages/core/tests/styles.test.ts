@@ -3,9 +3,12 @@
 // cannot be silently regressed by a CSS refactor.
 
 import { describe, it, expect } from "vitest";
-import { cellStyles } from "../src/styles/cells";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-describe("cellStyles", () => {
+const cellStyles = readFileSync(resolve(__dirname, "../src/styles/cells.css"), "utf8");
+
+describe("cells.css", () => {
   it("defines a content wrapper that applies a single-line ellipsis", () => {
     expect(cellStyles).toContain(".gp-grid-cell-content");
     expect(cellStyles).toContain("text-overflow: ellipsis");
@@ -23,5 +26,13 @@ describe("cellStyles", () => {
     );
     expect(cellRule).toContain("overflow: hidden");
     expect(cellRule).not.toContain("text-overflow: ellipsis");
+  });
+
+  it("lets the peek overlay wrap the default content span instead of scrolling horizontally", () => {
+    const peekContentRule = cellStyles.slice(
+      cellStyles.indexOf(".gp-grid-cell-peek .gp-grid-cell-content {"),
+    );
+    expect(peekContentRule).toContain("white-space: inherit");
+    expect(peekContentRule).toContain("text-overflow: clip");
   });
 });

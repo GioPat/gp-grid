@@ -1,7 +1,4 @@
-// packages/core/src/styles/header.ts
 
-// Header row, cell, sort arrows, and filter icon styles
-export const headerStyles: string = `
 /* =============================================================================
    Header
    ============================================================================= */
@@ -244,4 +241,3 @@ export const headerStyles: string = `
   background-color: var(--gp-grid-primary);
   border-radius: 2px;
 }
-`;

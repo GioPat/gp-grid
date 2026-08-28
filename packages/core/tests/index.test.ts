@@ -44,16 +44,6 @@ const expectedExports = [
   "kWayMerge",
   "kWayMergeMultiColumn",
   "detectBoundaryCollisions",
-  // Styles
-  "gridStyles",
-  "variablesStyles",
-  "containerStyles",
-  "headerStyles",
-  "cellStyles",
-  "statesStyles",
-  "scrollbarStyles",
-  "filtersStyles",
-  "rowDragStyles",
   // Positioning utilities
   "calculateColumnPositions",
   "calculateScaledColumnPositions",

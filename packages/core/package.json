@@ -48,11 +48,14 @@
     "dev": "tsdown --watch",
     "build": "tsdown --clean --sourcemap",
     "build:production": "tsdown --clean --minify --treeshake --dts --tsconfig tsconfig.build.json",
+    "build:worker": "node scripts/build-worker.ts",
+    "prepare": "node scripts/build-worker.ts",
     "test": "vitest",
     "bench": "vitest bench"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "lightningcss": "1.30.2",
     "tsdown": "^0.22.5",
     "typescript": "~5.9.0",
     "vitest": "^4.0.15"
