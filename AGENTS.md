@@ -1,4 +1,4 @@
-# gp-grid
+# AGENTS.md
 
 gp-grid is a typescript library with dedicated framework/library wrappers that allows user to manage tables and grids. The core idea of gp-grid is to give users a tool with "batteries included" but give room for full customizability. One of the core principle is the bundle size, allowing users to manage gp-grid in resource constrained (memory, bundle) environments so it cannot include external dependencies. Another core principle is the DX (Developer Experience)
 
