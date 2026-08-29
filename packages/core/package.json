@@ -2,7 +2,7 @@
   "name": "@gp-grid/core",
   "description": "A high-performance, framework-agnostic TypeScript data grid core with virtual scrolling",
   "private": false,
-  "version": "0.21.0",
+  "version": "0.22.0",
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -48,11 +48,14 @@
     "dev": "tsdown --watch",
     "build": "tsdown --clean --sourcemap",
     "build:production": "tsdown --clean --minify --treeshake --dts --tsconfig tsconfig.build.json",
+    "build:worker": "node scripts/build-worker.ts",
+    "prepare": "node scripts/build-worker.ts",
     "test": "vitest",
     "bench": "vitest bench"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "lightningcss": "1.30.2",
     "tsdown": "^0.22.5",
     "typescript": "~5.9.0",
     "vitest": "^4.0.15"

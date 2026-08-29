@@ -174,9 +174,6 @@ export type {
 // Shared UI Utilities (for framework wrappers)
 // =============================================================================
 
-/** Styles */
-export { gridStyles } from "./styles";
-
 /** Positioning utilities */
 export {
   calculateColumnPositions,

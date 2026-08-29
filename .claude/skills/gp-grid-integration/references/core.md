@@ -230,17 +230,13 @@ Adapters can call `formatCellValue` (exported from `@gp-grid/core`) to match the
 
 ## CSS
 
-The core also ships the canonical CSS. Wrappers re-export it. From vanilla JS:
+The core ships the canonical stylesheet as a real CSS file, `@gp-grid/core/dist/styles.css` (wrappers copy it to `@gp-grid/<wrapper>/dist/styles.css`). It is not exported as a JS string, so import the file once at the app entry point with your bundler, or link it from HTML:
 
 ```ts
-import { gridStyles } from "@gp-grid/core";
-
-const style = document.createElement("style");
-style.textContent = gridStyles;
-document.head.appendChild(style);
+import "@gp-grid/core/dist/styles.css";
 ```
 
-Or import the `.css` file the wrapper bundles. The CSS uses `:where()` selectors throughout so users can override styles without specificity wars.
+The CSS uses `:where()` selectors throughout so users can override styles without specificity wars.
 
 ## Source you should read
 

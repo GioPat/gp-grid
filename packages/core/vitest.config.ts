@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
+    // Regenerates the git-ignored sort-worker-code.ts before the suite runs.
+    globalSetup: ['tests/global-setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

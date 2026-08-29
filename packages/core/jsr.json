@@ -1,7 +1,12 @@
 {
   "name": "@gp-grid/core",
   "description": "A high-performance, framework-agnostic TypeScript data grid core with virtual scrolling",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "license": "Apache-2.0",
-  "exports": "./src/index.ts"
+  "exports": "./src/index.ts",
+  "publish": {
+    "exclude": [
+      "!src/sorting/sort-worker-code.ts"
+    ]
+  }
 }

@@ -1,7 +1,4 @@
-// packages/core/src/styles/cells.ts
 
-// Data cell styles including selection, active, editing, and fill handle
-export const cellStyles: string = `
 /* =============================================================================
    Data Cells
    ============================================================================= */
@@ -194,4 +191,12 @@ export const cellStyles: string = `
   -webkit-user-select: text;
 }
 
-`;
+/* The default renderer wraps text in `.gp-grid-cell-content`, which forces a
+   single nowrap line for the ellipsis. Inside the peek that would override the
+   overlay's pre-wrap and produce a horizontal scrollbar, so defer to the
+   overlay's white-space and let the text flow onto multiple lines. */
+.gp-grid-cell-peek .gp-grid-cell-content {
+  white-space: inherit;
+  text-overflow: clip;
+  overflow: visible;
+}

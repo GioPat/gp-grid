@@ -15,7 +15,7 @@ export type { SortedChunk, MultiColumnSortedChunk } from "./k-way-merge";
 export { detectBoundaryCollisions } from "./string-collision-resolver";
 
 // Sort worker code (for custom worker implementations)
-export { SORT_WORKER_CODE } from "./sort-worker";
+export { SORT_WORKER_CODE } from "./sort-worker-code";
 export type {
   SortIndicesRequest,
   SortIndicesResponse,
@@ -29,4 +29,4 @@ export type {
   SortStringChunkResponse,
   SortMultiColumnChunkRequest,
   SortMultiColumnChunkResponse,
-} from "./sort-worker";
+} from "./sort-worker-messages";

@@ -1,7 +1,4 @@
-// packages/core/src/styles/scrollbar.ts
 
-// Custom scrollbar styles
-export const scrollbarStyles: string = `
 /* =============================================================================
    Scrollbar Styling
    ============================================================================= */
@@ -27,4 +24,3 @@ export const scrollbarStyles: string = `
 :where(.gp-grid-container)::-webkit-scrollbar-corner {
   background-color: var(--gp-grid-scrollbar-track);
 }
-`;

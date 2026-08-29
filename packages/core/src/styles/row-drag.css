@@ -1,6 +1,4 @@
-// packages/core/src/styles/row-drag.ts
 
-export const rowDragStyles: string = `
 /* =============================================================================
    Row Drag
    ============================================================================= */
@@ -63,4 +61,3 @@ export const rowDragStyles: string = `
   background-color: var(--gp-grid-primary);
   border-radius: 2px;
 }
-`;

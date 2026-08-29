@@ -36,3 +36,7 @@ benchmarks/test-results*
 
 # Profiling
 profiling/results
+# Generated build artifact: the sort Web Worker bundled + minified into a string.
+# Source: packages/core/src/sorting/sort-worker.script.ts
+# Generator: packages/core/scripts/build-worker.ts (runs on install, build and test)
+packages/core/src/sorting/sort-worker-code.ts

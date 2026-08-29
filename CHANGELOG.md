@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.22.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.21.0...gp-grid-v0.22.0) (2026-08-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* convert CSS style from inline TS to pure CSS, minifies worker code
+
+### ♻️ Refactoring
+
+* convert CSS style from inline TS to pure CSS, minifies worker code ([601b6d2](https://github.com/GioPat/gp-grid/commit/601b6d2851189144e0a4f072bf331418ac0f3600))
+
 ## [0.21.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.20.0...gp-grid-v0.21.0) (2026-08-15)
 
 

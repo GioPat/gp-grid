@@ -122,6 +122,20 @@ pnpm add @gp-grid/core
 
 See the [@gp-grid/core README](./packages/core/README.md) for detailed documentation on creating custom framework adapters.
 
+## Development
+
+```bash
+pnpm install            # also generates packages/core/src/sorting/sort-worker-code.ts
+pnpm build:packages     # builds core + wrappers (dev build: readable, with sourcemaps)
+pnpm test               # vitest across the workspace
+pnpm dev                # build core + react, then start the React playground
+```
+
+Two files in `packages/core` are build artifacts and must not be edited by hand:
+
+- `dist/styles.css` is bundled from `src/styles/*.css` with Lightning CSS (minified in `build:production`). The wrappers copy it into their own `dist/`.
+- `src/sorting/sort-worker-code.ts` (git-ignored) is the sort Web Worker `src/sorting/sort-worker.script.ts` bundled and minified into a string. It is regenerated on install, build and test; run `pnpm --filter @gp-grid/core build:worker` to rebuild it manually.
+
 ## Donations
 
 Keeping this library requires effort and passion, I'm a full time engineer employed on other project and I'm trying my best to keep this work free! For all the features.
