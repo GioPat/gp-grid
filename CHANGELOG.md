@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.23.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.22.0...gp-grid-v0.23.0) (2026-08-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* the symbols above are no longer exported from @gp-grid/core. Use the GridCore facade (selection, fill, highlight, sortFilter) and the data-source factories instead.
+
+### 🐛 Bug Fixes
+
+* clear highlight caches when a column is moved ([348a155](https://github.com/GioPat/gp-grid/commit/348a15549159561ec8af58f8fa1252f5184f7100))
+* nest InstructionBatcher start/flush as documented ([b3b6e87](https://github.com/GioPat/gp-grid/commit/b3b6e877ffc5284e7176214a3154f6fdec1d7664))
+
+
+### ♻️ Refactoring
+
+* drop internal managers and sorting internals from the public API ([283348d](https://github.com/GioPat/gp-grid/commit/283348d453937f6ed4076d3fc3cd388df1da7c23))
+* route every view update through a single ViewSync ([e4f5fa2](https://github.com/GioPat/gp-grid/commit/e4f5fa24bff69f358b5b81c652508414c6fa89d4))
+
 ## [0.22.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.21.0...gp-grid-v0.22.0) (2026-08-28)
 
 
