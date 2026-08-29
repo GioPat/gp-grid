@@ -5,9 +5,7 @@ import type {
   BatchInstructionListener,
   ColumnDefinition,
   CellValue,
-  CellValueChangedEvent,
   DataSource,
-  RowId,
   SortModel,
   SortDirection,
   FilterModel,
@@ -26,52 +24,32 @@ import type {
   ViewportState,
 } from "./managers";
 import { InstructionBatcher } from "./managers";
-import {
-  computeColumnPositions,
-} from "./utils";
+import { computeColumnPositions } from "./utils";
+import type { RowDataManager } from "./managers/row-data-manager";
+import { type GridCoreConfig, resolveGridCoreConfig } from "./grid-core-config";
 import { buildGridManagers } from "./grid-core-managers";
-import { RowDataManager } from "./managers/row-data-manager";
+import type { ViewSync } from "./grid-core-view-sync";
 import {
-  emitContentSize as emitContentSizeFn,
-  emitHeaders as emitHeadersFn,
-  emitVisibleRange as emitVisibleRangeFn,
-} from "./grid-core-emitters";
-import {
+  type ColumnOperationDeps,
   applyColumnMove,
   applyColumnResize,
   applyRowDragCommit,
 } from "./grid-core-operations";
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-// With scroll virtualization active a fast fling traverses several rows per
-// frame; overscan below this leaves blank rows behind the fling.
-const RECOMMENDED_SCALED_OVERSCAN = 10;
-
-// Default momentum ceiling for the synthetic touch scroller, expressed in
-// rows per second and converted to logical px/ms via the row height.
-const DEFAULT_FLING_ROWS_PER_SECOND = 20_000;
-
-// =============================================================================
 // GridCore
 // =============================================================================
 
 export class GridCore<TData = unknown> {
-  // Configuration
+  // Options with defaults applied; immutable for the grid's lifetime
+  private readonly config: GridCoreConfig<TData>;
+
+  // Columns are the one option that changes after construction
   private columns: ColumnDefinition[];
-  private readonly rowHeight: number;
-  private readonly headerHeight: number;
-  private readonly overscan: number;
-  private readonly maxFlingVelocity: number;
-  private readonly sortingEnabled: boolean;
-  private readonly getRowId?: (row: TData) => RowId;
-  private readonly onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
-  private readonly rowDragEntireRow: boolean;
-  private readonly onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
-  private readonly onColumnResized?: (colIndex: number, newWidth: number) => void;
-  private readonly onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  private columnPositions: number[] = [];
+
+  // Instruction dispatch
+  private readonly batcher = new InstructionBatcher();
 
   // Viewport state
   private readonly viewport: ViewportState;
@@ -90,77 +68,26 @@ export class GridCore<TData = unknown> {
   public readonly sortFilter: SortFilterManager<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
-
-  // Column positions (computed)
-  private columnPositions: number[] = [];
-
-  // Instruction dispatch
-  private readonly batcher = new InstructionBatcher();
-
-  // Scroll virtualization
   private readonly scrollVirtualization: ScrollVirtualizationManager;
+
+  // Derived-view emission: content size, headers, visible range, slots
+  private readonly view: ViewSync<TData>;
 
   // Lifecycle state
   private isDestroyed: boolean = false;
-  private hasWarnedAboutScaledOverscan: boolean = false;
 
   constructor(options: GridCoreOptions<TData>) {
+    this.config = resolveGridCoreConfig(options);
     this.columns = options.columns;
-    this.rowHeight = options.rowHeight;
-    this.headerHeight = options.headerHeight ?? options.rowHeight;
-    this.overscan = options.overscan ?? 3;
-    this.maxFlingVelocity = options.maxFlingVelocity ??
-      (DEFAULT_FLING_ROWS_PER_SECOND * this.rowHeight) / 1000;
-    this.sortingEnabled = options.sortingEnabled ?? true;
-    this.getRowId = options.getRowId;
-    this.onCellValueChanged = options.onCellValueChanged;
-    this.rowDragEntireRow = options.rowDragEntireRow ?? false;
-    this.onRowDragEnd = options.onRowDragEnd;
-    this.onColumnResized = options.onColumnResized;
-    this.onColumnMoved = options.onColumnMoved;
-    if (this.onCellValueChanged && !this.getRowId) {
-      throw new Error("getRowId is required when onCellValueChanged is provided");
-    }
-
     this.computeColumnPositions();
-
-    let viewport!: ViewportState;
-    let slotPool!: SlotPoolManager;
-    let sortFilter!: SortFilterManager<TData>;
-    this.rowData = new RowDataManager<TData>({
-      dataSource: options.dataSource,
-      rowLoading: options.rowLoading,
-      batcher: this.batcher,
-      getColumns: () => this.columns,
-      getSortModel: () => sortFilter.getSortModel(),
-      getFilterModel: () => sortFilter.getFilterModel(),
-      getRowHeight: () => this.rowHeight,
-      getOverscan: () => this.overscan,
-      getScrollTop: () => viewport.getScrollTop(),
-      getViewportHeight: () => viewport.getViewportHeight(),
-      onCellValueChanged: this.onCellValueChanged,
-      getRowId: this.getRowId,
-      syncSlots: () => slotPool.syncSlots(),
-      emitVisibleRange: () => this.emitVisibleRange(),
-      emitContentSize: () => this.emitContentSize(),
-    });
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
-      highlighting: options.highlighting,
+      config: this.config,
       getColumns: () => this.columns,
-      getCachedRows: () => this.rowData.getCachedRows(),
-      getTotalRows: () => this.rowData.getTotalRows(),
-      getRowHeight: () => this.rowHeight,
-      getHeaderHeight: () => this.headerHeight,
-      getOverscan: () => this.overscan,
-      getSortingEnabled: () => this.sortingEnabled,
-      getCellValue: (row, col) => this.getCellValue(row, col),
-      setCellValue: (row, col, value) => this.setCellValue(row, col, value),
-      emitContentSize: () => this.emitContentSize(),
-      emitHeaders: () => this.emitHeaders(),
-      fetchData: () => this.rowData.loadInitial(),
+      getColumnPositions: () => this.columnPositions,
     });
+    this.rowData = managers.rowData;
     this.selection = managers.selection;
     this.highlight = managers.highlight;
     this.fill = managers.fill;
@@ -169,13 +96,11 @@ export class GridCore<TData = unknown> {
     this.slotPool = managers.slotPool;
     this.editManager = managers.editManager;
     this.sortFilter = managers.sortFilter;
-    viewport = this.viewport;
-    slotPool = this.slotPool;
-    sortFilter = this.sortFilter;
+    this.view = managers.view;
 
     this.input = new InputHandler(this, {
-      getHeaderHeight: () => this.headerHeight,
-      getRowHeight: () => this.rowHeight,
+      getHeaderHeight: () => this.config.headerHeight,
+      getRowHeight: () => this.config.rowHeight,
       getColumnPositions: () => this.columnPositions,
       getColumnCount: () => this.columns.length,
     });
@@ -202,9 +127,7 @@ export class GridCore<TData = unknown> {
    */
   async initialize(): Promise<void> {
     await this.rowData.loadInitial();
-    this.slotPool.syncSlots();
-    this.emitContentSize();
-    this.emitHeaders();
+    this.view.reconcile();
   }
 
   // ===========================================================================
@@ -230,9 +153,7 @@ export class GridCore<TData = unknown> {
     if (!changed) return;
 
     this.rowData.requestVisibleRows();
-    this.slotPool.syncSlots();
-    this.emitVisibleRange();
-    if (viewportSizeChanged) this.emitContentSize();
+    this.view.syncVisibleRows(viewportSizeChanged);
   }
 
   // ===========================================================================
@@ -370,48 +291,12 @@ export class GridCore<TData = unknown> {
     this.columnPositions = computeColumnPositions(this.columns);
   }
 
-  private emitContentSize(): void {
-    emitContentSizeFn({
-      batcher: this.batcher,
-      scrollVirtualization: this.scrollVirtualization,
-      slotPool: this.slotPool,
-      viewport: this.viewport,
-      columnPositions: this.columnPositions,
-    });
-    this.warnIfOverscanTooLowForScaling();
-  }
-
-  /**
-   * One-time advisory when scroll virtualization kicks in with a small
-   * overscan: momentum flings move several rows per frame at that scale,
-   * and a small overscan shows blank rows behind the fling.
-   */
-  private warnIfOverscanTooLowForScaling(): void {
-    if (this.hasWarnedAboutScaledOverscan) return;
-    if (this.scrollVirtualization.isScalingActive() === false) return;
-    this.hasWarnedAboutScaledOverscan = true;
-    if (this.overscan >= RECOMMENDED_SCALED_OVERSCAN) return;
-    console.warn(
-      `[gp-grid] Scroll virtualization is active (${this.rowData.getTotalRows().toLocaleString()} rows) ` +
-      `but overscan is ${this.overscan}. Fast momentum scrolling can outrun rendering and show blank rows ` +
-      `at this scale — set the overscan option to 10–12.`,
-    );
-  }
-
-  private emitHeaders(): void {
-    emitHeadersFn({
-      batcher: this.batcher,
-      sortFilter: this.sortFilter,
+  private columnOperationDeps(): ColumnOperationDeps<TData> {
+    return {
       columns: this.columns,
-    });
-  }
-
-  private emitVisibleRange(): void {
-    emitVisibleRangeFn({
-      batcher: this.batcher,
-      scrollVirtualization: this.scrollVirtualization,
-      slotPool: this.slotPool,
-    });
+      computeColumnPositions: () => this.computeColumnPositions(),
+      view: this.view,
+    };
   }
 
   // ===========================================================================
@@ -424,33 +309,21 @@ export class GridCore<TData = unknown> {
    * back-solved so the column ends up exactly `width` pixels wide.
    */
   setColumnWidth(colIndex: number, width: number): void {
-    applyColumnResize(colIndex, width, this.viewport.getViewportWidth(), {
-      batcher: this.batcher,
-      slotPool: this.slotPool,
-      refreshSlots: "sync",
-      computeColumnPositions: () => this.computeColumnPositions(),
-      emitContentSize: () => this.emitContentSize(),
-      emitHeaders: () => this.emitHeaders(),
-      columns: this.columns,
-      onComplete: () => this.onColumnResized?.(colIndex, width),
-    });
+    const applied = applyColumnResize(
+      colIndex,
+      width,
+      this.viewport.getViewportWidth(),
+      this.columnOperationDeps(),
+    );
+    if (applied) this.config.onColumnResized?.(colIndex, width);
   }
 
   /**
    * Move a column from one index to another and recompute layout.
    */
   moveColumn(fromIndex: number, toIndex: number): void {
-    const adjustedTo = applyColumnMove(fromIndex, toIndex, {
-      batcher: this.batcher,
-      slotPool: this.slotPool,
-      refreshSlots: "all",
-      computeColumnPositions: () => this.computeColumnPositions(),
-      emitContentSize: () => this.emitContentSize(),
-      emitHeaders: () => this.emitHeaders(),
-      columns: this.columns,
-      onComplete: () => { },
-    });
-    if (adjustedTo !== null) this.onColumnMoved?.(fromIndex, adjustedTo);
+    const adjustedTo = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
+    if (adjustedTo !== null) this.config.onColumnMoved?.(fromIndex, adjustedTo);
   }
 
   /**
@@ -468,14 +341,14 @@ export class GridCore<TData = unknown> {
       slotPool: this.slotPool,
       highlight: this.highlight,
     });
-    this.onRowDragEnd?.(sourceIndex, targetIndex);
+    this.config.onRowDragEnd?.(sourceIndex, targetIndex);
   }
 
   /**
    * Whether the entire row is draggable.
    */
   isRowDragEntireRow(): boolean {
-    return this.rowDragEntireRow;
+    return this.config.rowDragEntireRow;
   }
 
   // ===========================================================================
@@ -495,11 +368,11 @@ export class GridCore<TData = unknown> {
   }
 
   getRowHeight(): number {
-    return this.rowHeight;
+    return this.config.rowHeight;
   }
 
   getHeaderHeight(): number {
-    return this.headerHeight;
+    return this.config.headerHeight;
   }
 
   getTotalWidth(): number {
@@ -519,7 +392,7 @@ export class GridCore<TData = unknown> {
    * synthetic scroller while scroll virtualization is active.
    */
   getMaxFlingVelocity(): number {
-    return this.maxFlingVelocity;
+    return this.config.maxFlingVelocity;
   }
 
   /**
@@ -578,12 +451,7 @@ export class GridCore<TData = unknown> {
    */
   async refresh(): Promise<void> {
     await this.rowData.loadInitial();
-    this.highlight?.clearAllCaches();
-    // refreshAllSlots (not syncSlots) ensures stale slot data is re-read
-    // when totalRows didn't change but row contents did.
-    this.slotPool.refreshAllSlots();
-    this.emitContentSize();
-    this.emitVisibleRange();
+    this.view.reconcile();
   }
 
   /**
@@ -593,10 +461,7 @@ export class GridCore<TData = unknown> {
    */
   async refreshFromTransaction(): Promise<void> {
     await this.rowData.refreshFromTransaction();
-    this.highlight?.clearAllCaches();
-    this.slotPool.refreshAllSlots();
-    this.emitContentSize();
-    this.emitVisibleRange();
+    this.view.reconcile();
   }
 
   /**
@@ -627,9 +492,7 @@ export class GridCore<TData = unknown> {
   setColumns(columns: ColumnDefinition[]): void {
     this.columns = columns;
     this.computeColumnPositions();
-    this.emitContentSize();
-    this.emitHeaders();
-    this.slotPool.syncSlots();
+    this.view.reconcile();
   }
 
   /**

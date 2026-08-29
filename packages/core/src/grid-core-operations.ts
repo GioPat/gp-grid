@@ -5,38 +5,16 @@
 
 import type { DataSource, ColumnDefinition, FilterModel, SortModel } from "./types";
 import type { SlotPoolManager } from "./slot-pool";
-import type {
-  HighlightManager,
-  InstructionBatcher,
-} from "./managers";
+import type { HighlightManager } from "./managers";
+import type { ViewSync } from "./grid-core-view-sync";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
 export interface ColumnOperationDeps<TData> {
-  batcher: InstructionBatcher;
-  slotPool: SlotPoolManager;
-  refreshSlots: "sync" | "all";
-  computeColumnPositions: () => void;
-  emitContentSize: () => void;
-  emitHeaders: () => void;
+  /** GridCore's live column array; operations mutate it in place. */
   columns: ColumnDefinition[];
-  onComplete: () => void;
-  highlight?: HighlightManager<TData> | null;
+  computeColumnPositions: () => void;
+  view: ViewSync<TData>;
 }
-
-const emitColumnLayoutBatch = <TData>(deps: ColumnOperationDeps<TData>): void => {
-  deps.computeColumnPositions();
-  deps.batcher.start();
-  try {
-    deps.emitContentSize();
-    deps.emitHeaders();
-    deps.batcher.emit({ type: "COLUMNS_CHANGED", columns: [...deps.columns] });
-    if (deps.refreshSlots === "sync") deps.slotPool.syncSlots();
-    else deps.slotPool.refreshAllSlots();
-  } finally {
-    deps.batcher.flush();
-  }
-  deps.onComplete();
-};
 
 /**
  * Convert a desired displayed width to the stored width that produces it
@@ -72,13 +50,15 @@ export const applyColumnResize = <TData>(
   displayedWidth: number,
   viewportWidth: number,
   deps: ColumnOperationDeps<TData>,
-): void => {
+): boolean => {
   const column = deps.columns[colIndex];
-  if (!column) return;
+  if (column === undefined) return false;
   column.width = column.hidden
     ? displayedWidth
     : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, deps.columns);
-  emitColumnLayoutBatch({ ...deps, refreshSlots: "sync" });
+  deps.computeColumnPositions();
+  deps.view.syncColumnLayout("geometry");
+  return true;
 };
 
 export const applyColumnMove = <TData>(
@@ -94,7 +74,8 @@ export const applyColumnMove = <TData>(
   const [col] = deps.columns.splice(fromIndex, 1);
   deps.columns.splice(adjustedTo, 0, col!);
 
-  emitColumnLayoutBatch({ ...deps, refreshSlots: "all" });
+  deps.computeColumnPositions();
+  deps.view.syncColumnLayout("order");
   return adjustedTo;
 };
 
