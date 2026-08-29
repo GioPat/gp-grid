@@ -228,39 +228,6 @@ export interface DataErrorInstruction {
 }
 
 // =============================================================================
-// Transaction Instructions
-// =============================================================================
-
-/** Rows added instruction */
-export interface RowsAddedInstruction {
-  type: "ROWS_ADDED";
-  indices: number[];
-  count: number;
-  totalRows: number;
-}
-
-/** Rows removed instruction */
-export interface RowsRemovedInstruction {
-  type: "ROWS_REMOVED";
-  indices: number[];
-  totalRows: number;
-}
-
-/** Rows updated instruction */
-export interface RowsUpdatedInstruction {
-  type: "ROWS_UPDATED";
-  indices: number[];
-}
-
-/** Transaction processed instruction */
-export interface TransactionProcessedInstruction {
-  type: "TRANSACTION_PROCESSED";
-  added: number;
-  removed: number;
-  updated: number;
-}
-
-// =============================================================================
 // Column Change Instructions
 // =============================================================================
 
@@ -268,96 +235,6 @@ export interface TransactionProcessedInstruction {
 export interface ColumnsChangedInstruction {
   type: "COLUMNS_CHANGED";
   columns: ColumnDefinition[];
-}
-
-// =============================================================================
-// Column Resize Instructions
-// =============================================================================
-
-/** Column resize started */
-export interface StartColumnResizeInstruction {
-  type: "START_COLUMN_RESIZE";
-  colIndex: number;
-  initialWidth: number;
-}
-
-/** Column resize in progress */
-export interface UpdateColumnResizeInstruction {
-  type: "UPDATE_COLUMN_RESIZE";
-  colIndex: number;
-  currentWidth: number;
-}
-
-/** Column resize committed */
-export interface CommitColumnResizeInstruction {
-  type: "COMMIT_COLUMN_RESIZE";
-  colIndex: number;
-  newWidth: number;
-}
-
-/** Column resize cancelled */
-export interface CancelColumnResizeInstruction {
-  type: "CANCEL_COLUMN_RESIZE";
-}
-
-// =============================================================================
-// Column Move Instructions
-// =============================================================================
-
-/** Column move started */
-export interface StartColumnMoveInstruction {
-  type: "START_COLUMN_MOVE";
-  sourceColIndex: number;
-}
-
-/** Column move position updated */
-export interface UpdateColumnMoveInstruction {
-  type: "UPDATE_COLUMN_MOVE";
-  currentX: number;
-  currentY: number;
-  dropTargetIndex: number | null;
-}
-
-/** Column move committed */
-export interface CommitColumnMoveInstruction {
-  type: "COMMIT_COLUMN_MOVE";
-  sourceColIndex: number;
-  targetColIndex: number;
-}
-
-/** Column move cancelled */
-export interface CancelColumnMoveInstruction {
-  type: "CANCEL_COLUMN_MOVE";
-}
-
-// =============================================================================
-// Row Drag Instructions
-// =============================================================================
-
-/** Row drag started */
-export interface StartRowDragInstruction {
-  type: "START_ROW_DRAG";
-  sourceRowIndex: number;
-}
-
-/** Row drag position updated */
-export interface UpdateRowDragInstruction {
-  type: "UPDATE_ROW_DRAG";
-  currentX: number;
-  currentY: number;
-  dropTargetIndex: number | null;
-}
-
-/** Row drag committed */
-export interface CommitRowDragInstruction {
-  type: "COMMIT_ROW_DRAG";
-  sourceRowIndex: number;
-  targetRowIndex: number;
-}
-
-/** Row drag cancelled */
-export interface CancelRowDragInstruction {
-  type: "CANCEL_ROW_DRAG";
 }
 
 // =============================================================================
@@ -401,28 +278,8 @@ export type GridInstruction =
   | DataLoadingInstruction
   | DataLoadedInstruction
   | DataErrorInstruction
-  /** Transactions */
-  | RowsAddedInstruction
-  | RowsRemovedInstruction
-  | RowsUpdatedInstruction
-  | TransactionProcessedInstruction
   /** Column changes */
-  | ColumnsChangedInstruction
-  /** Column resize */
-  | StartColumnResizeInstruction
-  | UpdateColumnResizeInstruction
-  | CommitColumnResizeInstruction
-  | CancelColumnResizeInstruction
-  /** Column move */
-  | StartColumnMoveInstruction
-  | UpdateColumnMoveInstruction
-  | CommitColumnMoveInstruction
-  | CancelColumnMoveInstruction
-  /** Row drag */
-  | StartRowDragInstruction
-  | UpdateRowDragInstruction
-  | CommitRowDragInstruction
-  | CancelRowDragInstruction;
+  | ColumnsChangedInstruction;
 
 // =============================================================================
 // Instruction Listeners

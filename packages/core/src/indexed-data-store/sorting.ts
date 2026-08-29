@@ -3,37 +3,40 @@
 import type { CellValue, SortModel } from "../types";
 import { formatCellValue } from "../utils/format-helpers";
 
+/** Characters consumed by a single base-36 hash chunk. */
+const CHUNK_LENGTH = 10;
+
+/** Number of 10-character chunks for string hashing (30 chars total) */
+export const HASH_CHUNK_COUNT = 3;
+
 /**
- * Convert a string to a sortable number using first 10 characters.
- * Uses base-36 encoding (a-z = 0-25, 0-9 = 26-35).
+ * Map a character code to its base-36 sort weight: a-z to 0-25, 0-9 to 26-35,
+ * anything else to 0.
  */
-export function stringToSortableNumber(str: string): number {
-  const s = str.toLowerCase();
-  const len = Math.min(s.length, 10);
+const toBase36Weight = (code: number): number => {
+  if (code >= 97 && code <= 122) return code - 97;
+  if (code >= 48 && code <= 57) return code - 48 + 26;
+  return 0;
+};
+
+/**
+ * Base-36 hash of the CHUNK_LENGTH characters starting at `start`.
+ * Positions past the end of the string contribute 0, which keeps shorter
+ * strings ordered before longer ones sharing the same prefix.
+ */
+const hashChunkAt = (s: string, start: number): number => {
   let hash = 0;
-
-  for (let i = 0; i < len; i++) {
-    const code = s.codePointAt(i) ?? 200;
-    let mapped: number;
-    if (code >= 97 && code <= 122) {
-      // a-z
-      mapped = code - 97;
-    } else if (code >= 48 && code <= 57) {
-      // 0-9
-      mapped = code - 48 + 26;
-    } else {
-      mapped = 0;
-    }
-    hash = hash * 36 + mapped;
+  for (let i = 0; i < CHUNK_LENGTH; i++) {
+    const charIndex = start + i;
+    const code = charIndex < s.length ? (s.codePointAt(charIndex) ?? 200) : 0;
+    hash = hash * 36 + toBase36Weight(code);
   }
-
-  // Pad to 10 characters
-  for (let i = len; i < 10; i++) {
-    hash = hash * 36;
-  }
-
   return hash;
-}
+};
+
+/** Sortable number from the first 10 characters of a string (base-36). */
+const stringToSortableNumber = (str: string): number =>
+  hashChunkAt(str.toLowerCase(), 0);
 
 /**
  * Compare two cell values for sorting.
@@ -72,10 +75,10 @@ export function compareValues(a: CellValue, b: CellValue): number {
 }
 
 /**
- * Compute a sortable hash for a cell value.
- * Used for fast comparisons in sorted indices.
+ * Convert any cell value to a sortable number (worker sort pre-pass).
+ * Strings are hashed from their first 10 characters; nulls sort last.
  */
-export function computeValueHash(value: CellValue): number {
+export function toSortableNumber(value: CellValue): number {
   if (value == null) return Number.MAX_VALUE; // nulls sort last
 
   if (typeof value === "number") return value;
@@ -99,82 +102,6 @@ export function computeValueHash(value: CellValue): number {
 }
 
 /**
- * Configuration for sort hash computation
- */
-export interface SortHashConfig<TData> {
-  sortModel: SortModel[];
-  sortModelHash: string;
-  getFieldValue: (row: TData, field: string) => CellValue;
-}
-
-/**
- * Compute sort hashes for a row based on sort model.
- * Returns array of hashes, one for each sort column.
- */
-export function computeRowSortHashes<TData>(
-  row: TData,
-  config: SortHashConfig<TData>
-): number[] {
-  const hashes: number[] = [];
-
-  for (const sort of config.sortModel) {
-    const value = config.getFieldValue(row, sort.colId);
-    const hash = computeValueHash(value);
-    hashes.push(hash);
-  }
-
-  return hashes;
-}
-
-/**
- * Compare two rows using precomputed hash arrays.
- * Falls back to direct comparison if hashes unavailable.
- */
-export function compareRowsByHashes(
-  hashesA: number[] | undefined,
-  hashesB: number[] | undefined,
-  sortModel: SortModel[]
-): number | null {
-  if (!hashesA || !hashesB) {
-    return null; // Signal to use direct comparison
-  }
-
-  for (let i = 0; i < sortModel.length; i++) {
-    const diff = hashesA[i]! - hashesB[i]!;
-    if (diff !== 0) {
-      return sortModel[i]!.direction === "asc" ? diff : -diff;
-    }
-  }
-
-  return 0;
-}
-
-/**
- * Compare two rows directly without hash cache.
- */
-export function compareRowsDirect<TData>(
-  rowA: TData,
-  rowB: TData,
-  sortModel: SortModel[],
-  getFieldValue: (row: TData, field: string) => CellValue
-): number {
-  for (const { colId, direction } of sortModel) {
-    const valA = getFieldValue(rowA, colId);
-    const valB = getFieldValue(rowB, colId);
-    const comparison = compareValues(valA, valB);
-
-    if (comparison !== 0) {
-      return direction === "asc" ? comparison : -comparison;
-    }
-  }
-
-  return 0;
-}
-
-/** Number of 10-character chunks for string hashing (30 chars total) */
-export const HASH_CHUNK_COUNT = 3;
-
-/**
  * Convert a string to multiple sortable hash values (one per 10-char chunk).
  * This allows correct sorting of strings longer than 10 characters.
  * Returns HASH_CHUNK_COUNT hashes, each covering 10 characters.
@@ -184,54 +111,10 @@ export function stringToSortableHashes(str: string): number[] {
   const hashes: number[] = [];
 
   for (let chunk = 0; chunk < HASH_CHUNK_COUNT; chunk++) {
-    const start = chunk * 10;
-    let hash = 0;
-
-    for (let i = 0; i < 10; i++) {
-      const charIndex = start + i;
-      const code = charIndex < s.length ? (s.codePointAt(charIndex) ?? 200) : 0;
-      let mapped: number;
-      if (code >= 97 && code <= 122) {
-        mapped = code - 97;
-      } else if (code >= 48 && code <= 57) {
-        mapped = code - 48 + 26;
-      } else {
-        mapped = 0;
-      }
-      hash = hash * 36 + mapped;
-    }
-    hashes.push(hash);
+    hashes.push(hashChunkAt(s, chunk * CHUNK_LENGTH));
   }
 
   return hashes;
-}
-
-/**
- * Convert any cell value to a sortable number.
- * Strings are converted using a lexicographic hash of the first 10 characters.
- */
-export function toSortableNumber(val: CellValue): number {
-  if (val == null) return Number.MAX_VALUE;
-
-  if (Array.isArray(val)) {
-    if (val.length === 0) return Number.MAX_VALUE;
-    return stringToSortableNumber(val.join(", "));
-  }
-
-  if (typeof val === "number") return val;
-
-  if (val instanceof Date) return val.getTime();
-
-  if (typeof val === "string") {
-    return stringToSortableNumber(val);
-  }
-
-  if (typeof val === "object") {
-    return stringToSortableNumber(JSON.stringify(val));
-  }
-
-  const num = Number(val);
-  return Number.isNaN(num) ? 0 : num;
 }
 
 /**

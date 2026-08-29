@@ -2,25 +2,19 @@
 
 // Re-export main class
 export { IndexedDataStore } from "./indexed-data-store";
-export type { IndexedDataStoreOptions, RowSortCache } from "./indexed-data-store";
+export type { IndexedDataStoreOptions } from "./indexed-data-store";
 
 // Re-export field helpers
 export { getFieldValue, setFieldValue } from "./field-helpers";
 
 // Re-export sorting utilities
 export {
-  stringToSortableNumber,
   compareValues,
-  computeValueHash,
-  computeRowSortHashes,
-  compareRowsByHashes,
-  compareRowsDirect,
   HASH_CHUNK_COUNT,
   stringToSortableHashes,
   toSortableNumber,
   applySort,
 } from "./sorting";
-export type { SortHashConfig } from "./sorting";
 
 // Re-export filtering utilities
 export {

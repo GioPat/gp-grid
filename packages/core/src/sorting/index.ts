@@ -10,14 +10,13 @@ export { WorkerPool } from "./worker-pool";
 export type { WorkerPoolOptions } from "./worker-pool";
 
 // K-way merge utilities
-export { kWayMerge, kWayMergeMultiColumn, detectBoundaryCollisions } from "./k-way-merge";
+export { kWayMerge, kWayMergeMultiColumn } from "./k-way-merge";
 export type { SortedChunk, MultiColumnSortedChunk } from "./k-way-merge";
+export { detectBoundaryCollisions } from "./string-collision-resolver";
 
 // Sort worker code (for custom worker implementations)
 export { SORT_WORKER_CODE } from "./sort-worker-code";
 export type {
-  SortWorkerRequest,
-  SortWorkerResponse,
   SortIndicesRequest,
   SortIndicesResponse,
   SortMultiColumnRequest,

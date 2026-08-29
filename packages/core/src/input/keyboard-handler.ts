@@ -3,15 +3,12 @@ import type { CellPosition } from "../types/basic";
 import type { KeyEventData, KeyboardResult } from "../types/input";
 import type { Direction } from "../selection";
 
-const keyToDirection = (key: string): Direction | null => {
-  switch (key) {
-    case "ArrowUp": return "up";
-    case "ArrowDown": return "down";
-    case "ArrowLeft": return "left";
-    case "ArrowRight": return "right";
-    default: return null;
-  }
-};
+const ARROW_DIRECTIONS = new Map<string, Direction>([
+  ["ArrowUp", "up"],
+  ["ArrowDown", "down"],
+  ["ArrowLeft", "left"],
+  ["ArrowRight", "right"],
+]);
 
 type EditingCell = { row: number; col: number } | null;
 
@@ -48,8 +45,8 @@ export class KeyboardHandler<TData = unknown> {
       event.key !== "Tab";
     if (editingAndNotSpecialKey) return { preventDefault: false };
 
-    const direction = keyToDirection(event.key);
-    if (direction !== null) return this.moveFocus(direction, event.shiftKey);
+    const direction = ARROW_DIRECTIONS.get(event.key);
+    if (direction) return this.moveFocus(direction, event.shiftKey);
 
     const isCtrl = event.ctrlKey || event.metaKey;
     return this.handleAction(event.key, activeCell, editingCell, event.shiftKey, isCtrl);

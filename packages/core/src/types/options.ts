@@ -56,8 +56,6 @@ export interface GridCoreOptions<TData = unknown> {
   rowLoading?: RowLoadingOptions;
   /** Enable/disable sorting globally. Default: true */
   sortingEnabled?: boolean;
-  /** Debounce time for transactions in ms. Default 50. Set to 0 for sync. */
-  transactionDebounceMs?: number;
   /** Function to extract unique ID from row. Required for mutations. */
   getRowId?: (row: TData) => RowId;
   /** Row/column/cell highlighting configuration */

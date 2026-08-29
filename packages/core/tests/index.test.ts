@@ -6,16 +6,8 @@ import * as publicApi from "../src/index";
 const expectedExports = [
   // Core
   "GridCore",
-  // Managers
-  "SelectionManager",
-  "FillManager",
-  "SlotPoolManager",
-  "EditManager",
+  // Input handler + transactions
   "InputHandler",
-  "HighlightManager",
-  "SortFilterManager",
-  "RowMutationManager",
-  "ScrollVirtualizationManager",
   "TransactionManager",
   // Data sources
   "createClientDataSource",
@@ -24,10 +16,6 @@ const expectedExports = [
   "createMutableClientDataSource",
   // Transaction system
   "IndexedDataStore",
-  // Sorting utilities
-  "stringToSortableNumber",
-  "compareValues",
-  "computeValueHash",
   // Filtering utilities
   "evaluateTextCondition",
   "evaluateNumberCondition",
@@ -38,12 +26,6 @@ const expectedExports = [
   // Field helpers
   "getFieldValue",
   "setFieldValue",
-  // Parallel sorting
-  "ParallelSortManager",
-  "WorkerPool",
-  "kWayMerge",
-  "kWayMergeMultiColumn",
-  "detectBoundaryCollisions",
   // Positioning utilities
   "calculateColumnPositions",
   "calculateScaledColumnPositions",
@@ -56,14 +38,11 @@ const expectedExports = [
   "isCellEditing",
   "isCellInFillPreview",
   "buildCellClasses",
-  "isRowInSelectionRange",
-  "isColumnInSelectionRange",
   // UI State
   "createInitialState",
   // State reducer
   "applyInstruction",
   // Scroll helpers
-  "findSlotForRow",
   "scrollCellIntoView",
   // Format helpers
   "formatCellValue",

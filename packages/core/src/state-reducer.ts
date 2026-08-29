@@ -128,14 +128,6 @@ export const applyInstruction = <TData = unknown>(
     case "DATA_ERROR":
       return { isLoading: false, error: instruction.error };
 
-    case "ROWS_ADDED":
-    case "ROWS_REMOVED":
-      return { totalRows: instruction.totalRows };
-
-    case "ROWS_UPDATED":
-    case "TRANSACTION_PROCESSED":
-      return null;
-
     case "COLUMNS_CHANGED":
       return { columns: instruction.columns };
 

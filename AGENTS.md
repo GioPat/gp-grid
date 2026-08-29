@@ -1,4 +1,4 @@
-# gp-grid
+# AGENTS.md
 
 gp-grid is a typescript library with dedicated framework/library wrappers that allows user to manage tables and grids. The core idea of gp-grid is to give users a tool with "batteries included" but give room for full customizability. One of the core principle is the bundle size, allowing users to manage gp-grid in resource constrained (memory, bundle) environments so it cannot include external dependencies. Another core principle is the DX (Developer Experience)
 
@@ -19,7 +19,16 @@ The repo contains also playgrounds that are used to smoke and quick test feature
 
 See `package.json`
 
-## Build artifacts
+## Build
+
+Bundlers: `tsdown` (rolldown) for `core`, `react` and `vue`, configured in each package's `tsdown.config.ts`; `ng-packagr` for `angular`, followed by `scripts/postbuild.mjs`. Build `core` first: the wrappers copy `../core/dist/styles.css` at build time.
+
+- **Two profiles.** `build` is the dev profile (readable output, sourcemaps) used by `pnpm dev*`, `build:packages` and the test workflow. `build:production` (`--minify --treeshake`, `.d.ts`, no sourcemaps) is what the release workflow publishes. A local `dist/` is therefore unminified by default: judge bundle size and minification against `build:production` output or the published npm tarball.
+- **Core stays external in the wrappers.** `@gp-grid/core` is a runtime `dependency` of react/vue/angular, so the bundlers keep it as `import ... from "@gp-grid/core"` instead of inlining it; a wrapper bundle contains only wrapper code. `react`, `react-dom` and `vue` are peer dependencies and external as well.
+- **Type-checking reads core sources.** `tsc --noEmit` in react/vue/angular resolves `@gp-grid/core` to `../core/src` through `paths`, so a core API change is checked against the wrappers without rebuilding core. Run it in all three after touching core's public API.
+- **Publishing.** npm ships `dist/` (angular: `dist/angular`). JSR ships core's `src/` unbundled (`jsr.json` exports `./src/index.ts`), so everything reachable from `src/index.ts` must be plain TypeScript that resolves without a bundler: CSS lives in `.css` files outside the module graph and generated code is a real file on disk (see Build artifacts).
+
+### Build artifacts
 
 Two files in `packages/core` are produced by the build. Never hand-edit them:
 
@@ -47,5 +56,5 @@ Two files in `packages/core` are produced by the build. Never hand-edit them:
 ## Gotchas
 
 - The library `core` package must be library/framework agnostic
-- Check LSP type errors with the `tsc --noEmit` command.
+- Check type errors with `tsc --noEmit` in the package you changed; after core public-API changes run it in react, vue and angular too (see Build).
 - After changes in the public APIs (addition, removal, breaking change) warn the user to update the skill and the public documentation.

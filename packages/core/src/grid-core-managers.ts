@@ -1,7 +1,7 @@
 // packages/core/src/grid-core-managers.ts
 // Manager construction for GridCore. Extracted from grid-core.ts to keep
-// the orchestrator focused on public API and lifecycle — the factory
-// owns the subsystem wiring (per-manager deps + instruction-forwarding).
+// the orchestrator focused on public API and lifecycle — the factory owns
+// the subsystem wiring (per-manager deps + instruction-forwarding).
 
 import { SelectionManager } from "./selection";
 import { FillManager } from "./fill";
@@ -10,38 +10,25 @@ import { EditManager } from "./edit-manager";
 import {
   HighlightManager,
   InstructionBatcher,
-  RowMutationManager,
   ScrollVirtualizationManager,
   SortFilterManager,
   ViewportState,
 } from "./managers";
-import type {
-  CellValue,
-  ColumnDefinition,
-  HighlightingOptions,
-} from "./types";
+import { RowDataManager } from "./managers/row-data-manager";
+import { ViewSync } from "./grid-core-view-sync";
+import type { GridCoreConfig } from "./grid-core-config";
+import type { CellValue, ColumnDefinition } from "./types";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
-  highlighting: HighlightingOptions<TData> | undefined;
+  config: GridCoreConfig<TData>;
+  // Columns and their positions are owned (and replaced) by GridCore.
   getColumns: () => ColumnDefinition[];
-  getCachedRows: () => Map<number, TData>;
-  setCachedRows: (rows: Map<number, TData>) => void;
-  getTotalRows: () => number;
-  setTotalRows: (n: number) => void;
-  getRowHeight: () => number;
-  getHeaderHeight: () => number;
-  getOverscan: () => number;
-  getSortingEnabled: () => boolean;
-  getCellValue: (row: number, col: number) => CellValue;
-  setCellValue: (row: number, col: number, value: CellValue) => void;
-  emitContentSize: () => void;
-  emitHeaders: () => void;
-  fetchData: () => Promise<void>;
-  clearSelectionIfInvalid: (maxRow: number) => void;
+  getColumnPositions: () => number[];
 }
 
 export interface GridManagers<TData> {
+  rowData: RowDataManager<TData>;
   selection: SelectionManager;
   highlight: HighlightManager<TData> | null;
   fill: FillManager;
@@ -50,22 +37,34 @@ export interface GridManagers<TData> {
   slotPool: SlotPoolManager;
   editManager: EditManager;
   sortFilter: SortFilterManager<TData>;
-  rowMutation: RowMutationManager<TData>;
+  view: ViewSync<TData>;
 }
 
 export const buildGridManagers = <TData>(
   deps: GridManagersDeps<TData>,
 ): GridManagers<TData> => {
-  const { batcher } = deps;
+  const { batcher, config, getColumns } = deps;
+  const getRowHeight = (): number => config.rowHeight;
+  const getHeaderHeight = (): number => config.headerHeight;
+  const getOverscan = (): number => config.overscan;
 
-  // scrollVirtualization and viewport cross-reference each other through
-  // lazy arrow-fn getters. Forward-declare so both callbacks resolve at
-  // call time, not at construction.
+  // Managers cross-reference each other through lazy arrow-fn getters.
+  // Forward-declare the late ones so callbacks resolve at call time, not at
+  // construction; none of them run before buildGridManagers returns.
   let viewport!: ViewportState;
+  let rowData!: RowDataManager<TData>;
+  const getTotalRows = (): number => rowData.getTotalRows();
+  const getCachedRows = (): Map<number, TData> => rowData.getCachedRows();
+  const getCellValue = (row: number, col: number): CellValue =>
+    rowData.getCellValue(row, col);
+  const setCellValue = (row: number, col: number, value: CellValue): void => {
+    rowData.setCellValue(row, col, value);
+  };
+
   const scrollVirtualization = new ScrollVirtualizationManager({
-    getRowHeight: deps.getRowHeight,
-    getHeaderHeight: deps.getHeaderHeight,
-    getTotalRows: deps.getTotalRows,
+    getRowHeight,
+    getHeaderHeight,
+    getTotalRows,
     getScrollTop: () => viewport.getScrollTop(),
     getViewportHeight: () => viewport.getViewportHeight(),
   });
@@ -75,99 +74,114 @@ export const buildGridManagers = <TData>(
   let highlight: HighlightManager<TData> | null = null;
 
   const selection = new SelectionManager({
-    getRowCount: deps.getTotalRows,
-    getColumnCount: () => deps.getColumns().length,
-    getCellValue: deps.getCellValue,
-    getRowData: (row) => deps.getCachedRows().get(row),
-    getColumn: (col) => deps.getColumns()[col],
-    setCellValue: deps.setCellValue,
+    getRowCount: getTotalRows,
+    getColumnCount: () => getColumns().length,
+    getCellValue,
+    getRowData: (row) => getCachedRows().get(row),
+    getColumn: (col) => getColumns()[col],
+    setCellValue,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
     highlight?.onSelectionChange();
   });
 
-  if (deps.highlighting) {
+  if (config.highlighting) {
     highlight = new HighlightManager<TData>(
       {
         getActiveCell: () => selection.getActiveCell(),
         getSelectionRange: () => selection.getSelectionRange(),
-        getColumn: (colIndex) => deps.getColumns()[colIndex],
+        getColumn: (colIndex) => getColumns()[colIndex],
       },
-      deps.highlighting,
+      config.highlighting,
     );
     highlight.onInstruction((instruction) => batcher.emit(instruction));
   }
 
   const fill = new FillManager({
-    getRowCount: deps.getTotalRows,
-    getColumnCount: () => deps.getColumns().length,
-    getCellValue: deps.getCellValue,
-    getColumn: (col) => deps.getColumns()[col],
-    setCellValue: deps.setCellValue,
+    getRowCount: getTotalRows,
+    getColumnCount: () => getColumns().length,
+    getCellValue,
+    getColumn: (col) => getColumns()[col],
+    setCellValue,
   });
   fill.onInstruction((instruction) => batcher.emit(instruction));
 
   const slotPool = new SlotPoolManager({
-    getRowHeight: deps.getRowHeight,
-    getHeaderHeight: deps.getHeaderHeight,
-    getOverscan: deps.getOverscan,
+    getRowHeight,
+    getHeaderHeight,
+    getOverscan,
     getScrollTop: () => viewport.getScrollTop(),
     getViewportHeight: () => viewport.getViewportHeight(),
-    getTotalRows: deps.getTotalRows,
+    getTotalRows,
     getScrollRatio: () => scrollVirtualization.getScrollRatio(),
     getVirtualContentHeight: () => scrollVirtualization.getVirtualContentHeight(),
-    getRowData: (rowIndex) => deps.getCachedRows().get(rowIndex),
+    getRowData: (rowIndex) => getCachedRows().get(rowIndex),
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
   const editManager = new EditManager({
-    getColumn: (col) => deps.getColumns()[col],
-    getCellValue: deps.getCellValue,
-    setCellValue: deps.setCellValue,
+    getColumn: (col) => getColumns()[col],
+    getCellValue,
+    setCellValue,
     onCommit: (row) => slotPool.updateSlot(row),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));
 
   const sortFilter = new SortFilterManager<TData>({
-    getColumns: deps.getColumns,
-    isSortingEnabled: deps.getSortingEnabled,
-    getCachedRows: deps.getCachedRows,
+    getColumns,
+    isSortingEnabled: () => config.sortingEnabled,
+    getCachedRows,
     onSortFilterChange: async () => {
-      await deps.fetchData();
-      highlight?.clearAllCaches();
+      await rowData.loadInitial();
       // Filtered/sorted results are a new view — start from the top.
       viewport.resetScrollTop();
       batcher.start();
       try {
         batcher.emit({ type: "SCROLL_TO", scrollTop: 0 });
-        deps.emitContentSize();
-        deps.emitHeaders();
-        slotPool.refreshAllSlots();
+        view.reconcile();
       } finally {
         batcher.flush();
       }
     },
     onDataRefreshed: () => {
-      // Handled in onSortFilterChange via startBatch/flushBatch
+      // Handled in onSortFilterChange via batcher.start/flush
       // so all UI updates arrive as a single atomic batch.
     },
   });
   sortFilter.onInstruction((instruction) => batcher.emit(instruction));
 
-  const rowMutation = new RowMutationManager<TData>({
-    getCachedRows: deps.getCachedRows,
-    setCachedRows: deps.setCachedRows,
-    getTotalRows: deps.getTotalRows,
-    setTotalRows: deps.setTotalRows,
-    updateSlot: (rowIndex) => slotPool.updateSlot(rowIndex),
-    refreshAllSlots: () => slotPool.refreshAllSlots(),
-    emitContentSize: deps.emitContentSize,
-    clearSelectionIfInvalid: deps.clearSelectionIfInvalid,
+  const view = new ViewSync<TData>({
+    batcher,
+    scrollVirtualization,
+    slotPool,
+    viewport,
+    sortFilter,
+    highlight,
+    overscan: config.overscan,
+    getColumns,
+    getColumnPositions: deps.getColumnPositions,
+    getTotalRows,
   });
-  rowMutation.onInstruction((instruction) => batcher.emit(instruction));
+
+  rowData = new RowDataManager<TData>({
+    dataSource: config.dataSource,
+    rowLoading: config.rowLoading,
+    batcher,
+    getColumns,
+    getSortModel: () => sortFilter.getSortModel(),
+    getFilterModel: () => sortFilter.getFilterModel(),
+    getRowHeight,
+    getOverscan,
+    getScrollTop: () => viewport.getScrollTop(),
+    getViewportHeight: () => viewport.getViewportHeight(),
+    onCellValueChanged: config.onCellValueChanged,
+    getRowId: config.getRowId,
+    onRowsLoaded: (totalRowsChanged) => view.syncVisibleRows(totalRowsChanged),
+  });
 
   return {
+    rowData,
     selection,
     highlight,
     fill,
@@ -176,6 +190,6 @@ export const buildGridManagers = <TData>(
     slotPool,
     editManager,
     sortFilter,
-    rowMutation,
+    view,
   };
 };

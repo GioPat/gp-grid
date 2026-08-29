@@ -6,20 +6,12 @@ import type {
   PointerEventData,
   RowDragState,
 } from "../types/input";
-import {
-  DRAG_THRESHOLD,
-  calculateAutoScroll,
-} from "./auto-scroll-util";
+import { calculateAutoScroll } from "./auto-scroll-util";
+import { DragGesture } from "./drag-gesture";
 
 export class RowDrag<TData = unknown> {
-  private active = false;
+  private readonly gesture = new DragGesture();
   private sourceRowIndex = -1;
-  private startX = 0;
-  private startY = 0;
-  private thresholdMet = false;
-  private currentX = 0;
-  private currentY = 0;
-  private dropTargetIndex: number | null = null;
   private readonly core: GridCore<TData>;
   private deps: InputHandlerDeps;
 
@@ -33,36 +25,20 @@ export class RowDrag<TData = unknown> {
   }
 
   get isActive(): boolean {
-    return this.active;
+    return this.gesture.active;
   }
 
   get isDraggingForDisplay(): boolean {
-    return this.active && this.thresholdMet;
+    return this.gesture.isDraggingForDisplay;
   }
 
   start(sourceRowIndex: number, clientX: number, clientY: number): void {
-    this.active = true;
     this.sourceRowIndex = sourceRowIndex;
-    this.startX = clientX;
-    this.startY = clientY;
-    this.thresholdMet = false;
-    this.currentX = clientX;
-    this.currentY = clientY;
-    this.dropTargetIndex = null;
+    this.gesture.begin(clientX, clientY);
   }
 
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult | null {
-    const dx = event.clientX - this.startX;
-    const dy = event.clientY - this.startY;
-
-    if (this.thresholdMet === false) {
-      const thresholdCrossed = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
-      if (thresholdCrossed === false) return null;
-      this.thresholdMet = true;
-    }
-
-    this.currentX = event.clientX;
-    this.currentY = event.clientY;
+    if (this.gesture.track(event) === false) return null;
 
     const { top, left, height, width, scrollTop } = bounds;
     const headerHeight = this.deps.getHeaderHeight();
@@ -73,7 +49,7 @@ export class RowDrag<TData = unknown> {
       0,
       Math.min(this.core.getRowIndexAtDisplayY(viewportY, scrollTop), rowCount),
     );
-    this.dropTargetIndex = targetRow;
+    this.gesture.dropTargetIndex = targetRow;
 
     const autoScroll = calculateAutoScroll(
       event.clientY - top,
@@ -87,27 +63,25 @@ export class RowDrag<TData = unknown> {
   }
 
   end(): void {
-    if (this.thresholdMet && this.dropTargetIndex !== null) {
-      if (this.dropTargetIndex !== this.sourceRowIndex) {
-        this.core.commitRowDrag(this.sourceRowIndex, this.dropTargetIndex);
-      }
+    const { thresholdMet, dropTargetIndex } = this.gesture;
+    if (thresholdMet && dropTargetIndex !== null && dropTargetIndex !== this.sourceRowIndex) {
+      this.core.commitRowDrag(this.sourceRowIndex, dropTargetIndex);
     }
-    this.active = false;
     this.sourceRowIndex = -1;
-    this.thresholdMet = false;
-    this.dropTargetIndex = null;
+    this.gesture.reset();
   }
 
   getState(): RowDragState | null {
-    if (this.active === false) return null;
+    if (this.gesture.active === false) return null;
+    const { currentX, currentY, dropTargetIndex } = this.gesture;
     return {
       sourceRowIndex: this.sourceRowIndex,
-      currentX: this.currentX,
-      currentY: this.currentY,
-      dropTargetIndex: this.dropTargetIndex,
-      dropIndicatorY: this.dropTargetIndex === null
+      currentX,
+      currentY,
+      dropTargetIndex,
+      dropIndicatorY: dropTargetIndex === null
         ? 0
-        : this.core.getRowTranslateY(this.dropTargetIndex),
+        : this.core.getRowTranslateY(dropTargetIndex),
     };
   }
 }

@@ -8,6 +8,8 @@ import type { BatchInstructionListener, GridInstruction } from "../types";
 export class InstructionBatcher {
   private listeners: BatchInstructionListener[] = [];
   private buffer: GridInstruction[] | null = null;
+  // Open start() calls; only the outermost flush() delivers the batch.
+  private depth = 0;
 
   /**
    * Subscribe to batched instructions. Returns an unsubscribe function.
@@ -22,15 +24,20 @@ export class InstructionBatcher {
 
   /**
    * Begin buffering. `emit`/`emitBatch` accumulate into an internal buffer
-   * until `flush()` is called. Supports nested semantics at the caller's
-   * level (first startBatch "wins"; nested calls are no-ops by design).
+   * until the matching `flush()`. Calls nest: the outermost start() opens
+   * the buffer and only the outermost flush() delivers it, so a batched
+   * operation can call another batched operation and still emit one batch.
    */
   start(): void {
-    this.buffer = [];
+    if (this.depth === 0) this.buffer = [];
+    this.depth += 1;
   }
 
-  /** Flush buffered instructions to listeners as one batch and stop buffering. */
+  /** Close the current start(); the outermost close delivers the batch. */
   flush(): void {
+    if (this.depth === 0) return;
+    this.depth -= 1;
+    if (this.depth > 0) return;
     const buffer = this.buffer;
     this.buffer = null;
     if (buffer !== null && buffer.length > 0) {

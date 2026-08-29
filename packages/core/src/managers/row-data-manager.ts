@@ -29,16 +29,19 @@ export interface RowDataManagerOptions<TData> {
   getViewportHeight: () => number;
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   getRowId?: (row: TData) => RowId;
-  syncSlots: () => void;
-  emitVisibleRange: () => void;
-  emitContentSize: () => void;
+  /**
+   * A row window arrived from a fire-and-forget load (scroll-triggered), so
+   * nobody is awaiting it: the view must be synced from here.
+   */
+  onRowsLoaded: (totalRowsChanged: boolean) => void;
 }
 
 interface PaginatedFetchOptions {
   range: RowWindowRange;
   resetCache: boolean;
   showLoading: boolean;
-  refreshSlots: boolean;
+  /** false when the caller awaits the load and reconciles the view itself. */
+  notifyRowsLoaded: boolean;
 }
 
 export class RowDataManager<TData = unknown> {
@@ -115,7 +118,7 @@ export class RowDataManager<TData = unknown> {
         range: this.getInitialPaginatedRange(),
         resetCache: true,
         showLoading: true,
-        refreshSlots: false,
+        notifyRowsLoaded: false,
       });
       return;
     }
@@ -135,7 +138,7 @@ export class RowDataManager<TData = unknown> {
       range,
       resetCache: false,
       showLoading,
-      refreshSlots: true,
+      notifyRowsLoaded: true,
     });
   }
 
@@ -145,7 +148,7 @@ export class RowDataManager<TData = unknown> {
         range: this.getPaginatedLoadRange(true),
         resetCache: true,
         showLoading: false,
-        refreshSlots: false,
+        notifyRowsLoaded: false,
       });
       return;
     }
@@ -227,10 +230,8 @@ export class RowDataManager<TData = unknown> {
         });
       }
 
-      if (options.refreshSlots) {
-        this.options.syncSlots();
-        this.options.emitVisibleRange();
-        if (result.totalRowsChanged) this.options.emitContentSize();
+      if (options.notifyRowsLoaded) {
+        this.options.onRowsLoaded(result.totalRowsChanged);
       }
     } catch (error) {
       this.emitDataError(error);

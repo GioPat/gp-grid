@@ -11,7 +11,7 @@ import { IndexedDataStore } from "../indexed-data-store";
 import { TransactionManager, type TransactionResult } from "../managers";
 import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
 import { applySort } from "../indexed-data-store/sorting";
-import { defaultGetFieldValue } from "./client-data-source";
+import { getFieldValue as defaultGetFieldValue } from "../indexed-data-store/field-helpers";
 import { performWorkerSort } from "./worker-sort";
 import { applyFilters } from "../filtering";
 import { createInstructionEmitter } from "../utils";
@@ -110,7 +110,6 @@ export function createMutableClientDataSource<TData = unknown>(
     {
       getRowId,
       getFieldValue: getFieldValue ?? defaultGetFieldValue,
-      getValueFormatter,
     },
     data,
   );

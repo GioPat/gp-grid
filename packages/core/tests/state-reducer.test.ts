@@ -398,58 +398,6 @@ describe("applyInstruction", () => {
     });
   });
 
-  describe("row mutations / transactions", () => {
-    it("ROWS_ADDED returns totalRows", () => {
-      const result = applyInstruction<Row>(
-        {
-          type: "ROWS_ADDED",
-          indices: [10, 11],
-          count: 2,
-          totalRows: 42,
-        },
-        slots,
-        headers,
-      );
-      expect(result).toEqual({ totalRows: 42 });
-    });
-
-    it("ROWS_REMOVED returns totalRows", () => {
-      const result = applyInstruction<Row>(
-        {
-          type: "ROWS_REMOVED",
-          indices: [0],
-          totalRows: 41,
-        },
-        slots,
-        headers,
-      );
-      expect(result).toEqual({ totalRows: 41 });
-    });
-
-    it("ROWS_UPDATED returns null (no primitive field changes)", () => {
-      const result = applyInstruction<Row>(
-        { type: "ROWS_UPDATED", indices: [1, 2] },
-        slots,
-        headers,
-      );
-      expect(result).toBeNull();
-    });
-
-    it("TRANSACTION_PROCESSED returns null", () => {
-      const result = applyInstruction<Row>(
-        {
-          type: "TRANSACTION_PROCESSED",
-          added: 1,
-          removed: 0,
-          updated: 2,
-        },
-        slots,
-        headers,
-      );
-      expect(result).toBeNull();
-    });
-  });
-
   describe("columns", () => {
     it("COLUMNS_CHANGED returns the new columns array", () => {
       const columns: ColumnDefinition[] = [
@@ -472,18 +420,6 @@ describe("applyInstruction", () => {
       { type: "COMMIT_FILL", filledCells: [] },
       { type: "CANCEL_FILL" },
       { type: "COMMIT_EDIT", row: 0, col: 0, value: "v" },
-      { type: "START_COLUMN_RESIZE", colIndex: 0, initialWidth: 100 },
-      { type: "UPDATE_COLUMN_RESIZE", colIndex: 0, currentWidth: 120 },
-      { type: "COMMIT_COLUMN_RESIZE", colIndex: 0, newWidth: 130 },
-      { type: "CANCEL_COLUMN_RESIZE" },
-      { type: "START_COLUMN_MOVE", sourceColIndex: 0 },
-      { type: "UPDATE_COLUMN_MOVE", currentX: 10, currentY: 0, dropTargetIndex: 1 },
-      { type: "COMMIT_COLUMN_MOVE", sourceColIndex: 0, targetColIndex: 1 },
-      { type: "CANCEL_COLUMN_MOVE" },
-      { type: "START_ROW_DRAG", sourceRowIndex: 0 },
-      { type: "UPDATE_ROW_DRAG", currentX: 0, currentY: 10, dropTargetIndex: 1 },
-      { type: "COMMIT_ROW_DRAG", sourceRowIndex: 0, targetRowIndex: 1 },
-      { type: "CANCEL_ROW_DRAG" },
     ];
 
     it.each(passthroughInstructions)(

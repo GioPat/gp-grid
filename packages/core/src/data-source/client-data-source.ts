@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { ParallelSortManager, type ParallelSortOptions } from "../sorting";
 import { applySort } from "../indexed-data-store/sorting";
+import { getFieldValue as defaultGetFieldValue } from "../indexed-data-store/field-helpers";
 import { performWorkerSort } from "./worker-sort";
 import { applyFilters } from "../filtering";
 
@@ -17,30 +18,6 @@ import { applyFilters } from "../filtering";
 
 /** Threshold for using Web Worker (rows). Below this, sync sort is used. */
 const WORKER_THRESHOLD = 200000;
-
-// =============================================================================
-// Field Value Accessor
-// =============================================================================
-
-/**
- * Default field value accessor supporting dot-notation for nested properties
- */
-export function defaultGetFieldValue<TData>(
-  row: TData,
-  field: string,
-): CellValue {
-  const parts = field.split(".");
-  let value: unknown = row;
-
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") {
-      return null;
-    }
-    value = (value as Record<string, unknown>)[part];
-  }
-
-  return value as CellValue;
-}
 
 // =============================================================================
 // Client Data Source
