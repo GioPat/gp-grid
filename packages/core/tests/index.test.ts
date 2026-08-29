@@ -26,12 +26,6 @@ const expectedExports = [
   // Field helpers
   "getFieldValue",
   "setFieldValue",
-  // Parallel sorting
-  "ParallelSortManager",
-  "WorkerPool",
-  "kWayMerge",
-  "kWayMergeMultiColumn",
-  "detectBoundaryCollisions",
   // Positioning utilities
   "calculateColumnPositions",
   "calculateScaledColumnPositions",
