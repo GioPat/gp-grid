@@ -384,7 +384,10 @@ describe("createClientDataSource", () => {
         range: { startRow: 0, endRow: 10 },
         filter: {
           meta: {
-            conditions: [{ type: "text", operator: "contains", value: "Alice" }],
+            groups: [{
+              conditions: [{ type: "text", operator: "contains", value: "Alice" }],
+              combination: "and",
+            }],
             combination: "and",
           },
         },

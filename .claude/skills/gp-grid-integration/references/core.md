@@ -225,7 +225,7 @@ Adapters can call `formatCellValue` (exported from `@gp-grid/core`) to match the
 
 ### Localization and long text
 
-- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(partial)`, and `formatLabel(template, params)`. The official wrappers resolve a `Partial<GridLabels>` prop into full labels and pass them to their filter popup / body; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
+- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridLabelOverrides`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(overrides)`, and `formatLabel(template, params)`. The official wrappers resolve a `GridLabelOverrides` prop into full labels and pass them to their filter popup / body; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
 - **Long text:** `ColumnDefinition.wrapText` (default `false`) makes the default renderer wrap overflowing text onto new lines instead of truncating with an ellipsis. The canonical CSS already ships the `.gp-grid-cell--wrap` and `.gp-grid-cell-content` rules, so adapters that apply the core's cell classes get this for free.
 
 ## CSS

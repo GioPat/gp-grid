@@ -136,7 +136,10 @@ describe("MutableClientDataSource", () => {
         range: { startRow: 0, endRow: 10 },
         filter: {
           age: {
-            conditions: [{ type: "number", operator: ">", value: 25 }],
+            groups: [{
+              conditions: [{ type: "number", operator: ">", value: 25 }],
+              combination: "and",
+            }],
             combination: "and",
           },
         },

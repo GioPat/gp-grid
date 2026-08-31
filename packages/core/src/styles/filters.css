@@ -44,9 +44,6 @@
 
 :where(.gp-grid-filter-mode-toggle) {
   gap: 4px;
-  background-color: var(--gp-grid-bg-alt);
-  border-radius: 4px;
-  padding: 2px;
 }
 
 .gp-grid-filter-mode-toggle button {
@@ -57,9 +54,9 @@
   padding: 6px 10px;
   font-size: 11px;
   font-family: inherit;
-  border: none;
+  border: 1px solid var(--gp-grid-input-border);
   border-radius: 3px;
-  background-color: transparent;
+  background-color: var(--gp-grid-bg);
   color: var(--gp-grid-text-secondary);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -69,10 +66,10 @@
   color: var(--gp-grid-text);
 }
 
-:where(.gp-grid-filter-mode-toggle button.active) {
-  background-color: var(--gp-grid-bg);
-  color: var(--gp-grid-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+.gp-grid-filter-mode-toggle button.active {
+  background-color: var(--gp-grid-primary);
+  border-color: var(--gp-grid-primary);
+  color: #fff;
 }
 
 /* Info message for too many values */
@@ -190,7 +187,49 @@
   color: var(--gp-grid-text-muted);
 }
 
-/* Filter condition row (for number/date filters) */
+/* Explicit condition groups */
+.gp-grid-filter-groups,
+.gp-grid-filter-group {
+  display: flex;
+  flex-direction: column;
+}
+
+:where(.gp-grid-filter-groups) {
+  gap: 8px;
+}
+
+:where(.gp-grid-filter-group) {
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--gp-grid-border-light);
+  border-radius: 5px;
+  background-color: var(--gp-grid-bg-alt);
+}
+
+.gp-grid-filter-group-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+:where(.gp-grid-filter-group-actions) {
+  gap: 6px;
+}
+
+:where(.gp-grid-filter-group-actions .gp-grid-filter-combination) {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+:where(.gp-grid-filter-group-remove) {
+  margin-bottom: -2px;
+}
+
+:where(.gp-grid-filter-add-group) {
+  margin-top: 2px;
+}
+
+/* Filter condition row */
 .gp-grid-filter-condition {
   display: flex;
   flex-direction: column;
@@ -258,6 +297,10 @@
 }
 
 .gp-grid-filter-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
 }
@@ -303,10 +346,21 @@
   cursor: pointer;
 }
 
-:where(.gp-grid-filter-combination button.active) {
+.gp-grid-filter-combination button.active {
   background-color: var(--gp-grid-primary);
   border-color: var(--gp-grid-primary);
   color: #fff;
+}
+
+.gp-grid-filter-content button:focus-visible,
+.gp-grid-filter-content select:focus-visible,
+.gp-grid-filter-content input:focus-visible {
+  outline: 2px solid var(--gp-grid-primary);
+  outline-offset: 2px;
+}
+
+.gp-grid-filter-mode-toggle button:focus-visible {
+  outline-offset: -2px;
 }
 
 /* Add condition button */

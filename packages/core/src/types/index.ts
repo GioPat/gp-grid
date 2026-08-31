@@ -37,7 +37,11 @@ export type {
   NumberFilterCondition,
   DateFilterCondition,
   FilterCondition,
+  FilterConditionGroup,
   ColumnFilterModel,
+  LegacyFilterCondition,
+  LegacyColumnFilterModel,
+  ColumnFilterInput,
   FilterModel,
 } from "./filters";
 

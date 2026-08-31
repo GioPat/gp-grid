@@ -2,6 +2,8 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   DistinctValueEntry,
+  FilterCombination,
+  FilterConditionGroup,
   NumberFilterCondition,
   NumberFilterOperator,
   TextFilterCondition,
@@ -12,16 +14,21 @@ import { labelsForSelectedValues, rawValuesForLabels } from '@gp-grid/core';
 export interface TextConditionState {
   operator: string;
   value: string;
-  nextOperator: 'and' | 'or';
 }
 
 export interface NumberConditionState {
   operator: string;
   value: string;
   valueTo: string;
-  nextOperator: 'and' | 'or';
 }
 
+export interface ConditionGroupState<TCondition> {
+  conditions: TCondition[];
+  combination: FilterCombination;
+}
+
+export type TextConditionGroupState = ConditionGroupState<TextConditionState>;
+export type NumberConditionGroupState = ConditionGroupState<NumberConditionState>;
 export type FilterMode = 'values' | 'condition';
 
 const VALUE_LESS_TEXT_OPERATORS: ReadonlyArray<string> = ['blank', 'notBlank'];
@@ -38,26 +45,41 @@ export const isValueLessNumberOp = (operator: string): boolean =>
 export const defaultTextCondition = (): TextConditionState => ({
   operator: 'contains',
   value: '',
-  nextOperator: 'and',
 });
 
 export const defaultNumberCondition = (): NumberConditionState => ({
   operator: '=',
   value: '',
   valueTo: '',
-  nextOperator: 'and',
 });
 
-// Popup checkbox state tracks display LABELS; the filter model stores RAW
-// values (resolved via rawValuesForLabels on apply). Entry grouping lives in
-// core (`groupDistinctValues`), shared with the react/vue wrappers.
+export const defaultTextGroup = (): TextConditionGroupState => ({
+  conditions: [defaultTextCondition()],
+  combination: 'and',
+});
+
+export const defaultNumberGroup = (): NumberConditionGroupState => ({
+  conditions: [defaultNumberCondition()],
+  combination: 'and',
+});
 
 export interface TextInitState {
   filterMode: FilterMode;
   selectedLabels: Set<string>;
   includeBlanks: boolean;
-  textConditions: TextConditionState[];
+  textGroups: TextConditionGroupState[];
+  combination: FilterCombination;
 }
+
+const defaultTextState = (
+  entries: ReadonlyArray<DistinctValueEntry>,
+): TextInitState => ({
+  filterMode: 'values',
+  selectedLabels: new Set(entries.map(entry => entry.label)),
+  includeBlanks: true,
+  textGroups: [defaultTextGroup()],
+  combination: 'and',
+});
 
 export const initTextState = (
   filter: ColumnFilterModel | undefined,
@@ -65,56 +87,63 @@ export const initTextState = (
 ): TextInitState => {
   if (!filter) return defaultTextState(entries);
 
-  const textConds = filter.conditions.filter(
-    (c): c is TextFilterCondition => c.type === 'text'
-  );
-  if (textConds.length === 0) return defaultTextState(entries);
-
-  const firstCond = textConds[0];
-  if (firstCond?.selectedValues !== undefined) {
+  const firstCondition = filter.groups[0]?.conditions[0];
+  if (firstCondition?.type === 'text' && firstCondition.selectedValues !== undefined) {
     return {
       filterMode: 'values',
-      selectedLabels: labelsForSelectedValues(entries, firstCond.selectedValues),
-      includeBlanks: firstCond.includeBlank ?? true,
-      textConditions: [defaultTextCondition()],
+      selectedLabels: labelsForSelectedValues(entries, firstCondition.selectedValues),
+      includeBlanks: firstCondition.includeBlank ?? true,
+      textGroups: [defaultTextGroup()],
+      combination: 'and',
     };
   }
 
+  const textGroups = filter.groups.flatMap((group) => {
+    const conditions = group.conditions.flatMap((condition) => {
+      if (condition.type !== 'text') return [];
+      return [{ operator: condition.operator, value: condition.value ?? '' }];
+    });
+    if (conditions.length === 0) return [];
+    return [{ conditions, combination: group.combination }];
+  });
+  if (textGroups.length === 0) return defaultTextState(entries);
+
   return {
     filterMode: 'condition',
-    selectedLabels: new Set(entries.map(e => e.label)),
+    selectedLabels: new Set(entries.map(entry => entry.label)),
     includeBlanks: true,
-    textConditions: textConds.map((c, i) => ({
-      operator: c.operator,
-      value: c.value ?? '',
-      nextOperator: textConds[i]?.nextOperator ?? 'and',
-    })),
+    textGroups,
+    combination: filter.combination,
   };
 };
 
-const defaultTextState = (entries: ReadonlyArray<DistinctValueEntry>): TextInitState => ({
-  filterMode: 'values',
-  selectedLabels: new Set(entries.map(e => e.label)),
-  includeBlanks: true,
-  textConditions: [defaultTextCondition()],
-});
+export interface NumberInitState {
+  numberGroups: NumberConditionGroupState[];
+  combination: FilterCombination;
+}
 
-export const initNumberConditions = (
+export const initNumberState = (
   filter: ColumnFilterModel | undefined,
-): NumberConditionState[] => {
-  if (!filter) return [defaultNumberCondition()];
-
-  const numConds = filter.conditions.filter(
-    (c): c is NumberFilterCondition => c.type === 'number'
-  );
-  if (numConds.length === 0) return [defaultNumberCondition()];
-
-  return numConds.map((c, i) => ({
-    operator: c.operator,
-    value: c.value !== undefined ? String(c.value) : '',
-    valueTo: c.valueTo !== undefined ? String(c.valueTo) : '',
-    nextOperator: numConds[i]?.nextOperator ?? 'and',
-  }));
+): NumberInitState => {
+  if (!filter) {
+    return { numberGroups: [defaultNumberGroup()], combination: 'and' };
+  }
+  const numberGroups = filter.groups.flatMap((group) => {
+    const conditions = group.conditions.flatMap((condition) => {
+      if (condition.type !== 'number') return [];
+      return [{
+        operator: condition.operator,
+        value: condition.value !== undefined ? String(condition.value) : '',
+        valueTo: condition.valueTo !== undefined ? String(condition.valueTo) : '',
+      }];
+    });
+    if (conditions.length === 0) return [];
+    return [{ conditions, combination: group.combination }];
+  });
+  if (numberGroups.length === 0) {
+    return { numberGroups: [defaultNumberGroup()], combination: 'and' };
+  }
+  return { numberGroups, combination: filter.combination };
 };
 
 export interface TextFilterInput {
@@ -122,87 +151,84 @@ export interface TextFilterInput {
   entries: ReadonlyArray<DistinctValueEntry>;
   selectedLabels: Set<string>;
   includeBlanks: boolean;
-  textConditions: TextConditionState[];
+  textGroups: TextConditionGroupState[];
+  combination: FilterCombination;
 }
 
-export const buildTextFilter = (input: TextFilterInput): ColumnFilterModel | null => {
-  if (input.filterMode === 'values') {
-    return buildValuesFilter(input);
-  }
-  return buildConditionTextFilter(input.textConditions);
+export const buildTextFilter = (
+  input: TextFilterInput,
+): ColumnFilterModel | null => {
+  if (input.filterMode === 'values') return buildValuesFilter(input);
+  const groups = buildTextGroups(input.textGroups);
+  if (groups.length === 0) return null;
+  return { groups, combination: input.combination };
 };
 
-const buildValuesFilter = (input: TextFilterInput): ColumnFilterModel | null => {
-  const allSelected = input.entries.every(e => input.selectedLabels.has(e.label));
+const buildValuesFilter = (
+  input: TextFilterInput,
+): ColumnFilterModel | null => {
+  const allSelected = input.entries.every(entry =>
+    input.selectedLabels.has(entry.label));
   if (allSelected && input.includeBlanks) return null;
 
   return {
-    conditions: [{
-      type: 'text',
-      operator: 'equals',
-      selectedValues: rawValuesForLabels(input.entries, input.selectedLabels),
-      includeBlank: input.includeBlanks,
+    groups: [{
+      conditions: [{
+        type: 'text',
+        operator: 'equals',
+        selectedValues: rawValuesForLabels(input.entries, input.selectedLabels),
+        includeBlank: input.includeBlanks,
+      }],
+      combination: 'and',
     }],
-    combination: 'or',
+    combination: 'and',
   };
 };
 
-const buildConditionTextFilter = (
-  textConditions: TextConditionState[],
-): ColumnFilterModel | null => {
+const buildTextGroups = (
+  sourceGroups: TextConditionGroupState[],
+): FilterConditionGroup[] => sourceGroups.flatMap((group) => {
   const conditions: TextFilterCondition[] = [];
-  for (let i = 0; i < textConditions.length; i++) {
-    const cond = textConditions[i];
-    if (!cond) continue;
-    if (!isValueLessTextOp(cond.operator) && !cond.value) continue;
-
-    const out: TextFilterCondition = {
+  for (const condition of group.conditions) {
+    if (!isValueLessTextOp(condition.operator) && !condition.value) continue;
+    const builtCondition: TextFilterCondition = {
       type: 'text',
-      operator: cond.operator as TextFilterOperator,
+      operator: condition.operator as TextFilterOperator,
     };
-    if (!isValueLessTextOp(cond.operator)) out.value = cond.value;
-    linkNextOperator(conditions, i, textConditions);
-    conditions.push(out);
+    if (!isValueLessTextOp(condition.operator)) {
+      builtCondition.value = condition.value;
+    }
+    conditions.push(builtCondition);
   }
-  if (conditions.length === 0) return null;
-  return { conditions, combination: textConditions[0]?.nextOperator ?? 'and' };
-};
+  if (conditions.length === 0) return [];
+  return [{ conditions, combination: group.combination }];
+});
 
 export const buildNumberFilter = (
-  numberConditions: NumberConditionState[],
+  numberGroups: NumberConditionGroupState[],
+  combination: FilterCombination,
 ): ColumnFilterModel | null => {
-  const conditions: NumberFilterCondition[] = [];
-  for (let i = 0; i < numberConditions.length; i++) {
-    const cond = numberConditions[i];
-    if (!cond) continue;
-    if (!isValueLessNumberOp(cond.operator) && !cond.value) continue;
-
-    const out: NumberFilterCondition = {
-      type: 'number',
-      operator: cond.operator as NumberFilterOperator,
-    };
-    if (!isValueLessNumberOp(cond.operator)) {
-      out.value = parseFloat(cond.value);
-      if (cond.operator === 'between' && cond.valueTo) {
-        out.valueTo = parseFloat(cond.valueTo);
+  const groups: FilterConditionGroup[] = numberGroups.flatMap((group) => {
+    const conditions: NumberFilterCondition[] = [];
+    for (const condition of group.conditions) {
+      if (!isValueLessNumberOp(condition.operator) && !condition.value) continue;
+      const builtCondition: NumberFilterCondition = {
+        type: 'number',
+        operator: condition.operator as NumberFilterOperator,
+      };
+      if (!isValueLessNumberOp(condition.operator)) {
+        builtCondition.value = Number.parseFloat(condition.value);
+        if (condition.operator === 'between' && condition.valueTo) {
+          builtCondition.valueTo = Number.parseFloat(condition.valueTo);
+        }
       }
+      conditions.push(builtCondition);
     }
-    linkNextOperator(conditions, i, numberConditions);
-    conditions.push(out);
-  }
-  if (conditions.length === 0) return null;
-  return { conditions, combination: numberConditions[0]?.nextOperator ?? 'and' };
-};
-
-const linkNextOperator = <T extends { nextOperator?: 'and' | 'or' }>(
-  built: T[],
-  currentIndex: number,
-  source: ReadonlyArray<{ nextOperator: 'and' | 'or' }>,
-): void => {
-  const prev = built[built.length - 1];
-  if (prev === undefined || currentIndex === 0) return;
-  const prevSource = source[currentIndex - 1];
-  prev.nextOperator = prevSource?.nextOperator ?? 'and';
+    if (conditions.length === 0) return [];
+    return [{ conditions, combination: group.combination }];
+  });
+  if (groups.length === 0) return null;
+  return { groups, combination };
 };
 
 export const resolveColId = (column: ColumnDefinition): string =>

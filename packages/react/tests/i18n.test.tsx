@@ -3,9 +3,10 @@
 // operator labels, and that defaults remain when no override is given.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Grid, type GridProps } from "../src/Grid";
 import { NumberFilterContent } from "../src/components/NumberFilterContent";
+import { TextFilterContent } from "../src/components/TextFilterContent";
 import { resolveGridLabels } from "@gp-grid/core";
 import type { ColumnDefinition } from "@gp-grid/core";
 
@@ -83,5 +84,50 @@ describe("labels", () => {
     );
 
     expect(screen.getByRole("option", { name: "Greater than" })).toBeTruthy();
+  });
+
+  it("uses localized condition-group actions", () => {
+    const labels = resolveGridLabels({ addGroup: "+ Aggiungi gruppo" });
+    render(
+      <NumberFilterContent labels={labels} onApply={() => {}} onClose={() => {}} />,
+    );
+
+    expect(screen.getByRole("button", { name: "+ Aggiungi gruppo" })).toBeTruthy();
+  });
+
+  it("localizes and exposes the selected Values/Condition branch", () => {
+    const labels = resolveGridLabels({
+      valuesMode: "Scelte",
+      conditionMode: "Regole",
+      addCondition: "+ Regola",
+      addGroup: "+ Gruppo",
+      clear: "Azzera",
+      apply: "Conferma",
+      valuePlaceholder: "Valore personalizzato",
+      operators: { contains: "Comprende" },
+    });
+    render(
+      <TextFilterContent
+        distinctValues={[]}
+        labels={labels}
+        onApply={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    const valuesButton = screen.getByRole("button", { name: "Scelte" });
+    const conditionButton = screen.getByRole("button", { name: "Regole" });
+    expect(valuesButton.getAttribute("aria-pressed")).toBe("true");
+    expect(conditionButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(conditionButton);
+    expect(valuesButton.getAttribute("aria-pressed")).toBe("false");
+    expect(conditionButton.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("option", { name: "Comprende" })).toBeTruthy();
+    expect(screen.getByPlaceholderText("Valore personalizzato")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "+ Regola" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "+ Gruppo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Azzera" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Conferma" })).toBeTruthy();
   });
 });

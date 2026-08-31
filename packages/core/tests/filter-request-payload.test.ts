@@ -38,14 +38,15 @@ const rows: TestRow[] = [
 const buildPopupFilter = (distinct: CellValue[]): ColumnFilterModel => {
   const entries = groupDistinctValues(distinct, statusFormatter);
   return {
-    conditions: [
-      {
+    groups: [{
+      conditions: [{
         type: "text",
         operator: "equals",
         selectedValues: rawValuesForLabels(entries, new Set(["Active"])),
         includeBlank: false,
-      },
-    ],
+      }],
+      combination: "and",
+    }],
     combination: "and",
   };
 };
@@ -73,7 +74,8 @@ describe("filter request payload — valueFormatter never leaks to the server", 
     const withFilter = requests.filter((r) => r.filter?.["status"] !== undefined);
     expect(withFilter.length).toBeGreaterThan(0);
     const lastRequest = withFilter[withFilter.length - 1];
-    const condition = lastRequest?.filter?.["status"]?.conditions[0] as TextFilterCondition;
+    const condition = lastRequest?.filter?.["status"]?.groups[0]
+      ?.conditions[0] as TextFilterCondition;
     const selected = [...(condition.selectedValues ?? [])];
     expect(selected).toEqual([1]);
     expect(selected).not.toContain("Active");
@@ -94,14 +96,15 @@ describe("filter request payload — valueFormatter never leaks to the server", 
       // A model rebuilt from JSON/URL params without reviving types: the
       // number column receives "1" instead of 1 and would match nothing.
       const staleModel: ColumnFilterModel = {
-        conditions: [
-          {
+        groups: [{
+          conditions: [{
             type: "text",
             operator: "equals",
             selectedValues: new Set<CellValue>(["1"]),
             includeBlank: false,
-          },
-        ],
+          }],
+          combination: "and",
+        }],
         combination: "and",
       };
       await grid.setFilter("status", staleModel);

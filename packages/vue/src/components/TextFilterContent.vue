@@ -1,16 +1,33 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import type { CellValue, ColumnFilterModel, GridLabels, TextFilterCondition, TextFilterOperator } from "@gp-grid/core";
-import { formatLabel, getTextOperatorOptions, groupDistinctValues, isBlankCellValue, labelsForSelectedValues, rawValuesForLabels } from "@gp-grid/core";
-import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
-
-const MAX_VALUES_FOR_LIST = 100;
+import { computed, ref } from "vue";
+import {
+  formatLabel,
+  getTextOperatorOptions,
+  groupDistinctValues,
+  isBlankCellValue,
+  labelsForSelectedValues,
+  rawValuesForLabels,
+} from "@gp-grid/core";
+import type {
+  CellValue,
+  ColumnFilterModel,
+  FilterConditionGroup,
+  GridLabels,
+  TextFilterCondition,
+  TextFilterOperator,
+} from "@gp-grid/core";
+import {
+  useFilterConditions,
+  type LocalFilterGroup,
+} from "../composables/useFilterConditions";
 
 type FilterMode = "values" | "condition";
 
+const MAX_VALUES_FOR_LIST = 100;
+
 const props = defineProps<{
   distinctValues: CellValue[];
-  valueFormatter?: (v: CellValue) => string;
+  valueFormatter?: (value: CellValue) => string;
   currentFilter?: ColumnFilterModel;
   labels: GridLabels;
 }>();
@@ -21,105 +38,95 @@ const emit = defineEmits<{
 }>();
 
 const operators = computed(() => getTextOperatorOptions(props.labels));
-
-// Checkbox rows: one entry per display label, carrying every raw value that
-// formats to it. The filter model stores the RAW values; labels only exist
-// inside this popup.
 const uniqueEntries = computed(() =>
-  groupDistinctValues(props.distinctValues, props.valueFormatter),
+  groupDistinctValues(props.distinctValues, props.valueFormatter));
+const hasTooManyValues = computed(
+  () => uniqueEntries.value.length > MAX_VALUES_FOR_LIST,
 );
-
-const hasTooManyValues = computed(() => uniqueEntries.value.length > MAX_VALUES_FOR_LIST);
-
-// Detect initial mode from existing filter
+const firstCondition = computed(() =>
+  props.currentFilter?.groups[0]?.conditions[0] as TextFilterCondition | undefined);
 const initialMode = computed((): FilterMode => {
-  if (!props.currentFilter?.conditions[0]) {
+  if (firstCondition.value === undefined) {
     return hasTooManyValues.value ? "condition" : "values";
   }
-  const cond = props.currentFilter.conditions[0] as TextFilterCondition;
-  if (cond.selectedValues && cond.selectedValues.size > 0) {
-    return "values";
-  }
-  return "condition";
+  return firstCondition.value.selectedValues !== undefined
+    ? "values"
+    : "condition";
 });
-
 const mode = ref<FilterMode>(initialMode.value);
 
-// ============= VALUES MODE STATE =============
-// Local checkbox state tracks LABELS; raw values are resolved on apply.
 const initialSelected = computed(() => {
-  if (!props.currentFilter?.conditions[0]) return new Set<string>();
-  const cond = props.currentFilter.conditions[0] as TextFilterCondition;
-  if (!cond.selectedValues) return new Set<string>();
-  return labelsForSelectedValues(uniqueEntries.value, cond.selectedValues);
-});
-
-const initialIncludeBlanks = computed(() => {
-  if (!props.currentFilter?.conditions[0]) return true;
-  const cond = props.currentFilter.conditions[0] as TextFilterCondition;
-  return cond.includeBlank ?? true;
-});
-
-const searchText = ref("");
-const selectedLabels = ref<Set<string>>(new Set(initialSelected.value));
-const includeBlanks = ref(initialIncludeBlanks.value);
-
-// ============= CONDITION MODE STATE =============
-const initialConditions = computed((): LocalFilterCondition<TextFilterOperator>[] => {
-  if (!props.currentFilter?.conditions.length) {
-    return [{ operator: "contains", value: "", valueTo: "", nextOperator: "and" }];
-  }
-  const cond = props.currentFilter.conditions[0] as TextFilterCondition;
-  if (cond.selectedValues && cond.selectedValues.size > 0) {
-    return [{ operator: "contains", value: "", valueTo: "", nextOperator: "and" }];
-  }
-  const defaultCombination = props.currentFilter.combination ?? "and";
-  return props.currentFilter.conditions.map((c) => {
-    const tc = c as TextFilterCondition;
-    return {
-      operator: tc.operator,
-      value: tc.value ?? "",
-      valueTo: "",
-      nextOperator: tc.nextOperator ?? defaultCombination,
-    };
-  });
-});
-
-const { conditions, combination, updateCondition, addCondition, removeCondition } =
-  useFilterConditions<TextFilterOperator>(
-    initialConditions.value,
-    props.currentFilter?.combination ?? "and",
+  if (firstCondition.value?.selectedValues === undefined) return new Set<string>();
+  return labelsForSelectedValues(
+    uniqueEntries.value,
+    firstCondition.value.selectedValues,
   );
+});
+const searchText = ref("");
+const selectedLabels = ref(new Set(initialSelected.value));
+const includeBlanks = ref(firstCondition.value?.includeBlank ?? true);
 
-// ============= VALUES MODE LOGIC =============
+const initialGroups = computed((): LocalFilterGroup<TextFilterOperator>[] => {
+  if (
+    props.currentFilter?.groups.length &&
+    firstCondition.value?.selectedValues === undefined
+  ) {
+    return props.currentFilter.groups.map((group) => ({
+      combination: group.combination,
+      conditions: group.conditions.map((condition) => {
+        const textCondition = condition as TextFilterCondition;
+        return {
+          operator: textCondition.operator,
+          value: textCondition.value ?? "",
+          valueTo: "",
+        };
+      }),
+    }));
+  }
+  return [{
+    conditions: [{ operator: "contains", value: "", valueTo: "" }],
+    combination: "and",
+  }];
+});
+
+const {
+  groups,
+  combination,
+  setGroupCombination,
+  updateCondition,
+  addCondition,
+  removeCondition,
+  addGroup,
+  removeGroup,
+} = useFilterConditions(
+  initialGroups.value,
+  props.currentFilter?.combination ?? "and",
+);
+
 const displayEntries = computed(() => {
   if (!searchText.value) return uniqueEntries.value;
-  const lower = searchText.value.toLowerCase();
-  return uniqueEntries.value.filter((e) => e.label.toLowerCase().includes(lower));
+  const normalizedSearch = searchText.value.toLowerCase();
+  return uniqueEntries.value.filter((entry) =>
+    entry.label.toLowerCase().includes(normalizedSearch));
 });
-
-// Empty arrays count too (tags column with no tags), so the "(Blanks)"
-// opt-out renders whenever blank rows exist.
-const hasBlanks = computed(() => {
-  return props.distinctValues.some(isBlankCellValue);
-});
-
+const hasBlanks = computed(() => props.distinctValues.some(isBlankCellValue));
 const allSelected = computed(() => {
-  const allNonBlank = displayEntries.value.every((e) => selectedLabels.value.has(e.label));
+  const allNonBlank = displayEntries.value.every((entry) =>
+    selectedLabels.value.has(entry.label));
   return allNonBlank && (!hasBlanks.value || includeBlanks.value);
 });
 
-function handleSelectAll(): void {
-  selectedLabels.value = new Set(displayEntries.value.map((e) => e.label));
+const handleSelectAll = (): void => {
+  selectedLabels.value = new Set(displayEntries.value.map((entry) => entry.label));
   if (hasBlanks.value) includeBlanks.value = true;
-}
+};
 
-function handleDeselectAll(): void {
+const handleDeselectAll = (): void => {
   selectedLabels.value = new Set();
   includeBlanks.value = false;
-}
+};
 
-function handleValueToggle(label: string): void {
+const handleValueToggle = (label: string): void => {
   const next = new Set(selectedLabels.value);
   if (next.has(label)) {
     next.delete(label);
@@ -127,88 +134,78 @@ function handleValueToggle(label: string): void {
     next.add(label);
   }
   selectedLabels.value = next;
-}
+};
 
-// ============= APPLY LOGIC =============
-function handleApply(): void {
+const isValidCondition = (
+  condition: LocalFilterGroup<TextFilterOperator>["conditions"][number],
+): boolean => {
+  if (condition.operator === "blank" || condition.operator === "notBlank") {
+    return true;
+  }
+  return condition.value.trim() !== "";
+};
+
+const handleApply = (): void => {
   if (mode.value === "values") {
-    const allNonBlankSelected = uniqueEntries.value.every((e) => selectedLabels.value.has(e.label));
-    const isAllSelected = allNonBlankSelected && (!hasBlanks.value || includeBlanks.value);
-
+    const allNonBlankSelected = uniqueEntries.value.every((entry) =>
+      selectedLabels.value.has(entry.label));
+    const isAllSelected = allNonBlankSelected &&
+      (!hasBlanks.value || includeBlanks.value);
     if (isAllSelected) {
       emit("apply", null);
       return;
     }
-
-    const filter: ColumnFilterModel = {
-      conditions: [
-        {
-          type: "text",
-          operator: "equals",
-          selectedValues: rawValuesForLabels(uniqueEntries.value, selectedLabels.value),
-          includeBlank: includeBlanks.value,
-        },
-      ],
+    const condition: TextFilterCondition = {
+      type: "text",
+      operator: "equals",
+      selectedValues: rawValuesForLabels(
+        uniqueEntries.value,
+        selectedLabels.value,
+      ),
+      includeBlank: includeBlanks.value,
+    };
+    emit("apply", {
+      groups: [{ conditions: [condition], combination: "and" }],
       combination: "and",
-    };
-    emit("apply", filter);
-  } else {
-    const validConditions = conditions.value.filter((c) => {
-      if (c.operator === "blank" || c.operator === "notBlank") return true;
-      return c.value.trim() !== "";
     });
-
-    if (validConditions.length === 0) {
-      emit("apply", null);
-      return;
-    }
-
-    const filter: ColumnFilterModel = {
-      conditions: validConditions.map((c) => ({
-        type: "text" as const,
-        operator: c.operator,
-        value: c.value,
-        nextOperator: c.nextOperator,
-      })),
-      combination: "and", // Default combination for backwards compatibility
-    };
-    emit("apply", filter);
+    return;
   }
-}
 
-function handleClear(): void {
-  emit("apply", null);
-}
+  const filterGroups: FilterConditionGroup[] = groups.value.flatMap((group) => {
+    const validConditions = group.conditions.filter(isValidCondition);
+    if (validConditions.length === 0) return [];
+    const conditions: TextFilterCondition[] = validConditions.map((condition) => ({
+      type: "text",
+      operator: condition.operator,
+      value: condition.value,
+    }));
+    return [{ conditions, combination: group.combination }];
+  });
+  if (filterGroups.length === 0) {
+    emit("apply", null);
+    return;
+  }
+  emit("apply", { groups: filterGroups, combination: combination.value });
+};
+
+const handleClear = (): void => emit("apply", null);
 </script>
 
 <template>
   <div class="gp-grid-filter-content gp-grid-filter-text">
-    <!-- Mode toggle - only show if not too many values -->
     <div v-if="!hasTooManyValues" class="gp-grid-filter-mode-toggle">
-      <button
-        type="button"
-        :class="{ active: mode === 'values' }"
-        @click="mode = 'values'"
-      >
+      <button type="button" :class="{ active: mode === 'values' }" :aria-pressed="mode === 'values'" @click="mode = 'values'">
         {{ labels.valuesMode }}
       </button>
-      <button
-        type="button"
-        :class="{ active: mode === 'condition' }"
-        @click="mode = 'condition'"
-      >
+      <button type="button" :class="{ active: mode === 'condition' }" :aria-pressed="mode === 'condition'" @click="mode = 'condition'">
         {{ labels.conditionMode }}
       </button>
     </div>
-
-    <!-- Too many values message -->
     <div v-if="hasTooManyValues && mode === 'condition'" class="gp-grid-filter-info">
       {{ formatLabel(labels.tooManyValues, { count: uniqueEntries.length }) }}
     </div>
 
-    <!-- VALUES MODE -->
     <template v-if="mode === 'values'">
-      <!-- Search input -->
       <input
         v-model="searchText"
         class="gp-grid-filter-search"
@@ -216,8 +213,6 @@ function handleClear(): void {
         :placeholder="labels.searchPlaceholder"
         autofocus
       />
-
-      <!-- Select all / Deselect all -->
       <div class="gp-grid-filter-actions">
         <button type="button" :disabled="allSelected" @click="handleSelectAll">
           {{ labels.selectAll }}
@@ -226,20 +221,11 @@ function handleClear(): void {
           {{ labels.deselectAll }}
         </button>
       </div>
-
-      <!-- Checkbox list -->
       <div class="gp-grid-filter-list">
-        <!-- Blanks option -->
         <label v-if="hasBlanks" class="gp-grid-filter-option">
-          <input
-            type="checkbox"
-            :checked="includeBlanks"
-            @change="includeBlanks = !includeBlanks"
-          />
+          <input type="checkbox" :checked="includeBlanks" @change="includeBlanks = !includeBlanks" />
           <span class="gp-grid-filter-blank">{{ labels.blanks }}</span>
         </label>
-
-        <!-- Values -->
         <label
           v-for="entry in displayEntries"
           :key="entry.label"
@@ -255,72 +241,101 @@ function handleClear(): void {
       </div>
     </template>
 
-    <!-- CONDITION MODE -->
-    <template v-if="mode === 'condition'">
-      <div
-        v-for="(cond, index) in conditions"
-        :key="index"
-        class="gp-grid-filter-condition"
-      >
-        <!-- Combination toggle (AND/OR) for conditions after the first -->
-        <div v-if="index > 0" class="gp-grid-filter-combination">
-          <button
-            type="button"
-            :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
-            @click="updateCondition(index - 1, { nextOperator: 'and' })"
-          >
-            {{ labels.and }}
-          </button>
-          <button
-            type="button"
-            :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
-            @click="updateCondition(index - 1, { nextOperator: 'or' })"
-          >
-            {{ labels.or }}
-          </button>
-        </div>
-
-        <div class="gp-grid-filter-row">
-          <!-- Operator select -->
-          <select
-            :value="cond.operator"
-            :autofocus="index === 0"
-            @change="updateCondition(index, { operator: ($event.target as HTMLSelectElement).value as TextFilterOperator })"
-          >
-            <option v-for="op in operators" :key="op.value" :value="op.value">
-              {{ op.label }}
-            </option>
-          </select>
-
-          <!-- Text input (hidden for blank/notBlank) -->
-          <input
-            v-if="cond.operator !== 'blank' && cond.operator !== 'notBlank'"
-            type="text"
-            :value="cond.value"
-            :placeholder="labels.valuePlaceholder"
-            class="gp-grid-filter-text-input"
-            @input="updateCondition(index, { value: ($event.target as HTMLInputElement).value })"
-          />
-
-          <!-- Remove button (only if more than one condition) -->
-          <button
-            v-if="conditions.length > 1"
-            type="button"
-            class="gp-grid-filter-remove"
-            @click="removeCondition(index)"
-          >
-            {{ labels.removeCondition }}
-          </button>
-        </div>
+    <div v-if="mode === 'condition'" class="gp-grid-filter-groups">
+      <div v-if="groups.length > 1" class="gp-grid-filter-combination">
+        <button type="button" :class="{ active: combination === 'and' }" :aria-pressed="combination === 'and'" @click="combination = 'and'">
+          {{ labels.and }}
+        </button>
+        <button type="button" :class="{ active: combination === 'or' }" :aria-pressed="combination === 'or'" @click="combination = 'or'">
+          {{ labels.or }}
+        </button>
       </div>
-
-      <!-- Add condition button -->
-      <button type="button" class="gp-grid-filter-add" @click="addCondition('contains')">
-        {{ labels.addCondition }}
+      <div
+        v-for="(group, groupIndex) in groups"
+        :key="groupIndex"
+        class="gp-grid-filter-group"
+      >
+        <div
+          v-if="group.conditions.length > 1 || groups.length > 1"
+          class="gp-grid-filter-group-actions"
+        >
+          <div v-if="group.conditions.length > 1" class="gp-grid-filter-combination">
+            <button
+              type="button"
+              :class="{ active: group.combination === 'and' }"
+              :aria-pressed="group.combination === 'and'"
+              @click="setGroupCombination(groupIndex, 'and')"
+            >
+              {{ labels.and }}
+            </button>
+            <button
+              type="button"
+              :class="{ active: group.combination === 'or' }"
+              :aria-pressed="group.combination === 'or'"
+              @click="setGroupCombination(groupIndex, 'or')"
+            >
+              {{ labels.or }}
+            </button>
+          </div>
+          <button
+            v-if="groups.length > 1"
+            type="button"
+            class="gp-grid-filter-remove gp-grid-filter-group-remove"
+            @click="removeGroup(groupIndex)"
+          >
+            {{ labels.removeGroup }}
+          </button>
+        </div>
+          <div
+            v-for="(condition, conditionIndex) in group.conditions"
+            :key="conditionIndex"
+            class="gp-grid-filter-condition"
+          >
+            <div class="gp-grid-filter-row">
+              <select
+                :value="condition.operator"
+                :autofocus="groupIndex === 0 && conditionIndex === 0"
+                @change="updateCondition(groupIndex, conditionIndex, { operator: ($event.target as HTMLSelectElement).value as TextFilterOperator })"
+              >
+                <option v-for="operator in operators" :key="operator.value" :value="operator.value">
+                  {{ operator.label }}
+                </option>
+              </select>
+              <input
+                v-if="condition.operator !== 'blank' && condition.operator !== 'notBlank'"
+                type="text"
+                class="gp-grid-filter-text-input"
+                :value="condition.value"
+                :placeholder="labels.valuePlaceholder"
+                @input="updateCondition(groupIndex, conditionIndex, { value: ($event.target as HTMLInputElement).value })"
+              />
+              <button
+                v-if="group.conditions.length > 1"
+                type="button"
+                class="gp-grid-filter-remove"
+                @click="removeCondition(groupIndex, conditionIndex)"
+              >
+                {{ labels.removeCondition }}
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="gp-grid-filter-add"
+            @click="addCondition(groupIndex, 'contains')"
+          >
+            {{ labels.addCondition }}
+          </button>
+      </div>
+      <button
+        type="button"
+        class="gp-grid-filter-add gp-grid-filter-add-group"
+        @click="addGroup('contains')"
+      >
+        {{ labels.addGroup }}
       </button>
-    </template>
+    </div>
 
-    <!-- Apply/Clear buttons -->
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" @click="handleClear">
         {{ labels.clear }}

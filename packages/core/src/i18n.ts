@@ -62,6 +62,10 @@ export interface GridLabels {
   addCondition: string;
   /** Remove-condition button glyph */
   removeCondition: string;
+  /** "+ Add group" button */
+  addGroup: string;
+  /** Remove-group button glyph */
+  removeGroup: string;
   /** Clear button */
   clear: string;
   /** Apply button */
@@ -88,6 +92,14 @@ export interface GridLabels {
   operators: GridFilterOperatorLabels;
 }
 
+/**
+ * Consumer overrides for grid labels. Every top-level label and every nested
+ * operator label can be changed independently.
+ */
+export type GridLabelOverrides = Omit<Partial<GridLabels>, "operators"> & {
+  operators?: Partial<GridFilterOperatorLabels>;
+};
+
 /** English defaults for every grid label. */
 export const defaultGridLabels: GridLabels = {
   filterTitle: "Filter: {column}",
@@ -97,6 +109,8 @@ export const defaultGridLabels: GridLabels = {
   betweenSeparator: "to",
   addCondition: "+ Add condition",
   removeCondition: "\u00d7",
+  addGroup: "+ Add group",
+  removeGroup: "\u00d7",
   clear: "Clear",
   apply: "Apply",
   valuesMode: "Values",
@@ -132,7 +146,7 @@ export const defaultGridLabels: GridLabels = {
  * one level deep; the defaults are never mutated.
  */
 export const resolveGridLabels = (
-  overrides?: Partial<GridLabels>,
+  overrides?: GridLabelOverrides,
 ): GridLabels => ({
   ...defaultGridLabels,
   ...overrides,

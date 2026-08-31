@@ -40,6 +40,10 @@ export {
   rowPassesFilter,
   isSameDay,
 } from "./indexed-data-store/index";
+export {
+  isLegacyColumnFilterModel,
+  normalizeColumnFilterModel,
+} from "./filtering/normalize";
 
 /** Values-mode filter popup helpers (raw values grouped under display labels) */
 export {
@@ -73,7 +77,11 @@ export type {
   /** Filter types */
   FilterModel,
   ColumnFilterModel,
+  LegacyColumnFilterModel,
+  ColumnFilterInput,
   FilterCondition,
+  LegacyFilterCondition,
+  FilterConditionGroup,
   TextFilterCondition,
   NumberFilterCondition,
   DateFilterCondition,
@@ -239,6 +247,7 @@ export {
 } from "./i18n";
 export type {
   GridLabels,
+  GridLabelOverrides,
   GridFilterOperatorLabels,
   FilterOperatorOption,
 } from "./i18n";

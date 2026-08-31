@@ -17,7 +17,7 @@ import {
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, GridLabels, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -68,7 +68,7 @@ const props = withDefaults(
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (fromIndex: number, toIndex: number) => void;
     /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
-    labels?: Partial<GridLabels>;
+    labels?: GridLabelOverrides;
   }>(),
   {
     overscan: 3,

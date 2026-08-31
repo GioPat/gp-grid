@@ -11,11 +11,17 @@ import {
   getNumberOperatorOptions,
   getDateOperatorOptions,
 } from "../src/i18n";
+import type {
+  GridFilterOperatorLabels,
+  GridLabelOverrides,
+  GridLabels,
+} from "../src/i18n";
 
 describe("resolveGridLabels", () => {
   it("returns the full English default when no overrides are given", () => {
     const labels = resolveGridLabels();
     expect(labels.emptyState).toBe("No data to display");
+    expect(labels.addGroup).toBe("+ Add group");
     expect(labels.operators.greaterThan).toBe("Greater than");
     expect(labels).not.toBe(defaultGridLabels);
   });
@@ -38,6 +44,26 @@ describe("resolveGridLabels", () => {
     const before = defaultGridLabels.operators.greaterThan;
     resolveGridLabels({ operators: { greaterThan: "Superiore" } });
     expect(defaultGridLabels.operators.greaterThan).toBe(before);
+  });
+
+  it("allows every visible label to be overridden independently", () => {
+    const topLevelKeys = Object.keys(defaultGridLabels).filter(
+      (key) => key !== "operators",
+    ) as Array<Exclude<keyof GridLabels, "operators">>;
+    for (const key of topLevelKeys) {
+      const customValue = `custom-${key}`;
+      const overrides = { [key]: customValue } as GridLabelOverrides;
+      expect(resolveGridLabels(overrides)[key]).toBe(customValue);
+    }
+
+    const operatorKeys = Object.keys(
+      defaultGridLabels.operators,
+    ) as Array<keyof GridFilterOperatorLabels>;
+    for (const key of operatorKeys) {
+      const customValue = `custom-${key}`;
+      const labels = resolveGridLabels({ operators: { [key]: customValue } });
+      expect(labels.operators[key]).toBe(customValue);
+    }
   });
 });
 

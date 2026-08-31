@@ -42,6 +42,7 @@ export type { UseFilterPopupOptions } from "./composables/useFilterPopup";
 export { useFilterConditions } from "./composables/useFilterConditions";
 export type {
   LocalFilterCondition,
+  LocalFilterGroup,
   UseFilterConditionsResult,
 } from "./composables/useFilterConditions";
 
@@ -77,6 +78,8 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  isLegacyColumnFilterModel,
+  normalizeColumnFilterModel,
   // Utils
   calculateColumnPositions,
   getTotalWidth,
@@ -119,7 +122,12 @@ export type {
   // Filters
   FilterModel,
   ColumnFilterModel,
+  LegacyColumnFilterModel,
+  ColumnFilterInput,
   FilterCondition,
+  LegacyFilterCondition,
+  FilterConditionGroup,
+  FilterCombination,
   TextFilterCondition,
   NumberFilterCondition,
   DateFilterCondition,
@@ -131,6 +139,7 @@ export type {
   HeaderRendererParams,
   // Localization
   GridLabels,
+  GridLabelOverrides,
   GridFilterOperatorLabels,
   // UI State (shared with React)
   SlotData,

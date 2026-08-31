@@ -21,7 +21,12 @@ export type {
   SortModel,
   FilterModel,
   FilterCondition,
+  FilterConditionGroup,
+  FilterCombination,
   ColumnFilterModel,
+  LegacyFilterCondition,
+  LegacyColumnFilterModel,
+  ColumnFilterInput,
 
   // Column definition
   ColumnDefinition,
@@ -54,6 +59,7 @@ export type {
 
   // Localization
   GridLabels,
+  GridLabelOverrides,
   GridFilterOperatorLabels,
 
   // Instructions (for advanced use cases)
@@ -66,6 +72,8 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  isLegacyColumnFilterModel,
+  normalizeColumnFilterModel,
 } from "@gp-grid/core";
 
 // Re-export MutableDataSource type

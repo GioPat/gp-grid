@@ -9,7 +9,7 @@ import type {
   SortModel,
   SortDirection,
   FilterModel,
-  ColumnFilterModel,
+  ColumnFilterInput,
   EditState,
 } from "./types";
 import type { SelectionManager } from "./selection";
@@ -169,7 +169,7 @@ export class GridCore<TData = unknown> {
     return this.sortFilter.setSort(colId, direction, addToExisting);
   }
 
-  async setFilter(colId: string, filter: ColumnFilterModel | string | null): Promise<void> {
+  async setFilter(colId: string, filter: ColumnFilterInput | string | null): Promise<void> {
     if (this.rowData.isLoading()) return;
     return this.sortFilter.setFilter(colId, filter);
   }

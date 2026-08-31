@@ -39,6 +39,7 @@ Two files in `packages/core` are produced by the build. Never hand-edit them:
 
 - The library shall work also for Server Side Rendering
 - Use always `pnpm`
+- All the labels related to UI must be configurable to let gp-grid be i18n friendly and configurable
 
 ## Code style
 

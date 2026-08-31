@@ -56,8 +56,6 @@ export interface TextFilterCondition {
   selectedValues?: Set<CellValue>;
   /** Include blank values */
   includeBlank?: boolean;
-  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
-  nextOperator?: FilterCombination;
 }
 
 /** Number filter condition */
@@ -67,8 +65,6 @@ export interface NumberFilterCondition {
   value?: number;
   /** Second value for "between" operator */
   valueTo?: number;
-  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
-  nextOperator?: FilterCombination;
 }
 
 /** Date filter condition */
@@ -78,8 +74,6 @@ export interface DateFilterCondition {
   value?: Date | string;
   /** Second value for "between" operator */
   valueTo?: Date | string;
-  /** Operator connecting this condition to the next. Defaults to ColumnFilterModel.combination */
-  nextOperator?: FilterCombination;
 }
 
 /** Union of filter condition types */
@@ -88,11 +82,35 @@ export type FilterCondition =
   | NumberFilterCondition
   | DateFilterCondition;
 
-/** Column filter model with multiple conditions */
-export interface ColumnFilterModel {
+/** A visibly grouped set of conditions joined by one operator. */
+export interface FilterConditionGroup {
   conditions: FilterCondition[];
   combination: FilterCombination;
 }
+
+/** Column filter model with one explicit level of condition groups. */
+export interface ColumnFilterModel {
+  groups: FilterConditionGroup[];
+  combination: FilterCombination;
+}
+
+/**
+ * Condition shape accepted when restoring a filter created before grouped
+ * composition was introduced.
+ */
+export type LegacyFilterCondition = FilterCondition & {
+  /** Operator connecting this condition to the next. */
+  nextOperator?: FilterCombination;
+};
+
+/** Legacy left-to-right column filter model accepted as migration input. */
+export interface LegacyColumnFilterModel {
+  conditions: LegacyFilterCondition[];
+  combination: FilterCombination;
+}
+
+/** Canonical or legacy input accepted by the imperative filter API. */
+export type ColumnFilterInput = ColumnFilterModel | LegacyColumnFilterModel;
 
 /** Filter model type - maps column ID to filter */
 export type FilterModel = Record<string, ColumnFilterModel>;

@@ -10,11 +10,14 @@ import type {
   NumberFilterOperator,
   DateFilterCondition,
   DateFilterOperator,
+  ColumnFilterInput,
   ColumnFilterModel,
+  FilterConditionGroup,
   FilterModel,
 } from "../types";
 import { formatCellValue } from "../utils/format-helpers";
 import { isBlankCellValue, rawValueKey } from "./distinct-entries";
+import { normalizeColumnFilterModel } from "./normalize";
 
 // =============================================================================
 // Helper Functions
@@ -223,41 +226,52 @@ export function evaluateCondition(
 // Column Filter Evaluation
 // =============================================================================
 
+const evaluateConditionGroup = (
+  cellValue: CellValue,
+  group: ColumnFilterModel["groups"][number],
+  formatter?: (v: CellValue) => string,
+): boolean | undefined => {
+  let result: boolean | undefined;
+  for (const condition of group.conditions) {
+    const conditionResult = evaluateCondition(cellValue, condition, formatter);
+    if (result === undefined) {
+      result = conditionResult;
+      continue;
+    }
+    result = group.combination === "and"
+      ? result && conditionResult
+      : result || conditionResult;
+  }
+  return result;
+};
+
 /**
- * Evaluate a column filter model against a cell value.
- * Uses left-to-right evaluation with per-condition operators.
- * When `formatter` is provided, text conditions compare against the formatted
- * display value rather than the raw string.
+ * Evaluate a column filter model against a cell value. Conditions are joined
+ * inside their explicit group, then groups are joined at the model level.
+ * Legacy flat inputs retain their historical left-to-right truth table by
+ * first normalizing to an equivalent grouped model.
  */
 export function evaluateColumnFilter(
   cellValue: CellValue,
-  filter: ColumnFilterModel,
+  filter: ColumnFilterInput,
   formatter?: (v: CellValue) => string,
 ): boolean {
-  if (!filter.conditions || filter.conditions.length === 0) return true;
+  const normalizedFilter = normalizeColumnFilterModel(filter);
+  let result: boolean | undefined;
 
-  const firstCondition = filter.conditions[0];
-  if (!firstCondition) return true;
-
-  // Evaluate first condition
-  let result = evaluateCondition(cellValue, firstCondition, formatter);
-
-  // Iterate through remaining conditions with per-condition operators
-  for (let i = 1; i < filter.conditions.length; i++) {
-    const prevCondition = filter.conditions[i - 1]!;
-    const currentCondition = filter.conditions[i]!;
-    // Use nextOperator from previous condition, fallback to global combination
-    const operator = prevCondition.nextOperator ?? filter.combination;
-    const conditionResult = evaluateCondition(cellValue, currentCondition, formatter);
-
-    if (operator === "and") {
-      result = result && conditionResult;
-    } else {
-      result = result || conditionResult;
+  for (const group of normalizedFilter.groups) {
+    const groupResult = evaluateConditionGroup(cellValue, group, formatter);
+    if (groupResult === undefined) continue;
+    if (result === undefined) {
+      result = groupResult;
+      continue;
     }
+    result = normalizedFilter.combination === "and"
+      ? result && groupResult
+      : result || groupResult;
   }
 
-  return result;
+  return result ?? true;
 }
 
 // =============================================================================
@@ -309,7 +323,7 @@ export function rowPassesFilter<TData>(
  */
 export function applyFilters<TData>(
   data: TData[],
-  filterModel: FilterModel | Record<string, string>,
+  filterModel: FilterModel | Record<string, string | ColumnFilterInput>,
   getFieldValue: (row: TData, field: string) => CellValue,
   getValueFormatter?: (field: string) => ((v: CellValue) => string) | undefined,
 ): TData[] {
@@ -318,7 +332,10 @@ export function applyFilters<TData>(
     if (typeof filter === "string") {
       return filter.trim() !== "";
     }
-    return filter.conditions && filter.conditions.length > 0;
+    const normalizedFilter = normalizeColumnFilterModel(filter);
+    return normalizedFilter.groups.some(
+      (group: FilterConditionGroup) => group.conditions.length > 0,
+    );
   });
 
   if (filterEntries.length === 0) {

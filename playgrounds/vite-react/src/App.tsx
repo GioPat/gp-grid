@@ -429,7 +429,8 @@ function MainDemo() {
   };
 
   const gridLabels: Partial<GridLabels> = {
-    and: "E d citemmurt",
+    and: "E",
+    or: "O",
     filterTitle: "Filtra: {column}",
     apply: "Applica",
   };
