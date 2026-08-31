@@ -106,9 +106,9 @@ const fetchPeople = async (
     );
   }
   if (req.filter) {
-    // req.filter is Record<string, ColumnFilterModel> — read .conditions[0].value, NOT the model itself.
+    // Conditions live inside explicit groups; preserve both combination levels for compound filters.
     for (const [field, model] of Object.entries(req.filter)) {
-      const value = model.conditions[0]?.value;
+      const value = model.groups[0]?.conditions[0]?.value;
       if (value !== undefined) params.set(`f_${field}`, String(value));
     }
   }
@@ -329,12 +329,12 @@ For row drag, `onRowDragEnd` fires after the user drops. The consumer is respons
 
 ## Localization and text wrapping
 
-Override any user-visible string with the `labels` prop (`Partial<GridLabels>`); unspecified labels keep their English defaults:
+Override any user-visible string with the `labels` prop (`GridLabelOverrides`); unspecified labels keep their English defaults:
 
 ```tsx
-import { Grid, type GridLabels } from "@gp-grid/react";
+import { Grid, type GridLabelOverrides } from "@gp-grid/react";
 
-const labels: Partial<GridLabels> = {
+const labels: GridLabelOverrides = {
   filterTitle: "Filtra: {column}", // {column} is replaced with the header name
   and: "E",
   apply: "Applica",
@@ -344,7 +344,7 @@ const labels: Partial<GridLabels> = {
 <Grid columns={columns} rowData={rows} rowHeight={36} labels={labels} />;
 ```
 
-`GridLabels` covers the whole filter popup plus the grid chrome (empty state, error prefix). The nested `operators` object holds the filter dropdown labels (`contains`, `startsWith`, `between`, …); it is typed as a complete `GridFilterOperatorLabels`, so to change a single operator spread the English defaults: `operators: { ...defaultGridLabels.operators, contains: "Contiene" }` (import `defaultGridLabels` from `@gp-grid/core`).
+`GridLabelOverrides` covers the whole filter popup plus the grid chrome (empty state, error prefix). Its nested `operators` object is partial too, so `operators: { contains: "Contiene" }` changes only that dropdown label.
 
 Long text: by default a cell truncates with an ellipsis and shows the full value in a native tooltip. Add `wrapText: true` to a column to wrap onto new lines instead (clipped to the fixed row height):
 
@@ -452,7 +452,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `Partial<GridLabels>` | English defaults | override filter/grid text (localization) |
+| `labels` | `GridLabelOverrides` | English defaults | override filter/grid text (localization) |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |

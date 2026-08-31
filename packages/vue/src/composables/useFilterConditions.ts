@@ -1,54 +1,129 @@
-// packages/vue/src/composables/useFilterConditions.ts
-
 import { ref, type Ref } from "vue";
+import type { FilterCombination } from "@gp-grid/core";
 
 export interface LocalFilterCondition<TOperator extends string> {
   operator: TOperator;
   value: string;
   valueTo: string;
-  nextOperator: "and" | "or";
+}
+
+export interface LocalFilterGroup<TOperator extends string> {
+  conditions: LocalFilterCondition<TOperator>[];
+  combination: FilterCombination;
 }
 
 export interface UseFilterConditionsResult<TOperator extends string> {
-  conditions: Ref<LocalFilterCondition<TOperator>[]>;
-  combination: Ref<"and" | "or">;
-  updateCondition: (index: number, updates: Partial<LocalFilterCondition<TOperator>>) => void;
-  addCondition: (defaultOperator: TOperator) => void;
-  removeCondition: (index: number) => void;
+  groups: Ref<LocalFilterGroup<TOperator>[]>;
+  combination: Ref<FilterCombination>;
+  setGroupCombination: (
+    groupIndex: number,
+    combination: FilterCombination,
+  ) => void;
+  updateCondition: (
+    groupIndex: number,
+    conditionIndex: number,
+    updates: Partial<LocalFilterCondition<TOperator>>,
+  ) => void;
+  addCondition: (groupIndex: number, defaultOperator: TOperator) => void;
+  removeCondition: (groupIndex: number, conditionIndex: number) => void;
+  addGroup: (defaultOperator: TOperator) => void;
+  removeGroup: (groupIndex: number) => void;
 }
 
-/**
- * Composable for managing filter conditions.
- * Used by NumberFilterContent, DateFilterContent, and TextFilterContent (condition mode).
- */
+const defaultCondition = <TOperator extends string>(
+  operator: TOperator,
+): LocalFilterCondition<TOperator> => ({
+  operator,
+  value: "",
+  valueTo: "",
+});
+
+/** Manage the one-level condition groups used by every Vue filter editor. */
 export function useFilterConditions<TOperator extends string>(
-  initialConditions: LocalFilterCondition<TOperator>[],
-  initialCombination: "and" | "or" = "and",
+  initialGroups: LocalFilterGroup<TOperator>[],
+  initialCombination: FilterCombination = "and",
 ): UseFilterConditionsResult<TOperator> {
-  const conditions = ref<LocalFilterCondition<TOperator>[]>([...initialConditions]) as Ref<
-    LocalFilterCondition<TOperator>[]
-  >;
-  const combination = ref<"and" | "or">(initialCombination);
+  const groups = ref(initialGroups.map((group) => ({
+    ...group,
+    conditions: [...group.conditions],
+  }))) as Ref<LocalFilterGroup<TOperator>[]>;
+  const combination = ref<FilterCombination>(initialCombination);
 
-  const updateCondition = (index: number, updates: Partial<LocalFilterCondition<TOperator>>): void => {
-    const next = [...conditions.value];
-    next[index] = { ...next[index]!, ...updates };
-    conditions.value = next;
+  const setGroupCombination = (
+    groupIndex: number,
+    nextCombination: FilterCombination,
+  ): void => {
+    groups.value = groups.value.map((group, index) =>
+      index === groupIndex
+        ? { ...group, combination: nextCombination }
+        : group);
   };
 
-  const addCondition = (defaultOperator: TOperator): void => {
-    conditions.value = [...conditions.value, { operator: defaultOperator, value: "", valueTo: "", nextOperator: "and" }];
+  const updateCondition = (
+    groupIndex: number,
+    conditionIndex: number,
+    updates: Partial<LocalFilterCondition<TOperator>>,
+  ): void => {
+    groups.value = groups.value.map((group, index) => {
+      if (index !== groupIndex) return group;
+      const conditions = group.conditions.map((condition, currentIndex) =>
+        currentIndex === conditionIndex
+          ? { ...condition, ...updates }
+          : condition);
+      return { ...group, conditions };
+    });
   };
 
-  const removeCondition = (index: number): void => {
-    conditions.value = conditions.value.filter((_, i) => i !== index);
+  const addCondition = (
+    groupIndex: number,
+    defaultOperator: TOperator,
+  ): void => {
+    groups.value = groups.value.map((group, index) =>
+      index === groupIndex
+        ? {
+          ...group,
+          conditions: [...group.conditions, defaultCondition(defaultOperator)],
+        }
+        : group);
+  };
+
+  const removeCondition = (
+    groupIndex: number,
+    conditionIndex: number,
+  ): void => {
+    groups.value = groups.value.map((group, index) =>
+      index === groupIndex
+        ? {
+          ...group,
+          conditions: group.conditions.filter(
+            (_condition, currentIndex) => currentIndex !== conditionIndex,
+          ),
+        }
+        : group);
+  };
+
+  const addGroup = (defaultOperator: TOperator): void => {
+    groups.value = [
+      ...groups.value,
+      {
+        conditions: [defaultCondition(defaultOperator)],
+        combination: "and",
+      },
+    ];
+  };
+
+  const removeGroup = (groupIndex: number): void => {
+    groups.value = groups.value.filter((_group, index) => index !== groupIndex);
   };
 
   return {
-    conditions,
+    groups,
     combination,
+    setGroupCombination,
     updateCondition,
     addCondition,
     removeCondition,
+    addGroup,
+    removeGroup,
   };
 }

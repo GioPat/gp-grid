@@ -25,19 +25,22 @@ import type {
   CellValue,
   ColumnFilterModel,
   DistinctValueEntry,
+  FilterCombination,
   GridLabels,
 } from '@gp-grid/core';
 import { FILTER_POPUP_TEMPLATE } from './filter-popup.template';
 import {
   MAX_CHECKBOX_VALUES,
   type FilterMode,
-  type NumberConditionState,
-  type TextConditionState,
+  type NumberConditionGroupState,
+  type TextConditionGroupState,
   buildNumberFilter,
   buildTextFilter,
   defaultNumberCondition,
+  defaultNumberGroup,
   defaultTextCondition,
-  initNumberConditions,
+  defaultTextGroup,
+  initNumberState,
   initTextState,
   isNumberColumn as columnIsNumber,
   isValueLessNumberOp,
@@ -75,8 +78,9 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   // Ticked display labels; raw values are resolved on apply (buildTextFilter).
   selectedLabels = new Set<string>();
   includeBlanks = true;
-  textConditions: TextConditionState[] = [defaultTextCondition()];
-  numberConditions: NumberConditionState[] = [defaultNumberCondition()];
+  textGroups: TextConditionGroupState[] = [defaultTextGroup()];
+  numberGroups: NumberConditionGroupState[] = [defaultNumberGroup()];
+  groupCombination: FilterCombination = 'and';
 
   protected textOperators(): ReturnType<typeof getTextOperatorOptions> {
     return getTextOperatorOptions(this.labels());
@@ -176,36 +180,60 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     this.selectedLabels.clear();
   }
 
-  onTextOperatorChange(index: number, value: string): void {
-    setField(this.textConditions, index, 'operator', value);
+  onTextOperatorChange(groupIndex: number, index: number, value: string): void {
+    const group = this.textGroups[groupIndex];
+    if (group) setField(group.conditions, index, 'operator', value);
   }
 
-  onNumberOperatorChange(index: number, value: string): void {
-    setField(this.numberConditions, index, 'operator', value);
+  onNumberOperatorChange(groupIndex: number, index: number, value: string): void {
+    const group = this.numberGroups[groupIndex];
+    if (group) setField(group.conditions, index, 'operator', value);
   }
 
-  addTextCondition(): void {
-    this.textConditions.push(defaultTextCondition());
+  addTextCondition(groupIndex: number): void {
+    this.textGroups[groupIndex]?.conditions.push(defaultTextCondition());
   }
 
-  addNumberCondition(): void {
-    this.numberConditions.push(defaultNumberCondition());
+  addNumberCondition(groupIndex: number): void {
+    this.numberGroups[groupIndex]?.conditions.push(defaultNumberCondition());
   }
 
-  removeTextCondition(index: number): void {
-    this.textConditions.splice(index, 1);
+  removeTextCondition(groupIndex: number, index: number): void {
+    this.textGroups[groupIndex]?.conditions.splice(index, 1);
   }
 
-  removeNumberCondition(index: number): void {
-    this.numberConditions.splice(index, 1);
+  removeNumberCondition(groupIndex: number, index: number): void {
+    this.numberGroups[groupIndex]?.conditions.splice(index, 1);
   }
 
-  setTextNextOp(index: number, value: 'and' | 'or'): void {
-    setField(this.textConditions, index, 'nextOperator', value);
+  addTextGroup(): void {
+    this.textGroups.push(defaultTextGroup());
   }
 
-  setNumberNextOp(index: number, value: 'and' | 'or'): void {
-    setField(this.numberConditions, index, 'nextOperator', value);
+  addNumberGroup(): void {
+    this.numberGroups.push(defaultNumberGroup());
+  }
+
+  removeTextGroup(groupIndex: number): void {
+    this.textGroups.splice(groupIndex, 1);
+  }
+
+  removeNumberGroup(groupIndex: number): void {
+    this.numberGroups.splice(groupIndex, 1);
+  }
+
+  setTextGroupCombination(groupIndex: number, value: FilterCombination): void {
+    const group = this.textGroups[groupIndex];
+    if (group) group.combination = value;
+  }
+
+  setNumberGroupCombination(groupIndex: number, value: FilterCombination): void {
+    const group = this.numberGroups[groupIndex];
+    if (group) group.combination = value;
+  }
+
+  setGroupCombination(value: FilterCombination): void {
+    this.groupCombination = value;
   }
 
   handleApply(): void {
@@ -220,27 +248,33 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildFilter(): ColumnFilterModel | null {
-    if (this.isNumberColumn()) return buildNumberFilter(this.numberConditions);
+    if (this.isNumberColumn()) {
+      return buildNumberFilter(this.numberGroups, this.groupCombination);
+    }
     return buildTextFilter({
       filterMode: this.filterMode,
       entries: this.uniqueEntries(),
       selectedLabels: this.selectedLabels,
       includeBlanks: this.includeBlanks,
-      textConditions: this.textConditions,
+      textGroups: this.textGroups,
+      combination: this.groupCombination,
     });
   }
 
   private initFromCurrentFilter(): void {
     const filter = this.currentFilter();
     if (this.isNumberColumn()) {
-      this.numberConditions = initNumberConditions(filter);
+      const state = initNumberState(filter);
+      this.numberGroups = state.numberGroups;
+      this.groupCombination = state.combination;
       return;
     }
     const state = initTextState(filter, this.uniqueEntries());
     this.filterMode = state.filterMode;
     this.selectedLabels = state.selectedLabels;
     this.includeBlanks = state.includeBlanks;
-    this.textConditions = state.textConditions;
+    this.textGroups = state.textGroups;
+    this.groupCombination = state.combination;
   }
 
   private updatePosition(): void {

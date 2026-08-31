@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator, GridLabels } from "@gp-grid/core";
 import { getDateOperatorOptions } from "@gp-grid/core";
-import { useFilterConditions, type LocalFilterCondition } from "../composables/useFilterConditions";
+import type {
+  ColumnFilterModel,
+  DateFilterCondition,
+  DateFilterOperator,
+  FilterConditionGroup,
+  GridLabels,
+} from "@gp-grid/core";
+import {
+  useFilterConditions,
+  type LocalFilterGroup,
+} from "../composables/useFilterConditions";
 
 const props = defineProps<{
   currentFilter?: ColumnFilterModel;
@@ -16,141 +25,182 @@ const emit = defineEmits<{
 
 const operators = computed(() => getDateOperatorOptions(props.labels));
 
-// Convert Date to YYYY-MM-DD string for input
-function formatDateForInput(date: Date | string | undefined): string {
+const formatDateForInput = (date: Date | string | undefined): string => {
   if (!date) return "";
-  const d = typeof date === "string" ? new Date(date) : date;
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString().split("T")[0]!;
-}
+  const normalizedDate = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(normalizedDate.getTime())) return "";
+  return normalizedDate.toISOString().split("T")[0]!;
+};
 
-// Parse initial conditions from current filter
-const initialConditions = computed((): LocalFilterCondition<DateFilterOperator>[] => {
-  if (!props.currentFilter?.conditions.length) {
-    return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
+const initialGroups = computed((): LocalFilterGroup<DateFilterOperator>[] => {
+  if (props.currentFilter?.groups.length) {
+    return props.currentFilter.groups.map((group) => ({
+      combination: group.combination,
+      conditions: group.conditions.map((condition) => {
+        const dateCondition = condition as DateFilterCondition;
+        return {
+          operator: dateCondition.operator,
+          value: formatDateForInput(dateCondition.value),
+          valueTo: formatDateForInput(dateCondition.valueTo),
+        };
+      }),
+    }));
   }
-  const defaultCombination = props.currentFilter.combination ?? "and";
-  return props.currentFilter.conditions.map((c) => {
-    const cond = c as DateFilterCondition;
-    return {
-      operator: cond.operator,
-      value: formatDateForInput(cond.value),
-      valueTo: formatDateForInput(cond.valueTo),
-      nextOperator: cond.nextOperator ?? defaultCombination,
-    };
-  });
+  return [{
+    conditions: [{ operator: "=", value: "", valueTo: "" }],
+    combination: "and",
+  }];
 });
 
-const { conditions, combination, updateCondition, addCondition, removeCondition } =
-  useFilterConditions<DateFilterOperator>(
-    initialConditions.value,
-    props.currentFilter?.combination ?? "and",
-  );
+const {
+  groups,
+  combination,
+  setGroupCombination,
+  updateCondition,
+  addCondition,
+  removeCondition,
+  addGroup,
+  removeGroup,
+} = useFilterConditions(
+  initialGroups.value,
+  props.currentFilter?.combination ?? "and",
+);
 
-function handleApply(): void {
-  const validConditions = conditions.value.filter((c) => {
-    if (c.operator === "blank" || c.operator === "notBlank") return true;
-    if (c.operator === "between") {
-      return c.value !== "" && c.valueTo !== "";
-    }
-    return c.value !== "";
+const isValidCondition = (
+  condition: LocalFilterGroup<DateFilterOperator>["conditions"][number],
+): boolean => {
+  if (condition.operator === "blank" || condition.operator === "notBlank") {
+    return true;
+  }
+  if (condition.operator === "between") {
+    return condition.value !== "" && condition.valueTo !== "";
+  }
+  return condition.value !== "";
+};
+
+const handleApply = (): void => {
+  const filterGroups: FilterConditionGroup[] = groups.value.flatMap((group) => {
+    const validConditions = group.conditions.filter(isValidCondition);
+    if (validConditions.length === 0) return [];
+    const conditions: DateFilterCondition[] = validConditions.map((condition) => ({
+      type: "date",
+      operator: condition.operator,
+      value: condition.value || undefined,
+      valueTo: condition.valueTo || undefined,
+    }));
+    return [{ conditions, combination: group.combination }];
   });
-
-  if (validConditions.length === 0) {
+  if (filterGroups.length === 0) {
     emit("apply", null);
     return;
   }
+  emit("apply", { groups: filterGroups, combination: combination.value });
+};
 
-  const filter: ColumnFilterModel = {
-    conditions: validConditions.map((c) => ({
-      type: "date" as const,
-      operator: c.operator,
-      value: c.value || undefined,
-      valueTo: c.valueTo || undefined,
-      nextOperator: c.nextOperator,
-    })),
-    combination: "and", // Default combination for backwards compatibility
-  };
-  emit("apply", filter);
-}
-
-function handleClear(): void {
-  emit("apply", null);
-}
+const handleClear = (): void => emit("apply", null);
 </script>
 
 <template>
   <div class="gp-grid-filter-content gp-grid-filter-date">
-    <div
-      v-for="(cond, index) in conditions"
-      :key="index"
-      class="gp-grid-filter-condition"
-    >
-      <!-- Combination toggle (AND/OR) for conditions after the first -->
-      <div v-if="index > 0" class="gp-grid-filter-combination">
-        <button
-          type="button"
-          :class="{ active: conditions[index - 1]?.nextOperator === 'and' }"
-          @click="updateCondition(index - 1, { nextOperator: 'and' })"
-        >
+    <div class="gp-grid-filter-groups">
+      <div v-if="groups.length > 1" class="gp-grid-filter-combination">
+        <button type="button" :class="{ active: combination === 'and' }" :aria-pressed="combination === 'and'" @click="combination = 'and'">
           {{ labels.and }}
         </button>
-        <button
-          type="button"
-          :class="{ active: conditions[index - 1]?.nextOperator === 'or' }"
-          @click="updateCondition(index - 1, { nextOperator: 'or' })"
-        >
+        <button type="button" :class="{ active: combination === 'or' }" :aria-pressed="combination === 'or'" @click="combination = 'or'">
           {{ labels.or }}
         </button>
       </div>
-
-      <div class="gp-grid-filter-row">
-        <!-- Operator select -->
-        <select
-          :value="cond.operator"
-          @change="updateCondition(index, { operator: ($event.target as HTMLSelectElement).value as DateFilterOperator })"
+      <div
+        v-for="(group, groupIndex) in groups"
+        :key="groupIndex"
+        class="gp-grid-filter-group"
+      >
+        <div
+          v-if="group.conditions.length > 1 || groups.length > 1"
+          class="gp-grid-filter-group-actions"
         >
-          <option v-for="op in operators" :key="op.value" :value="op.value">
-            {{ op.label }}
-          </option>
-        </select>
-
-        <!-- Date input (hidden for blank/notBlank) -->
-        <input
-          v-if="cond.operator !== 'blank' && cond.operator !== 'notBlank'"
-          type="date"
-          :value="cond.value"
-          @input="updateCondition(index, { value: ($event.target as HTMLInputElement).value })"
-        />
-
-        <!-- Second date input for "between" -->
-        <template v-if="cond.operator === 'between'">
-          <span class="gp-grid-filter-to">{{ labels.betweenSeparator }}</span>
-          <input
-            type="date"
-            :value="cond.valueTo"
-            @input="updateCondition(index, { valueTo: ($event.target as HTMLInputElement).value })"
-          />
-        </template>
-
-        <!-- Remove button (only if more than one condition) -->
-        <button
-          v-if="conditions.length > 1"
-          type="button"
-          class="gp-grid-filter-remove"
-          @click="removeCondition(index)"
-        >
-          {{ labels.removeCondition }}
-        </button>
+          <div v-if="group.conditions.length > 1" class="gp-grid-filter-combination">
+            <button
+              type="button"
+              :class="{ active: group.combination === 'and' }"
+              :aria-pressed="group.combination === 'and'"
+              @click="setGroupCombination(groupIndex, 'and')"
+            >
+              {{ labels.and }}
+            </button>
+            <button
+              type="button"
+              :class="{ active: group.combination === 'or' }"
+              :aria-pressed="group.combination === 'or'"
+              @click="setGroupCombination(groupIndex, 'or')"
+            >
+              {{ labels.or }}
+            </button>
+          </div>
+          <button
+            v-if="groups.length > 1"
+            type="button"
+            class="gp-grid-filter-remove gp-grid-filter-group-remove"
+            @click="removeGroup(groupIndex)"
+          >
+            {{ labels.removeGroup }}
+          </button>
+        </div>
+          <div
+            v-for="(condition, conditionIndex) in group.conditions"
+            :key="conditionIndex"
+            class="gp-grid-filter-condition"
+          >
+            <div class="gp-grid-filter-row">
+              <select
+                :value="condition.operator"
+                @change="updateCondition(groupIndex, conditionIndex, { operator: ($event.target as HTMLSelectElement).value as DateFilterOperator })"
+              >
+                <option v-for="operator in operators" :key="operator.value" :value="operator.value">
+                  {{ operator.label }}
+                </option>
+              </select>
+              <input
+                v-if="condition.operator !== 'blank' && condition.operator !== 'notBlank'"
+                type="date"
+                :value="condition.value"
+                @input="updateCondition(groupIndex, conditionIndex, { value: ($event.target as HTMLInputElement).value })"
+              />
+              <template v-if="condition.operator === 'between'">
+                <span class="gp-grid-filter-to">{{ labels.betweenSeparator }}</span>
+                <input
+                  type="date"
+                  :value="condition.valueTo"
+                  @input="updateCondition(groupIndex, conditionIndex, { valueTo: ($event.target as HTMLInputElement).value })"
+                />
+              </template>
+              <button
+                v-if="group.conditions.length > 1"
+                type="button"
+                class="gp-grid-filter-remove"
+                @click="removeCondition(groupIndex, conditionIndex)"
+              >
+                {{ labels.removeCondition }}
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="gp-grid-filter-add"
+            @click="addCondition(groupIndex, '=')"
+          >
+            {{ labels.addCondition }}
+          </button>
       </div>
+      <button
+        type="button"
+        class="gp-grid-filter-add gp-grid-filter-add-group"
+        @click="addGroup('=')"
+      >
+        {{ labels.addGroup }}
+      </button>
     </div>
-
-    <!-- Add condition button -->
-    <button type="button" class="gp-grid-filter-add" @click="addCondition('=')">
-      {{ labels.addCondition }}
-    </button>
-
-    <!-- Apply/Clear buttons -->
     <div class="gp-grid-filter-buttons">
       <button type="button" class="gp-grid-filter-btn-clear" @click="handleClear">
         {{ labels.clear }}

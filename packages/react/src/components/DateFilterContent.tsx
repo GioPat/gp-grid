@@ -1,8 +1,17 @@
-// packages/react/src/components/DateFilterContent.tsx
-
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { getDateOperatorOptions } from "@gp-grid/core";
-import type { ColumnFilterModel, DateFilterCondition, DateFilterOperator, GridLabels } from "@gp-grid/core";
+import type {
+  ColumnFilterModel,
+  DateFilterCondition,
+  DateFilterOperator,
+  FilterConditionGroup,
+  GridLabels,
+} from "@gp-grid/core";
+import { FilterCombinationToggle } from "./FilterCombinationToggle";
+import {
+  useFilterGroups,
+  type LocalFilterGroup,
+} from "./useFilterGroups";
 
 export interface DateFilterContentProps {
   currentFilter?: ColumnFilterModel;
@@ -15,161 +24,195 @@ interface Condition {
   operator: DateFilterOperator;
   value: string;
   valueTo: string;
-  nextOperator: "and" | "or";
 }
 
-// Convert Date to YYYY-MM-DD string for input
-function formatDateForInput(date: Date | string | undefined): string {
+const createCondition = (): Condition => ({
+  operator: "=",
+  value: "",
+  valueTo: "",
+});
+
+const formatDateForInput = (date: Date | string | undefined): string => {
   if (!date) return "";
-  const d = typeof date === "string" ? new Date(date) : date;
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString().split("T")[0]!;
-}
+  const normalizedDate = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(normalizedDate.getTime())) return "";
+  return normalizedDate.toISOString().split("T")[0]!;
+};
+
+const initialGroupsFor = (
+  filter: ColumnFilterModel | undefined,
+): LocalFilterGroup<Condition>[] => {
+  if (filter?.groups.length) {
+    return filter.groups.map((group) => ({
+      combination: group.combination,
+      conditions: group.conditions.map((condition) => {
+        const dateCondition = condition as DateFilterCondition;
+        return {
+          operator: dateCondition.operator,
+          value: formatDateForInput(dateCondition.value),
+          valueTo: formatDateForInput(dateCondition.valueTo),
+        };
+      }),
+    }));
+  }
+  return [{ conditions: [createCondition()], combination: "and" }];
+};
+
+const isValidCondition = (condition: Condition): boolean => {
+  if (condition.operator === "blank" || condition.operator === "notBlank") {
+    return true;
+  }
+  if (condition.operator === "between") {
+    return condition.value !== "" && condition.valueTo !== "";
+  }
+  return condition.value !== "";
+};
 
 export function DateFilterContent({
   currentFilter,
   labels,
   onApply,
-  onClose,
 }: DateFilterContentProps): React.ReactNode {
   const operators = useMemo(() => getDateOperatorOptions(labels), [labels]);
-
-  const initialConditions = useMemo((): Condition[] => {
-    if (!currentFilter?.conditions.length) {
-      return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
-    }
-    const defaultCombination = currentFilter.combination ?? "and";
-    return currentFilter.conditions.map((c) => {
-      const cond = c as DateFilterCondition;
-      return {
-        operator: cond.operator,
-        value: formatDateForInput(cond.value),
-        valueTo: formatDateForInput(cond.valueTo),
-        nextOperator: cond.nextOperator ?? defaultCombination,
-      };
-    });
-  }, [currentFilter]);
-
-  const [conditions, setConditions] = useState<Condition[]>(initialConditions);
-
-  const updateCondition = useCallback((index: number, updates: Partial<Condition>) => {
-    setConditions((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index]!, ...updates };
-      return next;
-    });
-  }, []);
-
-  const addCondition = useCallback(() => {
-    setConditions((prev) => [...prev, { operator: "=", value: "", valueTo: "", nextOperator: "and" }]);
-  }, []);
-
-  const removeCondition = useCallback((index: number) => {
-    setConditions((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const initialGroups = useMemo(
+    () => initialGroupsFor(currentFilter),
+    [currentFilter],
+  );
+  const {
+    groups,
+    combination,
+    setCombination,
+    setGroupCombination,
+    updateCondition,
+    addCondition,
+    removeCondition,
+    addGroup,
+    removeGroup,
+  } = useFilterGroups(
+    initialGroups,
+    currentFilter?.combination ?? "and",
+    createCondition,
+  );
 
   const handleApply = useCallback(() => {
-    const validConditions = conditions.filter((c) => {
-      if (c.operator === "blank" || c.operator === "notBlank") return true;
-      if (c.operator === "between") {
-        return c.value !== "" && c.valueTo !== "";
-      }
-      return c.value !== "";
+    const filterGroups: FilterConditionGroup[] = groups.flatMap((group) => {
+      const validConditions = group.conditions.filter(isValidCondition);
+      if (validConditions.length === 0) return [];
+      const conditions: DateFilterCondition[] = validConditions.map((condition) => ({
+        type: "date",
+        operator: condition.operator,
+        value: condition.value || undefined,
+        valueTo: condition.valueTo || undefined,
+      }));
+      return [{ conditions, combination: group.combination }];
     });
 
-    if (validConditions.length === 0) {
+    if (filterGroups.length === 0) {
       onApply(null);
       return;
     }
+    onApply({ groups: filterGroups, combination });
+  }, [combination, groups, onApply]);
 
-    const filter: ColumnFilterModel = {
-      conditions: validConditions.map((c) => ({
-        type: "date" as const,
-        operator: c.operator,
-        value: c.value || undefined,
-        valueTo: c.valueTo || undefined,
-        nextOperator: c.nextOperator,
-      })),
-      combination: "and", // Default combination for backwards compatibility
-    };
-    onApply(filter);
-  }, [conditions, onApply]);
-
-  const handleClear = useCallback(() => {
-    onApply(null);
-  }, [onApply]);
+  const handleClear = useCallback(() => onApply(null), [onApply]);
 
   return (
     <div className="gp-grid-filter-content gp-grid-filter-date">
-      {conditions.map((cond, index) => (
-        <div key={index} className="gp-grid-filter-condition">
-          {index > 0 && (
-            <div className="gp-grid-filter-combination">
-              <button
-                type="button"
-                className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
-                onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
-              >
-                {labels.and}
-              </button>
-              <button
-                type="button"
-                className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
-                onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
-              >
-                {labels.or}
-              </button>
-            </div>
-          )}
-
-          <div className="gp-grid-filter-row">
-            <select
-              value={cond.operator}
-              onChange={(e) => updateCondition(index, { operator: e.target.value as DateFilterOperator })}
+      <div className="gp-grid-filter-groups">
+        {groups.length > 1 && (
+          <FilterCombinationToggle
+            value={combination}
+            labels={labels}
+            onChange={setCombination}
+          />
+        )}
+        {groups.map((group, groupIndex) => (
+          <div key={groupIndex} className="gp-grid-filter-group">
+            {(group.conditions.length > 1 || groups.length > 1) && (
+              <div className="gp-grid-filter-group-actions">
+                {group.conditions.length > 1 && (
+                  <FilterCombinationToggle
+                    value={group.combination}
+                    labels={labels}
+                    onChange={(value) => setGroupCombination(groupIndex, value)}
+                  />
+                )}
+                {groups.length > 1 && (
+                  <button
+                    type="button"
+                    className="gp-grid-filter-remove gp-grid-filter-group-remove"
+                    onClick={() => removeGroup(groupIndex)}
+                  >
+                    {labels.removeGroup}
+                  </button>
+                )}
+              </div>
+            )}
+            {group.conditions.map((condition, conditionIndex) => (
+              <div key={conditionIndex} className="gp-grid-filter-condition">
+                  <div className="gp-grid-filter-row">
+                    <select
+                      value={condition.operator}
+                      onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                        operator: event.target.value as DateFilterOperator,
+                      })}
+                    >
+                      {operators.map((operator) => (
+                        <option key={operator.value} value={operator.value}>
+                          {operator.label}
+                        </option>
+                      ))}
+                    </select>
+                    {condition.operator !== "blank" && condition.operator !== "notBlank" && (
+                      <input
+                        type="date"
+                        value={condition.value}
+                        onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                          value: event.target.value,
+                        })}
+                      />
+                    )}
+                    {condition.operator === "between" && (
+                      <>
+                        <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
+                        <input
+                          type="date"
+                          value={condition.valueTo}
+                          onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                            valueTo: event.target.value,
+                          })}
+                        />
+                      </>
+                    )}
+                    {group.conditions.length > 1 && (
+                      <button
+                        type="button"
+                        className="gp-grid-filter-remove"
+                        onClick={() => removeCondition(groupIndex, conditionIndex)}
+                      >
+                        {labels.removeCondition}
+                      </button>
+                    )}
+                  </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="gp-grid-filter-add"
+              onClick={() => addCondition(groupIndex)}
             >
-              {operators.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label}
-                </option>
-              ))}
-            </select>
-
-            {cond.operator !== "blank" && cond.operator !== "notBlank" && (
-              <input
-                type="date"
-                value={cond.value}
-                onChange={(e) => updateCondition(index, { value: e.target.value })}
-              />
-            )}
-
-            {cond.operator === "between" && (
-              <>
-                <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
-                <input
-                  type="date"
-                  value={cond.valueTo}
-                  onChange={(e) => updateCondition(index, { valueTo: e.target.value })}
-                />
-              </>
-            )}
-
-            {conditions.length > 1 && (
-              <button
-                type="button"
-                className="gp-grid-filter-remove"
-                onClick={() => removeCondition(index)}
-              >
-                {labels.removeCondition}
-              </button>
-            )}
+              {labels.addCondition}
+            </button>
           </div>
-        </div>
-      ))}
-
-      <button type="button" className="gp-grid-filter-add" onClick={addCondition}>
-        {labels.addCondition}
-      </button>
-
+        ))}
+        <button
+          type="button"
+          className="gp-grid-filter-add gp-grid-filter-add-group"
+          onClick={addGroup}
+        >
+          {labels.addGroup}
+        </button>
+      </div>
       <div className="gp-grid-filter-buttons">
         <button type="button" className="gp-grid-filter-btn-clear" onClick={handleClear}>
           {labels.clear}

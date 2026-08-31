@@ -117,30 +117,42 @@ const pageIndex = Math.floor(req.range.startRow / pageSize);
 type FilterModel = Record<string, ColumnFilterModel>;
 
 interface ColumnFilterModel {
+  groups: FilterConditionGroup[];
+  combination: "and" | "or"; // joins groups
+}
+
+interface FilterConditionGroup {
   conditions: FilterCondition[];
-  combination: "and" | "or";
+  combination: "and" | "or"; // joins conditions in this group
 }
 
 // FilterCondition is a tagged union — read .value from the right branch
 type FilterCondition =
-  | { type: "text";   operator: TextFilterOperator;   value?: string;        selectedValues?: Set<CellValue>; includeBlank?: boolean; nextOperator?: "and" | "or" }
-  | { type: "number"; operator: NumberFilterOperator; value?: number; valueTo?: number; nextOperator?: "and" | "or" }
-  | { type: "date";   operator: DateFilterOperator;   value?: Date | string; valueTo?: Date | string;       nextOperator?: "and" | "or" };
+  | { type: "text";   operator: TextFilterOperator;   value?: string;        selectedValues?: Set<CellValue>; includeBlank?: boolean }
+  | { type: "number"; operator: NumberFilterOperator; value?: number; valueTo?: number }
+  | { type: "date";   operator: DateFilterOperator;   value?: Date | string; valueTo?: Date | string };
 ```
 
-Do **not** do `String(req.filter[field])` — the value is a `ColumnFilterModel` object, so `String(...)` produces `"[object Object]"`. Read `req.filter[field].conditions[0].value` (or iterate `conditions` and `selectedValues` if your backend supports compound filters). `selectedValues` holds **raw** cell values (a `valueFormatter` never changes what the server receives) and is a `Set` — spread it into an array before serializing (`[...condition.selectedValues]`), because `JSON.stringify` on a `Set` produces `{}`. Example serializer:
+Do **not** do `String(req.filter[field])` — the value is a `ColumnFilterModel` object, so `String(...)` produces `"[object Object]"`. Read conditions through `model.groups` and preserve both combination levels if your backend supports compound filters. `selectedValues` holds **raw** cell values (a `valueFormatter` never changes what the server receives) and is a `Set` — spread it into an array before serializing (`[...condition.selectedValues]`), because `JSON.stringify` on a `Set` produces `{}`. Example serializer for the first predicate:
 
 ```ts
 const params = new URLSearchParams();
 if (req.filter) {
   for (const [field, model] of Object.entries(req.filter)) {
-    const condition = model.conditions[0];
+    const condition = model.groups[0]?.conditions[0];
     if (!condition) continue;
     if (condition.value !== undefined) params.set(`filter_${field}`, String(condition.value));
     if ("valueTo" in condition && condition.valueTo !== undefined) params.set(`filter_${field}_to`, String(condition.valueTo));
   }
 }
 ```
+
+The popup creates explicit one-level groups, so `(A AND B) OR C` and
+`A AND (B OR C)` have different, unambiguous models. `GridCore.setFilter()`
+accepts legacy flat models as migration input and normalizes them; server
+requests and `getFilterModel()` expose only the grouped shape.
+The popup displays one AND/OR selector per scope: the selector outside the
+cards joins groups, while the selector inside a card joins its conditions.
 
 The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is the default; tune via `rowLoading.cache` — **this is a prop on the grid component, NOT a second argument to `createServerDataSource`**. `createServerDataSource(queryFn, options?)` only accepts `{ loadMode? }` as options; cache config goes on the grid:
 
@@ -187,7 +199,7 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste). All wired automatically.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (a `Partial<GridLabels>`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `selectAll`, `deselectAll`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Unspecified labels fall back to English defaults; the `GridLabels` type is re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 ### Programmatic API (`GridCore`)

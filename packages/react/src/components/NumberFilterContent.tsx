@@ -1,8 +1,17 @@
-// packages/react/src/components/NumberFilterContent.tsx
-
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { getNumberOperatorOptions } from "@gp-grid/core";
-import type { ColumnFilterModel, GridLabels, NumberFilterCondition, NumberFilterOperator } from "@gp-grid/core";
+import type {
+  ColumnFilterModel,
+  FilterConditionGroup,
+  GridLabels,
+  NumberFilterCondition,
+  NumberFilterOperator,
+} from "@gp-grid/core";
+import { FilterCombinationToggle } from "./FilterCombinationToggle";
+import {
+  useFilterGroups,
+  type LocalFilterGroup,
+} from "./useFilterGroups";
 
 export interface NumberFilterContentProps {
   currentFilter?: ColumnFilterModel;
@@ -15,157 +24,196 @@ interface Condition {
   operator: NumberFilterOperator;
   value: string;
   valueTo: string;
-  nextOperator: "and" | "or";
 }
+
+const createCondition = (): Condition => ({
+  operator: "=",
+  value: "",
+  valueTo: "",
+});
+
+const initialGroupsFor = (
+  filter: ColumnFilterModel | undefined,
+): LocalFilterGroup<Condition>[] => {
+  if (filter?.groups.length) {
+    return filter.groups.map((group) => ({
+      combination: group.combination,
+      conditions: group.conditions.map((condition) => {
+        const numberCondition = condition as NumberFilterCondition;
+        return {
+          operator: numberCondition.operator,
+          value: numberCondition.value != null
+            ? String(numberCondition.value)
+            : "",
+          valueTo: numberCondition.valueTo != null
+            ? String(numberCondition.valueTo)
+            : "",
+        };
+      }),
+    }));
+  }
+  return [{ conditions: [createCondition()], combination: "and" }];
+};
+
+const isValidCondition = (condition: Condition): boolean => {
+  if (condition.operator === "blank" || condition.operator === "notBlank") {
+    return true;
+  }
+  if (condition.operator === "between") {
+    return condition.value !== "" && condition.valueTo !== "";
+  }
+  return condition.value !== "";
+};
 
 export function NumberFilterContent({
   currentFilter,
   labels,
   onApply,
-  onClose,
 }: NumberFilterContentProps): React.ReactNode {
   const operators = useMemo(() => getNumberOperatorOptions(labels), [labels]);
-
-  // Initialize from current filter
-  const initialConditions = useMemo((): Condition[] => {
-    if (!currentFilter?.conditions.length) {
-      return [{ operator: "=", value: "", valueTo: "", nextOperator: "and" }];
-    }
-    const defaultCombination = currentFilter.combination ?? "and";
-    return currentFilter.conditions.map((c) => {
-      const cond = c as NumberFilterCondition;
-      return {
-        operator: cond.operator,
-        value: cond.value != null ? String(cond.value) : "",
-        valueTo: cond.valueTo != null ? String(cond.valueTo) : "",
-        nextOperator: cond.nextOperator ?? defaultCombination,
-      };
-    });
-  }, [currentFilter]);
-
-  const [conditions, setConditions] = useState<Condition[]>(initialConditions);
-
-  const updateCondition = useCallback((index: number, updates: Partial<Condition>) => {
-    setConditions((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index]!, ...updates };
-      return next;
-    });
-  }, []);
-
-  const addCondition = useCallback(() => {
-    setConditions((prev) => [...prev, { operator: "=", value: "", valueTo: "", nextOperator: "and" }]);
-  }, []);
-
-  const removeCondition = useCallback((index: number) => {
-    setConditions((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const initialGroups = useMemo(
+    () => initialGroupsFor(currentFilter),
+    [currentFilter],
+  );
+  const {
+    groups,
+    combination,
+    setCombination,
+    setGroupCombination,
+    updateCondition,
+    addCondition,
+    removeCondition,
+    addGroup,
+    removeGroup,
+  } = useFilterGroups(
+    initialGroups,
+    currentFilter?.combination ?? "and",
+    createCondition,
+  );
 
   const handleApply = useCallback(() => {
-    // Filter out empty conditions
-    const validConditions = conditions.filter((c) => {
-      if (c.operator === "blank" || c.operator === "notBlank") return true;
-      if (c.operator === "between") {
-        return c.value !== "" && c.valueTo !== "";
-      }
-      return c.value !== "";
+    const filterGroups: FilterConditionGroup[] = groups.flatMap((group) => {
+      const validConditions = group.conditions.filter(isValidCondition);
+      if (validConditions.length === 0) return [];
+      const conditions: NumberFilterCondition[] = validConditions.map((condition) => ({
+        type: "number",
+        operator: condition.operator,
+        value: condition.value ? Number.parseFloat(condition.value) : undefined,
+        valueTo: condition.valueTo
+          ? Number.parseFloat(condition.valueTo)
+          : undefined,
+      }));
+      return [{ conditions, combination: group.combination }];
     });
 
-    if (validConditions.length === 0) {
+    if (filterGroups.length === 0) {
       onApply(null);
       return;
     }
+    onApply({ groups: filterGroups, combination });
+  }, [combination, groups, onApply]);
 
-    const filter: ColumnFilterModel = {
-      conditions: validConditions.map((c) => ({
-        type: "number" as const,
-        operator: c.operator,
-        value: c.value ? parseFloat(c.value) : undefined,
-        valueTo: c.valueTo ? parseFloat(c.valueTo) : undefined,
-        nextOperator: c.nextOperator,
-      })),
-      combination: "and", // Default combination for backwards compatibility
-    };
-    onApply(filter);
-  }, [conditions, onApply]);
-
-  const handleClear = useCallback(() => {
-    onApply(null);
-  }, [onApply]);
+  const handleClear = useCallback(() => onApply(null), [onApply]);
 
   return (
     <div className="gp-grid-filter-content gp-grid-filter-number">
-      {conditions.map((cond, index) => (
-        <div key={index} className="gp-grid-filter-condition">
-          {index > 0 && (
-            <div className="gp-grid-filter-combination">
-              <button
-                type="button"
-                className={conditions[index - 1]?.nextOperator === "and" ? "active" : ""}
-                onClick={() => updateCondition(index - 1, { nextOperator: "and" })}
-              >
-                {labels.and}
-              </button>
-              <button
-                type="button"
-                className={conditions[index - 1]?.nextOperator === "or" ? "active" : ""}
-                onClick={() => updateCondition(index - 1, { nextOperator: "or" })}
-              >
-                {labels.or}
-              </button>
-            </div>
-          )}
-
-          <div className="gp-grid-filter-row">
-            <select
-              value={cond.operator}
-              onChange={(e) => updateCondition(index, { operator: e.target.value as NumberFilterOperator })}
+      <div className="gp-grid-filter-groups">
+        {groups.length > 1 && (
+          <FilterCombinationToggle
+            value={combination}
+            labels={labels}
+            onChange={setCombination}
+          />
+        )}
+        {groups.map((group, groupIndex) => (
+          <div key={groupIndex} className="gp-grid-filter-group">
+            {(group.conditions.length > 1 || groups.length > 1) && (
+              <div className="gp-grid-filter-group-actions">
+                {group.conditions.length > 1 && (
+                  <FilterCombinationToggle
+                    value={group.combination}
+                    labels={labels}
+                    onChange={(value) => setGroupCombination(groupIndex, value)}
+                  />
+                )}
+                {groups.length > 1 && (
+                  <button
+                    type="button"
+                    className="gp-grid-filter-remove gp-grid-filter-group-remove"
+                    onClick={() => removeGroup(groupIndex)}
+                  >
+                    {labels.removeGroup}
+                  </button>
+                )}
+              </div>
+            )}
+            {group.conditions.map((condition, conditionIndex) => (
+              <div key={conditionIndex} className="gp-grid-filter-condition">
+                  <div className="gp-grid-filter-row">
+                    <select
+                      value={condition.operator}
+                      onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                        operator: event.target.value as NumberFilterOperator,
+                      })}
+                    >
+                      {operators.map((operator) => (
+                        <option key={operator.value} value={operator.value}>
+                          {operator.label}
+                        </option>
+                      ))}
+                    </select>
+                    {condition.operator !== "blank" && condition.operator !== "notBlank" && (
+                      <input
+                        type="number"
+                        value={condition.value}
+                        onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                          value: event.target.value,
+                        })}
+                        placeholder={labels.valuePlaceholder}
+                      />
+                    )}
+                    {condition.operator === "between" && (
+                      <>
+                        <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
+                        <input
+                          type="number"
+                          value={condition.valueTo}
+                          onChange={(event) => updateCondition(groupIndex, conditionIndex, {
+                            valueTo: event.target.value,
+                          })}
+                          placeholder={labels.valuePlaceholder}
+                        />
+                      </>
+                    )}
+                    {group.conditions.length > 1 && (
+                      <button
+                        type="button"
+                        className="gp-grid-filter-remove"
+                        onClick={() => removeCondition(groupIndex, conditionIndex)}
+                      >
+                        {labels.removeCondition}
+                      </button>
+                    )}
+                  </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="gp-grid-filter-add"
+              onClick={() => addCondition(groupIndex)}
             >
-              {operators.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label}
-                </option>
-              ))}
-            </select>
-
-            {cond.operator !== "blank" && cond.operator !== "notBlank" && (
-              <input
-                type="number"
-                value={cond.value}
-                onChange={(e) => updateCondition(index, { value: e.target.value })}
-                placeholder={labels.valuePlaceholder}
-              />
-            )}
-
-            {cond.operator === "between" && (
-              <>
-                <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
-                <input
-                  type="number"
-                  value={cond.valueTo}
-                  onChange={(e) => updateCondition(index, { valueTo: e.target.value })}
-                  placeholder={labels.valuePlaceholder}
-                />
-              </>
-            )}
-
-            {conditions.length > 1 && (
-              <button
-                type="button"
-                className="gp-grid-filter-remove"
-                onClick={() => removeCondition(index)}
-              >
-                {labels.removeCondition}
-              </button>
-            )}
+              {labels.addCondition}
+            </button>
           </div>
-        </div>
-      ))}
-
-      <button type="button" className="gp-grid-filter-add" onClick={addCondition}>
-        {labels.addCondition}
-      </button>
-
+        ))}
+        <button
+          type="button"
+          className="gp-grid-filter-add gp-grid-filter-add-group"
+          onClick={addGroup}
+        >
+          {labels.addGroup}
+        </button>
+      </div>
       <div className="gp-grid-filter-buttons">
         <button type="button" className="gp-grid-filter-btn-clear" onClick={handleClear}>
           {labels.clear}

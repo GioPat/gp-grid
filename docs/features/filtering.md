@@ -54,13 +54,20 @@ For `date`, `dateString`, `dateTime`, `dateTimeString` column types. Same operat
 
 ## Multiple Conditions
 
-Add multiple conditions and combine with AND/OR:
+Conditions are composed in explicit group cards. Each group has one AND/OR
+operator for its conditions, and the column filter has a second AND/OR
+operator between groups. This makes the grouping visible and lets the two
+expressions below produce different models:
 
 ```
-Condition 1: > 100
-AND
-Condition 2: < 500
+(Condition 1 AND Condition 2) OR Condition 3
+Condition 1 AND (Condition 2 OR Condition 3)
 ```
+
+Use **Add condition** inside a card and **Add group** below the cards. Empty
+conditions and groups are discarded when the filter is applied.
+Each AND/OR selector is displayed once for the level it controls: outside the
+cards for groups, and inside a card for that card's conditions.
 
 ## Filter Model
 
@@ -68,8 +75,13 @@ The filter model structure:
 
 ```typescript
 interface ColumnFilterModel {
+  groups: FilterConditionGroup[];
+  combination: 'and' | 'or'; // joins groups
+}
+
+interface FilterConditionGroup {
   conditions: FilterCondition[];
-  combination: 'and' | 'or';
+  combination: 'and' | 'or'; // joins conditions in this group
 }
 
 type FilterCondition =
@@ -81,10 +93,35 @@ type FilterCondition =
 interface TextFilterCondition {
   type: 'text';
   operator: TextFilterOperator;
+  value?: string;
   selectedValues?: Set<CellValue>;
   includeBlank?: boolean;
 }
 ```
+
+For example, `(A AND B) OR C` is represented as two groups:
+
+```typescript
+const filter: ColumnFilterModel = {
+  groups: [
+    { conditions: [A, B], combination: 'and' },
+    { conditions: [C], combination: 'and' },
+  ],
+  combination: 'or',
+};
+```
+
+### Migrating flat condition models
+
+`GridCore.setFilter()` still accepts the previous flat model with
+per-condition `nextOperator` values. It preserves the old left-to-right truth
+table and immediately converts the input into equivalent one-level groups.
+When a condition must appear in more than one group to preserve the expression,
+the compact form with the fewest repeated conditions is selected.
+
+Use `normalizeColumnFilterModel(legacyFilter)` to migrate stored filters
+explicitly. `getFilterModel()` and `DataSourceRequest.filter` always return the
+new grouped shape; server serializers must read `model.groups`.
 
 ### Values mode stores raw values
 
@@ -140,7 +177,10 @@ interface DateFilterCondition {
 
 ```typescript
 // Set filter on a column
-core.setFilter(colId: string, filter: ColumnFilterModel | null);
+core.setFilter(
+  colId: string,
+  filter: ColumnFilterInput | string | null,
+);
 
 // Open filter popup
 core.openFilterPopup(colIndex: number, anchorRect: DOMRect);
@@ -166,8 +206,9 @@ core.hasActiveFilter(colId: string): boolean;
 
 Every user-visible string in the grid is sourced from a shared `GridLabels`
 object (English defaults live in `@gp-grid/core`). Override any of them with
-the `labels` prop — pass a partial object, and `operators` is deep-merged so
-you can override a single operator label without touching the rest.
+the `labels` prop, typed as `GridLabelOverrides`. Top-level labels and nested
+`operators` are independently optional, so one operator can be changed
+without copying the rest.
 
 ```tsx
 <Grid
@@ -184,7 +225,7 @@ you can override a single operator label without touching the rest.
 Vue: `:labels="{ emptyState: 'No rows to show' }"`.
 Angular: `[labels]="{ emptyState: 'No rows to show' }"`.
 
-`GridLabels` fields:
+`GridLabelOverrides` accepts these `GridLabels` fields:
 
 | Field | Default | Notes |
 |-------|---------|-------|
@@ -194,6 +235,8 @@ Angular: `[labels]="{ emptyState: 'No rows to show' }"`.
 | `betweenSeparator` | `to` | Between-operator separator |
 | `addCondition` | `+ Add condition` | |
 | `removeCondition` | `×` | |
+| `addGroup` | `+ Add group` | |
+| `removeGroup` | `×` | |
 | `clear` / `apply` | `Clear` / `Apply` | |
 | `valuesMode` / `conditionMode` | `Values` / `Condition` | Text filter mode toggle |
 | `searchPlaceholder` | `Search...` | |

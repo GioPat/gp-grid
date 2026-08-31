@@ -17,6 +17,7 @@ import type {
   NumberFilterCondition,
   DateFilterCondition,
   ColumnFilterModel,
+  LegacyColumnFilterModel,
   FilterModel,
 } from "../src/types";
 
@@ -276,24 +277,45 @@ describe("evaluateDateCondition — operator table", () => {
 });
 
 describe("evaluateColumnFilter — AND/OR combinator", () => {
-  it("empty conditions: returns true", () => {
-    expect(evaluateColumnFilter("x", { conditions: [], combination: "and" })).toBe(true);
+  it("empty groups: returns true", () => {
+    expect(evaluateColumnFilter("x", { groups: [], combination: "and" })).toBe(true);
   });
 
-  it("combines via the global `combination` when conditions lack nextOperator", () => {
+  it("distinguishes (A AND B) OR C from A AND (B OR C)", () => {
     const filter: ColumnFilterModel = {
-      conditions: [textOp("contains", "a"), textOp("contains", "b")],
-      combination: "and",
+      groups: [
+        {
+          conditions: [textOp("contains", "a"), textOp("contains", "b")],
+          combination: "and",
+        },
+        { conditions: [textOp("contains", "c")], combination: "and" },
+      ],
+      combination: "or",
     };
     expect(evaluateColumnFilter("ab", filter)).toBe(true);
+    expect(evaluateColumnFilter("c", filter)).toBe(true);
     expect(evaluateColumnFilter("a", filter)).toBe(false);
+
+    const alternate: ColumnFilterModel = {
+      groups: [
+        { conditions: [textOp("contains", "a")], combination: "and" },
+        {
+          conditions: [textOp("contains", "b"), textOp("contains", "c")],
+          combination: "or",
+        },
+      ],
+      combination: "and",
+    };
+    expect(evaluateColumnFilter("ab", alternate)).toBe(true);
+    expect(evaluateColumnFilter("ac", alternate)).toBe(true);
+    expect(evaluateColumnFilter("bc", alternate)).toBe(false);
   });
 
-  it("per-condition nextOperator overrides the global combination", () => {
+  it("accepts legacy per-condition operators with their left-to-right semantics", () => {
     // Three conditions where global "and" would short-circuit to false at c2,
     // but c1.nextOperator = "or" promotes c1's true through c2's false.
     // Then c2.nextOperator = "and" combines the running result with c3.
-    const filter: ColumnFilterModel = {
+    const filter: LegacyColumnFilterModel = {
       conditions: [
         { ...textOp("contains", "a"), nextOperator: "or" },
         { ...textOp("contains", "x"), nextOperator: "and" },
@@ -304,7 +326,7 @@ describe("evaluateColumnFilter — AND/OR combinator", () => {
     expect(evaluateColumnFilter("ab", filter)).toBe(true);
 
     // Flip: c1.nextOperator = "and" overrides global "or" and forces AND semantics.
-    const andOverride: ColumnFilterModel = {
+    const andOverride: LegacyColumnFilterModel = {
       conditions: [
         { ...textOp("contains", "a"), nextOperator: "and" },
         textOp("contains", "x"),
@@ -332,7 +354,10 @@ describe("applyFilters — legacy string format + new format", () => {
 
   it("new ColumnFilterModel format applies per-column predicates", () => {
     const filterModel: FilterModel = {
-      name: { conditions: [textOp("startsWith", "A")], combination: "and" },
+      name: {
+        groups: [{ conditions: [textOp("startsWith", "A")], combination: "and" }],
+        combination: "and",
+      },
     };
     const result = applyFilters(rows, filterModel, getField);
     expect(result.map((r) => r.name)).toEqual(["Alice"]);
@@ -345,8 +370,14 @@ describe("applyFilters — legacy string format + new format", () => {
       { name: "Bob", age: "30" },
     ];
     const filterModel: FilterModel = {
-      name: { conditions: [textOp("equals", "Alice")], combination: "and" },
-      age: { conditions: [textOp("equals", "30")], combination: "and" },
+      name: {
+        groups: [{ conditions: [textOp("equals", "Alice")], combination: "and" }],
+        combination: "and",
+      },
+      age: {
+        groups: [{ conditions: [textOp("equals", "30")], combination: "and" }],
+        combination: "and",
+      },
     };
     const result = applyFilters(multiRows, filterModel, getField);
     expect(result).toEqual([{ name: "Alice", age: "30" }]);

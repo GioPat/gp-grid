@@ -14,6 +14,8 @@ All notable changes to gp-grid will be documented in this file.
 - Multi-column sort support with sort index indicator
 
 #### Filtering
+- Explicit one-level condition groups remove ambiguity from mixed AND/OR filters
+- Legacy flat condition models are normalized without changing their left-to-right semantics
 - Per-column `filterable` option in column definitions
 - Filter icon in column headers (funnel icon)
 - Header-based filter popup system
@@ -29,9 +31,18 @@ All notable changes to gp-grid will be documented in this file.
 - Per-column `wrapText` option to wrap long cell text onto multiple lines (clipped to the fixed row height).
 
 ### Changed
+- `ColumnFilterModel` now exposes `groups`; canonical conditions no longer expose `nextOperator`
+- Filter popups in React, Vue, and Angular use group cards with separate condition/group operators
+- Grid label props use `GridLabelOverrides`, allowing individual nested operator overrides
 - `FilterModel` type changed from `Record<string, string>` to `Record<string, ColumnFilterModel>`
 - Header rendering now includes sort/filter indicators and icons
-- `setFilter()` method now accepts `ColumnFilterModel | null`
+- `setFilter()` accepts canonical grouped filters plus legacy flat/string inputs for migration
+
+### Fixed
+- Centered the remove-condition and remove-group glyphs within their buttons
+- Rendered each condition/group combination selector once for its scope instead of showing tied duplicates
+- Ensured active filter toggles and focus outlines retain the theme primary color against generic application button styles
+- Matched the selected Values/Condition branch to the blue AND/OR state, removed its dark padded track, and exposed toggle state with `aria-pressed`
 
 ## [0.1.6] - 2024-12-23
 

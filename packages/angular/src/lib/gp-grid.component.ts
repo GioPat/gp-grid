@@ -21,7 +21,7 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   DataSource,
-  GridLabels,
+  GridLabelOverrides,
   HighlightingOptions,
   RowLoadingOptions,
   RowId,
@@ -86,7 +86,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
-  labels = input<Partial<GridLabels>>({});
+  labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
 

@@ -202,9 +202,9 @@ export class UsersGridComponent {
       params["sortBy"] = req.sort.map((s) => `${s.colId}:${s.direction}`).join(",");
     }
     if (req.filter) {
-      // req.filter is Record<string, ColumnFilterModel> — read .conditions[0].value, NOT the model itself.
+      // Conditions live inside explicit groups; preserve both combination levels for compound filters.
       for (const [field, model] of Object.entries(req.filter)) {
-        const value = model.conditions[0]?.value;
+        const value = model.groups[0]?.conditions[0]?.value;
         if (value !== undefined) params[`f_${field}`] = String(value);
       }
     }
@@ -406,13 +406,13 @@ Output payloads:
 
 ## Localization and text wrapping
 
-Override any user-visible string with the `labels` input (`Partial<GridLabels>`); unspecified labels keep their English defaults:
+Override any user-visible string with the `labels` input (`GridLabelOverrides`); unspecified labels keep their English defaults:
 
 ```ts
 import { GpGridComponent } from "@gp-grid/angular";
-import type { GridLabels } from "@gp-grid/angular";
+import type { GridLabelOverrides } from "@gp-grid/angular";
 
-protected readonly labels: Partial<GridLabels> = {
+protected readonly labels: GridLabelOverrides = {
   filterTitle: "Filtra: {column}", // {column} is replaced with the header name
   and: "E",
   apply: "Applica",
@@ -424,7 +424,7 @@ protected readonly labels: Partial<GridLabels> = {
 <gp-grid [columns]="columns" [rows]="rows" [rowHeight]="36" [labels]="labels" />
 ```
 
-`GridLabels` covers the whole filter popup plus the grid chrome (empty state, error prefix). The nested `operators` object holds the filter dropdown labels (`contains`, `startsWith`, `between`, …); it is typed as a complete `GridFilterOperatorLabels`, so to change a single operator spread the English defaults: `operators: { ...defaultGridLabels.operators, contains: "Contiene" }` (import `defaultGridLabels` from `@gp-grid/core`).
+`GridLabelOverrides` covers the whole filter popup plus the grid chrome (empty state, error prefix). Its nested `operators` object is partial too, so `operators: { contains: "Contiene" }` changes only that dropdown label.
 
 Long text: by default a cell truncates with an ellipsis and shows the full value in a native tooltip. Add `wrapText: true` to a column to wrap onto new lines instead (clipped to the fixed row height):
 
@@ -491,7 +491,7 @@ Inputs:
 | `[rowLoading]` | `RowLoadingOptions \| null` | `null` |
 | `[sortingEnabled]` | `boolean` | `true` |
 | `[wheelDampening]` | `number` | `0.1` |
-| `[labels]` | `Partial<GridLabels>` | English defaults |
+| `[labels]` | `GridLabelOverrides` | English defaults |
 
 Outputs:
 

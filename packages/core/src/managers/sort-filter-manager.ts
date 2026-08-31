@@ -4,10 +4,12 @@ import type {
   SortModel,
   SortDirection,
   FilterModel,
+  ColumnFilterInput,
   ColumnFilterModel,
 } from "./../types";
 import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
 import { rawValueKey } from "../filtering/distinct-entries";
+import { normalizeColumnFilterModel } from "../filtering/normalize";
 
 const DISTINCT_SCAN_WARN_THRESHOLD = 10_000;
 
@@ -100,30 +102,39 @@ export class SortFilterManager<TData = Record<string, unknown>> {
 
   async setFilter(
     colId: string,
-    filter: ColumnFilterModel | string | null,
+    filter: ColumnFilterInput | string | null,
   ): Promise<void> {
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (column?.filterable === false) return;
 
-    // Handle null, empty string, or empty conditions
+    // Handle null or an empty legacy string before canonical normalization.
     const isEmpty =
       filter === null ||
-      (typeof filter === "string" && filter.trim() === "") ||
-      (typeof filter === "object" &&
-        filter.conditions?.length === 0);
+      (typeof filter === "string" && filter.trim() === "");
 
     if (isEmpty) {
       delete this.filterModel[colId];
     } else if (typeof filter === "string") {
       // Convert old string format to new ColumnFilterModel format
       this.filterModel[colId] = {
-        conditions: [{ type: "text", operator: "contains", value: filter }],
+        groups: [{
+          conditions: [{ type: "text", operator: "contains", value: filter }],
+          combination: "and",
+        }],
         combination: "and",
       };
     } else {
-      this.warnTypeMismatchedSelectedValues(colId, column, filter);
-      this.filterModel[colId] = filter;
+      const normalizedFilter = normalizeColumnFilterModel(filter);
+      const hasConditions = normalizedFilter.groups.some(
+        (group) => group.conditions.length > 0,
+      );
+      if (hasConditions === false) {
+        delete this.filterModel[colId];
+      } else {
+        this.warnTypeMismatchedSelectedValues(colId, column, normalizedFilter);
+        this.filterModel[colId] = normalizedFilter;
+      }
     }
 
     await this.options.onSortFilterChange();
@@ -154,12 +165,14 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     if (rawTypeIsString) return;
     if (this.typeMismatchWarnedCols.has(colId)) return;
 
-    const hasStringOnlySelection = filter.conditions.some(
-      (condition) =>
-        condition.type === "text" &&
-        condition.selectedValues !== undefined &&
-        condition.selectedValues.size > 0 &&
-        [...condition.selectedValues].every((v) => typeof v === "string"),
+    const hasStringOnlySelection = filter.groups.some((group) =>
+      group.conditions.some(
+        (condition) =>
+          condition.type === "text" &&
+          condition.selectedValues !== undefined &&
+          condition.selectedValues.size > 0 &&
+          [...condition.selectedValues].every((v) => typeof v === "string"),
+      ),
     );
     if (hasStringOnlySelection === false) return;
 
@@ -183,7 +196,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   hasActiveFilter(colId: string): boolean {
     const filter = this.filterModel[colId];
     if (!filter) return false;
-    return filter.conditions.length > 0;
+    return filter.groups.some((group) => group.conditions.length > 0);
   }
 
   // ===========================================================================
