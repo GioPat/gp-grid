@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.0...gp-grid-v0.23.1) (2026-08-31)
+
+
+### 🐛 Bug Fixes
+
+* disambiguate filters condition by adding groups ([2f9cc6a](https://github.com/GioPat/gp-grid/commit/2f9cc6a6288b20f7166d3c4a1315775da2990c61))
+* disambiguate filters condition by adding groups ([64d202c](https://github.com/GioPat/gp-grid/commit/64d202c73c6a1edf9e4283791e0be1ea085a29f7))
+
 ## [0.23.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.22.0...gp-grid-v0.23.0) (2026-08-29)
 
 
