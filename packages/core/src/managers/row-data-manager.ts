@@ -163,6 +163,12 @@ export class RowDataManager<TData = unknown> {
       },
       getColumns: this.options.getColumns,
     });
+
+    // Keep wrapper row counts in sync without showing a loading indicator.
+    this.options.batcher.emit({
+      type: "DATA_LOADED",
+      totalRows: this.totalRows,
+    });
   }
 
   setDataSource(dataSource: DataSource<TData>): void {

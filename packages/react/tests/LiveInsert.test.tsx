@@ -68,6 +68,40 @@ describe("Live insert via MutableDataSource", () => {
     vi.restoreAllMocks();
   });
 
+  it("updates the empty state when transactions add and remove the last row", async () => {
+    const ds = createMutableClientDataSource<Row>([], {
+      getRowId: (row) => row.id,
+      debounceMs: 0,
+    });
+    const { container } = render(
+      <Grid<Row> columns={columns} dataSource={ds} rowHeight={36} headerHeight={40} />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".gp-grid-empty")?.textContent).toBe("No data to display");
+    });
+
+    await act(async () => {
+      ds.addRows([{ id: 1, value: "loaded-row" }]);
+      await ds.flushTransactions();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector(".gp-grid-row")?.textContent).toContain("loaded-row");
+      expect(container.querySelector(".gp-grid-empty")).toBeNull();
+    });
+
+    await act(async () => {
+      ds.removeRows([1]);
+      await ds.flushTransactions();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector(".gp-grid-row")).toBeNull();
+      expect(container.querySelector(".gp-grid-empty")?.textContent).toBe("No data to display");
+    });
+  });
+
   it("renders rows added after mount", async () => {
     const initial: Row[] = Array.from({ length: 10 }, (_, i) => ({
       id: i + 1,
