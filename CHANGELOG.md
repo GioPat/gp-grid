@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.1...gp-grid-v0.23.2) (2026-09-07)
+
+
+### 🐛 Bug Fixes
+
+* refresh from transactions trigger DATA_LOADED ([119b3ac](https://github.com/GioPat/gp-grid/commit/119b3ac344dbb6388cca36753cb9177c2128d3a1))
+
 ## [0.23.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.0...gp-grid-v0.23.1) (2026-08-31)
 
 
