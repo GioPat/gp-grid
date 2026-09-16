@@ -32,6 +32,20 @@ const collectValueFormatters = (
   return Object.keys(formatters).length > 0 ? formatters : undefined;
 };
 
+const collectFieldMap = (
+  columns: ColumnDefinition[] | undefined,
+): Record<string, string> | undefined => {
+  if (!columns || columns.length === 0) return undefined;
+  let hasDistinctId = false;
+  const fieldMap: Record<string, string> = {};
+  for (const column of columns) {
+    const columnId = column.colId ?? column.field;
+    fieldMap[columnId] = column.field;
+    if (columnId !== column.field) hasDistinctId = true;
+  }
+  return hasDistinctId ? fieldMap : undefined;
+};
+
 /**
  * Build a DataSourceRequest, dropping empty sort/filter fields so data
  * sources don't need to null-check them. Shared by `fetchData` and
@@ -42,4 +56,5 @@ export const buildDataSourceRequest = (options: BuildRequestOptions): DataSource
   sort: options.sortModel.length > 0 ? options.sortModel : undefined,
   filter: Object.keys(options.filterModel).length > 0 ? options.filterModel : undefined,
   valueFormatters: collectValueFormatters(options.columns),
+  fieldMap: collectFieldMap(options.columns),
 });

@@ -14,6 +14,8 @@ export interface FillManagerOptions {
   getCellValue: (row: number, col: number) => CellValue;
   getColumn: (col: number) => ColumnDefinition | undefined;
   setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
 }
 
 /**
@@ -52,6 +54,7 @@ export class FillManager {
    * Start a fill drag operation from a source range.
    */
   startFillDrag(sourceRange: CellRange): void {
+    if (this.options.isWritable?.() === false) return;
     this.state = {
       sourceRange,
       targetRow: sourceRange.endRow,

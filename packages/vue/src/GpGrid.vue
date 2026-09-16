@@ -225,7 +225,7 @@ const peekContext = computed(() => {
   const column = effectiveColumns.value[peek.col];
   const slot = slotsArray.value.find((s) => s.rowIndex === peek.row);
   if (!column || !slot) return null;
-  return { peek, column, rowData: slot.rowData as Row };
+  return { peek, column, rowData: slot.rowData as Row | undefined };
 });
 
 // Handle cell mouse enter (for highlighting)
@@ -543,6 +543,7 @@ defineExpose({
       :peek-cell="peekContext.peek"
       :column="peekContext.column"
       :row-data="peekContext.rowData"
+      :core="coreRef"
       :container-ref="outerContainerRef"
       :cell-renderers="cellRenderers ?? {}"
       :global-cell-renderer="cellRenderer"

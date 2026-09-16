@@ -25,6 +25,8 @@ export interface SelectionManagerOptions {
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
   setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
 }
 
 export interface PasteResult {
@@ -292,6 +294,9 @@ export class SelectionManager {
    * Paste text data into the active cell or selected target range.
    */
   pasteClipboardText(text: string): PasteResult {
+    if (this.options.isWritable?.() === false) {
+      return { handled: false, changedCells: [] };
+    }
     const effectiveRange = this.getEffectiveRange();
     if (effectiveRange === null) {
       return { handled: false, changedCells: [] };

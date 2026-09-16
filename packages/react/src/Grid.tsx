@@ -625,16 +625,21 @@ export function Grid<TData = unknown>(
 
       {/* Cell Peek (read-only multi-line overlay on dblclick of non-editable cell) */}
       {state.peekCell && (() => {
-        const peekColumn = effectiveColumns[state.peekCell.col];
-        const peekSlot = slotsArray.find(
-          (s) => s.rowIndex === state.peekCell!.row,
-        );
+        const peekCell = state.peekCell;
+        const peekCore = coreRef.current;
+        const peekColumn = effectiveColumns[peekCell.col];
+        const peekSlot = slotsArray.find((s) => s.rowIndex === peekCell.row);
         if (!peekColumn || !peekSlot) return null;
         return (
           <CellPeek
-            peekCell={state.peekCell}
+            peekCell={peekCell}
             column={peekColumn}
             rowData={peekSlot.rowData}
+            rawValue={peekCore?.getCellValue(peekCell.row, peekCell.col) ?? null}
+            rowId={peekCore?.getRowId(peekCell.row)}
+            getValue={(field) =>
+              peekCore?.getFieldValue(peekCell.row, field) ?? null
+            }
             containerRef={outerContainerRef}
             cellRenderers={cellRenderers}
             globalCellRenderer={cellRenderer}

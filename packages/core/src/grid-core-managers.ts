@@ -80,6 +80,7 @@ export const buildGridManagers = <TData>(
     getRowData: (row) => getCachedRows().get(row),
     getColumn: (col) => getColumns()[col],
     setCellValue,
+    isWritable: () => rowData.isWritable(),
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
@@ -104,6 +105,7 @@ export const buildGridManagers = <TData>(
     getCellValue,
     getColumn: (col) => getColumns()[col],
     setCellValue,
+    isWritable: () => rowData.isWritable(),
   });
   fill.onInstruction((instruction) => batcher.emit(instruction));
 
@@ -117,6 +119,7 @@ export const buildGridManagers = <TData>(
     getScrollRatio: () => scrollVirtualization.getScrollRatio(),
     getVirtualContentHeight: () => scrollVirtualization.getVirtualContentHeight(),
     getRowData: (rowIndex) => getCachedRows().get(rowIndex),
+    isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
@@ -124,6 +127,7 @@ export const buildGridManagers = <TData>(
     getColumn: (col) => getColumns()[col],
     getCellValue,
     setCellValue,
+    isWritable: () => rowData.isWritable(),
     onCommit: (row) => slotPool.updateSlot(row),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));
@@ -132,6 +136,7 @@ export const buildGridManagers = <TData>(
     getColumns,
     isSortingEnabled: () => config.sortingEnabled,
     getCachedRows,
+    getAccess: () => rowData.getAccess(),
     onSortFilterChange: async () => {
       await rowData.loadInitial();
       // Filtered/sorted results are a new view — start from the top.
@@ -176,6 +181,7 @@ export const buildGridManagers = <TData>(
     getScrollTop: () => viewport.getScrollTop(),
     getViewportHeight: () => viewport.getViewportHeight(),
     onCellValueChanged: config.onCellValueChanged,
+    onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,
     onRowsLoaded: (totalRowsChanged) => view.syncVisibleRows(totalRowsChanged),
   });

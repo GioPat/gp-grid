@@ -45,7 +45,7 @@ describe("applyInstruction", () => {
       expect(slot).toEqual({
         slotId: "s1",
         rowIndex: -1,
-        rowData: {},
+        rowData: undefined,
         translateY: 0,
       });
     });

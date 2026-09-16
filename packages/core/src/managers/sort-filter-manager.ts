@@ -1,6 +1,7 @@
 import type {
   ColumnDefinition,
   CellValue,
+  RowAccess,
   SortModel,
   SortDirection,
   FilterModel,
@@ -24,6 +25,11 @@ export interface SortFilterManagerOptions<TData> {
   isSortingEnabled: () => boolean;
   /** Get cached rows for distinct value computation */
   getCachedRows: () => Map<number, TData>;
+  /**
+   * Scalar access for a record-less (columnar) source. When present it is the
+   * distinct-value scan source, so the popup does not rely on a row cache.
+   */
+  getAccess?: () => RowAccess | null;
   /** Called when sort/filter changes to trigger data refresh */
   onSortFilterChange: () => Promise<void>;
   /** Called after data refresh to update UI */
@@ -290,6 +296,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     column: ColumnDefinition,
     maxValues: number,
   ): CellValue[] {
+    const access = this.options.getAccess?.() ?? null;
+    if (access) {
+      return this.scanAccessDistinctValues(access, column, maxValues);
+    }
     const cachedRows = this.options.getCachedRows();
     const total = cachedRows.size;
     const colId = column.colId ?? column.field;
@@ -315,6 +325,38 @@ export class SortFilterManager<TData = Record<string, unknown>> {
       if (!valuesMap.has(key)) {
         valuesMap.set(key, normalized);
       }
+    }
+    return Array.from(valuesMap.values());
+  }
+
+  /**
+   * Distinct-value scan for a record-less columnar source. Reads scalars
+   * directly from the bound access; bounded by `maxValues`.
+   */
+  private scanAccessDistinctValues(
+    access: RowAccess,
+    column: ColumnDefinition,
+    maxValues: number,
+  ): CellValue[] {
+    const colId = column.colId ?? column.field;
+    if (access.rowCount > DISTINCT_SCAN_WARN_THRESHOLD && !this.scanWarnedCols.has(colId)) {
+      this.scanWarnedCols.add(colId);
+      console.warn(
+        `[gp-grid] Scanning ${access.rowCount} rows to compute distinct values for column "${colId}". `
+        + "Pre-supply ColumnDefinition.distinctValues to skip this scan.",
+      );
+    }
+
+    const valuesMap = new Map<string, CellValue>();
+    for (let row = 0; row < access.rowCount; row += 1) {
+      if (valuesMap.size >= maxValues) {
+        this.warnTruncatedFormattedDomain(colId, column.valueFormatter);
+        break;
+      }
+      const [key, normalized] = this.normalizeDistinctValue(
+        access.getValue(row, column.field),
+      );
+      if (!valuesMap.has(key)) valuesMap.set(key, normalized);
     }
     return Array.from(valuesMap.values());
   }

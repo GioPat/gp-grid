@@ -10,6 +10,7 @@ import type {
   SlotData,
   FillHandlePosition,
   GridLabels,
+  RowId,
   VisibleColumnInfo,
 } from "@gp-grid/core";
 import {
@@ -63,7 +64,7 @@ const props = defineProps<{
 const bodyRef = ref<HTMLDivElement | null>(null);
 
 // Get row classes including highlight classes
-const getRowClasses = (slot: { rowIndex: number; rowData: Row }): string => {
+const getRowClasses = (slot: { rowIndex: number; rowData: Row | undefined }): string => {
   const highlightRowClasses =
     props.coreRef?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
   return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
@@ -74,7 +75,7 @@ const getCellClasses = (
   rowIndex: number,
   colIndex: number,
   column: ColumnDefinition,
-  rowData: Row,
+  rowData: Row | undefined,
   _hoverPosition: CellPosition | null,
 ): string => {
   const isEditing = isCellEditing(rowIndex, colIndex, props.editingCell);
@@ -104,6 +105,17 @@ const getCellClasses = (
     wrapText ? "gp-grid-cell--wrap" : "",
   ].filter(Boolean).join(" ");
 };
+
+// Read raw values through the core so a record-less (columnar) row renders
+// exactly like an object row.
+const getRawValue = (rowIndex: number, colIndex: number): CellValue =>
+  props.coreRef?.getCellValue(rowIndex, colIndex) ?? null;
+
+const getRowIdAt = (rowIndex: number): RowId | undefined =>
+  props.coreRef?.getRowId(rowIndex);
+
+const getFieldValueAt = (rowIndex: number, field: string): CellValue =>
+  props.coreRef?.getFieldValue(rowIndex, field) ?? null;
 
 defineExpose({ bodyRef });
 </script>
@@ -170,6 +182,9 @@ defineExpose({ bodyRef });
                 :is="renderEditCell({
                   column,
                   rowData: slot.rowData,
+                  rawValue: getRawValue(slot.rowIndex, originalIndex),
+                  rowId: getRowIdAt(slot.rowIndex),
+                  getValue: (field) => getFieldValueAt(slot.rowIndex, field),
                   rowIndex: slot.rowIndex,
                   colIndex: originalIndex,
                   initialValue: props.editingCell.initialValue,
@@ -185,6 +200,9 @@ defineExpose({ bodyRef });
                 :is="renderCell({
                   column,
                   rowData: slot.rowData,
+                  rawValue: getRawValue(slot.rowIndex, originalIndex),
+                  rowId: getRowIdAt(slot.rowIndex),
+                  getValue: (field) => getFieldValueAt(slot.rowIndex, field),
                   rowIndex: slot.rowIndex,
                   colIndex: originalIndex,
                   isActive: isCellActive(slot.rowIndex, originalIndex, props.activeCell),

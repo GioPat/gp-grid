@@ -1,7 +1,13 @@
 // packages/react/src/renderers/editRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
+import type {
+  GridCore,
+  ColumnDefinition,
+  CellValue,
+  RowId,
+  EditRendererParams,
+} from "@gp-grid/core";
 import type { ReactEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 
@@ -14,6 +20,12 @@ export interface RenderEditCellOptions<TData> {
   coreRef: React.RefObject<GridCore<TData> | null>;
   editRenderers: Record<string, ReactEditRenderer>;
   globalEditRenderer?: ReactEditRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
 }
 
 /**
@@ -31,18 +43,23 @@ export function renderEditCell<TData>(
     coreRef,
     editRenderers,
     globalEditRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
   } = options;
 
   const core = coreRef.current;
   if (!core) return null;
 
-  const rawValue = getCellValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getCellValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: EditRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    getValue,
     column,
     rowIndex,
     colIndex,

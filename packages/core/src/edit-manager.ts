@@ -16,6 +16,8 @@ export interface EditManagerOptions {
   setCellValue: (row: number, col: number, value: CellValue) => void;
   /** Callback when edit is committed (to update slot display) */
   onCommit?: (row: number, col: number, value: CellValue) => void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
 }
 
 // =============================================================================
@@ -77,6 +79,7 @@ export class EditManager {
    * Returns true if edit was started, false if cell is not editable.
    */
   startEdit(row: number, col: number): boolean {
+    if (this.options.isWritable?.() === false) return false;
     const column = this.options.getColumn(col);
     if (!column?.editable) {
       return false;

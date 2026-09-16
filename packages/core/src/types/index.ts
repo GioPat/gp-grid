@@ -14,6 +14,7 @@ export type {
   EditState,
   FillHandleState,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   SlotState,
 } from "./basic";
 
@@ -52,7 +53,17 @@ export type {
   DataSourceRange,
   DataSourceLoadMode,
   DataSource,
+  RowAccess,
 } from "./data-source";
+
+// Columnar source types
+export type {
+  ColumnarField,
+  ColumnarDataSourceOptions,
+  ColumnarAccess,
+  ColumnarDataSource,
+} from "./columnar";
+export { isColumnarDataSource } from "./columnar";
 
 // Instruction types
 export type {

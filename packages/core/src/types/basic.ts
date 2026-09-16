@@ -88,6 +88,18 @@ export interface CellValueChangedEvent<TData = unknown> {
   rowData: TData;
 }
 
+/** Emitted when a write is refused because the bound source is read-only. */
+export interface CellWriteRejectedEvent {
+  /** View row index the write targeted */
+  row: number;
+  /** Column index the write targeted */
+  col: number;
+  /** Source field key, when the column exists */
+  field: string;
+  /** Why the write was refused */
+  reason: "read-only-source";
+}
+
 /** The slot is the virtualized row, this represents the state of the slot */
 export interface SlotState {
   /** Slot ID */

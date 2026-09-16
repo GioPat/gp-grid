@@ -6,6 +6,7 @@ import type {
   ColumnDefinition,
   CellValue,
   DataSource,
+  RowId,
   SortModel,
   SortDirection,
   FilterModel,
@@ -213,6 +214,7 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   startEdit(row: number, col: number): void {
+    if (this.rowData.isWritable() === false) return;
     this.editManager.startEdit(row, col);
   }
 
@@ -272,8 +274,33 @@ export class GridCore<TData = unknown> {
     return this.rowData.getCellValue(row, col);
   }
 
+  /**
+   * Read a raw source field at a view row, independent of the displayed
+   * columns. Lets a cell renderer read another field that has no grid column,
+   * including for record-less (columnar) rows.
+   */
+  getFieldValue(viewIndex: number, field: string): CellValue {
+    return this.rowData.getFieldValue(viewIndex, field);
+  }
+
   setCellValue(row: number, col: number, value: CellValue): void {
     this.rowData.setCellValue(row, col, value);
+  }
+
+  /**
+   * Stable identity for a view row when the source exposes one. Columnar
+   * sources resolve it lazily; no per-row ID table is built on bind.
+   */
+  getRowId(rowIndex: number): RowId | undefined {
+    return this.rowData.getRowId(rowIndex);
+  }
+
+  /**
+   * False when the bound source declares itself read-only. Every write path
+   * (edit, paste, fill, direct setter, row move) is refused centrally.
+   */
+  isWritable(): boolean {
+    return this.rowData.isWritable();
   }
 
   // ===========================================================================

@@ -17,6 +17,7 @@ import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate
 import type { AngularColumnDefinition } from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
+  CellValue,
   CellValueChangedEvent,
   ColumnDefinition,
   ColumnFilterModel,
@@ -207,6 +208,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   protected computeRowClassesFn = (rowIndex: number, rowData: unknown): string[] => {
     return this.bindings.coreRef?.highlight?.computeRowClasses(rowIndex, rowData) ?? [];
   };
+
+  /** Raw value reader shared with the body and peek: record-less rows work. */
+  protected readCellValueFn = (rowIndex: number, colIndex: number): CellValue =>
+    this.bindings.coreRef?.getCellValue(rowIndex, colIndex) ?? null;
+
+  protected readFieldValueFn = (rowIndex: number, field: string): CellValue =>
+    this.bindings.coreRef?.getFieldValue(rowIndex, field) ?? null;
+
+  protected readRowIdFn = (rowIndex: number): RowId | undefined =>
+    this.bindings.coreRef?.getRowId(rowIndex);
 
   protected computeCellClassesFn = (
     rowIndex: number,

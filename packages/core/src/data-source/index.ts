@@ -6,6 +6,9 @@ export {
   createDataSourceFromArray,
 } from "./client-data-source";
 
+// Read-only columnar data source
+export { createColumnarDataSource } from "./columnar-data-source";
+
 // Server data source
 export {
   createServerDataSource,

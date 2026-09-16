@@ -20,7 +20,9 @@ import {
   getFieldValue,
   type CellPosition,
   type CellRendererParams,
+  type CellValue,
   type ColumnDefinition,
+  type RowId,
 } from '@gp-grid/core';
 import type { CellRendererTemplate } from './grid-body.component';
 
@@ -57,6 +59,9 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   peekCell = input.required<CellPosition>();
   column = input.required<ColumnDefinition>();
   rowData = input.required<unknown>();
+  readCellValue = input<((rowIndex: number, colIndex: number) => CellValue) | null>(null);
+  readFieldValue = input<((rowIndex: number, field: string) => CellValue) | null>(null);
+  readRowId = input<((rowIndex: number) => RowId | undefined) | null>(null);
   containerEl = input.required<HTMLElement | null>();
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
   globalCellRenderer = input<CellRendererTemplate | null>(null);
@@ -78,14 +83,24 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
     return this.globalCellRenderer();
   });
 
+  private rawValueFor(col: ColumnDefinition): CellValue {
+    const read = this.readCellValue();
+    if (read) return read(this.peekCell().row, this.peekCell().col);
+    return getFieldValue(this.rowData(), col.field);
+  }
+
   protected rendererParams = computed<CellRendererParams>(() => {
     const col = this.column();
     const data = this.rowData();
-    const rawValue = getFieldValue(data, col.field);
+    const rawValue = this.rawValueFor(col);
     const displayValue = col.valueFormatter ? col.valueFormatter(rawValue) : rawValue;
+    const readField = this.readFieldValue();
+    const rowIndex = this.peekCell().row;
     return {
       value: displayValue,
       rowData: data,
+      rowId: this.readRowId()?.(rowIndex),
+      getValue: (field: string) => (readField ? readField(rowIndex, field) : null),
       column: col,
       rowIndex: this.peekCell().row,
       colIndex: this.peekCell().col,
@@ -98,7 +113,7 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   protected fallbackText = computed<string>(() => {
     const col = this.column();
     const renderer = col.cellRenderer;
-    const value = getFieldValue(this.rowData(), col.field);
+    const value = this.rawValueFor(col);
     if (typeof renderer === 'function') {
       const result = renderer(this.rendererParams());
       return result === null || result === undefined ? '' : String(result);

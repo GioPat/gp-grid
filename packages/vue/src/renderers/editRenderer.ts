@@ -1,7 +1,13 @@
 // packages/vue/src/renderers/editRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
+import type {
+  GridCore,
+  ColumnDefinition,
+  CellValue,
+  RowId,
+  EditRendererParams,
+} from "@gp-grid/core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 import { invokeRenderer } from "./utils";
@@ -15,6 +21,12 @@ export interface RenderEditCellOptions {
   core: GridCore | null;
   editRenderers: Record<string, VueEditRenderer>;
   globalEditRenderer?: VueEditRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
 }
 
 /**
@@ -32,17 +44,22 @@ export function renderEditCell(
     core,
     editRenderers,
     globalEditRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
   } = options;
 
   if (!core) return createTextVNode("");
 
-  const rawValue = getCellValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getCellValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: EditRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    getValue,
     column,
     rowIndex,
     colIndex,
