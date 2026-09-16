@@ -9,14 +9,16 @@ import {
   type RenderMetrics,
   type ScrollMetrics,
   type SortFilterMetrics,
+  type WideGridMetrics,
 } from "../data/types";
 import { calculateMedianMetrics, calculateMetricStats } from "./stats";
 import { getRunDir, getRunManifest } from "./run-context";
 
-type BenchmarkCategory = "scroll" | "render" | "sort" | "memory";
+type BenchmarkCategory = "scroll" | "render" | "sort" | "memory" | "wide";
 
 interface SaveResultOptions {
   browserVersion?: string;
+  columnCount?: number;
 }
 
 const categoryToResultKey: Record<
@@ -27,6 +29,7 @@ const categoryToResultKey: Record<
   render: "initialRender",
   sort: "sortFilter",
   memory: "memoryUsage",
+  wide: "wideGrid",
 };
 
 export const saveResult = <T extends object>(
@@ -49,6 +52,7 @@ export const saveResult = <T extends object>(
     implementationMode: metadata.implementationMode,
     comment: metadata.comment,
     rowCount,
+    columnCount: options.columnCount,
     metrics,
     samples,
     stats: calculateMetricStats(samples),
@@ -56,7 +60,8 @@ export const saveResult = <T extends object>(
     timestamp: new Date().toISOString(),
   };
 
-  const filename = `${category}-${grid}-${rowCount}.json`;
+  const dimensions = options.columnCount === undefined ? `${rowCount}` : `${rowCount}r-${options.columnCount}c`;
+  const filename = `${category}-${grid}-${dimensions}.json`;
   const filepath = path.join(runDir, filename);
   fs.writeFileSync(filepath, JSON.stringify(result, null, 2));
 
@@ -90,6 +95,7 @@ export const loadAllResults = (): BenchmarkRun => {
     config: manifest.config,
     libraryVersions: manifest.libraryVersions,
     packageSizes: manifest.packageSizes,
+    artifacts: manifest.artifacts,
     results: {
       scrollPerformance: loadResultsByCategory<ScrollMetrics>(
         files,
@@ -111,6 +117,7 @@ export const loadAllResults = (): BenchmarkRun => {
         runDir,
         "memory-",
       ),
+      wideGrid: loadResultsByCategory<WideGridMetrics>(files, runDir, "wide-"),
     },
   };
 };

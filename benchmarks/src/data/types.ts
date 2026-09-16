@@ -102,6 +102,11 @@ export interface BenchmarkGridApi {
   getRowCount(): number;
   getDisplayedRowCount(): number;
   getDisplayedRows(start: number, count: number): BenchmarkRow[];
+  getSetupMetrics?(): {
+    dataGenerationMs: number;
+    bindElapsedMs: number;
+    columnCount: number;
+  };
   // Optional: the grid's active scroll compression ratio (1 = none, < 1 = the
   // DOM scroll space is compressed and the scrollbar maps to a larger logical
   // range). The scroll benchmark uses this to measure gp-grid's true (logical)
@@ -138,10 +143,23 @@ export interface ScrollMetrics {
 export interface RenderMetrics {
   timeToFirstPaint: number;
   timeToFullRender: number;
+  // Available when an adapter can separate deterministic data generation from
+  // the interval between binding that data and the grid reporting ready.
+  dataGenerationMs?: number;
+  gridBindToReadyMs?: number;
   domContentLoaded: number;
   // null when the browser never reported an LCP candidate for the page.
   largestContentfulPaint: number | null;
   totalBlockingTime: number;
+}
+
+export interface WideGridMetrics {
+  timeToReadyMs: number;
+  dataGenerationMs: number;
+  gridBindToReadyMs: number;
+  mountedRows: number;
+  mountedCells: number;
+  horizontalScrollMs: number;
 }
 
 export interface SortFilterMetrics {
@@ -183,6 +201,7 @@ export interface RunEnvironment {
 
 export interface RunConfig {
   rowCounts: number[];
+  columnCounts?: number[];
   iterations: number;
   rowHeightPx: number;
   playwrightWorkers: number;
@@ -207,6 +226,25 @@ export interface GridPackageSize {
   versions: Record<string, string>;
   minifiedBytes: number;
   gzipBytes: number;
+  source?: "candidate" | "published";
+}
+
+export interface ArtifactFileProvenance {
+  name: string;
+  version: string;
+  entry: string;
+  style: string;
+  entrySha256: string;
+  styleSha256: string;
+}
+
+export interface ArtifactProvenance {
+  source: "candidate" | "published";
+  buildProfile: "production" | "published-package";
+  commit: string;
+  dirty: boolean;
+  repositoryRoot?: string;
+  packages: ArtifactFileProvenance[];
 }
 
 export interface RunManifest {
@@ -214,10 +252,11 @@ export interface RunManifest {
   timestamp: string;
   environment: RunEnvironment;
   config: RunConfig;
-  libraryVersions: Record<GridType, GridLibraryVersion>;
+  libraryVersions: Partial<Record<GridType, GridLibraryVersion>>;
   // Optional so result readers remain compatible with runs created before
   // package-size measurement was added.
-  packageSizes?: Record<GridType, GridPackageSize>;
+  packageSizes?: Partial<Record<GridType, GridPackageSize>>;
+  artifacts?: ArtifactProvenance;
 }
 
 export interface BenchmarkResult<T> {
@@ -228,6 +267,7 @@ export interface BenchmarkResult<T> {
   implementationMode: GridImplementationMode;
   comment: string | null;
   rowCount: number;
+  columnCount?: number;
   metrics: T;
   samples: T[];
   stats: MetricStats;
@@ -240,12 +280,14 @@ export interface BenchmarkRun {
   timestamp: string;
   environment: RunEnvironment;
   config: RunConfig;
-  libraryVersions: Record<GridType, GridLibraryVersion>;
-  packageSizes?: Record<GridType, GridPackageSize>;
+  libraryVersions: Partial<Record<GridType, GridLibraryVersion>>;
+  packageSizes?: Partial<Record<GridType, GridPackageSize>>;
+  artifacts?: ArtifactProvenance;
   results: {
     scrollPerformance: BenchmarkResult<ScrollMetrics>[];
     initialRender: BenchmarkResult<RenderMetrics>[];
     sortFilter: BenchmarkResult<SortFilterMetrics>[];
     memoryUsage: BenchmarkResult<MemoryMetrics>[];
+    wideGrid: BenchmarkResult<WideGridMetrics>[];
   };
 }

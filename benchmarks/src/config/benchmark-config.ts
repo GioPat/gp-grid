@@ -51,3 +51,10 @@ export const getBenchmarkRowCounts = (): number[] => {
     [...benchmarkDefaults.rowCounts]
   );
 };
+
+export const getBenchmarkColumnCounts = (): number[] => {
+  return (
+    parsePositiveIntegerList(process.env.BENCH_COLUMN_COUNTS) ??
+    [...benchmarkDefaults.columnCounts]
+  );
+};

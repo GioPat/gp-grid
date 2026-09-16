@@ -5,6 +5,7 @@ import { GRIDS, type GridType, type GridLibraryVersion } from "../data/types";
 // Node ESM loader requires the import attribute (this runs under Playwright/Node,
 // not Vite).
 import gridPackages from "../config/grid-packages.json" with { type: "json" };
+import { collectArtifactProvenance, readBenchmarkSource } from "../../scripts/artifact-resolution.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,9 +43,17 @@ export const collectLibraryVersions = (): Record<
   GridType,
   GridLibraryVersion
 > => {
+  const artifacts = collectArtifactProvenance(readBenchmarkSource());
   return GRIDS.reduce(
     (acc, grid) => {
-      acc[grid] = buildEntry(grid);
+      const entry = buildEntry(grid);
+      if (grid === "gp-grid") {
+        for (const packageName of Object.keys(entry.packages)) {
+          const artifact = artifacts.packages.find((item) => item.name === packageName);
+          if (artifact) entry.packages[packageName] = artifact.version;
+        }
+      }
+      acc[grid] = entry;
       return acc;
     },
     {} as Record<GridType, GridLibraryVersion>,

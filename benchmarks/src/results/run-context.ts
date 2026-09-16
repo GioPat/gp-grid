@@ -9,11 +9,17 @@ import {
   PLAYWRIGHT_WORKERS,
   ROW_HEIGHT_PX,
   VIEWPORT,
+  getBenchmarkColumnCounts,
   getBenchmarkIterations,
   getBenchmarkRowCounts,
 } from "../config/benchmark-config";
 import type { RunManifest } from "../data/types";
 import { collectLibraryVersions } from "./library-versions";
+import {
+  assertManifestMatchesCurrentArtifacts,
+  collectArtifactProvenance,
+  readBenchmarkSource,
+} from "../../scripts/artifact-resolution.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,12 +55,14 @@ const collectEnvironment = (chromeVersion = "unknown"): RunManifest["environment
 };
 
 const createManifest = (chromeVersion?: string): RunManifest => {
+  const artifacts = collectArtifactProvenance(readBenchmarkSource());
   return {
     runId: process.env.BENCH_RUN_ID ?? createRunId(),
     timestamp: new Date().toISOString(),
     environment: collectEnvironment(chromeVersion),
     config: {
       rowCounts: getBenchmarkRowCounts(),
+      columnCounts: getBenchmarkColumnCounts(),
       iterations: getBenchmarkIterations(),
       rowHeightPx: ROW_HEIGHT_PX,
       playwrightWorkers: PLAYWRIGHT_WORKERS,
@@ -64,6 +72,7 @@ const createManifest = (chromeVersion?: string): RunManifest => {
       headless: HEADLESS,
     },
     libraryVersions: collectLibraryVersions(),
+    artifacts,
   };
 };
 
@@ -85,6 +94,7 @@ export const getRunManifest = (chromeVersion?: string): RunManifest => {
     const manifest = JSON.parse(
       fs.readFileSync(ACTIVE_RUN_FILE, "utf-8"),
     ) as RunManifest;
+    assertManifestMatchesCurrentArtifacts(manifest);
 
     if (chromeVersion && manifest.environment.chromeVersion === "unknown") {
       const updated = {

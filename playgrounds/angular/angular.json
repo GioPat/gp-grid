@@ -10,6 +10,42 @@
   },
   "newProjectRoot": "projects",
   "projects": {
+    "conformance-angular": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.conformance.ts",
+            "tsConfig": "tsconfig.app.json",
+            "index": "src/index.html",
+            "styles": ["src/styles.css"],
+            "outputPath": "dist/conformance-angular",
+            "outputMode": "static"
+          },
+          "configurations": {
+            "production": {
+              "optimization": true,
+              "sourceMap": false,
+              "outputHashing": "none"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "conformance-angular:build:production"
+            }
+          },
+          "defaultConfiguration": "production"
+        }
+      }
+    },
     "playground-angular": {
       "projectType": "application",
       "schematics": {},
