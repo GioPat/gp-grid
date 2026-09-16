@@ -109,8 +109,12 @@ export interface ColumnarDataSource extends DataSource<never> {
  */
 export const isColumnarDataSource = (
   source: unknown,
-): source is ColumnarDataSource =>
-  typeof source === "object" &&
-  source !== null &&
-  (source as { kind?: unknown }).kind === "columnar" &&
-  typeof (source as { access?: unknown }).access === "object";
+): source is ColumnarDataSource => {
+  if (typeof source !== "object" || source === null) return false;
+  const candidate = source as { kind?: unknown; access?: unknown };
+  return (
+    candidate.kind === "columnar" &&
+    typeof candidate.access === "object" &&
+    candidate.access !== null
+  );
+};

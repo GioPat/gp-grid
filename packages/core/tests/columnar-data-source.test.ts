@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { GridCore } from "../src/grid-core";
 import { createColumnarDataSource } from "../src/data-source";
-import type { ColumnDefinition } from "../src/types";
+import { isColumnarDataSource, type ColumnDefinition } from "../src/types";
 
 const ids = [1, 2, 3, 4, 5];
 const names = ["Alice", "Bob", "Charlie", "Diana", "Eve"];
@@ -33,6 +33,20 @@ const makeSource = () => {
   });
   return { source, reads: () => reads };
 };
+
+describe("isColumnarDataSource", () => {
+  it("recognizes columnar sources without accepting invalid values", () => {
+    const source = createColumnarDataSource({
+      fields: [{ field: "id", data: ids }],
+    });
+
+    expect(isColumnarDataSource(source)).toBe(true);
+    expect(isColumnarDataSource(null)).toBe(false);
+    expect(isColumnarDataSource({})).toBe(false);
+    expect(isColumnarDataSource({ kind: "client", access: {} })).toBe(false);
+    expect(isColumnarDataSource({ kind: "columnar", access: null })).toBe(false);
+  });
+});
 
 describe("createColumnarDataSource", () => {
   it("validates schema in O(c) and reads no cell values on construction", () => {
