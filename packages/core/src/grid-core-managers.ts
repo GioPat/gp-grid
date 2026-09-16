@@ -136,7 +136,7 @@ export const buildGridManagers = <TData>(
     getColumns,
     isSortingEnabled: () => config.sortingEnabled,
     getCachedRows,
-    getAccess: () => rowData.getAccess(),
+    getRowAccess: () => rowData.getRowAccess(),
     onSortFilterChange: async () => {
       await rowData.loadInitial();
       // Filtered/sorted results are a new view — start from the top.

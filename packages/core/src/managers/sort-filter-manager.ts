@@ -29,7 +29,7 @@ export interface SortFilterManagerOptions<TData> {
    * Scalar access for a record-less (columnar) source. When present it is the
    * distinct-value scan source, so the popup does not rely on a row cache.
    */
-  getAccess?: () => RowAccess | null;
+  getRowAccess?: () => RowAccess | null;
   /** Called when sort/filter changes to trigger data refresh */
   onSortFilterChange: () => Promise<void>;
   /** Called after data refresh to update UI */
@@ -296,9 +296,9 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     column: ColumnDefinition,
     maxValues: number,
   ): CellValue[] {
-    const access = this.options.getAccess?.() ?? null;
-    if (access) {
-      return this.scanAccessDistinctValues(access, column, maxValues);
+    const rowAccess = this.options.getRowAccess?.() ?? null;
+    if (rowAccess) {
+      return this.scanAccessDistinctValues(rowAccess, column, maxValues);
     }
     const cachedRows = this.options.getCachedRows();
     const total = cachedRows.size;

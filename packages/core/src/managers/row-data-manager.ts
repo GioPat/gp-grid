@@ -65,7 +65,7 @@ export class RowDataManager<TData = unknown> {
    * it is the authoritative read path: the row cache stays empty and cells are
    * read on demand instead of being copied into row objects.
    */
-  private access: RowAccess | null = null;
+  private rowAccess: RowAccess | null = null;
   private totalRows = 0;
   private isDataLoading = false;
   /** Guards against an obsolete load applying after a newer one. */
@@ -120,20 +120,22 @@ export class RowDataManager<TData = unknown> {
    * source record is available: a columnar row renders with no record.
    */
   hasRow(rowIndex: number): boolean {
-    if (this.access) return rowIndex >= 0 && rowIndex < this.access.rowCount;
+    if (this.rowAccess) {
+      return rowIndex >= 0 && rowIndex < this.rowAccess.rowCount;
+    }
     return this.cachedRows.get(rowIndex) !== undefined;
   }
 
   /** Scalar access for the current response, when the source provides one. */
-  getAccess(): RowAccess | null {
-    return this.access;
+  getRowAccess(): RowAccess | null {
+    return this.rowAccess;
   }
 
   /** Stable identity for a view row, when the source exposes one. */
   getRowId(viewRow: number): RowId | undefined {
-    if (this.access) {
-      if (viewRow < 0 || viewRow >= this.access.rowCount) return undefined;
-      return this.access.getRowId?.(viewRow);
+    if (this.rowAccess) {
+      if (viewRow < 0 || viewRow >= this.rowAccess.rowCount) return undefined;
+      return this.rowAccess.getRowId?.(viewRow);
     }
     const row = this.cachedRows.get(viewRow);
     if (row === undefined) return undefined;
@@ -150,11 +152,11 @@ export class RowDataManager<TData = unknown> {
   }
 
   getCellValue(row: number, col: number): CellValue {
-    if (this.access) {
+    if (this.rowAccess) {
       const column = this.options.getColumns()[col];
       if (column === undefined) return null;
-      if (row < 0 || row >= this.access.rowCount) return null;
-      return this.access.getValue(row, column.field);
+      if (row < 0 || row >= this.rowAccess.rowCount) return null;
+      return this.rowAccess.getValue(row, column.field);
     }
     return readCell(this.cachedRows, this.options.getColumns(), row, col);
   }
@@ -164,9 +166,9 @@ export class RowDataManager<TData = unknown> {
    * columns. Columnar rows read scalar access; object rows read the record.
    */
   getFieldValue(viewIndex: number, field: string): CellValue {
-    if (this.access) {
-      if (viewIndex < 0 || viewIndex >= this.access.rowCount) return null;
-      return this.access.getValue(viewIndex, field);
+    if (this.rowAccess) {
+      if (viewIndex < 0 || viewIndex >= this.rowAccess.rowCount) return null;
+      return this.rowAccess.getValue(viewIndex, field);
     }
     const row = this.cachedRows.get(viewIndex);
     if (row === undefined) return null;
@@ -194,10 +196,10 @@ export class RowDataManager<TData = unknown> {
    * Bind a response's scalar access, releasing any projection owned by the
    * previous one. The row cache is left empty: no record is materialized.
    */
-  private setAccess(next: RowAccess | null): void {
-    if (this.access === next) return;
-    this.access?.release?.();
-    this.access = next;
+  private setRowAccess(next: RowAccess | null): void {
+    if (this.rowAccess === next) return;
+    this.rowAccess?.release?.();
+    this.rowAccess = next;
   }
 
   async loadInitial(): Promise<void> {
@@ -266,14 +268,14 @@ export class RowDataManager<TData = unknown> {
   setDataSource(dataSource: DataSource<TData>): void {
     this.dataSource = dataSource;
     this.rowWindowLoader.reset();
-    this.setAccess(null);
+    this.setRowAccess(null);
     this.loadGeneration += 1;
     this.totalRows = 0;
   }
 
   destroy(): void {
     this.rowWindowLoader.reset();
-    this.setAccess(null);
+    this.setRowAccess(null);
     this.loadGeneration += 1;
     this.cachedRows.clear();
     this.totalRows = 0;
@@ -318,11 +320,11 @@ export class RowDataManager<TData = unknown> {
   private applyResponse(response: DataSourceResponse<TData>): void {
     if (response.access) {
       this.cachedRows.clear();
-      this.setAccess(response.access);
+      this.setRowAccess(response.access);
       this.totalRows = response.totalRows;
       return;
     }
-    this.setAccess(null);
+    this.setRowAccess(null);
     this.cachedRows.clear();
     response.rows.forEach((row, index) => {
       this.cachedRows.set(index, row);
