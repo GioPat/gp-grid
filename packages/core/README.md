@@ -187,6 +187,61 @@ const dataSource = createClientDataSource(data, {
 });
 ```
 
+### Columnar Data Source (read-only)
+
+`createColumnarDataSource` reads caller-owned arrays, typed-array views, and scalar accessors without converting them into row objects. Construction and revision validation take O(columns) work. Pass the source through the ordinary `dataSource` input in React, Vue, or Angular, or use it with `GridCore` directly.
+
+The source is read-only from the grid's perspective. The caller can update its own data, then notify the source and refresh the bound grid:
+
+```typescript
+import { GridCore, createColumnarDataSource } from "@gp-grid/core";
+
+const values = [10, 20];
+const source = createColumnarDataSource({
+  rowCount: values.length,
+  fields: [
+    { field: "value", data: values },
+    { field: "label", getValue: (row) => `Value ${values[row]}` },
+  ],
+});
+const grid = new GridCore({
+  columns: [
+    { field: "value", cellDataType: "number", width: 100 },
+    { field: "label", cellDataType: "text", width: 180 },
+  ],
+  dataSource: source,
+  rowHeight: 32,
+});
+await grid.initialize();
+
+// Same row count: only the revision needs to change.
+values[0] = 15;
+source.setRevision(1);
+await grid.refresh();
+
+// Append: pass the new count because this source declares rowCount explicitly.
+values.push(30);
+source.setRevision(2, values.length);
+await grid.refresh();
+
+// Shrink: update the declared count in the same way.
+values.pop();
+source.setRevision(3, values.length);
+await grid.refresh();
+
+grid.destroy(); // Wrappers manage their core's lifetime automatically.
+```
+
+`setRevision(revision, rowCount?)` updates source metadata; `await grid.refresh()` reloads the view, including any active sorting/filtering. Array-reference equality does not signal an update. When using a wrapper, call `refresh()` on its exposed core.
+
+- **Inferred count:** omit `rowCount` when constructing the source and use `setRevision(nextRevision)`. The source re-reads the fields' declared lengths (`length`, falling back to `data.length`). Keep explicit field lengths current when data grows or shrinks.
+- **Explicit count:** pass `setRevision(nextRevision, nextRowCount)` whenever the count changes. Omitting the second argument retains the last declared count.
+- **Accessor-only fields:** the explicit count is authoritative, so `setRevision(nextRevision, nextRowCount)` works without replacing accessor functions or updating their length hints.
+
+Update all resident columns to consistent lengths before adopting a revision. An invalid count or inconsistent declared lengths throws, leaving the source's previous revision and row-count metadata unchanged. This does not undo changes the caller has already made to its arrays. Keep data stable while the grid reads it.
+
+Columnar rows have no materialized record: `grid.getRowData(viewIndex)` returns `undefined`. Read raw values with `grid.getCellValue(viewIndex, colIndex)` or `grid.getFieldValue(viewIndex, field)`, including source fields without a grid column. Cell renderers use `params.getValue(field)` and `params.rowId`; `params.value` remains the formatted display value.
+
 ### Server-Side Data Source
 
 For large datasets that require server-side row-window loading, sorting, and filtering.
