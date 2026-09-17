@@ -10,10 +10,12 @@ import type {
   RowId,
   RowLoadingOptions,
   SortModel,
+  WriteRejectionOperation,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
 import {
   buildDataSourceRequest,
+  createWriteRejection,
   getFieldValue as readRowFieldValue,
   readCell,
   writeCell,
@@ -177,19 +179,28 @@ export class RowDataManager<TData = unknown> {
 
   setCellValue(row: number, col: number, value: CellValue): void {
     if (this.isWritable() === false) {
-      const column = this.options.getColumns()[col];
-      this.options.onWriteRejected?.({
-        row,
-        col,
-        field: column?.field ?? "",
-        reason: "read-only-source",
-      });
+      this.rejectWrite(row, col, "setCellValue");
       return;
     }
     writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
       onCellValueChanged: this.options.onCellValueChanged,
       getRowId: this.options.getRowId,
     });
+  }
+
+  /**
+   * Report a refused write through the single diagnostic contract. Every write
+   * entry point routes here so a read-only source is observable consistently.
+   */
+  rejectWrite(
+    row: number,
+    col: number,
+    operation: WriteRejectionOperation,
+  ): void {
+    const column = this.options.getColumns()[col];
+    this.options.onWriteRejected?.(
+      createWriteRejection(row, col, column?.field ?? "", operation),
+    );
   }
 
   /**

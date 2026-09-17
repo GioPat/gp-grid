@@ -3,10 +3,15 @@
 import type {
   CellRange,
   CellValue,
+  CellWriteRejectedEvent,
   FillHandleState,
   ColumnDefinition,
 } from "./types";
-import { createInstructionEmitter, normalizeRange } from "./utils";
+import {
+  createInstructionEmitter,
+  createWriteRejection,
+  normalizeRange,
+} from "./utils";
 
 export interface FillManagerOptions {
   getRowCount: () => number;
@@ -16,6 +21,8 @@ export interface FillManagerOptions {
   setCellValue: (row: number, col: number, value: CellValue) => void;
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
+  /** Called when a fill drag is refused because the source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
 /**
@@ -54,7 +61,14 @@ export class FillManager {
    * Start a fill drag operation from a source range.
    */
   startFillDrag(sourceRange: CellRange): void {
-    if (this.options.isWritable?.() === false) return;
+    if (this.options.isWritable?.() === false) {
+      const { minRow, minCol } = normalizeRange(sourceRange);
+      const column = this.options.getColumn(minCol);
+      this.options.onWriteRejected?.(
+        createWriteRejection(minRow, minCol, column?.field ?? "", "fill"),
+      );
+      return;
+    }
     this.state = {
       sourceRange,
       targetRow: sourceRange.endRow,

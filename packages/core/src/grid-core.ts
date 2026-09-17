@@ -214,7 +214,8 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   startEdit(row: number, col: number): void {
-    if (this.rowData.isWritable() === false) return;
+    // The edit manager owns the read-only check so a refused, editable cell
+    // reports through the shared write-rejection diagnostic.
     this.editManager.startEdit(row, col);
   }
 
@@ -362,6 +363,10 @@ export class GridCore<TData = unknown> {
    * performed, then only update the affected slots.
    */
   commitRowDrag(sourceIndex: number, targetIndex: number): void {
+    if (this.rowData.isWritable() === false) {
+      this.rowData.rejectWrite(sourceIndex, -1, "row-move");
+      return;
+    }
     applyRowDragCommit(sourceIndex, targetIndex, {
       dataSource: this.rowData.getDataSource(),
       cachedRows: this.rowData.getCachedRows(),

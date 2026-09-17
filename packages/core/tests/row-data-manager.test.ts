@@ -115,6 +115,7 @@ describe("RowDataManager", () => {
       col: 9,
       field: "",
       reason: "read-only-source",
+      operation: "setCellValue",
     }]);
     manager.setDataSource({ query: async () => response() });
     expect(released).toBe(true);
