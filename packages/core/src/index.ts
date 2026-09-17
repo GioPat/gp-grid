@@ -17,7 +17,16 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  createColumnarDataSource,
 } from "./data-source";
+export { isColumnarDataSource } from "./types";
+export type {
+  ColumnarField,
+  ColumnarDataSourceOptions,
+  ColumnarAccess,
+  ColumnarDataSource,
+  RowAccess,
+} from "./types";
 
 /** Transaction system */
 export { IndexedDataStore } from "./indexed-data-store/index";
@@ -103,6 +112,8 @@ export type {
   EditState,
   FillHandleState,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
   SlotState,
 
   /** DataSource */

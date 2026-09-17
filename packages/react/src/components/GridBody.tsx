@@ -21,7 +21,6 @@ import {
   buildCellClasses,
   formatCellValue,
   formatLabel,
-  getFieldValue,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
@@ -129,6 +128,8 @@ const GridBodyInner = <TData = unknown>(
           {slotsArray.map((slot) => {
             if (slot.rowIndex < 0) return null;
 
+            const core = coreRef.current;
+
             // Compute row highlight classes (pass rowData for content-based rules)
             const highlightRowClasses =
               coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
@@ -190,6 +191,14 @@ const GridBodyInner = <TData = unknown>(
                       slot.rowData,
                     ) ?? [];
 
+                  // Read the raw value through the core read path so a
+                  // record-less (columnar) row renders like an object row.
+                  const rawValue =
+                    core?.getCellValue(slot.rowIndex, originalIndex) ?? null;
+                  const rowId = core?.getRowId(slot.rowIndex);
+                  const getValue = (field: string): CellValue =>
+                    core?.getFieldValue(slot.rowIndex, field) ?? null;
+
                   const isRowDragHandle = column.rowDrag === true;
                   // Wrap only affects the default text content, so it is
                   // irrelevant (and would clash with the edit input) in edit mode.
@@ -211,10 +220,7 @@ const GridBodyInner = <TData = unknown>(
                   const titleText =
                     column.tooltip === false || isEditing
                       ? ""
-                      : formatCellValue(
-                        getFieldValue(slot.rowData, column.field),
-                        column.valueFormatter,
-                      );
+                      : formatCellValue(rawValue, column.valueFormatter);
 
                   return (
                     <div
@@ -245,6 +251,9 @@ const GridBodyInner = <TData = unknown>(
                         ? renderEditCell({
                           column,
                           rowData: slot.rowData,
+                          rawValue,
+                          rowId,
+                          getValue,
                           rowIndex: slot.rowIndex,
                           colIndex: originalIndex,
                           initialValue: editingCell.initialValue,
@@ -255,6 +264,9 @@ const GridBodyInner = <TData = unknown>(
                         : renderCell({
                           column,
                           rowData: slot.rowData,
+                          rawValue,
+                          rowId,
+                          getValue,
                           rowIndex: slot.rowIndex,
                           colIndex: originalIndex,
                           isActive: active,

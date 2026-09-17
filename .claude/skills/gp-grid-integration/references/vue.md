@@ -387,6 +387,7 @@ The wrapper watches both props. If either changes, it calls `core.setDataSource(
 | `:labels` | `GridLabelOverrides` | English defaults |
 | `:get-row-id` | `(row: TData) => RowId` | — |
 | `:on-cell-value-changed` | `(e: CellValueChangedEvent<TData>) => void` | — |
+| `:on-write-rejected` | `(e: CellWriteRejectedEvent) => void` | — |
 | `:loading-component` | `Component<{ isLoading: boolean }>` | spinner |
 | `:row-drag-entire-row` | `boolean` | `false` |
 | `:on-row-drag-end` | `(src, tgt) => void` | — |

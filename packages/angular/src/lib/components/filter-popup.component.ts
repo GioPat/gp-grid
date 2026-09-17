@@ -311,5 +311,7 @@ const setField = <T, K extends keyof T>(
   value: T[K],
 ): void => {
   const item = arr[index];
-  if (item) item[key] = value;
+  // Assign through `T` rather than the truthiness-narrowed `NonNullable<T>`;
+  // the latter rejects the generic indexed value.
+  if (item !== undefined) (item as T)[key] = value;
 };

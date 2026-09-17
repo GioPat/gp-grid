@@ -79,6 +79,7 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | Static array with sort/filter, but the array won't change | `createClientDataSource(array)` | one-shot |
 | Client-side data that changes after first render (most apps) | `useGridData` (React/Vue) or `createGridData` / `provideGridData` (Angular) | mutable, transactional |
 | Data is too big for memory; server handles paging/sort/filter | `createServerDataSource(async (req) => ...)` | server-driven |
+| Your own column-oriented/typed-array storage is already resident | `createColumnarDataSource({ fields, rowCount, getRowId? })` | read-only (1.0) |
 
 **Why `useGridData` / `createGridData` matters:** if you replace the `rowData` prop with a fresh array on every state change, the grid rebuilds the entire pipeline (sort indices, filter caches, virtualization). Above 10,000 rows the library logs a dev warning. The mutable hook/helper batches updates as transactions instead. Always prefer it when data changes.
 
@@ -93,6 +94,65 @@ The mutable API is the same in every framework:
 
 `getRowId` is required for any mutation.
 
+#### Columnar (read-only) sources
+
+When you already hold columns as arrays or typed-array views, `createColumnarDataSource`
+binds them with O(columns) work and no per-row copy:
+
+```ts
+import { createColumnarDataSource } from "@gp-grid/core";
+
+const source = createColumnarDataSource({
+  rowCount: ids.length,                 // or omit and declare each field length
+  getRowId: (sourceRow) => ids[sourceRow]!,
+  fields: [
+    { field: "id", data: ids },                 // borrowed array / typed-array view
+    { field: "score", data: scoreView },
+    { field: "label", getValue: (r) => ... },   // derived/nullable accessor
+  ],
+});
+```
+
+- Columnar sources are **read-only**: editing, paste, fill, direct setters and
+  row moves are refused, and each fires `onWriteRejected` with an `operation`
+  (`"setCellValue" | "edit" | "paste" | "fill" | "row-move"`). Pass
+  `onWriteRejected` as a React/Vue prop or an Angular `(onWriteRejected)`
+  output; a rejected write never fires `onCellValueChanged`. A non-editable
+  column emits nothing. Sorting, filtering, selection, copy and column layout
+  still work; sorting never mutates your arrays.
+- React, Vue and Angular re-export `createColumnarDataSource` (and the columnar
+  source types), so the source can be built without a direct core import.
+  Angular also exposes a `core` getter, matching `gridRef.core` in React and the
+  exposed `core` in Vue, for `await core.refresh()` after a revision.
+- Rendering reads only the mounted window: binding, scrolling and revision
+  refresh never scan the borrowed columns, and the grid never materializes
+  records (`source.getRecord` is opt-in).
+- `field` is the source-field key; `headerName` is the display label. If a column
+  uses a different `colId`, the grid maps it to the source field automatically.
+- Cell renderers get `rowData: undefined` for a columnar row; read a value with
+  `params.getValue(field)` and identity with `params.rowId`.
+- After in-place updates, adopt a new source revision and call
+  `await core.refresh()` on the bound grid. Changing the revision alone does
+  not refresh the view; replacing the source object also works.
+- With an inferred row count, use `source.setRevision(nextRevision)`; the source
+  re-reads declared field lengths (`length`, falling back to `data.length`). Keep
+  any explicit field lengths current after append/shrink.
+- With an explicit `rowCount`, as in the example above, use
+  `source.setRevision(nextRevision, nextRowCount)` when the count changes.
+  Omitting the second argument retains the last declared count. The same API
+  works for accessor-only sources without replacing their functions or updating
+  their length hints: the explicit count is authoritative for those fields.
+
+```ts
+// After updating all resident columns to the new, consistent lengths:
+source.setRevision(source.revision + 1, ids.length);
+await core.refresh(); // The GridCore instance exposed by the wrapper.
+```
+
+Revision validation is O(columns). Invalid counts or inconsistent declared
+lengths throw before the revision and row-count metadata are committed; caller
+array mutations are not rolled back. Keep data stable while the grid reads it.
+
 The server-side query function receives a `DataSourceRequest`:
 
 ```ts
@@ -101,6 +161,7 @@ interface DataSourceRequest {
   sort?: { colId: string; direction: "asc" | "desc" }[];
   filter?: FilterModel;
   valueFormatters?: Record<string, (v: CellValue) => string>;
+  fieldMap?: Record<string, string>; // ColumnId -> source-field key (columnar)
 }
 ```
 
@@ -212,7 +273,7 @@ Every wrapper exposes the underlying `GridCore` instance — same surface in eve
 | `setFilter(colId, filterModel \| null)` | Programmatic filter (null clears) |
 | `startEdit(row, col)` / `commitEdit()` / `cancelEdit()` | Drive editing imperatively |
 | `setDataSource(ds)` | Swap data source without losing scroll/sort/filter state |
-| `refresh()` | Refetch from data source (server data sources) |
+| `refresh()` | Refetch from the source; call after adopting a columnar revision |
 | `refreshFromTransaction()` | Apply queued mutations |
 | `getRowCount()` / `getRowData(rowIndex)` | Inspect data |
 | `selection` (manager) | `startSelection`, `extendTo`, etc. |

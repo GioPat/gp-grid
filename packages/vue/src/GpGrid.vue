@@ -17,7 +17,7 @@ import {
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -57,6 +57,8 @@ const props = withDefaults(
     getRowId?: (row: Row) => RowId;
     /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
     onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
+    /** Called when a write is refused because the bound source is read-only. */
+    onWriteRejected?: (event: CellWriteRejectedEvent) => void;
     /** Custom loading component to render instead of default spinner */
     loadingComponent?: Component<{ isLoading: boolean }>;
     /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
@@ -225,7 +227,7 @@ const peekContext = computed(() => {
   const column = effectiveColumns.value[peek.col];
   const slot = slotsArray.value.find((s) => s.rowIndex === peek.row);
   if (!column || !slot) return null;
-  return { peek, column, rowData: slot.rowData as Row };
+  return { peek, column, rowData: slot.rowData as Row | undefined };
 });
 
 // Handle cell mouse enter (for highlighting)
@@ -278,6 +280,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onCellValueChanged: props.onCellValueChanged
       ? (event) => props.onCellValueChanged?.(event)
       : undefined,
+    onWriteRejected: (event) => props.onWriteRejected?.(event),
     rowDragEntireRow: props.rowDragEntireRow ?? false,
     onRowDragEnd: (src, tgt) => props.onRowDragEnd?.(src, tgt),
     onColumnResized: (col, w) => props.onColumnResized?.(col, w),
@@ -543,6 +546,7 @@ defineExpose({
       :peek-cell="peekContext.peek"
       :column="peekContext.column"
       :row-data="peekContext.rowData"
+      :core="coreRef"
       :container-ref="outerContainerRef"
       :cell-renderers="cellRenderers ?? {}"
       :global-cell-renderer="cellRenderer"

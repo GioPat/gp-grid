@@ -1,7 +1,13 @@
 // packages/core/src/edit-manager.ts
 
-import type { EditState, CellValue, CellPosition, ColumnDefinition } from "./types";
-import { createInstructionEmitter } from "./utils";
+import type {
+  EditState,
+  CellValue,
+  CellPosition,
+  CellWriteRejectedEvent,
+  ColumnDefinition,
+} from "./types";
+import { createInstructionEmitter, createWriteRejection } from "./utils";
 
 // =============================================================================
 // Types
@@ -16,6 +22,10 @@ export interface EditManagerOptions {
   setCellValue: (row: number, col: number, value: CellValue) => void;
   /** Callback when edit is committed (to update slot display) */
   onCommit?: (row: number, col: number, value: CellValue) => void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
+  /** Called when an editable cell refuses a write because the source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
 // =============================================================================
@@ -74,11 +84,19 @@ export class EditManager {
 
   /**
    * Start editing a cell.
-   * Returns true if edit was started, false if cell is not editable.
+   * Returns true if edit was started, false if cell is not editable or the
+   * source is read-only. A refused write on an editable column is reported.
    */
   startEdit(row: number, col: number): boolean {
     const column = this.options.getColumn(col);
+    // A non-editable column is a disabled control: no attempted command.
     if (!column?.editable) {
+      return false;
+    }
+    if (this.options.isWritable?.() === false) {
+      this.options.onWriteRejected?.(
+        createWriteRejection(row, col, column.field, "edit"),
+      );
       return false;
     }
 

@@ -42,6 +42,7 @@ export const resolveGridCoreConfig = <TData>(
     getRowId: options.getRowId,
     highlighting: options.highlighting,
     onCellValueChanged: options.onCellValueChanged,
+    onWriteRejected: options.onWriteRejected,
     onRowDragEnd: options.onRowDragEnd,
     onColumnResized: options.onColumnResized,
     onColumnMoved: options.onColumnMoved,

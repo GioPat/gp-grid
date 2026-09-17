@@ -16,7 +16,12 @@ import type {
 export interface SlotData<TData = unknown> {
   slotId: string;
   rowIndex: number;
-  rowData: TData;
+  /**
+   * Source record for object sources; `undefined` for a columnar row, which
+   * renders without materializing a record. Read cell values through the core
+   * read path (`GridCore.getCellValue`), not from this field.
+   */
+  rowData: TData | undefined;
   translateY: number;
 }
 

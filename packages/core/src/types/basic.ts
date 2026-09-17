@@ -88,6 +88,28 @@ export interface CellValueChangedEvent<TData = unknown> {
   rowData: TData;
 }
 
+/** Which supported write entry point a refused write came from. */
+export type WriteRejectionOperation =
+  | "setCellValue"
+  | "edit"
+  | "paste"
+  | "fill"
+  | "row-move";
+
+/** Emitted when a write is refused because the bound source is read-only. */
+export interface CellWriteRejectedEvent {
+  /** View row index the write targeted; the dragged row for `row-move` */
+  row: number;
+  /** Column index the write targeted; `-1` when the operation has no column */
+  col: number;
+  /** Source field key, when the column exists */
+  field: string;
+  /** Why the write was refused */
+  reason: "read-only-source";
+  /** Attempted write entry point that was refused */
+  operation: WriteRejectionOperation;
+}
+
 /** The slot is the virtualized row, this represents the state of the slot */
 export interface SlotState {
   /** Slot ID */

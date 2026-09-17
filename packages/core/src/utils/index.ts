@@ -61,3 +61,5 @@ export { computeColumnPositions } from "./column-positions";
 
 export { readCell, writeCell } from "./cell-access";
 export type { WriteCellDeps } from "./cell-access";
+
+export { createWriteRejection } from "./write-rejection";

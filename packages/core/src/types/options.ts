@@ -1,7 +1,11 @@
 // packages/core/src/types/options.ts
 // Grid options types
 
-import type { RowId, CellValueChangedEvent } from "./basic";
+import type {
+  RowId,
+  CellValueChangedEvent,
+  CellWriteRejectedEvent,
+} from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
 import type { HighlightingOptions } from "./highlighting";
@@ -62,6 +66,11 @@ export interface GridCoreOptions<TData = unknown> {
   highlighting?: HighlightingOptions<TData>;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /**
+   * Called when a write is refused because the bound source is read-only.
+   * The grid never emits a successful change event for a rejected write.
+   */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
   /** Whether clicking and dragging any cell in a row drags the entire row instead of starting selection. Default: false */
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */

@@ -23,6 +23,7 @@
     "bench:candidate:wide": "pnpm build:candidate && pnpm --dir benchmarks bench:candidate:wide",
     "test:conformance": "pnpm build:candidate && pnpm --dir benchmarks test:conformance",
     "test:ssr": "pnpm build:candidate && node benchmarks/scripts/ssr-smoke.mjs",
+    "test:columnar": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/columnar-smoke.mjs",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",

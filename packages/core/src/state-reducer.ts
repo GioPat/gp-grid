@@ -18,7 +18,7 @@ export const applyInstruction = <TData = unknown>(
       slots.set(instruction.slotId, {
         slotId: instruction.slotId,
         rowIndex: -1,
-        rowData: {} as TData,
+        rowData: undefined,
         translateY: 0,
       });
       return null;

@@ -17,10 +17,13 @@ import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate
 import type { AngularColumnDefinition } from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
+  CellValue,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnFilterModel,
   DataSource,
+  GridCore,
   GridLabelOverrides,
   HighlightingOptions,
   RowLoadingOptions,
@@ -84,6 +87,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   wheelDampening = input<number>(0.1);
   onRowDragEnd = output<{ source: number; target: number }>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
+  onWriteRejected = output<CellWriteRejectedEvent>();
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
   labels = input<GridLabelOverrides>({});
@@ -130,6 +134,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       {
         onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
+        onWriteRejected: (event) => this.onWriteRejected.emit(event),
         onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
         onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
       },
@@ -153,6 +158,15 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
       document.removeEventListener('pointerup', this.onDocumentPointerUp);
     }
+  }
+
+  /**
+   * The underlying core instance, mirroring the `core` exposed by the React
+   * and Vue wrappers. Use it to read values or refresh after a columnar source
+   * adopts a new revision.
+   */
+  get core(): GridCore<unknown> | null {
+    return this.bindings.coreRef;
   }
 
   protected onBodyScroll(scrollLeft: number): void {
@@ -207,6 +221,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   protected computeRowClassesFn = (rowIndex: number, rowData: unknown): string[] => {
     return this.bindings.coreRef?.highlight?.computeRowClasses(rowIndex, rowData) ?? [];
   };
+
+  /** Raw value reader shared with the body and peek: record-less rows work. */
+  protected readCellValueFn = (rowIndex: number, colIndex: number): CellValue =>
+    this.bindings.coreRef?.getCellValue(rowIndex, colIndex) ?? null;
+
+  protected readFieldValueFn = (rowIndex: number, field: string): CellValue =>
+    this.bindings.coreRef?.getFieldValue(rowIndex, field) ?? null;
+
+  protected readRowIdFn = (rowIndex: number): RowId | undefined =>
+    this.bindings.coreRef?.getRowId(rowIndex);
 
   protected computeCellClassesFn = (
     rowIndex: number,

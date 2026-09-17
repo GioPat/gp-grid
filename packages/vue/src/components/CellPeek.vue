@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import type { CellPosition, ColumnDefinition } from "@gp-grid/core";
+import type {
+  CellPosition,
+  CellValue,
+  ColumnDefinition,
+  GridCore,
+} from "@gp-grid/core";
 import { bindPeekSelectAll } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import type { Row, VueCellRenderer } from "../types";
@@ -8,7 +13,10 @@ import type { Row, VueCellRenderer } from "../types";
 const props = defineProps<{
   peekCell: CellPosition;
   column: ColumnDefinition;
-  rowData: Row;
+  /** Source record, or `undefined` for a record-less (columnar) row. */
+  rowData: Row | undefined;
+  /** Bound core, used to read raw values without materializing a record. */
+  core: GridCore | null;
   containerRef: HTMLDivElement | null;
   cellRenderers: Record<string, VueCellRenderer>;
   globalCellRenderer?: VueCellRenderer;
@@ -97,10 +105,17 @@ const overlayStyle = computed(() => ({
   visibility: positioned.value ? ("visible" as const) : ("hidden" as const),
 }));
 
-const peekVNode = computed(() =>
-  renderCell({
+const peekVNode = computed(() => {
+  const core = props.core;
+  const getValue = (field: string): CellValue =>
+    core?.getFieldValue(props.peekCell.row, field) ?? null;
+
+  return renderCell({
     column: props.column,
     rowData: props.rowData,
+    rawValue: core?.getCellValue(props.peekCell.row, props.peekCell.col) ?? null,
+    rowId: core?.getRowId(props.peekCell.row),
+    getValue,
     rowIndex: props.peekCell.row,
     colIndex: props.peekCell.col,
     isActive: true,
@@ -108,8 +123,8 @@ const peekVNode = computed(() =>
     isEditing: false,
     cellRenderers: props.cellRenderers,
     globalCellRenderer: props.globalCellRenderer,
-  }),
-);
+  });
+});
 </script>
 
 <template>

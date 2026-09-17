@@ -65,6 +65,7 @@ export function Grid<TData = unknown>(
     highlighting,
     getRowId,
     onCellValueChanged,
+    onWriteRejected,
     loadingComponent,
     rowDragEntireRow = false,
     onRowDragEnd,
@@ -164,6 +165,8 @@ export function Grid<TData = unknown>(
   getRowIdRef.current = getRowId;
   const onCellValueChangedRef = useRef(onCellValueChanged);
   onCellValueChangedRef.current = onCellValueChanged;
+  const onWriteRejectedRef = useRef(onWriteRejected);
+  onWriteRejectedRef.current = onWriteRejected;
   const onRowDragEndRef = useRef(onRowDragEnd);
   onRowDragEndRef.current = onRowDragEnd;
   const onColumnResizedRef = useRef(onColumnResized);
@@ -248,6 +251,7 @@ export function Grid<TData = unknown>(
       onCellValueChanged: onCellValueChangedRef.current
         ? (event) => onCellValueChangedRef.current?.(event)
         : undefined,
+      onWriteRejected: (event) => onWriteRejectedRef.current?.(event),
       rowDragEntireRow,
       onRowDragEnd: (src, tgt) => onRowDragEndRef.current?.(src, tgt),
       onColumnResized: (col, w) => onColumnResizedRef.current?.(col, w),
@@ -625,16 +629,21 @@ export function Grid<TData = unknown>(
 
       {/* Cell Peek (read-only multi-line overlay on dblclick of non-editable cell) */}
       {state.peekCell && (() => {
-        const peekColumn = effectiveColumns[state.peekCell.col];
-        const peekSlot = slotsArray.find(
-          (s) => s.rowIndex === state.peekCell!.row,
-        );
+        const peekCell = state.peekCell;
+        const peekCore = coreRef.current;
+        const peekColumn = effectiveColumns[peekCell.col];
+        const peekSlot = slotsArray.find((s) => s.rowIndex === peekCell.row);
         if (!peekColumn || !peekSlot) return null;
         return (
           <CellPeek
-            peekCell={state.peekCell}
+            peekCell={peekCell}
             column={peekColumn}
             rowData={peekSlot.rowData}
+            rawValue={peekCore?.getCellValue(peekCell.row, peekCell.col) ?? null}
+            rowId={peekCore?.getRowId(peekCell.row)}
+            getValue={(field) =>
+              peekCore?.getFieldValue(peekCell.row, field) ?? null
+            }
             containerRef={outerContainerRef}
             cellRenderers={cellRenderers}
             globalCellRenderer={cellRenderer}

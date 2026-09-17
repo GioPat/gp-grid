@@ -14,6 +14,7 @@ import {
   CellRange,
   CellValue,
   ColumnDefinition,
+  RowId,
   CellRendererParams,
   EditRendererParams,
   FillHandlePosition,
@@ -94,6 +95,12 @@ export class GridBodyComponent {
   fillHandlePosition = input<FillHandlePosition | null>(null);
   dragState = input<DragState | null>(null);
   labels = input<GridLabels>(defaultGridLabels);
+  /** Raw value reader from the bound core (record-less rows). */
+  readCellValue = input<((rowIndex: number, colIndex: number) => CellValue) | null>(null);
+  /** Reader for another field's raw value at a row, without a record. */
+  readFieldValue = input<((rowIndex: number, field: string) => CellValue) | null>(null);
+  /** Lazily resolved row identity, when the source exposes one. */
+  readRowId = input<((rowIndex: number) => RowId | undefined) | null>(null);
 
   scrolled = output<number>();
   cellPointerDown = output<CellPointerDownEvent>();
@@ -132,19 +139,40 @@ export class GridBodyComponent {
     this.scrolled.emit(el.scrollLeft);
   }
 
+  private rawValueAt(
+    rowData: unknown,
+    column: ColumnDefinition,
+    rowIndex: number,
+    colIndex: number,
+  ): CellValue {
+    const read = this.readCellValue();
+    return read ? read(rowIndex, colIndex) : getFieldValue(rowData, column.field);
+  }
+
+  private identityAt(rowIndex: number): RowId | undefined {
+    return this.readRowId()?.(rowIndex);
+  }
+
+  private fieldReaderAt(rowIndex: number): (field: string) => CellValue {
+    const read = this.readFieldValue();
+    return (field) => (read ? read(rowIndex, field) : null);
+  }
+
   protected cellParams(
     rowData: unknown,
     column: ColumnDefinition,
     rowIndex: number,
     colIndex: number,
   ): CellRendererParams {
-    const rawValue = getFieldValue(rowData, column.field);
+    const rawValue = this.rawValueAt(rowData, column, rowIndex, colIndex);
     const displayValue = column.valueFormatter
       ? column.valueFormatter(rawValue)
       : rawValue;
     return {
       value: displayValue,
       rowData,
+      rowId: this.identityAt(rowIndex),
+      getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
       colIndex,
@@ -185,13 +213,15 @@ export class GridBodyComponent {
     colIndex: number,
   ): EditRendererParams {
     const ec = this.editingCell();
-    const rawValue = getFieldValue(rowData, column.field);
+    const rawValue = this.rawValueAt(rowData, column, rowIndex, colIndex);
     const displayValue = column.valueFormatter
       ? column.valueFormatter(rawValue)
       : rawValue;
     return {
       value: displayValue,
       rowData,
+      rowId: this.identityAt(rowIndex),
+      getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
       colIndex,
@@ -215,7 +245,7 @@ export class GridBodyComponent {
     colIndex: number,
   ): string {
     const renderer = column.cellRenderer;
-    const value = getFieldValue(rowData, column.field);
+    const value = this.rawValueAt(rowData, column, rowIndex, colIndex);
     if (typeof renderer === 'function') {
       const params = this.cellParams(rowData, column, rowIndex, colIndex);
       const result = renderer(params);

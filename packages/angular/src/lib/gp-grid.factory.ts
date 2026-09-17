@@ -1,6 +1,7 @@
 import { GridCore } from '@gp-grid/core';
 import type {
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   ColumnDefinition,
   DataSource,
   HighlightingOptions,
@@ -25,6 +26,7 @@ export interface BuildGridCoreInputs<TData> {
 export interface BuildGridCoreEmitters<TData> {
   onRowDragEnd: (source: number, target: number) => void;
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
+  onWriteRejected: (event: CellWriteRejectedEvent) => void;
   onColumnResized: (colIndex: number, newWidth: number) => void;
   onColumnMoved: (fromIndex: number, toIndex: number) => void;
 }
@@ -51,6 +53,7 @@ export const buildGridCore = <TData>(
     rowDragEntireRow: inputs.rowDragEntireRow,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
+    onWriteRejected: emitters.onWriteRejected,
     onColumnResized: emitters.onColumnResized,
     onColumnMoved: emitters.onColumnMoved,
   });

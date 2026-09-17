@@ -26,6 +26,11 @@ export interface SlotPoolManagerOptions {
   getVirtualContentHeight: () => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
+  /**
+   * Whether the row exists and can be rendered. Distinct from row data: a
+   * columnar row renders with no source record.
+   */
+  isRowAvailable: (rowIndex: number) => boolean;
 }
 
 interface SlotPoolState {
@@ -127,8 +132,8 @@ export class SlotPoolManager {
 
     let recycleIdx = 0;
     for (const rowIndex of requiredRows) {
+      if (this.options.isRowAvailable(rowIndex) === false) continue;
       const rowData = this.options.getRowData(rowIndex);
-      if (rowData === undefined) continue;
       const recycledSlotId = recycleIdx < slotsToRecycle.length
         ? slotsToRecycle[recycleIdx++]
         : undefined;
@@ -249,8 +254,8 @@ export class SlotPoolManager {
     for (const [slotId, slot] of this.state.slots) {
       // Check if row index is still valid and data is available
       if (slot.rowIndex >= 0 && slot.rowIndex < totalRows) {
+        if (this.options.isRowAvailable(slot.rowIndex) === false) continue;
         const rowData = this.options.getRowData(slot.rowIndex);
-        if (rowData === undefined) continue;
 
         const translateY = this.getRowTranslateY(slot.rowIndex);
 
@@ -275,16 +280,13 @@ export class SlotPoolManager {
    */
   updateSlot(rowIndex: number): void {
     const slotId = this.state.rowToSlot.get(rowIndex);
-    if (slotId) {
-      const rowData = this.options.getRowData(rowIndex);
-      if (rowData) {
-        this.emit({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData,
-        });
-      }
+    if (slotId && this.options.isRowAvailable(rowIndex)) {
+      this.emit({
+        type: "ASSIGN_SLOT",
+        slotId,
+        rowIndex,
+        rowData: this.options.getRowData(rowIndex),
+      });
     }
   }
 

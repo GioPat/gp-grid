@@ -3,11 +3,17 @@
 import type {
   CellPosition,
   CellRange,
+  CellWriteRejectedEvent,
   SelectionState,
   CellValue,
   ColumnDefinition,
 } from "./types";
-import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
+import {
+  createInstructionEmitter,
+  createWriteRejection,
+  normalizeRange,
+  formatCellValue,
+} from "./utils";
 import {
   coerceClipboardValue,
   normalizeClipboardText,
@@ -25,6 +31,10 @@ export interface SelectionManagerOptions {
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
   setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
+  /** Called when a paste is refused because the source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
 export interface PasteResult {
@@ -294,6 +304,14 @@ export class SelectionManager {
   pasteClipboardText(text: string): PasteResult {
     const effectiveRange = this.getEffectiveRange();
     if (effectiveRange === null) {
+      return { handled: false, changedCells: [] };
+    }
+    if (this.options.isWritable?.() === false) {
+      const { minRow, minCol } = normalizeRange(effectiveRange);
+      const column = this.options.getColumn(minCol);
+      this.options.onWriteRejected?.(
+        createWriteRejection(minRow, minCol, column?.field ?? "", "paste"),
+      );
       return { handled: false, changedCells: [] };
     }
 

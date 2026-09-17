@@ -9,7 +9,9 @@ import React, {
 } from "react";
 import type {
   CellPosition,
+  CellValue,
   ColumnDefinition,
+  RowId,
 } from "@gp-grid/core";
 import { bindPeekSelectAll } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
@@ -18,7 +20,14 @@ import type { ReactCellRenderer } from "../types";
 export interface CellPeekProps<TData = unknown> {
   peekCell: CellPosition;
   column: ColumnDefinition;
-  rowData: TData;
+  /** Source record, or `undefined` for a record-less (columnar) row. */
+  rowData: TData | undefined;
+  /** Raw value read through the core read path. */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
   containerRef: React.RefObject<HTMLDivElement | null>;
   cellRenderers: Record<string, ReactCellRenderer>;
   globalCellRenderer?: ReactCellRenderer;
@@ -43,6 +52,9 @@ export function CellPeek<TData = unknown>({
   peekCell,
   column,
   rowData,
+  rawValue,
+  rowId,
+  getValue,
   containerRef,
   cellRenderers,
   globalCellRenderer,
@@ -136,6 +148,9 @@ export function CellPeek<TData = unknown>({
   const content = renderCell({
     column,
     rowData,
+    rawValue,
+    rowId,
+    getValue,
     rowIndex: peekCell.row,
     colIndex: peekCell.col,
     isActive: true,

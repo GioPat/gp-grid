@@ -2,7 +2,12 @@
 
 import { h, type VNode } from "vue";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
-import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
+import type {
+  CellValue,
+  RowId,
+  ColumnDefinition,
+  CellRendererParams,
+} from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
 import { invokeRenderer } from "./utils";
 
@@ -18,6 +23,12 @@ export interface RenderCellOptions {
   isEditing: boolean;
   cellRenderers: Record<string, VueCellRenderer>;
   globalCellRenderer?: VueCellRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
 }
 
 /**
@@ -34,15 +45,20 @@ export function renderCell(options: RenderCellOptions): VNode {
     isEditing,
     cellRenderers,
     globalCellRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
   } = options;
 
-  const rawValue = getFieldValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getFieldValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: CellRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    getValue,
     column,
     rowIndex,
     colIndex,

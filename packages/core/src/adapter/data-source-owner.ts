@@ -17,6 +17,7 @@ const LARGE_ARRAY_WARN_THRESHOLD = 10_000;
  */
 export class DataSourceOwner<TData = unknown> {
   private owned: DataSource<TData> | null = null;
+  private lastProvided: DataSource<TData> | null = null;
   private lastAppliedRows: TData[] | null = null;
   private lastAppliedColumns: ColumnDefinition[] | null = null;
 
@@ -26,6 +27,7 @@ export class DataSourceOwner<TData = unknown> {
    * for later destruction.
    */
   initialize(provided: DataSource<TData> | null, initialRows: TData[]): DataSource<TData> {
+    this.lastProvided = provided;
     if (provided !== null) return provided;
     this.owned = createDataSourceFromArray(initialRows);
     this.lastAppliedRows = initialRows;
@@ -33,12 +35,30 @@ export class DataSourceOwner<TData = unknown> {
   }
 
   /**
-   * Call when the `rows` input changes. Returns a new owned DataSource
-   * if one was rebuilt (caller should push it to core via setDataSource),
-   * or null if nothing changed or a provided DataSource is in use.
+   * Call when the `rows` input changes. Returns the DataSource the core should
+   * bind when it changes, or null when nothing changed. A changed provided
+   * source is returned so a wrapper can swap to it at runtime.
    */
   syncRows(rows: TData[], provided: DataSource<TData> | null): DataSource<TData> | null {
-    if (provided !== null) return null;
+    if (provided !== null) {
+      if (this.lastProvided === provided) return null;
+      // A different provided source replaces any owned one.
+      this.owned?.destroy?.();
+      this.owned = null;
+      this.lastProvided = provided;
+      return provided;
+    }
+
+    if (this.lastProvided !== null) {
+      // Dropping a provided source rebuilds an owned one from the current rows,
+      // even when the rows array reference did not change.
+      this.lastProvided = null;
+      this.lastAppliedRows = rows;
+      this.owned?.destroy?.();
+      this.owned = createDataSourceFromArray(rows);
+      return this.owned;
+    }
+
     if (this.lastAppliedRows === rows) return null;
     this.lastAppliedRows = rows;
     if (rows.length > LARGE_ARRAY_WARN_THRESHOLD) {
