@@ -14,6 +14,7 @@ const categoryPrefixes = {
   initialRender: "render-",
   sortFilter: "sort-",
   memoryUsage: "memory-",
+  wideGrid: "wide-",
 };
 
 // The comparison only covers grids that render rows to real DOM nodes;
@@ -28,8 +29,10 @@ const SCOPE_NOTE =
 const SCROLL_NOTE =
   "Every grid receives the identical mouse-wheel input. Each grid's scroll and virtualization model translates that input into a different distance (custom scrollbars and dampened virtual-scroll wheel handling rescale the deltas), so the Rows Traversed column shows how many rows each grid actually covered during the measured pass.";
 
-const PACKAGE_SIZE_NOTE =
-  "Production ESM JavaScript and CSS bundles of the exact grid-library imports used by each benchmark, minified by Vite and measured with gzip. React and React DOM peer dependencies are excluded; bundled transitive dependencies and imported CSS are included, while other emitted assets are excluded. Every package is sized at the published npm version shown in its Packages cell.";
+const packageSizeNote = (run) => {
+  const gpGridSource = run.artifacts?.source ?? "published";
+  return `Production ESM JavaScript and CSS bundles of the exact grid-library imports used by each benchmark, minified by Vite and measured with gzip. React and React DOM peer dependencies are excluded; bundled transitive dependencies and imported CSS are included, while other emitted assets are excluded. gp-grid source: ${gpGridSource}.`;
+};
 
 const REPO_URL = "https://github.com/GioPat/gp-grid";
 
@@ -86,6 +89,7 @@ const loadRun = () => {
     initialRender: loadResults(runDir, categoryPrefixes.initialRender),
     sortFilter: loadResults(runDir, categoryPrefixes.sortFilter),
     memoryUsage: loadResults(runDir, categoryPrefixes.memoryUsage),
+    wideGrid: loadResults(runDir, categoryPrefixes.wideGrid),
   };
 
   return {
@@ -118,6 +122,8 @@ const buildMetaEntries = (run) => {
 
   return [
     ["Run", run.runId],
+    ["gp-grid source", run.artifacts?.source ?? "legacy/unknown"],
+    ["Checkout", run.artifacts ? `${run.artifacts.commit}${run.artifacts.dirty ? " (dirty)" : ""}` : "not recorded"],
     ["Date", run.timestamp],
     ["Machine", environment.cpuModel],
     [
@@ -177,9 +183,24 @@ const buildSections = (run) => [
   },
   {
     title: "Package Bundle Sizes",
-    note: PACKAGE_SIZE_NOTE,
+    note: packageSizeNote(run),
     headers: ["Grid", "Packages", "Minified", "Gzip"],
     rows: buildPackageSizeRows(run.packageSizes),
+  },
+  {
+    title: "Wide Grid",
+    headers: ["Grid", "Rows", "Columns", "Ready", "Data generation", "Bind to ready", "Mounted rows", "Mounted cells", "Horizontal scroll"],
+    rows: (run.results.wideGrid ?? []).map((result) => [
+      gridLink(result),
+      result.rowCount,
+      result.columnCount,
+      `${result.metrics.timeToReadyMs}ms`,
+      `${result.metrics.dataGenerationMs}ms`,
+      `${result.metrics.gridBindToReadyMs}ms`,
+      result.metrics.mountedRows,
+      result.metrics.mountedCells,
+      `${result.metrics.horizontalScrollMs}ms`,
+    ]),
   },
   {
     title: "Scroll Performance",
@@ -212,13 +233,19 @@ const buildSections = (run) => [
   },
   {
     title: "Initial Render",
-    headers: ["Grid", "Mode", "Rows", "FCP", "Full Render", "LCP", "TBT"],
+    headers: ["Grid", "Mode", "Rows", "FCP", "Full Render", "Data generation", "Bind to ready", "LCP", "TBT"],
     rows: run.results.initialRender.map((result) => [
       gridLink(result),
       result.implementationMode,
       formatRowCount(result.rowCount),
       `${result.metrics.timeToFirstPaint}ms`,
       `${result.metrics.timeToFullRender}ms`,
+      result.metrics.dataGenerationMs == null
+        ? "n/a"
+        : `${result.metrics.dataGenerationMs}ms`,
+      result.metrics.gridBindToReadyMs == null
+        ? "n/a"
+        : `${result.metrics.gridBindToReadyMs}ms`,
       // null means the browser reported no LCP candidate for the page.
       result.metrics.largestContentfulPaint == null
         ? "n/a"
@@ -364,6 +391,7 @@ const jsonReport = {
   config: run.config,
   libraryVersions: run.libraryVersions,
   packageSizes: run.packageSizes,
+  artifacts: run.artifacts,
   results: run.results,
 };
 const markdown = generateMarkdownSummary(run);

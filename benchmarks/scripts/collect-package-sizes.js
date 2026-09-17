@@ -3,6 +3,7 @@ import path from "path";
 import { gzipSync } from "zlib";
 import { fileURLToPath } from "url";
 import { build } from "vite";
+import { collectArtifactProvenance, getGpGridAliases, readBenchmarkSource } from "./artifact-resolution.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BENCHMARKS_ROOT = path.join(__dirname, "..");
@@ -85,12 +86,16 @@ const outputContents = (buildResult) => {
   return contents;
 };
 
-const measurePackageGroup = async (grid, source) => {
+const measurePackageGroup = async (grid, source, benchmarkSource) => {
   const buildResult = await build({
     configFile: false,
     root: BENCHMARKS_ROOT,
     logLevel: "silent",
     plugins: [packageEntryPlugin(grid, source)],
+    resolve: {
+      alias: grid === "gp-grid" ? getGpGridAliases(benchmarkSource) : [],
+      dedupe: ["react", "react-dom"],
+    },
     build: {
       write: false,
       minify: true,
@@ -123,8 +128,9 @@ const readMeasuredVersion = (packageName) => {
   return JSON.parse(fs.readFileSync(manifestPath, "utf-8")).version;
 };
 
-export const collectPackageSizes = async (gridPackages) => {
+export const collectPackageSizes = async (gridPackages, benchmarkSource = readBenchmarkSource()) => {
   const sizes = {};
+  const artifactProvenance = collectArtifactProvenance(benchmarkSource);
 
   for (const [grid, packages] of Object.entries(gridPackages)) {
     const source = PACKAGE_ENTRY_SOURCES[grid];
@@ -135,9 +141,13 @@ export const collectPackageSizes = async (gridPackages) => {
     sizes[grid] = {
       packages,
       versions: Object.fromEntries(
-        packages.map((pkg) => [pkg, readMeasuredVersion(pkg)]),
+        packages.map((pkg) => {
+          const artifact = artifactProvenance.packages.find((item) => item.name === pkg);
+          return [pkg, artifact?.version ?? readMeasuredVersion(pkg)];
+        }),
       ),
-      ...(await measurePackageGroup(grid, source)),
+      source: grid === "gp-grid" ? benchmarkSource : "published",
+      ...(await measurePackageGroup(grid, source, benchmarkSource)),
     };
   }
 

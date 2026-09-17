@@ -20,18 +20,39 @@ import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
+  columnCount?: number;
 }
 
 function isReady(): boolean {
   return document.querySelectorAll(".gp-grid-row").length > 0;
 }
 
-export function GridWrapper({ initialRowCount }: GridWrapperProps) {
+export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.length }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
   const gridRef = useRef<GridRef<BenchmarkRow> | null>(null);
   const prevDataSourceRef = useRef<DataSource<BenchmarkRow> | null>(null);
 
-  const columns = useMemo(() => toGpGridColumns(BENCHMARK_COLUMNS) as ColumnDefinition[], []);
+  const setupMetricsRef = useRef({ dataGenerationMs: 0, bindStartedAt: 0 });
+  const columns = useMemo(() => {
+    const baseColumns = toGpGridColumns(BENCHMARK_COLUMNS) as ColumnDefinition[];
+    if (columnCount <= baseColumns.length) {
+      return baseColumns.slice(0, columnCount);
+    }
+
+    return Array.from({ length: columnCount }, (_, index) => {
+      const source = baseColumns[index % baseColumns.length];
+      if (source === undefined) {
+        throw new Error("The benchmark needs at least one base column.");
+      }
+      return {
+        ...source,
+        colId: `wide-${index}`,
+        headerName: `${source.headerName} ${index}`,
+        sortable: false,
+        filterable: false,
+      };
+    });
+  }, [columnCount]);
 
   const dataSource = useMemo(() => {
     return createClientDataSource(data);
@@ -51,7 +72,12 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
 
   // Load data function
   const loadData = useCallback((count: number) => {
+    const generationStartedAt = performance.now();
     const newData = generateData(count);
+    setupMetricsRef.current = {
+      dataGenerationMs: performance.now() - generationStartedAt,
+      bindStartedAt: performance.now(),
+    };
     setData(newData);
   }, []);
 
@@ -194,6 +220,11 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
 
         return rows;
       },
+      getSetupMetrics: () => ({
+        dataGenerationMs: setupMetricsRef.current.dataGenerationMs,
+        bindElapsedMs: Math.max(0, performance.now() - setupMetricsRef.current.bindStartedAt),
+        columnCount: columns.length,
+      }),
     };
 
     window.gridApi = api;
@@ -206,6 +237,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     filter,
     clearFilters,
     data.length,
+    columns.length,
   ]);
 
   // Initial data load

@@ -3,6 +3,10 @@
   "rowCounts": [
     1000000
   ],
+  "columnCounts": [
+    1000,
+    10000
+  ],
   "rowHeightPx": 32,
   "playwrightWorkers": 1,
   "retries": 0,
