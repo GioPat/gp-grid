@@ -113,9 +113,18 @@ const readGit = (args, fallback) => {
   }
 };
 
-export const collectArtifactProvenance = (source = readBenchmarkSource()) => {
-  const packages = Object.entries(packageDefinitions).map(([name, definition]) => {
-    return source === "candidate" ? candidatePackage(name, definition) : publishedPackage(name);
+export const collectPackageProvenance = (
+  packageNames,
+  source = readBenchmarkSource(),
+) => {
+  const packages = packageNames.map((name) => {
+    const definition = packageDefinitions[name];
+    if (definition === undefined) {
+      throw new Error(`Unknown benchmark package "${name}".`);
+    }
+    return source === "candidate"
+      ? candidatePackage(name, definition)
+      : publishedPackage(name);
   });
 
   return {
@@ -126,6 +135,10 @@ export const collectArtifactProvenance = (source = readBenchmarkSource()) => {
     repositoryRoot: source === "candidate" ? normalizePath(REPOSITORY_ROOT) : undefined,
     packages,
   };
+};
+
+export const collectArtifactProvenance = (source = readBenchmarkSource()) => {
+  return collectPackageProvenance(Object.keys(packageDefinitions), source);
 };
 
 export const getGpGridAliases = (source = readBenchmarkSource()) => {
