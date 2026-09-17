@@ -19,9 +19,11 @@ import { isPlatformBrowser } from '@angular/common';
 import type {
   CellValue,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnFilterModel,
   DataSource,
+  GridCore,
   GridLabelOverrides,
   HighlightingOptions,
   RowLoadingOptions,
@@ -85,6 +87,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   wheelDampening = input<number>(0.1);
   onRowDragEnd = output<{ source: number; target: number }>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
+  onWriteRejected = output<CellWriteRejectedEvent>();
   onColumnResized = output<{ colIndex: number; newWidth: number }>();
   onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
   labels = input<GridLabelOverrides>({});
@@ -131,6 +134,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       {
         onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
+        onWriteRejected: (event) => this.onWriteRejected.emit(event),
         onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
         onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
       },
@@ -154,6 +158,15 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
       document.removeEventListener('pointerup', this.onDocumentPointerUp);
     }
+  }
+
+  /**
+   * The underlying core instance, mirroring the `core` exposed by the React
+   * and Vue wrappers. Use it to read values or refresh after a columnar source
+   * adopts a new revision.
+   */
+  get core(): GridCore<unknown> | null {
+    return this.bindings.coreRef;
   }
 
   protected onBodyScroll(scrollLeft: number): void {
