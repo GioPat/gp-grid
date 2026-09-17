@@ -33,6 +33,8 @@ export type {
 
   // Events
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
 
   // DataSource
   DataSource,
@@ -44,6 +46,13 @@ export type {
   RowLoadingMode,
   RowCacheOptions,
   RowCacheEviction,
+
+  // Columnar read-only source
+  ColumnarAccess,
+  ColumnarDataSource,
+  ColumnarDataSourceOptions,
+  ColumnarField,
+  RowAccess,
 
   // Renderer params
   CellRendererParams,
@@ -69,6 +78,8 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  createColumnarDataSource,
+  isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
 } from '@gp-grid/core';

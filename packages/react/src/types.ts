@@ -6,6 +6,7 @@ import type {
   DataSource,
   CellRendererParams,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   EditRendererParams,
   HeaderRendererParams,
   GridCore,
@@ -97,6 +98,8 @@ export interface GridProps<TData = unknown> {
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /** Called when a write is refused because the bound source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: React.ComponentType<{ isLoading: boolean }>;
   /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */

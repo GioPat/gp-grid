@@ -113,6 +113,7 @@ export type {
   FillHandleState,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteRejectionOperation,
   SlotState,
 
   /** DataSource */

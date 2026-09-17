@@ -12,8 +12,14 @@ import type {
   ColumnDefinition,
 } from "@gp-grid/core";
 import type { GridProps, GridRef } from "@gp-grid/react";
+import type { CellWriteRejectedEvent as ReactWriteRejectedEvent } from "@gp-grid/react";
+import { createColumnarDataSource as createColumnarFromReact } from "@gp-grid/react";
 import type { GpGridProps } from "@gp-grid/vue";
+import type { CellWriteRejectedEvent as VueWriteRejectedEvent } from "@gp-grid/vue";
+import { createColumnarDataSource as createColumnarFromVue } from "@gp-grid/vue";
 import type { AngularColumnDefinition } from "@gp-grid/angular";
+import type { CellWriteRejectedEvent as AngularWriteRejectedEvent } from "@gp-grid/angular";
+import { createColumnarDataSource as createColumnarFromAngular } from "@gp-grid/angular";
 
 // Borrowed columns: ordinary array, typed-array views and a derived accessor.
 const ids = new Int32Array([1, 2, 3]);
@@ -45,8 +51,11 @@ const core = new GridCore({
   rowHeight: 32,
   onWriteRejected: (event) => {
     void event.row;
+    void event.col;
     void event.field;
     void event.reason;
+    // The refused write entry point, e.g. "setCellValue" | "edit" | "paste".
+    void event.operation;
   },
 });
 
@@ -68,11 +77,17 @@ const reactProps: GridProps = {
   dataSource: source,
   rowHeight: 32,
   gridRef: { current: reactRef },
+  onWriteRejected: (event) => {
+    void event.operation;
+  },
 };
 const vueProps: GpGridProps = {
   columns,
   dataSource: source,
   rowHeight: 32,
+  onWriteRejected: (event) => {
+    void event.field;
+  },
 };
 const angularColumns: AngularColumnDefinition[] = columns;
 
@@ -80,6 +95,18 @@ const angularColumns: AngularColumnDefinition[] = columns;
 const empty: ColumnarDataSource = createColumnarDataSource({
   fields: [{ field: "id", data: new Int32Array(0) }],
 });
+
+// Each wrapper re-exports the factory and exposes the rejection event type.
+const wrapperSources: ColumnarDataSource[] = [
+  createColumnarFromReact({ fields: [{ field: "id", data: new Int32Array(0) }] }),
+  createColumnarFromVue({ fields: [{ field: "id", data: new Int32Array(0) }] }),
+  createColumnarFromAngular({ fields: [{ field: "id", data: new Int32Array(0) }] }),
+];
+type WrapperRejectionEvents = [
+  ReactWriteRejectedEvent,
+  VueWriteRejectedEvent,
+  AngularWriteRejectedEvent,
+];
 
 void value;
 void identity;
@@ -89,4 +116,6 @@ void reactProps;
 void vueProps;
 void angularColumns;
 void empty;
+void wrapperSources;
+void (null as unknown as WrapperRejectionEvents);
 core.destroy();

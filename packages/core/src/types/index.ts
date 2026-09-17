@@ -15,6 +15,7 @@ export type {
   FillHandleState,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteRejectionOperation,
   SlotState,
 } from "./basic";
 

@@ -81,6 +81,7 @@ export const buildGridManagers = <TData>(
     getColumn: (col) => getColumns()[col],
     setCellValue,
     isWritable: () => rowData.isWritable(),
+    onWriteRejected: config.onWriteRejected,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
@@ -106,6 +107,7 @@ export const buildGridManagers = <TData>(
     getColumn: (col) => getColumns()[col],
     setCellValue,
     isWritable: () => rowData.isWritable(),
+    onWriteRejected: config.onWriteRejected,
   });
   fill.onInstruction((instruction) => batcher.emit(instruction));
 
@@ -128,6 +130,7 @@ export const buildGridManagers = <TData>(
     getCellValue,
     setCellValue,
     isWritable: () => rowData.isWritable(),
+    onWriteRejected: config.onWriteRejected,
     onCommit: (row) => slotPool.updateSlot(row),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));

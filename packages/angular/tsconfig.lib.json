@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
-    "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "5.0",
     "declaration": true,
     "strict": true,
     "lib": [

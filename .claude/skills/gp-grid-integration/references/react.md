@@ -455,6 +455,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 | `labels` | `GridLabelOverrides` | English defaults | override filter/grid text (localization) |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
+| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
 | `onRowDragEnd` | `(src, tgt) => void` | — | consumer reorders |

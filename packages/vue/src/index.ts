@@ -78,6 +78,8 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  createColumnarDataSource,
+  isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
   // Utils
@@ -106,6 +108,8 @@ export type {
   CellRange,
   // Events
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
   // Selection
   SelectionState,
   // Data source
@@ -119,6 +123,12 @@ export type {
   RowCacheOptions,
   RowCacheEviction,
   MutableDataSource,
+  // Columnar read-only source
+  ColumnarAccess,
+  ColumnarDataSource,
+  ColumnarDataSourceOptions,
+  ColumnarField,
+  RowAccess,
   // Filters
   FilterModel,
   ColumnFilterModel,

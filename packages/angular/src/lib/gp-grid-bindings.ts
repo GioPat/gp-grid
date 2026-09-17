@@ -34,9 +34,9 @@ export interface GpGridBindingsDeps {
 export class GpGridBindings<TData = unknown> {
   readonly dataSourceOwner = new DataSourceOwner<TData>();
   readonly autoScroll: AutoScrollDriver;
-  readonly pendingRowDrag: PendingRowDragController;
-  readonly pendingCellTap: PendingCellTapController;
-  readonly touchScroll: TouchScrollController;
+  readonly pendingRowDrag: PendingRowDragController<TData>;
+  readonly pendingCellTap: PendingCellTapController<TData>;
+  readonly touchScroll: TouchScrollController<TData>;
   readonly input: InputEventAdapter<TData>;
 
   coreRef: GridCore<TData> | null = null;
@@ -48,18 +48,18 @@ export class GpGridBindings<TData = unknown> {
       () => this.deps.getBody(),
       (event) => this.input.dragMove(event),
     );
-    this.pendingRowDrag = new PendingRowDragController({
+    this.pendingRowDrag = new PendingRowDragController<TData>({
       getCore: () => this.coreRef,
       getContainer: this.deps.getContainer,
       isBrowser: this.deps.isBrowser,
       onDragConfirmed: (state) => this.deps.vm.dragState.set(state),
     });
-    this.pendingCellTap = new PendingCellTapController({
+    this.pendingCellTap = new PendingCellTapController<TData>({
       getCore: () => this.coreRef,
       isBrowser: this.deps.isBrowser,
       onTapConfirmed: () => this.deps.getContainer()?.focus(),
     });
-    this.touchScroll = new TouchScrollController({
+    this.touchScroll = new TouchScrollController<TData>({
       getCore: () => this.coreRef,
       getScrollEl: this.deps.getBody,
       isBrowser: this.deps.isBrowser,

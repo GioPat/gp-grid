@@ -6,6 +6,7 @@ import type {
   ColumnDefinition as CoreColumnDefinition,
   CellRendererParams,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
   EditRendererParams,
   GridLabelOverrides,
   HeaderRendererParams,
@@ -91,6 +92,8 @@ export interface GpGridProps<TData = unknown> {
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /** Called when a write is refused because the bound source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */

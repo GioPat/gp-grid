@@ -208,7 +208,7 @@ The minimal wrapper does five things, in order:
 2. **Instantiate `GridCore`** with the user's options.
 3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
-5. **Forward output callbacks** — `onCellValueChanged`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved` — back out to the user's API.
+5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved` — back out to the user's API.
 
 For a complete reference implementation, read **`packages/react/src/Grid.tsx`** and **`packages/react/src/gridState/`** end to end. The Vue wrapper (`packages/vue/src/GpGrid.vue` + `packages/vue/src/gridState/`) is the same shape with Vue reactivity. The Angular wrapper (`packages/angular/src/lib/gp-grid.component.ts` + `gp-grid-bindings.ts` + `gp-grid-view-model.ts`) is the same shape with signals.
 
