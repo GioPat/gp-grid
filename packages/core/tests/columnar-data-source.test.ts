@@ -1,9 +1,14 @@
 // packages/core/tests/columnar-data-source.test.ts
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { GridCore } from "../src/grid-core";
 import { createColumnarDataSource } from "../src/data-source";
-import { isColumnarDataSource, type ColumnDefinition } from "../src/types";
+import {
+  isColumnarDataSource,
+  type CellValueChangedEvent,
+  type CellWriteRejectedEvent,
+  type ColumnDefinition,
+} from "../src/types";
 
 const ids = [1, 2, 3, 4, 5];
 const names = ["Alice", "Bob", "Charlie", "Diana", "Eve"];
@@ -213,9 +218,75 @@ describe("GridCore with a columnar source", () => {
     expect(displayed).toEqual(["Alice", "Charlie", "Diana"]);
   });
 
-  it("rejects every write path and reports the rejection", async () => {
+  it("reports an independent rejection for every write path", async () => {
     const { source } = makeSource();
-    const rejected: Array<{ row: number; col: number; field: string; reason: string }> = [];
+    const rejected: CellWriteRejectedEvent[] = [];
+    const changed: CellValueChangedEvent<never>[] = [];
+    const grid = new GridCore({
+      columns,
+      dataSource: source,
+      rowHeight: 32,
+      onWriteRejected: (event) => rejected.push(event),
+      // Required by the config when onCellValueChanged is present; the
+      // read-only source must never invoke it.
+      getRowId: () => 0,
+      onCellValueChanged: (event) => changed.push(event),
+    });
+    await grid.initialize();
+
+    // Direct setter.
+    grid.setCellValue(0, 1, "Mallory");
+    expect(grid.getCellValue(0, 1)).toBe("Alice");
+    expect(rejected).toEqual([
+      expect.objectContaining({
+        row: 0,
+        col: 1,
+        field: "name",
+        reason: "read-only-source",
+        operation: "setCellValue",
+      }),
+    ]);
+
+    // Edit activation on an editable column of a read-only source.
+    rejected.length = 0;
+    grid.startEdit(0, 1);
+    expect(grid.getEditState()).toBeNull();
+    expect(rejected).toEqual([
+      expect.objectContaining({ row: 0, col: 1, field: "name", operation: "edit" }),
+    ]);
+
+    // Paste into the active cell.
+    rejected.length = 0;
+    grid.selection.startSelection({ row: 0, col: 1 });
+    expect(grid.pasteClipboardText("Mallory")).toBe(false);
+    expect(rejected).toEqual([
+      expect.objectContaining({ row: 0, col: 1, field: "name", operation: "paste" }),
+    ]);
+
+    // Fill drag start.
+    rejected.length = 0;
+    grid.fill.startFillDrag({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 });
+    expect(grid.fill.isActive()).toBe(false);
+    expect(rejected).toEqual([
+      expect.objectContaining({ row: 0, col: 1, field: "name", operation: "fill" }),
+    ]);
+
+    // Source row move.
+    rejected.length = 0;
+    grid.commitRowDrag(0, 2);
+    expect(rejected).toEqual([
+      expect.objectContaining({ row: 0, col: -1, operation: "row-move" }),
+    ]);
+
+    // No attempted operation produced a successful change event.
+    expect(changed).toEqual([]);
+    expect(names).toEqual(["Alice", "Bob", "Charlie", "Diana", "Eve"]);
+    expect(scores).toEqual([50, 20, 40, 10, 30]);
+  });
+
+  it("does not report a rejection for a disabled, non-editable column", async () => {
+    const { source } = makeSource();
+    const rejected: CellWriteRejectedEvent[] = [];
     const grid = new GridCore({
       columns,
       dataSource: source,
@@ -224,22 +295,10 @@ describe("GridCore with a columnar source", () => {
     });
     await grid.initialize();
 
-    grid.startEdit(0, 1);
+    // Column 0 (id) is not editable, so the control is disabled: no event.
+    grid.startEdit(0, 0);
     expect(grid.getEditState()).toBeNull();
-
-    grid.setCellValue(0, 1, "Mallory");
-    expect(grid.getCellValue(0, 1)).toBe("Alice");
-
-    grid.selection.startSelection({ row: 0, col: 1 });
-    const pasted = grid.pasteClipboardText("Mallory");
-    expect(pasted).toBe(false);
-
-    grid.fill.startFillDrag({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 });
-    expect(grid.fill.isActive()).toBe(false);
-
-    expect(rejected.length).toBeGreaterThan(0);
-    expect(rejected.every((event) => event.reason === "read-only-source")).toBe(true);
-    expect(names).toEqual(["Alice", "Bob", "Charlie", "Diana", "Eve"]);
+    expect(rejected).toEqual([]);
   });
 
   it("re-binds a new revision explicitly on refresh", async () => {
@@ -253,6 +312,162 @@ describe("GridCore with a columnar source", () => {
 
     expect(source.revision).toBe(1);
     expect(grid.getCellValue(0, 1)).toBe("Alicia");
+  });
+});
+
+const INDEX_KEY = /^\d+$/;
+
+/**
+ * Wrap a borrowed store so every numeric cell read is observable. The grid
+ * keeps the proxy as-is, so a hidden full copy or eager scan would show up as
+ * reads performed at construction/bind time instead of per requested cell.
+ */
+const countingReads = <T extends object>(target: T) => {
+  let reads = 0;
+  const data = new Proxy(target, {
+    get(source, property) {
+      if (typeof property === "string" && INDEX_KEY.test(property)) reads += 1;
+      return Reflect.get(source, property, source);
+    },
+  });
+  return { data, reads: () => reads };
+};
+
+describe("borrowed storage and observable reads", () => {
+  it("reads changed caller-owned arrays through a revision refresh", async () => {
+    const names = ["Ada", "Grace", "Linus"];
+    const scores = [10, 20, 30];
+    const nameStore = countingReads(names);
+    let scoreReads = 0;
+    const source = createColumnarDataSource({
+      fields: [
+        { field: "name", data: nameStore.data },
+        {
+          field: "score",
+          getValue: (row) => {
+            scoreReads += 1;
+            return scores[row]!;
+          },
+        },
+      ],
+    });
+    const grid = new GridCore({
+      columns: [
+        { field: "name", cellDataType: "text", width: 120 },
+        { field: "score", cellDataType: "number", width: 80 },
+      ],
+      dataSource: source,
+      rowHeight: 32,
+    });
+
+    await grid.initialize();
+    grid.setViewport(0, 0, 400, 96);
+    // Construction, binding and the first window read no cells: a mandatory
+    // deferred scan or eager full copy would be visible here.
+    expect(nameStore.reads()).toBe(0);
+    expect(scoreReads).toBe(0);
+
+    names[1] = "Grace Hopper";
+    scores[1] = 99;
+    source.setRevision(1);
+    await grid.refresh();
+
+    // A revision refresh re-reads metadata, not the whole column.
+    expect(nameStore.reads()).toBe(0);
+
+    expect(grid.getCellValue(1, 0)).toBe("Grace Hopper");
+    expect(grid.getCellValue(1, 1)).toBe(99);
+    // Reading one cell reads exactly one borrowed value and one accessor value.
+    expect(nameStore.reads()).toBe(1);
+    expect(scoreReads).toBe(1);
+  });
+
+  it("reads a nonzero-offset typed-array view at its own boundaries", async () => {
+    const backing = new Float64Array([111, 222, 3, 4, 5, 6, 777, 888]);
+    const view = backing.subarray(2, 6);
+    const store = countingReads(view);
+    const source = createColumnarDataSource({
+      rowCount: 4,
+      fields: [{ field: "v", data: store.data }],
+    });
+
+    expect(store.reads()).toBe(0);
+
+    const grid = new GridCore({
+      columns: [{ field: "v", cellDataType: "number", width: 80 }],
+      dataSource: source,
+      rowHeight: 32,
+    });
+    await grid.initialize();
+    grid.setViewport(0, 0, 200, 128);
+    expect(store.reads()).toBe(0);
+
+    // Values come from the view's offset, not the backing buffer start.
+    expect(source.access.getValue(0, "v")).toBe(3);
+    expect(source.access.getValue(3, "v")).toBe(6);
+    expect(store.reads()).toBe(2);
+    // Reads outside the declared view are null, never a neighbour's value.
+    expect(source.access.getValue(-1, "v")).toBeNull();
+    expect(source.access.getValue(4, "v")).toBeNull();
+    expect(store.reads()).toBe(2);
+
+    backing[2] = 30;
+    backing[5] = 60;
+    // Values just outside the view must never leak into a cell.
+    backing[1] = 999;
+    backing[6] = 888;
+    source.setRevision(1);
+    await grid.refresh();
+
+    expect(grid.getCellValue(0, 0)).toBe(30);
+    expect(grid.getCellValue(3, 0)).toBe(60);
+    // The caller's view keeps its own buffer, offset and length.
+    expect(view.buffer).toBe(backing.buffer);
+    expect(view.byteOffset).toBe(16);
+    expect(view.length).toBe(4);
+
+    grid.destroy();
+    // Teardown never detaches or frees the caller's buffer.
+    expect(backing[2]).toBe(30);
+  });
+
+  it("never materializes records and resolves identity lazily", async () => {
+    const names = ["Ada", "Grace", "Linus"];
+    const scores = [30, 10, 20];
+    let identityReads = 0;
+    const source = createColumnarDataSource({
+      fields: [
+        { field: "name", data: names },
+        { field: "score", data: scores },
+      ],
+      getRowId: (row) => {
+        identityReads += 1;
+        return row + 100;
+      },
+    });
+    const getRecord = vi.spyOn(source, "getRecord");
+    const grid = new GridCore({
+      columns: [
+        { field: "name", cellDataType: "text", width: 120 },
+        { field: "score", cellDataType: "number", width: 80 },
+      ],
+      dataSource: source,
+      rowHeight: 32,
+    });
+
+    await grid.initialize();
+    grid.setViewport(0, 0, 400, 128);
+    await grid.setSort("score", "asc");
+    await grid.setFilter("name", "a");
+    await grid.refresh();
+
+    // No implicit record materialization on bind, render, sort, filter, refresh.
+    expect(getRecord).not.toHaveBeenCalled();
+    // Binding never enumerates rows to build an eager ID table.
+    expect(identityReads).toBe(0);
+    const id = grid.getRowId(0);
+    expect(typeof id).toBe("number");
+    expect(identityReads).toBe(1);
   });
 });
 
