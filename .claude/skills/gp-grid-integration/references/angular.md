@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onColumnResized)`, `(onColumnMoved)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)` outputs:
 
 ```html
 <gp-grid
@@ -389,6 +389,7 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onColumnResize
   [rowHeight]="36"
   [getRowId]="getRowId"
   (onCellValueChanged)="onCellValueChanged($event)"
+  (onWriteRejected)="onWriteRejected($event)"
   (onRowDragEnd)="onRowDragEnd($event)"
   (onColumnResized)="onColumnResized($event)"
   (onColumnMoved)="onColumnMoved($event)"
@@ -398,11 +399,12 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onColumnResize
 Output payloads:
 
 - `onCellValueChanged: CellValueChangedEvent<TData>` — full event from core
+- `onWriteRejected: CellWriteRejectedEvent` — a read-only source refused a write; `operation` names the entry point
 - `onRowDragEnd: { source: number; target: number }`
 - `onColumnResized: { colIndex: number; newWidth: number }`
 - `onColumnMoved: { fromIndex: number; toIndex: number }`
 
-`getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference).
+`getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
 ## Localization and text wrapping
 
@@ -499,6 +501,7 @@ Outputs:
 |---|---|
 | `(onRowDragEnd)` | `{ source: number; target: number }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<unknown>` |
+| `(onWriteRejected)` | `CellWriteRejectedEvent` |
 | `(onColumnResized)` | `{ colIndex: number; newWidth: number }` |
 | `(onColumnMoved)` | `{ fromIndex: number; toIndex: number }` |
 

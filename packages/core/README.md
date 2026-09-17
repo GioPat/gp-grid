@@ -242,6 +242,38 @@ Update all resident columns to consistent lengths before adopting a revision. An
 
 Columnar rows have no materialized record: `grid.getRowData(viewIndex)` returns `undefined`. Read raw values with `grid.getCellValue(viewIndex, colIndex)` or `grid.getFieldValue(viewIndex, field)`, including source fields without a grid column. Cell renderers use `params.getValue(field)` and `params.rowId`; `params.value` remains the formatted display value.
 
+#### Read-only write rejection
+
+Every write entry point refuses a columnar source and reports it through the
+`onWriteRejected` option, independently of a column's `editable` flag:
+
+```typescript
+const grid = new GridCore({
+  columns,
+  dataSource: source,
+  rowHeight: 32,
+  onWriteRejected: (event) => {
+    // event.reason is always "read-only-source".
+    // event.operation is one of:
+    //   "setCellValue" | "edit" | "paste" | "fill" | "row-move"
+    console.warn(`Refused ${event.operation} on row ${event.row}, col ${event.col}`);
+  },
+});
+```
+
+| Attempt | Result on a columnar source | `operation` |
+| --- | --- | --- |
+| `grid.setCellValue(row, col, value)` | value unchanged; rejection event | `"setCellValue"` |
+| `grid.startEdit(row, col)` on an `editable` column | no edit state; rejection event | `"edit"` |
+| `grid.pasteClipboardText(text)` | returns `false`; rejection event | `"paste"` |
+| `grid.fill.startFillDrag(range)` | no active fill; rejection event | `"fill"` |
+| `grid.commitRowDrag(from, to)` | no reorder and no `onRowDragEnd`; rejection event | `"row-move"` |
+
+A non-editable column is a disabled control and emits no attempted-command
+event. A rejected write never emits `onCellValueChanged`. React and Vue accept
+`onWriteRejected` as a prop and Angular exposes it as an `(onWriteRejected)`
+output; all three re-export `createColumnarDataSource` and friends.
+
 ### Server-Side Data Source
 
 For large datasets that require server-side row-window loading, sorting, and filtering.

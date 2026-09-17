@@ -113,9 +113,20 @@ const source = createColumnarDataSource({
 });
 ```
 
-- Columnar sources are **read-only**: editing, paste, fill and direct setters are
-  refused and `onWriteRejected` fires. Sorting, filtering, selection, copy and
-  column layout still work; sorting never mutates your arrays.
+- Columnar sources are **read-only**: editing, paste, fill, direct setters and
+  row moves are refused, and each fires `onWriteRejected` with an `operation`
+  (`"setCellValue" | "edit" | "paste" | "fill" | "row-move"`). Pass
+  `onWriteRejected` as a React/Vue prop or an Angular `(onWriteRejected)`
+  output; a rejected write never fires `onCellValueChanged`. A non-editable
+  column emits nothing. Sorting, filtering, selection, copy and column layout
+  still work; sorting never mutates your arrays.
+- React, Vue and Angular re-export `createColumnarDataSource` (and the columnar
+  source types), so the source can be built without a direct core import.
+  Angular also exposes a `core` getter, matching `gridRef.core` in React and the
+  exposed `core` in Vue, for `await core.refresh()` after a revision.
+- Rendering reads only the mounted window: binding, scrolling and revision
+  refresh never scan the borrowed columns, and the grid never materializes
+  records (`source.getRecord` is opt-in).
 - `field` is the source-field key; `headerName` is the display label. If a column
   uses a different `colId`, the grid maps it to the source field automatically.
 - Cell renderers get `rowData: undefined` for a columnar row; read a value with
