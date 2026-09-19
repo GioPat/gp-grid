@@ -5,6 +5,12 @@ import type {
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
+  GridCore,
+  RowDragEndEvent,
 } from '@gp-grid/angular';
 
 interface ConformanceRow {
@@ -127,6 +133,12 @@ const createColumnarFixture = () => {
         <button data-testid="reset" (click)="reset()">Reset</button>
         <button data-testid="remount" (click)="remount()">Remount</button>
         <button data-testid="replace-columns" (click)="replaceColumns()">Replace columns</button>
+        <button data-testid="apply-column-state" (click)="applyColumnState()">Apply column state</button>
+        <button data-testid="reset-column-state" (click)="resetColumnState()">Reset column state</button>
+        <button data-testid="apply-sort" (click)="applySort()">Apply sort</button>
+        <button data-testid="apply-filter" (click)="applyFilter()">Apply filter</button>
+        <button data-testid="move-column" (click)="moveColumn()">Move column</button>
+        <button data-testid="drag-row" (click)="dragRow()">Drag row</button>
         <button data-testid="use-columnar" (click)="useColumnar()">Use columnar</button>
         <button data-testid="use-object" (click)="useObject()">Use object</button>
         <button data-testid="bump-revision" (click)="bumpRevision()">Bump revision</button>
@@ -137,22 +149,30 @@ const createColumnarFixture = () => {
           @if (mode() === 'columnar') {
             <gp-grid
               [columns]="columnarColumns"
+              [columnState]="columnState()"
               [dataSource]="columnarSource"
               [rows]="emptyRows"
               [rowHeight]="32"
               [headerHeight]="36"
               [getRowId]="getRowId"
               (onCellValueChanged)="onCellValueChanged($event)"
-              (onWriteRejected)="onWriteRejected($event)" />
+              (onWriteRejected)="onWriteRejected($event)"
+              (onColumnResized)="onColumnResized($event)"
+              (onColumnMoved)="onColumnMoved($event)"
+              (onRowDragEnd)="onRowDragEnd($event)" />
           } @else {
             <gp-grid
               [columns]="columns()"
+              [columnState]="columnState()"
               [rows]="rows()"
               [rowHeight]="32"
               [headerHeight]="36"
               [getRowId]="getRowId"
               (onCellValueChanged)="onCellValueChanged($event)"
-              (onWriteRejected)="onWriteRejected($event)" />
+              (onWriteRejected)="onWriteRejected($event)"
+              (onColumnResized)="onColumnResized($event)"
+              (onColumnMoved)="onColumnMoved($event)"
+              (onRowDragEnd)="onRowDragEnd($event)" />
           }
         }
       </div>
@@ -174,6 +194,10 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   protected readonly generation = signal(0);
   protected readonly editEvents = signal(0);
   protected readonly writeRejected = signal(0);
+  protected readonly columnState = signal<ColumnStateUpdate[]>([]);
+  private readonly eventCounts = { resized: 0, moved: 0, dragged: 0 };
+  private readonly coreTokens = new WeakMap<object, number>();
+  private nextCoreToken = 1;
   protected readonly metrics = () => JSON.stringify({
     generation: this.generation(),
     editEvents: this.editEvents(),
@@ -182,6 +206,21 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     revision: this.revision(),
   });
   protected readonly getRowId = (row: unknown): number => (row as ConformanceRow).id;
+
+  private coreOf(): GridCore<unknown> | null {
+    return this.grid?.core ?? null;
+  }
+
+  private readCoreToken(): number {
+    const core = this.coreOf();
+    if (!core) return -1;
+    const existing = this.coreTokens.get(core);
+    if (existing !== undefined) return existing;
+    const token = this.nextCoreToken;
+    this.nextCoreToken += 1;
+    this.coreTokens.set(core, token);
+    return token;
+  }
 
   ngAfterViewInit(): void {
     if (typeof window === 'undefined') return;
@@ -193,6 +232,18 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
       sourceDistinctRows: (): number => this.fixture.distinctRows(),
       resetSourceReads: (): void => this.fixture.resetReads(),
       recordMaterializations: (): number => this.fixture.recordMaterializations(),
+      coreToken: (): number => this.readCoreToken(),
+      columnIds: (): string[] =>
+        this.coreOf()?.getColumns().map((column) => column.colId ?? column.field) ?? [],
+      columnState: (): ColumnStateSnapshot[] => this.coreOf()?.getColumnState() ?? [],
+      sortColumn: (): string | null => this.coreOf()?.getSortModel()[0]?.colId ?? null,
+      filterCount: (): number => Object.keys(this.coreOf()?.getFilterModel() ?? {}).length,
+      eventCounts: () => ({ ...this.eventCounts }),
+      resetEventCounts: (): void => {
+        this.eventCounts.resized = 0;
+        this.eventCounts.moved = 0;
+        this.eventCounts.dragged = 0;
+      },
     };
   }
 
@@ -213,9 +264,13 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     this.mounted.set(false);
     this.rows.set(createRows());
     this.columns.set(createColumns());
+    this.columnState.set([]);
     this.mode.set('object');
     this.editEvents.set(0);
     this.writeRejected.set(0);
+    this.eventCounts.resized = 0;
+    this.eventCounts.moved = 0;
+    this.eventCounts.dragged = 0;
     window.setTimeout(() => {
       this.generation.update((value) => value + 1);
       this.mounted.set(true);
@@ -256,5 +311,42 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
 
   protected onWriteRejected(_event: CellWriteRejectedEvent): void {
     this.writeRejected.update((value) => value + 1);
+  }
+
+  protected onColumnResized(_event: ColumnResizedEvent): void {
+    this.eventCounts.resized += 1;
+  }
+
+  protected onColumnMoved(_event: ColumnMovedEvent): void {
+    this.eventCounts.moved += 1;
+  }
+
+  protected onRowDragEnd(_event: RowDragEndEvent): void {
+    this.eventCounts.dragged += 1;
+  }
+
+  protected applyColumnState(): void {
+    this.columnState.set([{ columnId: 'city', width: 260 }]);
+  }
+
+  protected resetColumnState(): void {
+    this.columnState.set([]);
+    this.coreOf()?.resetColumnState();
+  }
+
+  protected applySort(): void {
+    void this.coreOf()?.setSort('score', 'asc');
+  }
+
+  protected applyFilter(): void {
+    void this.coreOf()?.setFilter('city', 'City 1');
+  }
+
+  protected moveColumn(): void {
+    this.coreOf()?.moveColumn(0, 2);
+  }
+
+  protected dragRow(): void {
+    this.coreOf()?.commitRowDrag(0, 1);
   }
 }

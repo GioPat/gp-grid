@@ -56,6 +56,43 @@ const readRawCell = (page: Page, row: number, col: number): Promise<unknown> =>
     { row, col },
   );
 
+/** Call a zero-argument conformance hook exposed by the shared fixtures. */
+const readHook = <T>(page: Page, name: string): Promise<T> =>
+  page.evaluate((hookName) => {
+    const hooks = (globalThis as unknown as {
+      __gpConformance?: Record<string, () => unknown>;
+    }).__gpConformance;
+    return hooks?.[hookName]?.() ?? null;
+  }, name) as Promise<T>;
+
+interface ColumnStateSnapshot {
+  columnId: string;
+  width: number;
+  hidden: boolean;
+  order: number;
+}
+
+const coreToken = (page: Page): Promise<number> => readHook<number>(page, "coreToken");
+const sortColumn = (page: Page): Promise<string | null> => readHook<string | null>(page, "sortColumn");
+const filterCount = (page: Page): Promise<number> => readHook<number>(page, "filterCount");
+const columnState = (page: Page): Promise<ColumnStateSnapshot[]> =>
+  readHook<ColumnStateSnapshot[]>(page, "columnState");
+const columnIds = (page: Page): Promise<string[]> => readHook<string[]>(page, "columnIds");
+const eventCounts = (page: Page): Promise<{ resized: number; moved: number; dragged: number }> =>
+  readHook<{ resized: number; moved: number; dragged: number }>(page, "eventCounts");
+const resetEventCounts = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const hooks = (globalThis as unknown as {
+      __gpConformance?: { resetEventCounts?: () => void };
+    }).__gpConformance;
+    hooks?.resetEventCounts?.();
+  });
+
+const cityWidth = async (page: Page): Promise<number> => {
+  const state = await columnState(page);
+  return state.find((entry) => entry.columnId === "city")?.width ?? -1;
+};
+
 // Columnar fixture shape, mirrored from the three conformance apps.
 const COLUMNAR_ROW_COUNT = 200;
 const COLUMNAR_COLUMN_COUNT = 8;
@@ -174,14 +211,9 @@ test("replace caller-owned columns", async ({ page }, testInfo) => {
   expect(pageErrors).toEqual([]);
 });
 
-// Regression for the original defect setup. The plain replacement test above
-// is unmarked because it passes everywhere; the defect only reproduces once the
-// column has been resized first, so the marker lives here.
+// Regression for the original defect setup. Both the plain and the
+// resize-then-replace paths now reconcile in one atomic batch.
 test("resize then replace caller-owned columns", async ({ page }, testInfo) => {
-  test.fail(
-    testInfo.project.name === "vue" || testInfo.project.name === "angular",
-    "Baseline defect owned by PRD 002: after a column resize, Vue and Angular do not reconcile a replacement columns input.",
-  );
   const pageErrors = await openFixture(page, testInfo.project.name);
   const header = page.locator('.gp-grid-header-cell[data-col-index="1"]');
   const initialWidth = (await header.boundingBox())?.width ?? 0;
@@ -201,6 +233,68 @@ test("resize then replace caller-owned columns", async ({ page }, testInfo) => {
   await expect(page.locator(".gp-grid-header-cell")).toHaveCount(3);
   await expect(page.locator(".gp-grid-header-cell")).toContainText(["Score", "City", "Replacement"]);
   await expect(page.locator(".gp-grid-header-cell", { hasText: "Name" })).toHaveCount(0);
+  expect(await columnIds(page)).toEqual(["score", "city", "replacement"]);
+  expect(pageErrors).toEqual([]);
+});
+
+test("replacement keeps the core instance, sort and scroll", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await page.getByTestId("apply-sort").click();
+  await expect.poll(() => sortColumn(page)).toBe("score");
+  await scrollBody(page, 3_200, 0);
+  const token = await coreToken(page);
+
+  await page.getByTestId("replace-columns").click();
+  await expect(page.locator(".gp-grid-header-cell")).toHaveCount(3);
+  await expect.poll(() => coreToken(page)).toBe(token);
+  await expect.poll(() => sortColumn(page)).toBe("score");
+  await expect.poll(async () => (await scrollMetrics(page)).scrollTop).toBeGreaterThanOrEqual(3_200);
+  expect(pageErrors).toEqual([]);
+});
+
+test("replacement keeps a filter on a surviving column", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await page.getByTestId("apply-filter").click();
+  await expect.poll(() => filterCount(page)).toBe(1);
+
+  await page.getByTestId("replace-columns").click();
+  await expect(page.locator(".gp-grid-header-cell")).toHaveCount(3);
+  await expect.poll(() => filterCount(page)).toBe(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("an explicit resetColumnState beats retained user state", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await page.getByTestId("apply-column-state").click();
+  await expect.poll(() => cityWidth(page)).toBe(260);
+
+  await page.getByTestId("reset-column-state").click();
+  await expect.poll(() => cityWidth(page)).toBe(140);
+  expect(pageErrors).toEqual([]);
+});
+
+test("resize, move and row-drag emit object events", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await resetEventCounts(page);
+
+  const header = page.locator('.gp-grid-header-cell[data-col-index="2"]');
+  const handle = header.locator(".gp-grid-header-resize-handle");
+  const handleBox = await handle.boundingBox();
+  if (handleBox === null) {
+    throw new Error("Column resize handle is not measurable.");
+  }
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + 40, handleBox.y + handleBox.height / 2);
+  await page.mouse.up();
+
+  await page.getByTestId("move-column").click();
+  await page.getByTestId("drag-row").click();
+
+  const counts = await eventCounts(page);
+  expect(counts.resized).toBeGreaterThanOrEqual(1);
+  expect(counts.moved).toBeGreaterThanOrEqual(1);
+  expect(counts.dragged).toBeGreaterThanOrEqual(1);
   expect(pageErrors).toEqual([]);
 });
 
