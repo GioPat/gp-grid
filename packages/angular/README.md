@@ -128,6 +128,35 @@ export class App {
 
 `provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source.
 
+## Column state and events
+
+`columnState` is an optional input of type `ColumnStateUpdate[]` — `{ columnId, width?, hidden?, order? }` — applied through the core whenever it changes.
+
+| Output | Payload |
+| --- | --- |
+| `(onColumnResized)` | `{ columnId, width, viewIndex }` |
+| `(onColumnMoved)` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
+| `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
+
+```html
+<gp-grid
+  [columns]="columns"
+  [columnState]="columnState"
+  [dataSource]="grid.dataSource"
+  [rowHeight]="36"
+  (onColumnResized)="onResized($event)"
+  (onColumnMoved)="onMoved($event)" />
+```
+
+### Migration from 0.x
+
+The old payloads `{ colIndex, newWidth }`, `{ fromIndex, toIndex }` and `{ source, target }` became `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }` and `{ rowId, fromViewIndex, toViewIndex }`. There is no compatibility adapter.
+
+Reassigning `columns` reconciles the schema by `ColumnId` (`colId ?? field`) without recreating the core: retained columns keep their user width/order/visibility, unrelated sort/filter/scroll survives, and removed columns drop their headers and state. A definition `width`/`hidden` change only applies when the column has no user override for that property; otherwise call `resetColumnState(["id"])` on the exposed core.
+
+The public website documentation for this package lives outside this repository and should be updated by the maintainer.
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE).

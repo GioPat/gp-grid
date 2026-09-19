@@ -29,6 +29,7 @@ A framework-agnostic TypeScript library for building high-performance data grids
 - [Architecture Overview](#architecture-overview)
 - [Data Sources](#data-sources)
 - [Types Reference](#types-reference)
+- [Column identity and state](#column-identity-and-state)
 - [Creating a Framework Adapter](#creating-a-framework-adapter)
 - [API Reference](#api-reference)
 - [Donations](#donations)
@@ -143,7 +144,7 @@ The core emits these instruction types:
 | `MOVE_SLOT`                                   | Update slot position (translateY) |
 | `SET_ACTIVE_CELL`                             | Update active cell highlight      |
 | `SET_SELECTION_RANGE`                         | Update selection range            |
-| `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode                  |
+| `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode; `START_EDIT` carries `editId` and is re-sent with the draft when the edited column moves |
 | `COMMIT_EDIT`                                 | Commit edited value               |
 | `UPDATE_HEADER`                               | Update header with sort state     |
 | `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle              |
@@ -383,7 +384,8 @@ interface ColumnDefinition {
   field: string; // Property path in row data
   colId?: string; // Unique column ID (defaults to field)
   cellDataType: CellDataType; // "text" | "number" | "boolean" | "date" | "object"
-  width: number; // Column width in pixels
+  width: number; // Initial width in pixels; live width lives in the core
+  hidden?: boolean; // Initial visibility; live visibility lives in the core
   headerName?: string; // Display name (defaults to field)
   editable?: boolean; // Enable cell editing
   cellRenderer?: string; // Custom renderer key
@@ -397,9 +399,12 @@ interface ColumnDefinition {
 When building framework adapters, these params are passed to custom renderers:
 
 ```typescript
-interface CellRendererParams {
+interface CellRendererParams<TData = unknown> {
   value: CellValue;
-  rowData: Row;
+  rowData?: TData;
+  rowId?: RowId;
+  columnId: string;
+  getValue?: (field: string) => CellValue;
   column: ColumnDefinition;
   rowIndex: number;
   colIndex: number;
@@ -417,12 +422,92 @@ interface EditRendererParams extends CellRendererParams {
 
 interface HeaderRendererParams {
   column: ColumnDefinition;
+  columnId: string;
   colIndex: number;
   sortDirection?: SortDirection;
   sortIndex?: number;
   onSort: (direction: SortDirection | null, addToExisting: boolean) => void;
 }
 ```
+
+## Column identity and state
+
+### The three layers
+
+1. **Caller definitions** — the `columns` array you pass in. Immutable input: the grid never writes to it.
+2. **Live column state** — per-column `width`, `hidden` and order, owned by the core and keyed by `ColumnId`.
+3. **Resolved layout** — ordered definitions with the live state applied, plus positions, hit-testing and rendering.
+
+`ColumnId` is `colId ?? field`, a plain string.
+
+### Precedence
+
+Definition defaults < retained user state < explicit commands.
+
+A definition's `width`, `hidden` and position are initial defaults only. State retained from resizing, moving or hiding survives a `columns` replacement; passing a new array reference is never a reset. Definition order stays authoritative until a column is moved with `moveColumn`/`setColumnState({ order })`.
+
+### Commands
+
+```typescript
+interface ColumnStateUpdate {
+  columnId: string;
+  width?: number;
+  hidden?: boolean;
+  order?: number;
+}
+
+interface ColumnStateSnapshot {
+  columnId: string;
+  width: number;
+  hidden: boolean;
+  order: number;
+}
+```
+
+| Command | Behavior |
+| --- | --- |
+| `setColumnState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. |
+| `resetColumnState(columnIds?)` | Drop user state. No argument resets every column to its definition defaults; IDs reset only those columns. |
+| `getColumnState()` | Effective width, visibility and order per column, in layout order. |
+
+### Duplicate ids
+
+Definitions with the same `ColumnId` warn once with `[gp-grid] Duplicate column id "x"` and the first definition wins.
+
+### Frozen definitions
+
+Definitions are caller-owned and the grid treats them as read-only. Resizing, moving and hiding record state in the core; they never mutate the definitions array or the objects inside it.
+
+### Migrating from 0.x
+
+```ts
+// 0.x: mutated the caller's definition
+columns[2].width = newWidth;
+// 1.0
+grid.setColumnState([{ columnId: "city", width: newWidth }]);
+grid.resetColumnState(["city"]);
+```
+
+### Events
+
+Column and row interaction events are object-shaped.
+
+| Event | Payload |
+| --- | --- |
+| `onColumnResized` | `{ columnId, width, viewIndex }` |
+| `onColumnMoved` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `onRowDragEnd` | `{ rowId, fromViewIndex, toViewIndex }` |
+
+`CellValueChangedEvent` gained `columnId`; `colIndex` remains and is the current view column index. Cell, edit and header renderer params gained `columnId` as well.
+
+### Record access
+
+- `getViewRow(viewIndex): ViewRow<TData> | undefined` — `ViewRow` is `{ kind: "record"; id: RowId; viewIndex: number; record?: TData }`, built on request. `id` falls back to the source position when no `getRowId` is configured.
+- `getRecordById(rowId): TData | undefined` — answers for resident rows and for sources that provide a direct lookup; columnar and server windows outside the resident set are not searched.
+- `hasRow(viewIndex)` — whether the view row exists; a `null` cell is a value, not an unloaded row.
+- `getSlotGeneration(rowIndex)` / `isSlotGenerationCurrent(rowIndex, generation)` — tag async renderer callbacks so stale slot assignments can be dropped.
+- `getRowData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
+- `getRowCount()` — the number of displayed view rows (after sort/filter).
 
 ## Creating a Framework Adapter
 
@@ -507,18 +592,28 @@ class MyGridAdapter {
 
 ### GridCore Methods
 
-| Method                                              | Description                           |
-| --------------------------------------------------- | ------------------------------------- |
-| `initialize()`                                      | Initialize grid and load initial data |
-| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize      |
-| `setSort(colId, direction, addToExisting)`          | Set column sort                       |
-| `setFilter(colId, value)`                           | Set column filter                     |
-| `startEdit(row, col)`                               | Start editing a cell                  |
-| `commitEdit()`                                      | Commit current edit                   |
-| `cancelEdit()`                                      | Cancel current edit                   |
-| `refresh()`                                         | Refetch data from source              |
-| `getRowCount()`                                     | Get total row count                   |
-| `getRowData(rowIndex)`                              | Get data for a specific row           |
+| Method                                              | Description                                |
+| --------------------------------------------------- | ------------------------------------------ |
+| `initialize()`                                      | Initialize grid and load initial data      |
+| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
+| `setColumns(columns)`                               | Reconcile definitions by `ColumnId`        |
+| `setColumnState(updates)`                           | Apply explicit width/hidden/order commands |
+| `resetColumnState(columnIds?)`                      | Drop user column state                     |
+| `getColumnState()`                                  | Effective width/hidden/order per column    |
+| `setSort(colId, direction, addToExisting)`          | Set column sort                            |
+| `setFilter(colId, value)`                           | Set column filter                          |
+| `startEdit(row, col)`                               | Start editing a cell                       |
+| `updateEditValue(value, editId?)`                   | Update the open edit's draft               |
+| `commitEdit(editId?)`                               | Commit current edit                        |
+| `cancelEdit(editId?)`                               | Cancel current edit                        |
+| `refresh()`                                         | Refetch data from source                   |
+| `getRowCount()`                                     | Displayed view-row count (after sort/filter) |
+| `getRowData(viewIndex)`                             | Source record, or `undefined` when record-less/unloaded |
+| `hasRow(viewIndex)`                                 | Whether the view row exists                |
+| `getViewRow(viewIndex)`                             | Displayed row and its identity, built on request |
+| `getRecordById(rowId)`                              | Source record by stable identity           |
+| `getSlotGeneration(rowIndex)`                       | Current slot assignment generation         |
+| `isSlotGenerationCurrent(rowIndex, generation)`     | Whether a slot generation is still current |
 
 ### GridCore Properties
 

@@ -241,20 +241,21 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
   ```ts
   interface CellValueChangedEvent<TData> {
     rowId: RowId;        // from getRowId — RowId = string | number
-    colIndex: number;
-    field: string;       // the column's `field` (NOT `colId`, NOT `column.field`, just `field`)
+    columnId: string;    // normalized identity: colId ?? field
+    colIndex: number;    // current view column index
+    field: string;       // the column's source `field`
     oldValue: CellValue;
     newValue: CellValue;
     rowData: TData;      // full row object
   }
   ```
 
-  Do **not** use `event.colId` — that field does not exist. Use `event.field` or `event.colIndex`.
+  `columnId` is the normalized `colId ?? field`; `field` is still the source field. There is no `event.colId`.
 - **Fill handle (Excel-style):** automatic on editable columns when a single cell is active or a range is selected. Drag the small square at the bottom-right of the active cell.
 - **Copy / paste:** Ctrl+C copies the selected range to clipboard as TSV; Ctrl+V pastes clipboard values across the active selection. Works automatically.
-- **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd(sourceIndex, targetIndex)` — **the consumer must reorder the underlying data**, the grid does not mutate it.
-- **Column resize / move:** on by default. Drag the right edge of a header to resize, drag the header body to reorder. Listen with `onColumnResized(colIndex, newWidth)` and `onColumnMoved(fromIndex, toIndex)` to persist user state.
-- **Column hide:** set `hidden: true` on the column (keeps it in the definition array; index references stay valid).
+- **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })` — **the consumer must reorder the underlying data**, the grid does not mutate it.
+- **Column resize / move:** on by default. Drag the right edge of a header to resize, drag the header body to reorder. Listen with `onColumnResized({ columnId, width, viewIndex })` and `onColumnMoved({ columnId, fromViewIndex, toViewIndex })` to persist user state.
+- **Column hide:** set `hidden: true` as the column's initial default (keeps it in the definition array); after mount, toggle visibility through `setColumnState` or the wrapper's `columnState` input.
 - **Highlighting (row / column / cell, incl. crosshair):** pass `highlighting={{ computeRowClasses, computeColumnClasses, computeCellClasses }}`. Each callback gets a context with `isHovered`, `isActive`, `isSelected`, etc., and returns CSS class names. Combine `computeRowClasses` + `computeColumnClasses` for an Excel-style crosshair. Define the highlight CSS classes globally (not scoped) — gp-grid renders cells outside any per-component CSS scope.
 - **Dark mode:** `darkMode={true}` adds a `.gp-grid-container--dark` modifier; the grid's CSS handles the rest.
 - **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste). All wired automatically.
@@ -262,6 +263,16 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
 - **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
+
+Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.
+
+### Column state and schema lifecycle
+
+- Column identity is `ColumnId = colId ?? field`. Duplicate ids warn once (`[gp-grid] Duplicate column id "x"`); the first definition wins and duplicates are dropped from the resolved layout.
+- Definitions are immutable caller input. Definition `width` / `hidden` / order are only initial defaults; live state lives in the core keyed by `ColumnId`.
+- Replacing the `columns` array reconciles by id and is never a reset: surviving columns keep user width, order and visibility. Definition order is authoritative until a column is moved.
+- `setColumnState(updates)` applies `{ columnId, width?, hidden?, order? }[]`; `resetColumnState(columnIds?)` resets the given ids (no arg resets all); `getColumnState()` returns `{ columnId, width, hidden, order }[]`.
+- Wrappers accept a controlled `columnState` input (React prop `columnState`, Vue `column-state`, Angular input `columnState`, typed `ColumnStateUpdate[]`) applied through `setColumnState` on every change.
 
 ### Programmatic API (`GridCore`)
 
@@ -271,11 +282,17 @@ Every wrapper exposes the underlying `GridCore` instance — same surface in eve
 |---|---|
 | `setSort(colId, direction, addToExisting)` | Programmatic sort |
 | `setFilter(colId, filterModel \| null)` | Programmatic filter (null clears) |
-| `startEdit(row, col)` / `commitEdit()` / `cancelEdit()` | Drive editing imperatively |
+| `startEdit(row, col)` / `commitEdit(editId?)` / `cancelEdit(editId?)` | Drive editing imperatively; pass `getEditState().editId` to ignore callbacks from a closed editor |
 | `setDataSource(ds)` | Swap data source without losing scroll/sort/filter state |
 | `refresh()` | Refetch from the source; call after adopting a columnar revision |
 | `refreshFromTransaction()` | Apply queued mutations |
-| `getRowCount()` / `getRowData(rowIndex)` | Inspect data |
+| `getRowCount()` | Displayed view-row count |
+| `getRowData(viewIndex)` | Source record at a view index, or `undefined` when record-less/unloaded |
+| `hasRow(viewIndex)` | Whether the view row exists (a `null` cell is a value) |
+| `getViewRow(viewIndex)` | `{ kind: "record", id, viewIndex, record? }` or `undefined` |
+| `getRecordById(rowId)` | Source record for a stable id (resident rows / source lookup only) |
+| `setColumnState(updates)` / `resetColumnState(ids?)` / `getColumnState()` | Column width / hidden / order state |
+| `getSlotGeneration(rowIndex)` / `isSlotGenerationCurrent(rowIndex, gen)` | Slot recycle guard for async renderers |
 | `selection` (manager) | `startSelection`, `extendTo`, etc. |
 | `fill` (manager) | Fill handle programmatic control |
 | `highlight.updateOptions(opts)` | Swap highlighting at runtime |
@@ -299,7 +316,7 @@ How to get the ref:
 - **`dataSource` reference unstable across renders** → grid resets on every render. Memoize (`useMemo` in React, `computed` / `shallowRef` in Vue, `inject`/DI in Angular).
 - **Custom renderer key not in registry** → cell falls back to default. Pass it via `cellRenderers={{ key: fn }}` and reference by string from the column.
 - **Highlighting CSS in scoped Vue styles or component-scoped Angular styles** → won't apply. Define those rules in a global stylesheet.
-- **Column index drift after `hidden: true`** → don't worry: the grid maps visible↔original indices internally. Event callbacks (`onColumnMoved`, etc.) report original indices.
+- **Column index drift after `hidden: true`** → don't worry: the grid maps visible↔original indices internally, and events carry `columnId` plus named view indices (`viewIndex`, `fromViewIndex`, `toViewIndex`).
 
 ## What this skill does NOT do
 

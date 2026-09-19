@@ -348,9 +348,9 @@ export class PeopleGridComponent implements AfterViewInit {
 Important details:
 
 - **Templates are resolved at `AfterViewInit`** with `{ static: true }`. Build the columns array there, then call `cdr.detectChanges()` to push the new columns into the grid input. Building columns in the constructor or class fields gives `undefined` template refs.
-- **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, etc.).
+- **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, `params.columnId`, etc.); `params.columnId` is the normalized `colId ?? field` and `params.rowId` is present when the row has a stable id.
 - **For edit renderers**, call `event.stopPropagation()` in `keydown` so the grid's keyboard handler doesn't intercept arrow keys / Enter while the user types in the editor.
-- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input.
+- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by `ColumnId` (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.setColumnState` whenever it changes.
 
 `AngularColumnDefinition` accepts three forms for each renderer:
 
@@ -400,9 +400,9 @@ Output payloads:
 
 - `onCellValueChanged: CellValueChangedEvent<TData>` — full event from core
 - `onWriteRejected: CellWriteRejectedEvent` — a read-only source refused a write; `operation` names the entry point
-- `onRowDragEnd: { source: number; target: number }`
-- `onColumnResized: { colIndex: number; newWidth: number }`
-- `onColumnMoved: { fromIndex: number; toIndex: number }`
+- `onRowDragEnd: { rowId: RowId; fromViewIndex: number; toViewIndex: number }`
+- `onColumnResized: { columnId: string; width: number; viewIndex: number }`
+- `onColumnMoved: { columnId: string; fromViewIndex: number; toViewIndex: number }`
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
@@ -438,7 +438,13 @@ const columns: AngularColumnDefinition[] = [
 
 ## Programmatic API
 
-Get the `GridCore` via `@ViewChild`. The component holds an internal `bindings.coreRef`; for now, the public path is to read it from a wrapper / proxy you maintain, or escalate by using `ViewChild` + accessing the underlying core through the component's bindings (the long-term API for this is evolving — check `packages/angular/src/lib/gp-grid.component.ts` for current exposure).
+Get the `GridCore` through the component's public `get core()` accessor:
+
+```ts
+@ViewChild(GpGridComponent) private grid?: GpGridComponent;
+
+this.grid?.core?.setSort("name", "asc");
+```
 
 For the common operations (sort, filter, edit), you'll usually drive them via `[columns]` / `[dataSource]` inputs and `output()` events instead of imperative calls.
 
@@ -475,6 +481,7 @@ Inputs:
 | Input | Type | Default |
 |---|---|---|
 | `[columns]` | `AngularColumnDefinition[]` | required |
+| `[columnState]` | `ColumnStateUpdate[]` | `null` |
 | `[rows]` | `unknown[]` | `[]` |
 | `[dataSource]` | `DataSource<unknown> \| null` | `null` |
 | `[getRowId]` | `((row: unknown) => RowId) \| null` | `null` |
@@ -499,11 +506,11 @@ Outputs:
 
 | Output | Payload |
 |---|---|
-| `(onRowDragEnd)` | `{ source: number; target: number }` |
+| `(onRowDragEnd)` | `{ rowId: RowId; fromViewIndex: number; toViewIndex: number }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<unknown>` |
 | `(onWriteRejected)` | `CellWriteRejectedEvent` |
-| `(onColumnResized)` | `{ colIndex: number; newWidth: number }` |
-| `(onColumnMoved)` | `{ fromIndex: number; toIndex: number }` |
+| `(onColumnResized)` | `{ columnId: string; width: number; viewIndex: number }` |
+| `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
 
 ## Angular-specific gotchas
 

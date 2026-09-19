@@ -262,15 +262,15 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
     :data-source="dataSource"
     :row-height="36"
     :get-row-id="(row) => row.id"
-    :on-cell-value-changed="(e) => console.log(e.field, e.oldValue, '→', e.newValue)"
-    :on-row-drag-end="(from, to) => console.log('row', from, '→', to)"
-    :on-column-resized="(colIndex, newWidth) => persist(colIndex, newWidth)"
-    :on-column-moved="(fromIndex, toIndex) => persistOrder(fromIndex, toIndex)"
+    :on-cell-value-changed="(e) => console.log(e.columnId, e.oldValue, '→', e.newValue)"
+    :on-row-drag-end="(e) => console.log('row', e.rowId, e.fromViewIndex, '→', e.toViewIndex)"
+    :on-column-resized="(e) => persist(e.columnId, e.width)"
+    :on-column-moved="(e) => persistOrder(e.columnId, e.fromViewIndex, e.toViewIndex)"
   />
 </template>
 ```
 
-`getRowId` is required when `onCellValueChanged` is set.
+`getRowId` is required when `onCellValueChanged` is set. `onRowDragEnd` / `onColumnResized` / `onColumnMoved` deliver object payloads (`{ rowId, fromViewIndex, toViewIndex }`, `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }`), not positional arguments.
 
 ## Localization and text wrapping
 
@@ -362,11 +362,23 @@ Both callbacks together = Excel-style crosshair. The `<style>` tag with the high
 
 The wrapper watches both props. If either changes, it calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just keep references stable (or change them intentionally).
 
+Replacing `columns` never recreates the core either: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+
+```vue
+<GpGrid
+  :columns="columns"
+  :data-source="dataSource"
+  :column-state="[{ columnId: 'age', hidden: true }, { columnId: 'name', order: 0 }]"
+  :row-height="36"
+/>
+```
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |
 |---|---|---|
 | `:columns` | `ColumnDefinition[]` | required |
+| `:column-state` | `ColumnStateUpdate[]` | — |
 | `:data-source` | `DataSource<TData>` | — |
 | `:row-data` | `TData[]` | — |
 | `:row-height` | `number` | required |
@@ -390,9 +402,9 @@ The wrapper watches both props. If either changes, it calls `core.setDataSource(
 | `:on-write-rejected` | `(e: CellWriteRejectedEvent) => void` | — |
 | `:loading-component` | `Component<{ isLoading: boolean }>` | spinner |
 | `:row-drag-entire-row` | `boolean` | `false` |
-| `:on-row-drag-end` | `(src, tgt) => void` | — |
-| `:on-column-resized` | `(colIndex, newWidth) => void` | — |
-| `:on-column-moved` | `(from, to) => void` | — |
+| `:on-row-drag-end` | `(e: RowDragEndEvent) => void` | — |
+| `:on-column-resized` | `(e: ColumnResizedEvent) => void` | — |
+| `:on-column-moved` | `(e: ColumnMovedEvent) => void` | — |
 
 ## Vue-specific gotchas
 

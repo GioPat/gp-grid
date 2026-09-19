@@ -6,6 +6,14 @@ All notable changes to gp-grid will be documented in this file.
 
 ### Added
 
+#### Identity, column state and schema lifecycle (PRD 002)
+- `GridCore.setColumnState(updates)`, `resetColumnState(columnIds?)` and `getColumnState()`; an optional controlled `columnState` input on every wrapper
+- `GridCore.getViewRow(viewIndex)` and `getRecordById(rowId)` for identity-addressed record access
+- `getSlotGeneration`/`isSlotGenerationCurrent` and a monotonically increasing slot assignment `generation`
+- Edit session token: `EditState.editId`, `editId` on `START_EDIT`, and an optional `editId` argument on `updateEditValue`/`commitEdit`/`cancelEdit`; wrapper editor callbacks are tagged automatically, so a callback from a closed editor can no longer act on a newer edit
+- `createMutableClientDataSource` implements `DataSource.getRecordById` through its ID index
+- Object-shaped column/row events with stable identity: `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`
+
 #### Sorting
 - Global `sortingEnabled` option to enable/disable sorting across the grid
 - Per-column `sortable` option in column definitions
@@ -31,6 +39,10 @@ All notable changes to gp-grid will be documented in this file.
 - Per-column `wrapText` option to wrap long cell text onto multiple lines (clipped to the fixed row height).
 
 ### Changed
+- **Breaking (0.x → 1.0):** `onColumnResized`/`onColumnMoved`/`onRowDragEnd` now take object payloads with `columnId`/`rowId` and named view indices in all wrappers; positional callbacks are no longer supported
+- **Breaking (0.x → 1.0):** `CellValueChangedEvent` gained `columnId`, and `getRowData` returns the currently resident source record only
+- Column definitions are immutable caller input; live width/order/visibility state is keyed by `ColumnId` in the core, so resize/move never mutate the caller's objects or array
+- Replacing `columns` reconciles by id in one instruction batch: retained columns keep user state, sort and filter; removed columns drop their state, headers and caches; the core instance survives
 - `ColumnFilterModel` now exposes `groups`; canonical conditions no longer expose `nextOperator`
 - Filter popups in React, Vue, and Angular use group cards with separate condition/group operators
 - Grid label props use `GridLabelOverrides`, allowing individual nested operator overrides

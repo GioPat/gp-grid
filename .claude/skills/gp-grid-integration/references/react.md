@@ -316,14 +316,14 @@ const headerRenderers = {
   dataSource={dataSource}
   rowHeight={36}
   getRowId={(row) => row.id}
-  onCellValueChanged={(e) => console.log(e.field, e.oldValue, "→", e.newValue)}
-  onRowDragEnd={(from, to) => console.log("row", from, "→", to)}
-  onColumnResized={(colIndex, newWidth) => persist(colIndex, newWidth)}
-  onColumnMoved={(fromIndex, toIndex) => persistOrder(fromIndex, toIndex)}
+  onCellValueChanged={(e) => console.log(e.columnId, e.oldValue, "→", e.newValue)}
+  onRowDragEnd={(e) => console.log("row", e.rowId, e.fromViewIndex, "→", e.toViewIndex)}
+  onColumnResized={(e) => persist(e.columnId, e.width)}
+  onColumnMoved={(e) => persistOrder(e.columnId, e.fromViewIndex, e.toViewIndex)}
 />
 ```
 
-`getRowId` is **required** when `onCellValueChanged` is provided.
+`getRowId` is **required** when `onCellValueChanged` is provided. `onRowDragEnd` / `onColumnResized` / `onColumnMoved` deliver object payloads: `{ rowId, fromViewIndex, toViewIndex }`, `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }`. A `columns` replacement reconciles by id and does not reset width/order/visibility.
 
 For row drag, `onRowDragEnd` fires after the user drops. The consumer is responsible for actually reordering the underlying data — gp-grid does not mutate the array. With `useGridData` you'd typically rebuild and re-set, or use `removeRows` + `addRows`.
 
@@ -429,11 +429,25 @@ Use both callbacks together for an Excel-style crosshair. **Memoize** the `highl
 
 You can change the `dataSource` prop after mount. The wrapper detects the change and calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just make sure the new ds is referentially distinct from the old one (otherwise nothing happens).
 
+## Reactive `columns` and column state
+
+Replacing the `columns` array never recreates the core: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+
+```tsx
+<Grid
+  columns={columns}
+  dataSource={dataSource}
+  columnState={[{ columnId: "age", hidden: true }, { columnId: "name", order: 0 }]}
+  rowHeight={36}
+/>
+```
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `columns` | `ColumnDefinition[]` | required | |
+| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order; applied via `setColumnState` |
 | `dataSource` | `DataSource<TData>` | — | mutually exclusive with `rowData`; takes precedence |
 | `rowData` | `TData[]` | — | wrapped in a client data source by the wrapper |
 | `rowHeight` | `number` | required | px |
@@ -458,9 +472,9 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
-| `onRowDragEnd` | `(src, tgt) => void` | — | consumer reorders |
-| `onColumnResized` | `(colIndex, newWidth) => void` | — | persist user state |
-| `onColumnMoved` | `(from, to) => void` | — | persist user state |
+| `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |
+| `onColumnResized` | `(e: ColumnResizedEvent) => void` | — | persist user state |
+| `onColumnMoved` | `(e: ColumnMovedEvent) => void` | — | persist user state |
 
 ## React-specific gotchas
 
