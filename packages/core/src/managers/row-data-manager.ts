@@ -26,6 +26,9 @@ import {
 } from "./row-window-loader";
 import { refreshTransactionData } from "../grid-core-operations";
 
+/** Cap on the resident rows inspected for the duplicate-RowId diagnostic. */
+const DUPLICATE_ID_SCAN_LIMIT = 10_000;
+
 export interface RowDataManagerOptions<TData> {
   dataSource: DataSource<TData>;
   rowLoading: RowLoadingOptions | undefined;
@@ -72,6 +75,9 @@ export class RowDataManager<TData = unknown> {
   private isDataLoading = false;
   /** Guards against an obsolete load applying after a newer one. */
   private loadGeneration = 0;
+  private hasWarnedDuplicateRowId = false;
+  /** Bounded id -> view index sightings from visited windows. */
+  private readonly seenRowIds = new Map<RowId, number>();
 
   constructor(options: RowDataManagerOptions<TData>) {
     this.options = options;
@@ -142,6 +148,26 @@ export class RowDataManager<TData = unknown> {
     const row = this.cachedRows.get(viewRow);
     if (row === undefined) return undefined;
     return this.options.getRowId?.(row);
+  }
+
+  /**
+   * Record lookup by stable identity. Uses the source's direct lookup when
+   * present; otherwise scans the resident rows, which is O(resident).
+   */
+  getRecordById(rowId: RowId): TData | undefined {
+    if (this.dataSource.getRecordById) return this.dataSource.getRecordById(rowId);
+    for (const [viewIndex, row] of this.cachedRows) {
+      if (this.getRowId(viewIndex) === rowId) return row;
+    }
+    return undefined;
+  }
+
+  /** View index of a resident record by identity, or -1. O(resident). */
+  findViewIndexById(rowId: RowId): number {
+    for (const viewIndex of this.cachedRows.keys()) {
+      if (this.getRowId(viewIndex) === rowId) return viewIndex;
+    }
+    return -1;
   }
 
   /** False when the bound source declares itself read-only. */
@@ -228,6 +254,7 @@ export class RowDataManager<TData = unknown> {
   }
 
   requestVisibleRows(): void {
+    this.diagnoseWindowRowIds();
     if (this.isPaginatedLoading() === false) return;
 
     const range = this.getPaginatedLoadRange(true);
@@ -341,6 +368,64 @@ export class RowDataManager<TData = unknown> {
       this.cachedRows.set(index, row);
     });
     this.totalRows = response.totalRows;
+    this.diagnoseDuplicateRowIds();
+  }
+
+  /**
+   * Once-only diagnostic for duplicate IDs among the rows currently resident
+   * in the cache. Bounded by the resident set and by a scan cap, so a huge
+   * client dataset never turns binding into a full-dataset validation.
+   */
+  private diagnoseDuplicateRowIds(): void {
+    if (this.hasWarnedDuplicateRowId) return;
+    const getRowId = this.options.getRowId;
+    if (getRowId === undefined) return;
+    const seen = new Set<RowId>();
+    let scanned = 0;
+    for (const row of this.cachedRows.values()) {
+      if (scanned >= DUPLICATE_ID_SCAN_LIMIT) return;
+      scanned += 1;
+      const rowId = getRowId(row);
+      if (seen.has(rowId)) {
+        this.hasWarnedDuplicateRowId = true;
+        console.warn(`[gp-grid] Duplicate row id ${JSON.stringify(rowId)}`);
+        return;
+      }
+      seen.add(rowId);
+    }
+  }
+
+  /**
+   * Duplicate check for rows entering the window, beyond the load-time scan
+   * cap. A sighting only counts while its earlier row still holds that id.
+   */
+  private diagnoseWindowRowIds(): void {
+    const getRowId = this.options.getRowId;
+    if (this.hasWarnedDuplicateRowId || getRowId === undefined) return;
+    const { startRow, endRow } = this.getPaginatedLoadRange(true);
+    for (let viewIndex = startRow; viewIndex < endRow; viewIndex++) {
+      const row = this.cachedRows.get(viewIndex);
+      if (row === undefined) continue;
+      const rowId = getRowId(row);
+      if (this.isHeldByAnotherRow(rowId, viewIndex, getRowId)) {
+        this.hasWarnedDuplicateRowId = true;
+        console.warn(`[gp-grid] Duplicate row id ${JSON.stringify(rowId)}`);
+        return;
+      }
+      if (this.seenRowIds.size >= DUPLICATE_ID_SCAN_LIMIT) this.seenRowIds.clear();
+      this.seenRowIds.set(rowId, viewIndex);
+    }
+  }
+
+  private isHeldByAnotherRow(
+    rowId: RowId,
+    viewIndex: number,
+    getRowId: (row: TData) => RowId,
+  ): boolean {
+    const seenAt = this.seenRowIds.get(rowId);
+    if (seenAt === undefined || seenAt === viewIndex) return false;
+    const other = this.cachedRows.get(seenAt);
+    return other !== undefined && getRowId(other) === rowId;
   }
 
   private async fetchPaginatedData(
@@ -357,6 +442,10 @@ export class RowDataManager<TData = unknown> {
         options.resetCache,
       );
       if (result.applied === false) return;
+      if (result.loadedBlockCount > 0) {
+        this.diagnoseDuplicateRowIds();
+        this.diagnoseWindowRowIds();
+      }
 
       if (options.showLoading || result.totalRowsChanged) {
         this.options.batcher.emit({

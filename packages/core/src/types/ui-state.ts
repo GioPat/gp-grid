@@ -22,6 +22,11 @@ export interface SlotData<TData = unknown> {
    * read path (`GridCore.getCellValue`), not from this field.
    */
   rowData: TData | undefined;
+  /**
+   * Assignment generation for this slot. A callback that captured an older
+   * generation belongs to a superseded assignment and must be ignored.
+   */
+  generation: number;
   translateY: number;
 }
 
@@ -48,6 +53,8 @@ export interface FilterPopupState {
 export interface InitialStateArgs {
   initialWidth?: number;
   initialHeight?: number;
+  /** Resolved layout the wrapper renders until the core emits `COLUMNS_CHANGED`. */
+  initialColumns?: ColumnDefinition[];
 }
 
 export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => ({
@@ -68,7 +75,7 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
   totalRows: 0,
   visibleRowRange: null,
   hoverPosition: null,
-  columns: null,
+  columns: args?.initialColumns ?? [],
   pendingScrollTop: null,
 });
 
@@ -80,7 +87,7 @@ export interface GridState<TData = unknown> {
   slots: Map<string, SlotData<TData>>;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
-  editingCell: { row: number; col: number; initialValue: CellValue } | null;
+  editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   /** Cell currently shown in a read-only peek overlay (multi-line expand on double-click) */
   peekCell: CellPosition | null;
   contentWidth: number;
@@ -91,7 +98,8 @@ export interface GridState<TData = unknown> {
   viewportHeight: number;
   /** Y offset for rows wrapper when virtualization is active (keeps row translateY values small) */
   rowsWrapperOffset: number;
-  headers: Map<number, HeaderData>;
+  /** Header state keyed by `ColumnId`. */
+  headers: Map<string, HeaderData>;
   filterPopup: FilterPopupState | null;
   isLoading: boolean;
   error: string | null;
@@ -100,8 +108,8 @@ export interface GridState<TData = unknown> {
   visibleRowRange: { start: number; end: number } | null;
   /** Currently hovered cell position (for highlighting) */
   hoverPosition: CellPosition | null;
-  /** Columns updated by core (after resize/reorder). Null means use props. */
-  columns: ColumnDefinition[] | null;
+  /** Core-owned resolved layout (ordered columns with effective widths/visibility). */
+  columns: ColumnDefinition[];
   /** Pending programmatic scroll — framework should apply to container and clear */
   pendingScrollTop: number | null;
 }

@@ -11,7 +11,7 @@ import type { SlotData, HeaderData, GridState } from "./types/ui-state";
 export const applyInstruction = <TData = unknown>(
   instruction: GridInstruction,
   slots: Map<string, SlotData<TData>>,
-  headers: Map<number, HeaderData>,
+  headers: Map<string, HeaderData>,
 ): Partial<GridState<TData>> | null => {
   switch (instruction.type) {
     case "CREATE_SLOT":
@@ -19,6 +19,7 @@ export const applyInstruction = <TData = unknown>(
         slotId: instruction.slotId,
         rowIndex: -1,
         rowData: undefined,
+        generation: instruction.generation,
         translateY: 0,
       });
       return null;
@@ -34,6 +35,7 @@ export const applyInstruction = <TData = unknown>(
           ...existing,
           rowIndex: instruction.rowIndex,
           rowData: instruction.rowData as TData,
+          generation: instruction.generation,
         });
       }
       return null;
@@ -74,6 +76,7 @@ export const applyInstruction = <TData = unknown>(
           row: instruction.row,
           col: instruction.col,
           initialValue: instruction.initialValue,
+          editId: instruction.editId,
         },
       };
 
@@ -96,12 +99,16 @@ export const applyInstruction = <TData = unknown>(
       };
 
     case "UPDATE_HEADER":
-      headers.set(instruction.colIndex, {
+      headers.set(instruction.columnId, {
         column: instruction.column,
         sortDirection: instruction.sortDirection,
         sortIndex: instruction.sortIndex,
         hasFilter: instruction.hasFilter,
       });
+      return null;
+
+    case "REMOVE_HEADERS":
+      for (const columnId of instruction.columnIds) headers.delete(columnId);
       return null;
 
     case "OPEN_FILTER_POPUP":

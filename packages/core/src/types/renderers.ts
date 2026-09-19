@@ -25,6 +25,8 @@ export interface CellRendererParams<TData = unknown> {
   rowData: TData | undefined;
   /** Stable identity for the row, when the source exposes one. */
   rowId?: RowId;
+  /** Normalized column identity: `colId ?? field`. */
+  columnId: string;
   /**
    * Read another field's raw value at this row without requiring a record.
    * Defined for columnar rows and for object rows.
@@ -61,6 +63,8 @@ export interface EditRendererParams<TData = unknown>
 export interface HeaderRendererParams {
   /** Column definition */
   column: ColumnDefinition;
+  /** Normalized column identity: `colId ?? field`. */
+  columnId: string;
   /** Column index */
   colIndex: number;
   /** Sort direction */

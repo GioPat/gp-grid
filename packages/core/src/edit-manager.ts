@@ -6,6 +6,7 @@ import type {
   CellPosition,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  RowId,
 } from "./types";
 import { createInstructionEmitter, createWriteRejection } from "./utils";
 
@@ -26,6 +27,13 @@ export interface EditManagerOptions {
   isWritable?: () => boolean;
   /** Called when an editable cell refuses a write because the source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /**
+   * Current slot-assignment generation for a view row, or -1 when no slot
+   * serves it. Used to drop a commit that belongs to a recycled assignment.
+   */
+  getSlotGeneration?: (row: number) => number;
+  /** Identity of the record at a view row, when the source exposes one. */
+  getRowId?: (row: number) => RowId | undefined;
 }
 
 // =============================================================================
@@ -37,6 +45,9 @@ export interface EditManagerOptions {
  */
 export class EditManager {
   private editState: EditState | null = null;
+  private editGeneration = -1;
+  private editRowId: RowId | undefined;
+  private nextEditId = 1;
   private peekState: CellPosition | null = null;
   private readonly options: EditManagerOptions;
   private readonly emitter = createInstructionEmitter();
@@ -106,21 +117,42 @@ export class EditManager {
     }
 
     const initialValue = this.options.getCellValue(row, col);
+    const editId = this.nextEditId++;
     this.editState = {
       row,
       col,
       initialValue,
       currentValue: initialValue,
+      editId,
     };
+    this.editGeneration = this.options.getSlotGeneration?.(row) ?? -1;
+    this.editRowId = this.options.getRowId?.(row);
 
     this.emit({
       type: "START_EDIT",
       row,
       col,
       initialValue,
+      editId,
     });
 
     return true;
+  }
+
+  /**
+   * Follow a layout change that moved the edited column to a new index.
+   * Re-emits START_EDIT with the draft so the re-anchored editor keeps it.
+   */
+  remapColumn(col: number): void {
+    if (!this.editState || this.editState.col === col) return;
+    this.editState = { ...this.editState, col };
+    this.emit({
+      type: "START_EDIT",
+      row: this.editState.row,
+      col,
+      initialValue: this.editState.currentValue,
+      editId: this.editState.editId,
+    });
   }
 
   // ===========================================================================
@@ -148,6 +180,13 @@ export class EditManager {
     return true;
   }
 
+  /** Follow a layout change that moved the peeked column to a new index. */
+  remapPeekColumn(col: number): void {
+    if (this.peekState === null || this.peekState.col === col) return;
+    this.peekState = { ...this.peekState, col };
+    this.emit({ type: "START_PEEK", row: this.peekState.row, col });
+  }
+
   /**
    * Close any active peek overlay. No-op if none is open.
    */
@@ -160,20 +199,29 @@ export class EditManager {
   /**
    * Update the current edit value.
    */
-  updateValue(value: CellValue): void {
-    if (this.editState) {
-      this.editState.currentValue = value;
-    }
+  updateValue(value: CellValue, editId?: number): void {
+    if (this.editState === null || this.isStaleSession(editId)) return;
+    this.editState.currentValue = value;
+  }
+
+  /** An editor callback tagged with another session's token is stale. */
+  private isStaleSession(editId: number | undefined): boolean {
+    return editId !== undefined && editId !== this.editState?.editId;
   }
 
   /**
    * Commit the current edit.
    * Saves the value and closes the editor.
    */
-  commit(): void {
-    if (!this.editState) return;
+  commit(editId?: number): void {
+    if (!this.editState || this.isStaleSession(editId)) return;
 
     const { row, col, currentValue } = this.editState;
+
+    if (this.isEditAssignmentCurrent(row) === false) {
+      this.cancel();
+      return;
+    }
 
     // Update the cell value
     this.options.setCellValue(row, col, currentValue);
@@ -188,6 +236,8 @@ export class EditManager {
 
     // Clear edit state
     this.editState = null;
+    this.editGeneration = -1;
+    this.editRowId = undefined;
     this.emit({ type: "STOP_EDIT" });
 
     // Notify that edit was committed (for slot update)
@@ -195,11 +245,26 @@ export class EditManager {
   }
 
   /**
+   * A refresh bumps the generation in place, so the edit is only superseded
+   * when the row lost its slot or the record under that view row changed.
+   */
+  private isEditAssignmentCurrent(row: number): boolean {
+    if (this.editGeneration === -1) return true;
+    const generation = this.options.getSlotGeneration?.(row) ?? -1;
+    if (generation === this.editGeneration) return true;
+    if (generation === -1) return false;
+    return this.options.getRowId?.(row) === this.editRowId;
+  }
+
+  /**
    * Cancel the current edit.
    * Discards changes and closes the editor.
    */
-  cancel(): void {
+  cancel(editId?: number): void {
+    if (this.isStaleSession(editId)) return;
     this.editState = null;
+    this.editGeneration = -1;
+    this.editRowId = undefined;
     this.emit({ type: "STOP_EDIT" });
   }
 

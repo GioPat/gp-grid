@@ -82,7 +82,7 @@ describe("public entry point", () => {
     expect(a.totalRows).toBe(0);
     expect(a.visibleRowRange).toBeNull();
     expect(a.hoverPosition).toBeNull();
-    expect(a.columns).toBeNull();
+    expect(a.columns).toEqual([]);
     expect(a.pendingScrollTop).toBeNull();
     expect(a.contentWidth).toBe(0);
     expect(a.contentHeight).toBe(0);

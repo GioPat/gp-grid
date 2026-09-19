@@ -251,6 +251,12 @@ export class SelectionManager {
     this.emit({ type: "SET_SELECTION_RANGE", range: this.state.range });
   }
 
+  /** Drop the selection rectangle, keeping the active cell. */
+  clearSelectionRange(): void {
+    this.state.range = null;
+    this.emit({ type: "SET_SELECTION_RANGE", range: null });
+  }
+
   // ===========================================================================
   // Data Extraction
   // ===========================================================================

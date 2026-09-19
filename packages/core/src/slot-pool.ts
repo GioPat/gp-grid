@@ -38,6 +38,8 @@ interface SlotPoolState {
   /** Maps rowIndex to slotId for quick lookup */
   rowToSlot: Map<number, string>;
   nextSlotId: number;
+  /** Monotonic assignment generation; every ASSIGN_SLOT increments it. */
+  nextGeneration: number;
 }
 
 // =============================================================================
@@ -53,6 +55,7 @@ export class SlotPoolManager {
     slots: new Map(),
     rowToSlot: new Map(),
     nextSlotId: 0,
+    nextGeneration: 1,
   };
 
   private readonly options: SlotPoolManagerOptions;
@@ -85,6 +88,16 @@ export class SlotPoolManager {
    */
   getSlots(): Map<string, SlotState> {
     return this.state.slots;
+  }
+
+  /**
+   * Get the current assignment generation for a row, or -1 when no slot
+   * currently serves it. Callbacks captured with an older generation are stale.
+   */
+  getSlotGeneration(rowIndex: number): number {
+    const slotId = this.state.rowToSlot.get(rowIndex);
+    if (slotId === undefined) return -1;
+    return this.state.slots.get(slotId)?.generation ?? -1;
   }
 
   // ===========================================================================
@@ -178,6 +191,7 @@ export class SlotPoolManager {
     instructions: GridInstruction[],
   ): void {
     let slotId: string;
+    const generation = this.state.nextGeneration++;
 
     if (recycledSlotId === undefined) {
       slotId = `slot-${this.state.nextSlotId++}`;
@@ -185,20 +199,22 @@ export class SlotPoolManager {
         slotId,
         rowIndex,
         rowData,
+        generation,
         translateY: this.getRowTranslateY(rowIndex),
       });
-      instructions.push({ type: "CREATE_SLOT", slotId });
+      instructions.push({ type: "CREATE_SLOT", slotId, generation });
     } else {
       slotId = recycledSlotId;
       const slot = this.state.slots.get(slotId)!;
       slot.rowIndex = rowIndex;
       slot.rowData = rowData;
+      slot.generation = generation;
       slot.translateY = this.getRowTranslateY(rowIndex);
     }
 
     this.state.rowToSlot.set(rowIndex, slotId);
     instructions.push(
-      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData },
+      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData, generation },
       { type: "MOVE_SLOT", slotId, translateY: this.getRowTranslateY(rowIndex) },
     );
   }
@@ -258,12 +274,14 @@ export class SlotPoolManager {
         const rowData = this.options.getRowData(slot.rowIndex);
 
         const translateY = this.getRowTranslateY(slot.rowIndex);
+        const generation = this.state.nextGeneration++;
 
         slot.rowData = rowData;
+        slot.generation = generation;
         slot.translateY = translateY;
 
         instructions.push(
-          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData },
+          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData, generation },
           { type: "MOVE_SLOT", slotId, translateY },
         );
       }
@@ -281,11 +299,15 @@ export class SlotPoolManager {
   updateSlot(rowIndex: number): void {
     const slotId = this.state.rowToSlot.get(rowIndex);
     if (slotId && this.options.isRowAvailable(rowIndex)) {
+      const slot = this.state.slots.get(slotId);
+      const generation = this.state.nextGeneration++;
+      if (slot) slot.generation = generation;
       this.emit({
         type: "ASSIGN_SLOT",
         slotId,
         rowIndex,
         rowData: this.options.getRowData(rowIndex),
+        generation,
       });
     }
   }

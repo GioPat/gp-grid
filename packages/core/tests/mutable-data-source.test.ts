@@ -37,6 +37,11 @@ describe("MutableClientDataSource", () => {
   });
 
   describe("basic functionality", () => {
+    it("answers getRecordById from the id index", () => {
+      expect(dataSource.getRecordById?.(2)).toMatchObject({ name: "Alice" });
+      expect(dataSource.getRecordById?.("2")).toBeUndefined();
+    });
+
     it("should query data correctly", async () => {
       const response = await dataSource.query({
         range: { startRow: 0, endRow: 10 },

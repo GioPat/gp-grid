@@ -101,6 +101,18 @@ export type {
 
   /** Column definition */
   ColumnDefinition,
+  ColumnId,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
+
+  /** View row identity */
+  ViewRow,
+
+  /** Interaction events */
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  RowDragEndEvent,
 
   /** Cell Position coordinates: row and column, zero-based indices */
   CellPosition,
@@ -138,6 +150,7 @@ export type {
   StopPeekInstruction,
   SetContentSizeInstruction,
   UpdateHeaderInstruction,
+  RemoveHeadersInstruction,
   StartFillInstruction,
   UpdateFillInstruction,
   CommitFillInstruction,

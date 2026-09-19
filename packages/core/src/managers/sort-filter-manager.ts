@@ -50,7 +50,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   // Sort & Filter state
   private sortModel: SortModel[] = [];
   private filterModel: FilterModel = {};
-  private openFilterColIndex: number | null = null;
+  private openFilterColId: string | null = null;
   private readonly scanWarnedCols = new Set<string>();
   private readonly truncationWarnedCols = new Set<string>();
   private readonly typeMismatchWarnedCols = new Set<string>();
@@ -418,23 +418,24 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     anchorRect: { top: number; left: number; width: number; height: number },
     computeDistinctValues: boolean = true,
   ): void {
-    // If clicking on the same column's filter icon, close the popup
-    if (this.openFilterColIndex === colIndex) {
-      this.closeFilterPopup();
-      return;
-    }
-
     const columns = this.options.getColumns();
     const column = columns[colIndex];
     if (!column || !this.isColumnFilterable(colIndex)) return;
 
     const colId = column.colId ?? column.field;
+
+    // If clicking on the same column's filter icon, close the popup
+    if (this.openFilterColId === colId) {
+      this.closeFilterPopup();
+      return;
+    }
+
     let distinctValues: CellValue[] = [];
     if (computeDistinctValues) {
       distinctValues = this.getDistinctValuesForColumn(colId);
     }
 
-    this.openFilterColIndex = colIndex;
+    this.openFilterColId = colId;
     this.emit({
       type: "OPEN_FILTER_POPUP",
       colIndex,
@@ -446,11 +447,33 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   }
 
   /**
-   * Close filter popup
+   * Close the filter popup. Emits CLOSE_FILTER_POPUP through the batcher, so a
+   * call during schema reconciliation lands in that batch.
    */
   closeFilterPopup(): void {
-    this.openFilterColIndex = null;
+    this.openFilterColId = null;
     this.emit({ type: "CLOSE_FILTER_POPUP" });
+  }
+
+  /**
+   * Drop sort/filter entries whose column left the layout. Returns true when
+   * the data must be re-queried (a removed filter or sort changed the query).
+   */
+  reconcileColumns(validIds: ReadonlySet<string>): boolean {
+    const previousSortCount = this.sortModel.length;
+    this.sortModel = this.sortModel.filter((sort) => validIds.has(sort.colId));
+    let changed = this.sortModel.length !== previousSortCount;
+
+    for (const colId of Object.keys(this.filterModel)) {
+      if (validIds.has(colId)) continue;
+      delete this.filterModel[colId];
+      changed = true;
+    }
+
+    if (this.openFilterColId !== null && !validIds.has(this.openFilterColId)) {
+      this.closeFilterPopup();
+    }
+    return changed;
   }
 
   // ===========================================================================
@@ -482,6 +505,6 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     this.emitter.clearListeners();
     this.sortModel = [];
     this.filterModel = {};
-    this.openFilterColIndex = null;
+    this.openFilterColId = null;
   }
 }

@@ -4,6 +4,10 @@ import type {
   GridCoreOptions,
   BatchInstructionListener,
   ColumnDefinition,
+  ColumnId,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
+  ViewRow,
   CellValue,
   DataSource,
   RowId,
@@ -29,6 +33,14 @@ import { computeColumnPositions } from "./utils";
 import type { RowDataManager } from "./managers/row-data-manager";
 import { type GridCoreConfig, resolveGridCoreConfig } from "./grid-core-config";
 import { buildGridManagers } from "./grid-core-managers";
+import { ColumnModel } from "./column-model";
+import {
+  type ColumnCoreDeps,
+  applyColumnStateReset,
+  applyColumnStateUpdates,
+  applySetColumns,
+  readColumnState,
+} from "./grid-core-columns";
 import type { ViewSync } from "./grid-core-view-sync";
 import {
   type ColumnOperationDeps,
@@ -45,8 +57,8 @@ export class GridCore<TData = unknown> {
   // Options with defaults applied; immutable for the grid's lifetime
   private readonly config: GridCoreConfig<TData>;
 
-  // Columns are the one option that changes after construction
-  private columns: ColumnDefinition[];
+  // Immutable caller definitions, live column state and resolved layout
+  private readonly columnModel: ColumnModel;
   private columnPositions: number[] = [];
 
   // Instruction dispatch
@@ -79,13 +91,13 @@ export class GridCore<TData = unknown> {
 
   constructor(options: GridCoreOptions<TData>) {
     this.config = resolveGridCoreConfig(options);
-    this.columns = options.columns;
+    this.columnModel = new ColumnModel(options.columns);
     this.computeColumnPositions();
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
       config: this.config,
-      getColumns: () => this.columns,
+      getColumns: () => this.columnModel.getLayout(),
       getColumnPositions: () => this.columnPositions,
     });
     this.rowData = managers.rowData;
@@ -103,7 +115,7 @@ export class GridCore<TData = unknown> {
       getHeaderHeight: () => this.config.headerHeight,
       getRowHeight: () => this.config.rowHeight,
       getColumnPositions: () => this.columnPositions,
-      getColumnCount: () => this.columns.length,
+      getColumnCount: () => this.columnModel.getLayout().length,
     });
   }
 
@@ -213,10 +225,10 @@ export class GridCore<TData = unknown> {
   // Editing
   // ===========================================================================
 
-  startEdit(row: number, col: number): void {
+  startEdit(row: number, col: number): boolean {
     // The edit manager owns the read-only check so a refused, editable cell
     // reports through the shared write-rejection diagnostic.
-    this.editManager.startEdit(row, col);
+    return this.editManager.startEdit(row, col);
   }
 
   /**
@@ -226,7 +238,7 @@ export class GridCore<TData = unknown> {
    * and not currently being edited).
    */
   startPeek(row: number, col: number): boolean {
-    const column = this.columns[col];
+    const column = this.columnModel.columnAt(col);
     if (!column || column.peekable === false) return false;
     return this.editManager.startPeek(row, col);
   }
@@ -240,16 +252,17 @@ export class GridCore<TData = unknown> {
     return this.editManager.getPeekState();
   }
 
-  updateEditValue(value: CellValue): void {
-    this.editManager.updateValue(value);
+  /** `editId` is the open edit's session token; a stale one is ignored. */
+  updateEditValue(value: CellValue, editId?: number): void {
+    this.editManager.updateValue(value, editId);
   }
 
-  commitEdit(): void {
-    this.editManager.commit();
+  commitEdit(editId?: number): void {
+    this.editManager.commit(editId);
   }
 
-  cancelEdit(): void {
-    this.editManager.cancel();
+  cancelEdit(editId?: number): void {
+    this.editManager.cancel(editId);
   }
 
   pasteClipboardText(text: string): boolean {
@@ -316,12 +329,14 @@ export class GridCore<TData = unknown> {
   }
 
   private computeColumnPositions(): void {
-    this.columnPositions = computeColumnPositions(this.columns);
+    this.columnPositions = computeColumnPositions(this.columnModel.getLayout());
   }
 
   private columnOperationDeps(): ColumnOperationDeps<TData> {
     return {
-      columns: this.columns,
+      getLayout: () => this.columnModel.getLayout(),
+      setColumnWidth: (columnId, width) => this.columnModel.setWidth(columnId, width),
+      moveColumn: (fromIndex, toIndex) => this.columnModel.move(fromIndex, toIndex),
       computeColumnPositions: () => this.computeColumnPositions(),
       view: this.view,
     };
@@ -333,7 +348,7 @@ export class GridCore<TData = unknown> {
 
   /**
    * Set the displayed width of a column and recompute layout. `width` is the
-   * post-redistribution displayed width — the stored `column.width` is
+   * post-redistribution displayed width — the stored column state width is
    * back-solved so the column ends up exactly `width` pixels wide.
    */
   setColumnWidth(colIndex: number, width: number): void {
@@ -343,15 +358,27 @@ export class GridCore<TData = unknown> {
       this.viewport.getViewportWidth(),
       this.columnOperationDeps(),
     );
-    if (applied) this.config.onColumnResized?.(colIndex, width);
+    if (applied) {
+      this.config.onColumnResized?.({
+        columnId: applied.columnId,
+        width: applied.width,
+        viewIndex: colIndex,
+      });
+    }
   }
 
   /**
    * Move a column from one index to another and recompute layout.
    */
   moveColumn(fromIndex: number, toIndex: number): void {
-    const adjustedTo = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
-    if (adjustedTo !== null) this.config.onColumnMoved?.(fromIndex, adjustedTo);
+    const applied = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
+    if (applied) {
+      this.config.onColumnMoved?.({
+        columnId: applied.columnId,
+        fromViewIndex: applied.fromViewIndex,
+        toViewIndex: applied.toViewIndex,
+      });
+    }
   }
 
   /**
@@ -367,13 +394,19 @@ export class GridCore<TData = unknown> {
       this.rowData.rejectWrite(sourceIndex, -1, "row-move");
       return;
     }
+    // Read identity first: the commit reorders the cache under these indices.
+    const rowId = this.rowData.getRowId(sourceIndex) ?? sourceIndex;
     applyRowDragCommit(sourceIndex, targetIndex, {
       dataSource: this.rowData.getDataSource(),
       cachedRows: this.rowData.getCachedRows(),
       slotPool: this.slotPool,
       highlight: this.highlight,
     });
-    this.config.onRowDragEnd?.(sourceIndex, targetIndex);
+    this.config.onRowDragEnd?.({
+      rowId,
+      fromViewIndex: sourceIndex,
+      toViewIndex: targetIndex,
+    });
   }
 
   /**
@@ -388,13 +421,14 @@ export class GridCore<TData = unknown> {
   // ===========================================================================
 
   getColumns(): ColumnDefinition[] {
-    return this.columns;
+    return this.columnModel.getLayout();
   }
 
   getColumnPositions(): number[] {
     return [...this.columnPositions];
   }
 
+  /** Number of displayed view rows (after sort/filter). */
   getRowCount(): number {
     return this.rowData.getTotalRows();
   }
@@ -474,6 +508,54 @@ export class GridCore<TData = unknown> {
     return this.rowData.getRowData(rowIndex);
   }
 
+  /**
+   * Whether a view row exists and can be rendered. Distinct from having a
+   * record: a columnar row exists with no source record, and a `null` cell
+   * value is still a value.
+   */
+  hasRow(viewIndex: number): boolean {
+    return this.rowData.hasRow(viewIndex);
+  }
+
+  /**
+   * A displayed row and its identity, built on request. Returns `undefined`
+   * when the view row does not exist; a record-less row has `record` absent.
+   * Without a source identity `id` is the view index, valid until the next
+   * sort, filter or refresh.
+   */
+  getViewRow(viewIndex: number): ViewRow<TData> | undefined {
+    if (this.rowData.hasRow(viewIndex) === false) return undefined;
+    const record = this.rowData.getRowData(viewIndex);
+    return {
+      kind: "record",
+      id: this.rowData.getRowId(viewIndex) ?? viewIndex,
+      viewIndex,
+      record,
+    };
+  }
+
+  /**
+   * Look up a source record by stable identity. Answers for rows currently
+   * resident in the grid and for sources that implement a direct lookup;
+   * server and columnar windows outside the resident set are not searched.
+   */
+  getRecordById(rowId: RowId): TData | undefined {
+    return this.rowData.getRecordById(rowId);
+  }
+
+  /**
+   * Current assignment generation for a view row, or -1 when no slot serves
+   * it. Renderers tag async callbacks with this and drop stale ones.
+   */
+  getSlotGeneration(rowIndex: number): number {
+    return this.slotPool.getSlotGeneration(rowIndex);
+  }
+
+  /** Whether `generation` still matches the slot currently serving a row. */
+  isSlotGenerationCurrent(rowIndex: number, generation: number): boolean {
+    return this.slotPool.getSlotGeneration(rowIndex) === generation;
+  }
+
   // ===========================================================================
   // Data Updates
   // ===========================================================================
@@ -519,12 +601,47 @@ export class GridCore<TData = unknown> {
   }
 
   /**
-   * Update columns and recompute layout.
+   * Update columns and reconcile by `ColumnId` in one instruction batch.
+   * Retained IDs keep user state, sort and filter; removed IDs drop headers,
+   * state and caches; new IDs take definition defaults.
    */
   setColumns(columns: ColumnDefinition[]): void {
-    this.columns = columns;
-    this.computeColumnPositions();
-    this.view.reconcile();
+    applySetColumns(this.columnDeps(), columns);
+  }
+
+  /**
+   * Apply explicit per-column state. Values win over retained user state and
+   * over definition defaults.
+   */
+  setColumnState(updates: ColumnStateUpdate[]): void {
+    applyColumnStateUpdates(this.columnDeps(), updates);
+  }
+
+  /**
+   * Drop user column state. With no IDs, every column returns to its
+   * definition defaults; with IDs, only those columns reset.
+   */
+  resetColumnState(columnIds?: ColumnId[]): void {
+    applyColumnStateReset(this.columnDeps(), columnIds);
+  }
+
+  /** Effective per-column width, visibility and order, in layout order. */
+  getColumnState(): ColumnStateSnapshot[] {
+    return readColumnState(this.columnDeps());
+  }
+
+  private columnDeps(): ColumnCoreDeps<TData> {
+    return {
+      batcher: this.batcher,
+      columnModel: this.columnModel,
+      selection: this.selection,
+      editManager: this.editManager,
+      sortFilter: this.sortFilter,
+      rowData: this.rowData,
+      view: this.view,
+      computeColumnPositions: () => this.computeColumnPositions(),
+      reloadAfterSchemaChange: () => this.refresh(),
+    };
   }
 
   /**

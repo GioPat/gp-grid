@@ -41,6 +41,8 @@ export interface ViewSyncDeps<TData> {
 export class ViewSync<TData> {
   private readonly deps: ViewSyncDeps<TData>;
   private hasWarnedAboutScaledOverscan = false;
+  private emittedHeaderIds = new Set<string>();
+  private emittedLayout: readonly ColumnDefinition[] | null = null;
 
   constructor(deps: ViewSyncDeps<TData>) {
     this.deps = deps;
@@ -96,7 +98,6 @@ export class ViewSync<TData> {
     try {
       this.emitContentSize();
       this.emitHeaders();
-      batcher.emit({ type: "COLUMNS_CHANGED", columns: [...this.deps.getColumns()] });
       if (change === "order") {
         highlight?.clearAllCaches();
         slotPool.refreshAllSlots();
@@ -125,19 +126,36 @@ export class ViewSync<TData> {
 
   emitHeaders(): void {
     const { batcher, sortFilter } = this.deps;
+    const columns = this.deps.getColumns();
     const sortInfoMap = sortFilter.getSortInfoMap();
-    for (const [colIndex, column] of this.deps.getColumns().entries()) {
-      const colId = column.colId ?? column.field;
-      const sortInfo = sortInfoMap.get(colId);
+
+    // The column model builds a new layout array on every resolve, so its
+    // identity covers any definition change, not only id/width/visibility.
+    if (columns !== this.emittedLayout) {
+      this.emittedLayout = columns;
+      batcher.emit({ type: "COLUMNS_CHANGED", columns: [...columns] });
+    }
+
+    const currentIds = new Set<string>();
+    for (const column of columns) {
+      const columnId = column.colId ?? column.field;
+      currentIds.add(columnId);
+      const sortInfo = sortInfoMap.get(columnId);
       batcher.emit({
         type: "UPDATE_HEADER",
-        colIndex,
+        columnId,
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
-        hasFilter: sortFilter.hasActiveFilter(colId),
+        hasFilter: sortFilter.hasActiveFilter(columnId),
       });
     }
+
+    const removedIds = [...this.emittedHeaderIds].filter((id) => !currentIds.has(id));
+    if (removedIds.length > 0) {
+      batcher.emit({ type: "REMOVE_HEADERS", columnIds: removedIds });
+    }
+    this.emittedHeaderIds = currentIds;
   }
 
   emitVisibleRange(): void {

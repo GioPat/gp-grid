@@ -90,6 +90,12 @@ export interface DataSource<TData = unknown> {
   readonly writable?: boolean;
   /** Query data based on the request (range, sort, filter). */
   query(request: DataSourceRequest): Promise<DataSourceResponse<TData>>;
+  /**
+   * Optional direct record lookup by stable identity. Sources that can answer
+   * cheaply (e.g. an indexed store) implement it; the grid otherwise searches
+   * only currently resident rows.
+   */
+  getRecordById?: (rowId: RowId) => TData | undefined;
   /** Optional cleanup method to release resources */
   destroy?: () => void;
   /** Move a row */

@@ -24,7 +24,7 @@ const column: ColumnDefinition = {
 
 describe("applyInstruction", () => {
   let slots: Map<string, SlotData<Row>>;
-  let headers: Map<number, HeaderData>;
+  let headers: Map<string, HeaderData>;
 
   beforeEach(() => {
     slots = new Map();
@@ -34,7 +34,7 @@ describe("applyInstruction", () => {
   describe("slot lifecycle", () => {
     it("creates a slot with default values and returns null", () => {
       const result = applyInstruction<Row>(
-        { type: "CREATE_SLOT", slotId: "s1" },
+        { type: "CREATE_SLOT", slotId: "s1", generation: 0 },
         slots,
         headers,
       );
@@ -46,6 +46,7 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: -1,
         rowData: undefined,
+        generation: 0,
         translateY: 0,
       });
     });
@@ -55,6 +56,7 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: 0,
         rowData: { id: 1, name: "a" },
+        generation: 1,
         translateY: 0,
       });
 
@@ -84,6 +86,7 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: -1,
         rowData: {} as Row,
+        generation: 0,
         translateY: 64,
       });
 
@@ -94,6 +97,7 @@ describe("applyInstruction", () => {
           slotId: "s1",
           rowIndex: 3,
           rowData,
+          generation: 7,
         },
         slots,
         headers,
@@ -104,6 +108,7 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: 3,
         rowData,
+        generation: 7,
         translateY: 64,
       });
     });
@@ -115,6 +120,7 @@ describe("applyInstruction", () => {
           slotId: "missing",
           rowIndex: 1,
           rowData: { id: 1, name: "x" },
+          generation: 2,
         },
         slots,
         headers,
@@ -129,6 +135,7 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: 2,
         rowData: { id: 2, name: "b" },
+        generation: 1,
         translateY: 0,
       });
 
@@ -282,11 +289,11 @@ describe("applyInstruction", () => {
       });
     });
 
-    it("UPDATE_HEADER stores header data under colIndex and returns null", () => {
+    it("UPDATE_HEADER stores header data under columnId and returns null", () => {
       const result = applyInstruction<Row>(
         {
           type: "UPDATE_HEADER",
-          colIndex: 2,
+          columnId: "name",
           column,
           sortDirection: "asc",
           sortIndex: 0,
@@ -296,7 +303,7 @@ describe("applyInstruction", () => {
         headers,
       );
       expect(result).toBeNull();
-      expect(headers.get(2)).toEqual({
+      expect(headers.get("name")).toEqual({
         column,
         sortDirection: "asc",
         sortIndex: 0,
@@ -305,7 +312,7 @@ describe("applyInstruction", () => {
     });
 
     it("UPDATE_HEADER overwrites a previously stored header", () => {
-      headers.set(1, {
+      headers.set("name", {
         column,
         sortDirection: "desc",
         sortIndex: 1,
@@ -315,7 +322,7 @@ describe("applyInstruction", () => {
       applyInstruction<Row>(
         {
           type: "UPDATE_HEADER",
-          colIndex: 1,
+          columnId: "name",
           column,
           hasFilter: false,
         },
@@ -323,12 +330,27 @@ describe("applyInstruction", () => {
         headers,
       );
 
-      expect(headers.get(1)).toEqual({
+      expect(headers.get("name")).toEqual({
         column,
         sortDirection: undefined,
         sortIndex: undefined,
         hasFilter: false,
       });
+    });
+
+    it("REMOVE_HEADERS drops only the named columns", () => {
+      headers.set("a", { column, hasFilter: false });
+      headers.set("b", { column, hasFilter: false });
+
+      const result = applyInstruction<Row>(
+        { type: "REMOVE_HEADERS", columnIds: ["a"] },
+        slots,
+        headers,
+      );
+
+      expect(result).toBeNull();
+      expect(headers.has("a")).toBe(false);
+      expect(headers.has("b")).toBe(true);
     });
   });
 

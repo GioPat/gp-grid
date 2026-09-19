@@ -3,17 +3,29 @@
 // function encapsulates the batch-emit + cache-maintenance sequence for
 // a single mutation so the GridCore facade stays thin.
 
-import type { DataSource, ColumnDefinition, FilterModel, SortModel } from "./types";
+import type { DataSource, ColumnDefinition, ColumnId, FilterModel, SortModel } from "./types";
+import { getColumnId } from "./column-model";
 import type { SlotPoolManager } from "./slot-pool";
 import type { HighlightManager } from "./managers";
 import type { ViewSync } from "./grid-core-view-sync";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
 export interface ColumnOperationDeps<TData> {
-  /** GridCore's live column array; operations mutate it in place. */
-  columns: ColumnDefinition[];
+  /** Current resolved layout. Never mutated by these operations. */
+  getLayout: () => ColumnDefinition[];
+  /** Write the stored width for a column ID and re-resolve the layout. */
+  setColumnWidth: (columnId: ColumnId, storedWidth: number) => void;
+  /** Move a column and re-resolve; returns the applied target index or null. */
+  moveColumn: (fromIndex: number, toIndex: number) => number | null;
   computeColumnPositions: () => void;
   view: ViewSync<TData>;
+}
+
+/** Result of a resize/move for the caller to emit as an identity event. */
+export interface ColumnOperationResult {
+  columnId: ColumnId;
+  fromViewIndex: number;
+  toViewIndex: number;
 }
 
 /**
@@ -50,33 +62,35 @@ export const applyColumnResize = <TData>(
   displayedWidth: number,
   viewportWidth: number,
   deps: ColumnOperationDeps<TData>,
-): boolean => {
-  const column = deps.columns[colIndex];
-  if (column === undefined) return false;
-  column.width = column.hidden
+): { columnId: ColumnId; width: number } | null => {
+  const layout = deps.getLayout();
+  const column = layout[colIndex];
+  if (column === undefined) return null;
+  const storedWidth = column.hidden
     ? displayedWidth
-    : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, deps.columns);
+    : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, layout);
+  deps.setColumnWidth(getColumnId(column), storedWidth);
   deps.computeColumnPositions();
   deps.view.syncColumnLayout("geometry");
-  return true;
+  return { columnId: getColumnId(column), width: displayedWidth };
 };
 
 export const applyColumnMove = <TData>(
   fromIndex: number,
   toIndex: number,
   deps: ColumnOperationDeps<TData>,
-): number | null => {
-  if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= deps.columns.length) return null;
-  const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
-  if (adjustedTo < 0 || adjustedTo >= deps.columns.length) return null;
-  if (fromIndex === adjustedTo) return null;
-
-  const [col] = deps.columns.splice(fromIndex, 1);
-  deps.columns.splice(adjustedTo, 0, col!);
-
+): ColumnOperationResult | null => {
+  const column = deps.getLayout()[fromIndex];
+  if (column === undefined) return null;
+  const adjustedTo = deps.moveColumn(fromIndex, toIndex);
+  if (adjustedTo === null) return null;
   deps.computeColumnPositions();
   deps.view.syncColumnLayout("order");
-  return adjustedTo;
+  return {
+    columnId: getColumnId(column),
+    fromViewIndex: fromIndex,
+    toViewIndex: adjustedTo,
+  };
 };
 
 export interface RowDragCommitDeps<TData> {

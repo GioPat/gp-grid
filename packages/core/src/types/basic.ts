@@ -15,8 +15,22 @@ export type CellDataType =
 /** Cell value type */
 export type CellValue = string | number | boolean | Date | object | null;
 
-/** Row ID type for transaction operations */
+/** Row ID type for transaction operations. `1` and `"1"` are distinct. */
 export type RowId = string | number;
+
+/**
+ * A displayed row and its identity. Built on request — the grid never
+ * allocates one per row. 002 only produces `kind: "record"`; groups and
+ * aggregates arrive with later PRDs.
+ */
+export interface ViewRow<TData = unknown> {
+  kind: "record";
+  /** Source identity; the view index when the source exposes none. */
+  id: RowId;
+  viewIndex: number;
+  /** Source record, absent for record-less (columnar) rows. */
+  record?: TData;
+}
 
 /** Sort direction type */
 export type SortDirection = "asc" | "desc" | null;
@@ -60,6 +74,8 @@ export interface EditState {
   initialValue: CellValue;
   /** Current value */
   currentValue: CellValue;
+  /** Edit session token; editor callbacks tagged with another one are ignored. */
+  editId: number;
 }
 
 /** Fill handle state */
@@ -76,7 +92,9 @@ export interface FillHandleState {
 export interface CellValueChangedEvent<TData = unknown> {
   /** Stable row ID (from getRowId) */
   rowId: RowId;
-  /** Column index */
+  /** Normalized column identity: `colId ?? field`. */
+  columnId: string;
+  /** Current view column index (resolved-layout position). */
   colIndex: number;
   /** Column field name */
   field: string;
@@ -118,6 +136,12 @@ export interface SlotState {
   rowIndex: number;
   /** Row data */
   rowData: unknown;
+  /**
+   * Monotonic assignment generation. Bumped every time the slot is assigned
+   * (including recycling), so a late callback can be told apart from the
+   * assignment that produced it.
+   */
+  generation: number;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
 }
