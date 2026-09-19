@@ -6,6 +6,12 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
+  GridCore,
+  RowDragEndEvent,
 } from "@gp-grid/vue";
 
 interface ConformanceRow {
@@ -129,7 +135,25 @@ const mounted = ref(true);
 const generation = ref(0);
 const editEvents = ref(0);
 const writeRejected = ref(0);
+const columnState = ref<ColumnStateUpdate[] | undefined>(undefined);
 const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
+const eventCounts = { resized: 0, moved: 0, dragged: 0 };
+const coreTokens = new WeakMap<object, number>();
+let nextCoreToken = 1;
+
+const coreOf = (): GridCore<unknown> | undefined =>
+  (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+
+const readCoreToken = (): number => {
+  const core = coreOf();
+  if (!core) return -1;
+  const existing = coreTokens.get(core);
+  if (existing !== undefined) return existing;
+  const token = nextCoreToken;
+  nextCoreToken += 1;
+  coreTokens.set(core, token);
+  return token;
+};
 
 const metrics = computed(() => JSON.stringify({
   generation: generation.value,
@@ -150,11 +174,15 @@ const replaceColumns = (): void => {
 const reset = (): void => {
   rows.value = createRows();
   columns.value = createColumns();
+  columnState.value = undefined;
   mode.value = "object";
   mounted.value = true;
   generation.value += 1;
   editEvents.value = 0;
   writeRejected.value = 0;
+  eventCounts.resized = 0;
+  eventCounts.moved = 0;
+  eventCounts.dragged = 0;
 };
 
 const remount = async (): Promise<void> => {
@@ -195,21 +223,57 @@ const onWriteRejected = (_event: CellWriteRejectedEvent): void => {
   writeRejected.value += 1;
 };
 
+const onColumnResized = (_event: ColumnResizedEvent): void => {
+  eventCounts.resized += 1;
+};
+const onColumnMoved = (_event: ColumnMovedEvent): void => {
+  eventCounts.moved += 1;
+};
+const onRowDragEnd = (_event: RowDragEndEvent): void => {
+  eventCounts.dragged += 1;
+};
+
+const applyColumnState = (): void => {
+  columnState.value = [{ columnId: "city", width: 260 }];
+};
+const resetColumnState = (): void => {
+  columnState.value = undefined;
+  coreOf()?.resetColumnState();
+};
+const applySort = (): void => {
+  void coreOf()?.setSort("score", "asc");
+};
+const applyFilter = (): void => {
+  void coreOf()?.setFilter("city", "City 1");
+};
+const moveColumn = (): void => {
+  coreOf()?.moveColumn(0, 2);
+};
+const dragRow = (): void => {
+  coreOf()?.commitRowDrag(0, 1);
+};
+
 if (typeof window !== "undefined") {
   (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
-    getCellValue: (row: number, col: number): CellValue => {
-      const exposed = gridRef.value as unknown as { core?: { getCellValue(row: number, col: number): CellValue } } | null;
-      return exposed?.core?.getCellValue(row, col) ?? null;
-    },
-    getFieldValue: (row: number, field: string): CellValue => {
-      const exposed = gridRef.value as unknown as { core?: { getFieldValue(row: number, field: string): CellValue } } | null;
-      return exposed?.core?.getFieldValue(row, field) ?? null;
-    },
+    getCellValue: (row: number, col: number): CellValue => coreOf()?.getCellValue(row, col) ?? null,
+    getFieldValue: (row: number, field: string): CellValue => coreOf()?.getFieldValue(row, field) ?? null,
     revision: (): number => fixture.source.revision,
     sourceReads: (): number => fixture.reads(),
     sourceDistinctRows: (): number => fixture.distinctRows(),
     resetSourceReads: (): void => fixture.resetReads(),
     recordMaterializations: (): number => fixture.recordMaterializations(),
+    coreToken: readCoreToken,
+    columnIds: (): string[] =>
+      coreOf()?.getColumns().map((column: ColumnDefinition) => column.colId ?? column.field) ?? [],
+    columnState: (): ColumnStateSnapshot[] => coreOf()?.getColumnState() ?? [],
+    sortColumn: (): string | null => coreOf()?.getSortModel()[0]?.colId ?? null,
+    filterCount: (): number => Object.keys(coreOf()?.getFilterModel() ?? {}).length,
+    eventCounts: () => ({ ...eventCounts }),
+    resetEventCounts: (): void => {
+      eventCounts.resized = 0;
+      eventCounts.moved = 0;
+      eventCounts.dragged = 0;
+    },
   };
 }
 </script>
@@ -220,6 +284,12 @@ if (typeof window !== "undefined") {
       <button data-testid="reset" @click="reset">Reset</button>
       <button data-testid="remount" @click="remount">Remount</button>
       <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
+      <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
+      <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
+      <button data-testid="apply-sort" @click="applySort">Apply sort</button>
+      <button data-testid="apply-filter" @click="applyFilter">Apply filter</button>
+      <button data-testid="move-column" @click="moveColumn">Move column</button>
+      <button data-testid="drag-row" @click="dragRow">Drag row</button>
       <button data-testid="use-columnar" @click="useColumnar">Use columnar</button>
       <button data-testid="use-object" @click="useObject">Use object</button>
       <button data-testid="bump-revision" @click="bumpRevision">Bump revision</button>
@@ -231,6 +301,7 @@ if (typeof window !== "undefined") {
         ref="gridRef"
         :key="generation"
         :columns="mode === 'columnar' ? columnarColumns : columns"
+        :column-state="columnState"
         :data-source="mode === 'columnar' ? fixture.source : undefined"
         :row-data="mode === 'columnar' ? undefined : rows"
         :row-height="32"
@@ -238,6 +309,9 @@ if (typeof window !== "undefined") {
         :get-row-id="(row: unknown) => (row as ConformanceRow).id"
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"
+        :on-column-resized="onColumnResized"
+        :on-column-moved="onColumnMoved"
+        :on-row-drag-end="onRowDragEnd"
       />
     </div>
   </main>

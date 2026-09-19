@@ -22,6 +22,7 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Examples](#examples)
+- [Column state and schema lifecycle](#column-state-and-schema-lifecycle)
 - [API Reference](#api-reference)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Styling](#styling)
@@ -478,6 +479,58 @@ const dataSource = createClientDataSource(tasks);
 </template>
 ```
 
+## Column state and schema lifecycle
+
+Passing a new `columns` array reconciles the schema by `ColumnId` (`colId ?? field`) in one batch. The core instance is reused: unrelated sort, filter and scroll state survive, surviving columns keep their user width/order/visibility, and removed columns drop their headers and state.
+
+Definition `width`/`hidden` are initial defaults. A definition change only applies when the column has no user override for that property; otherwise call `core.resetColumnState(["id"])` first.
+
+Drive width, visibility and order from your own state with the controlled `column-state` prop:
+
+```vue
+<template>
+  <GpGrid
+    :columns="columns"
+    :row-data="rows"
+    :row-height="36"
+    :column-state="[{ columnId: 'city', width: 220 }]"
+  />
+</template>
+```
+
+### Migration from 0.x
+
+Events are object-shaped in every wrapper; there is no compatibility adapter.
+
+```vue
+<template>
+  <!-- 0.x -->
+  <GpGrid
+    :columns="columns"
+    :row-data="rows"
+    :row-height="36"
+    :on-column-resized="(colIndex, newWidth) => persist(colIndex, newWidth)"
+    :on-column-moved="(from, to) => persistOrder(from, to)"
+    :on-row-drag-end="(src, tgt) => persistRowOrder(src, tgt)"
+  />
+
+  <!-- 1.0 -->
+  <GpGrid
+    :columns="columns"
+    :row-data="rows"
+    :row-height="36"
+    :column-state="columnState"
+    :on-column-resized="({ columnId, width, viewIndex }) => persist(columnId, width, viewIndex)"
+    :on-column-moved="({ columnId, fromViewIndex, toViewIndex }) => persistOrder(columnId, fromViewIndex, toViewIndex)"
+    :on-row-drag-end="({ rowId, fromViewIndex, toViewIndex }) => persistRowOrder(rowId, fromViewIndex, toViewIndex)"
+  />
+</template>
+```
+
+The old prop-driven `columns[i].width = newWidth` mutation becomes `:column-state="[{ columnId: 'city', width: newWidth }]"`; `hidden` follows the same shape.
+
+The public website documentation for this package lives outside this repository and should be updated by the maintainer.
+
 ## API Reference
 
 ### GpGridProps
@@ -485,12 +538,14 @@ const dataSource = createClientDataSource(tasks);
 | Prop              | Type                                | Default     | Description                                                 |
 | ----------------- | ----------------------------------- | ----------- | ----------------------------------------------------------- |
 | `columns`         | `ColumnDefinition[]`                | required    | Column definitions                                          |
+| `columnState`     | `ColumnStateUpdate[]`               | -           | Controlled `{ columnId, width?, hidden?, order? }` state applied through the core |
 | `dataSource`      | `DataSource<TData>`                 | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                           | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                            | required    | Height of each row in pixels                                |
 | `headerHeight`    | `number`                            | `rowHeight` | Height of header row                                        |
 | `overscan`        | `number`                            | `3`         | Number of rows to render outside viewport                   |
 | `sortingEnabled`  | `boolean`                           | `true`      | Enable column sorting                                       |
+| `getRowId`        | `(row: TData) => RowId`             | -           | Stable row identity; required for mutations                 |
 | `darkMode`        | `boolean`                           | `false`     | Enable dark theme                                           |
 | `wheelDampening`  | `number`                            | `0.1`       | Scroll wheel sensitivity (0-1)                              |
 | `cellRenderers`   | `Record<string, VueCellRenderer>`   | `{}`        | Cell renderer registry                                      |
@@ -499,6 +554,11 @@ const dataSource = createClientDataSource(tasks);
 | `cellRenderer`    | `VueCellRenderer`                   | -           | Global fallback cell renderer                               |
 | `editRenderer`    | `VueEditRenderer`                   | -           | Global fallback edit renderer                               |
 | `headerRenderer`  | `VueHeaderRenderer`                 | -           | Global fallback header renderer                             |
+| `onColumnResized` | `(event: ColumnResizedEvent) => void` | -         | Called with `{ columnId, width, viewIndex }`                |
+| `onColumnMoved`   | `(event: ColumnMovedEvent) => void`   | -         | Called with `{ columnId, fromViewIndex, toViewIndex }`      |
+| `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -         | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
+| `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
+| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |
 
 ### ColumnDefinition
 
@@ -507,7 +567,7 @@ const dataSource = createClientDataSource(tasks);
 | `field`          | `string`       | Property path in row data (supports dot notation: `"address.city"`) |
 | `colId`          | `string`       | Unique column ID (defaults to `field`)                              |
 | `cellDataType`   | `CellDataType` | `"text"` \| `"number"` \| `"boolean"` \| `"date"` \| `"object"`     |
-| `width`          | `number`       | Column width in pixels                                              |
+| `width`          | `number`       | Initial column width in pixels; live width is core state            |
 | `headerName`     | `string`       | Display name in header (defaults to `field`)                        |
 | `editable`       | `boolean`      | Enable cell editing                                                 |
 | `cellRenderer`   | `string`       | Key in `cellRenderers` registry                                     |
@@ -520,9 +580,12 @@ const dataSource = createClientDataSource(tasks);
 import type { VNode } from "vue";
 
 // Cell renderer receives these params
-interface CellRendererParams {
+interface CellRendererParams<TData = unknown> {
   value: CellValue; // Current cell value
-  rowData: Row; // Full row data
+  rowData?: TData; // Source record; absent for record-less rows
+  rowId?: RowId; // Stable row identity, when the source exposes one
+  columnId: string; // `colId ?? field`
+  getValue?: (field: string) => CellValue; // Read another field's raw value
   column: ColumnDefinition; // Column definition
   rowIndex: number; // Row index
   colIndex: number; // Column index
@@ -548,6 +611,7 @@ type VueEditRenderer = (params: EditRendererParams) => VNode | null;
 // Header renderer params
 interface HeaderRendererParams {
   column: ColumnDefinition;
+  columnId: string; // `colId ?? field`
   colIndex: number;
   sortDirection?: "asc" | "desc";
   sortIndex?: number; // For multi-column sort

@@ -3,6 +3,9 @@
 import type {
   RowId,
   ColumnDefinition,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateUpdate,
   DataSource,
   CellRendererParams,
   CellValueChangedEvent,
@@ -12,6 +15,7 @@ import type {
   GridCore,
   GridLabelOverrides,
   HighlightingOptions,
+  RowDragEndEvent,
   RowLoadingOptions,
 } from "@gp-grid/core";
 
@@ -48,6 +52,11 @@ export type ReactHeaderRenderer = (
 export interface GridProps<TData = unknown> {
   /** Column definitions */
   columns: ColumnDefinition[];
+  /**
+   * Controlled per-column state applied through the core whenever it changes.
+   * Explicit commands win over retained user state and definition defaults.
+   */
+  columnState?: ColumnStateUpdate[];
   /** Data source for the grid */
   dataSource?: DataSource<TData>;
   /** Legacy: Raw row data (will be wrapped in a client data source) */
@@ -105,11 +114,11 @@ export interface GridProps<TData = unknown> {
   /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer handles data reordering. */
-  onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  onRowDragEnd?: (event: RowDragEndEvent) => void;
   /** Called when a column is resized. */
-  onColumnResized?: (colIndex: number, newWidth: number) => void;
+  onColumnResized?: (event: ColumnResizedEvent) => void;
   /** Called when a column is moved/reordered. */
-  onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

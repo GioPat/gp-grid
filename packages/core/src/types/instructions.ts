@@ -20,6 +20,8 @@ import type { ColumnFilterModel } from "./filters";
 export interface CreateSlotInstruction {
   type: "CREATE_SLOT";
   slotId: string;
+  /** Initial assignment generation; always 0 for a fresh slot. */
+  generation: number;
 }
 
 /** Destroy slot instruction */
@@ -34,6 +36,8 @@ export interface AssignSlotInstruction {
   slotId: string;
   rowIndex: number;
   rowData: unknown;
+  /** Assignment generation, matching the slot's current generation. */
+  generation: number;
 }
 
 /** Move slot instruction */
@@ -87,7 +91,9 @@ export interface StartEditInstruction {
   type: "START_EDIT";
   row: number;
   col: number;
+  /** Value the editor opens with: the draft when an open edit is re-anchored. */
   initialValue: CellValue;
+  editId: number;
 }
 
 /** Stop edit instruction */
@@ -151,12 +157,18 @@ export interface SetContentSizeInstruction {
 /** Update header instruction */
 export interface UpdateHeaderInstruction {
   type: "UPDATE_HEADER";
-  colIndex: number;
+  columnId: string;
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
   /** Whether column has an active filter */
   hasFilter: boolean;
+}
+
+/** Drop header state for columns that left the resolved layout. */
+export interface RemoveHeadersInstruction {
+  type: "REMOVE_HEADERS";
+  columnIds: string[];
 }
 
 // =============================================================================
@@ -266,6 +278,7 @@ export type GridInstruction =
   /** Layout */
   | SetContentSizeInstruction
   | UpdateHeaderInstruction
+  | RemoveHeadersInstruction
   /** Filter popup */
   | OpenFilterPopupInstruction
   | CloseFilterPopupInstruction

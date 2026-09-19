@@ -101,6 +101,7 @@ export type {
   CellDataType,
   CellValue,
   RowId,
+  ViewRow,
   SortDirection,
   SortModel,
   // Cell coordinates
@@ -110,6 +111,14 @@ export type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteRejectionOperation,
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  RowDragEndEvent,
+  // Column identity and state
+  ColumnId,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
   // Selection
   SelectionState,
   // Data source

@@ -3,8 +3,11 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
   DataSource,
   HighlightingOptions,
+  RowDragEndEvent,
   RowLoadingOptions,
   RowId,
 } from '@gp-grid/core';
@@ -24,11 +27,11 @@ export interface BuildGridCoreInputs<TData> {
 }
 
 export interface BuildGridCoreEmitters<TData> {
-  onRowDragEnd: (source: number, target: number) => void;
+  onRowDragEnd: (event: RowDragEndEvent) => void;
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
   onWriteRejected: (event: CellWriteRejectedEvent) => void;
-  onColumnResized: (colIndex: number, newWidth: number) => void;
-  onColumnMoved: (fromIndex: number, toIndex: number) => void;
+  onColumnResized: (event: ColumnResizedEvent) => void;
+  onColumnMoved: (event: ColumnMovedEvent) => void;
 }
 
 export const buildGridCore = <TData>(

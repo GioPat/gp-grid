@@ -7,6 +7,11 @@ import type {
   CellWriteRejectedEvent,
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
+import type {
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  RowDragEndEvent,
+} from "./events";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
 import type { HighlightingOptions } from "./highlighting";
 
@@ -74,9 +79,9 @@ export interface GridCoreOptions<TData = unknown> {
   /** Whether clicking and dragging any cell in a row drags the entire row instead of starting selection. Default: false */
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */
-  onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+  onRowDragEnd?: (event: RowDragEndEvent) => void;
   /** Called when a column is resized. */
-  onColumnResized?: (colIndex: number, newWidth: number) => void;
+  onColumnResized?: (event: ColumnResizedEvent) => void;
   /** Called when a column is moved/reordered. */
-  onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+  onColumnMoved?: (event: ColumnMovedEvent) => void;
 }

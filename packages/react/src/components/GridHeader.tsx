@@ -14,7 +14,7 @@ export interface GridHeaderProps<TData = unknown> {
   visibleColumnsWithIndices: VisibleColumnInfo[];
   columnPositions: number[];
   columnWidths: number[];
-  headers: Map<number, HeaderData>;
+  headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
@@ -62,7 +62,7 @@ export const GridHeader = <TData = unknown>(
         }}
       >
         {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
-          const headerInfo = headers.get(originalIndex);
+          const headerInfo = headers.get(column.colId ?? column.field);
           const colW = columnWidths[visibleIndex] ?? 0;
           return (
             <div

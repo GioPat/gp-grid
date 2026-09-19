@@ -77,7 +77,6 @@ export class DataSourceOwner<TData = unknown> {
    * unchanged.
    */
   syncColumns(columns: ColumnDefinition[]): boolean {
-    if (columns.length === 0) return false;
     if (this.lastAppliedColumns === columns) return false;
     this.lastAppliedColumns = columns;
     return true;

@@ -55,6 +55,7 @@ export const writeCell = <TData>(
   if (emitChange) {
     deps.onCellValueChanged!({
       rowId: deps.getRowId!(rowData),
+      columnId: column.colId ?? column.field,
       colIndex: col,
       field: column.field,
       oldValue: oldValue!,

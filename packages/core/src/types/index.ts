@@ -6,6 +6,7 @@ export type {
   CellDataType,
   CellValue,
   RowId,
+  ViewRow,
   SortDirection,
   SortModel,
   CellPosition,
@@ -19,6 +20,13 @@ export type {
   SlotState,
 } from "./basic";
 
+/** Object-shaped interaction events */
+export type {
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  RowDragEndEvent,
+} from "./events";
+
 // Highlighting types (must come before columns, which depends on these)
 export type {
   HighlightColumnInfo,
@@ -27,7 +35,13 @@ export type {
 } from "./highlighting";
 
 // Column types
-export type { ColumnDefinition } from "./columns";
+export type {
+  ColumnDefinition,
+  ColumnId,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
+} from "./columns";
 
 // Filter types
 export type {
@@ -84,6 +98,7 @@ export type {
   StopPeekInstruction,
   SetContentSizeInstruction,
   UpdateHeaderInstruction,
+  RemoveHeadersInstruction,
   OpenFilterPopupInstruction,
   CloseFilterPopupInstruction,
   StartFillInstruction,

@@ -5,7 +5,12 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
   GridRef,
+  RowDragEndEvent,
 } from "@gp-grid/react";
 
 interface ConformanceRow {
@@ -141,6 +146,19 @@ interface ConformanceHooks {
   sourceDistinctRows: () => number;
   resetSourceReads: () => void;
   recordMaterializations: () => number;
+  coreToken: () => number;
+  columnIds: () => string[];
+  columnState: () => ColumnStateSnapshot[];
+  sortColumn: () => string | null;
+  filterCount: () => number;
+  eventCounts: () => { resized: number; moved: number; dragged: number };
+  resetEventCounts: () => void;
+}
+
+interface EventCounts {
+  resized: number;
+  moved: number;
+  dragged: number;
 }
 
 export const ConformanceApp = (): React.ReactNode => {
@@ -154,7 +172,11 @@ export const ConformanceApp = (): React.ReactNode => {
   const [generation, setGeneration] = useState(0);
   const [editEvents, setEditEvents] = useState(0);
   const [writeRejected, setWriteRejected] = useState(0);
+  const [columnState, setColumnState] = useState<ColumnStateUpdate[] | undefined>(undefined);
   const gridRef = useRef<GridRef<ConformanceRow> | null>(null);
+  const eventCounts = useRef<EventCounts>({ resized: 0, moved: 0, dragged: 0 });
+  const coreTokens = useRef(new WeakMap<object, number>());
+  const nextCoreToken = useRef(1);
 
   const isColumnar = mode === "columnar";
 
@@ -169,6 +191,7 @@ export const ConformanceApp = (): React.ReactNode => {
   const reset = useCallback(() => {
     setRows(createRows());
     setColumns(createColumns());
+    setColumnState(undefined);
     setMode("object");
     setMounted(true);
     setGeneration((value) => value + 1);
@@ -214,6 +237,53 @@ export const ConformanceApp = (): React.ReactNode => {
     setWriteRejected((value) => value + 1);
   }, []);
 
+  const onColumnResized = useCallback((_event: ColumnResizedEvent) => {
+    eventCounts.current.resized += 1;
+  }, []);
+  const onColumnMoved = useCallback((_event: ColumnMovedEvent) => {
+    eventCounts.current.moved += 1;
+  }, []);
+  const onRowDragEnd = useCallback((_event: RowDragEndEvent) => {
+    eventCounts.current.dragged += 1;
+  }, []);
+
+  const readCoreToken = useCallback((): number => {
+    const core = gridRef.current?.core;
+    if (!core) return -1;
+    const tokens = coreTokens.current;
+    const existing = tokens.get(core);
+    if (existing !== undefined) return existing;
+    const token = nextCoreToken.current;
+    nextCoreToken.current += 1;
+    tokens.set(core, token);
+    return token;
+  }, []);
+
+  const applyColumnState = useCallback(() => {
+    setColumnState([{ columnId: "city", width: 260 }]);
+  }, []);
+
+  const resetColumnState = useCallback(() => {
+    setColumnState(undefined);
+    gridRef.current?.core?.resetColumnState();
+  }, []);
+
+  const applySort = useCallback(() => {
+    void gridRef.current?.core?.setSort("score", "asc");
+  }, []);
+
+  const applyFilter = useCallback(() => {
+    void gridRef.current?.core?.setFilter("city", "City 1");
+  }, []);
+
+  const moveColumn = useCallback(() => {
+    gridRef.current?.core?.moveColumn(0, 2);
+  }, []);
+
+  const dragRow = useCallback(() => {
+    gridRef.current?.core?.commitRowDrag(0, 1);
+  }, []);
+
   // Expose the wrapper's stripped built core for raw-value assertions and the
   // borrowed-source read counters for bounded-read assertions.
   useEffect(() => {
@@ -225,12 +295,21 @@ export const ConformanceApp = (): React.ReactNode => {
       sourceDistinctRows: () => fixture.distinctRows(),
       resetSourceReads: () => fixture.resetReads(),
       recordMaterializations: () => fixture.recordMaterializations(),
+      coreToken: readCoreToken,
+      columnIds: () => gridRef.current?.core?.getColumns().map((column) => column.colId ?? column.field) ?? [],
+      columnState: () => gridRef.current?.core?.getColumnState() ?? [],
+      sortColumn: () => gridRef.current?.core?.getSortModel()[0]?.colId ?? null,
+      filterCount: () => Object.keys(gridRef.current?.core?.getFilterModel() ?? {}).length,
+      eventCounts: () => ({ ...eventCounts.current }),
+      resetEventCounts: () => {
+        eventCounts.current = { resized: 0, moved: 0, dragged: 0 };
+      },
     };
     (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance = hooks;
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [fixture]);
+  }, [fixture, readCoreToken]);
 
   const metrics = useMemo(
     () => ({ generation, editEvents, writeRejected, mode, revision }),
@@ -243,6 +322,12 @@ export const ConformanceApp = (): React.ReactNode => {
         <button data-testid="reset" onClick={reset}>Reset</button>
         <button data-testid="remount" onClick={remount}>Remount</button>
         <button data-testid="replace-columns" onClick={replaceColumns}>Replace columns</button>
+        <button data-testid="apply-column-state" onClick={applyColumnState}>Apply column state</button>
+        <button data-testid="reset-column-state" onClick={resetColumnState}>Reset column state</button>
+        <button data-testid="apply-sort" onClick={applySort}>Apply sort</button>
+        <button data-testid="apply-filter" onClick={applyFilter}>Apply filter</button>
+        <button data-testid="move-column" onClick={moveColumn}>Move column</button>
+        <button data-testid="drag-row" onClick={dragRow}>Drag row</button>
         <button data-testid="use-columnar" onClick={useColumnar}>Use columnar</button>
         <button data-testid="use-object" onClick={useObject}>Use object</button>
         <button data-testid="bump-revision" onClick={bumpRevision}>Bump revision</button>
@@ -254,6 +339,7 @@ export const ConformanceApp = (): React.ReactNode => {
             key={generation}
             gridRef={gridRef}
             columns={isColumnar ? columnarColumns : columns}
+            columnState={columnState}
             dataSource={isColumnar ? fixture.source : undefined}
             rowData={isColumnar ? undefined : rows}
             rowHeight={32}
@@ -261,6 +347,9 @@ export const ConformanceApp = (): React.ReactNode => {
             getRowId={(row) => row.id}
             onCellValueChanged={onCellValueChanged}
             onWriteRejected={onWriteRejected}
+            onColumnResized={onColumnResized}
+            onColumnMoved={onColumnMoved}
+            onRowDragEnd={onRowDragEnd}
           />
         )}
       </div>

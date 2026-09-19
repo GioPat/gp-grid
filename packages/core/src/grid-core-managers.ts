@@ -132,6 +132,8 @@ export const buildGridManagers = <TData>(
     isWritable: () => rowData.isWritable(),
     onWriteRejected: config.onWriteRejected,
     onCommit: (row) => slotPool.updateSlot(row),
+    getSlotGeneration: (row) => slotPool.getSlotGeneration(row),
+    getRowId: (row) => rowData.getRowId(row),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));
 

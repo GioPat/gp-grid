@@ -13,7 +13,7 @@ const props = defineProps<{
   visibleColumnsWithIndices: VisibleColumnInfo[];
   columnPositions: number[];
   columnWidths: number[];
-  headers: Map<number, HeaderData>;
+  headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
@@ -55,11 +55,11 @@ const props = defineProps<{
           :is="renderHeader({
             column,
             colIndex: originalIndex,
-            sortDirection: props.headers.get(originalIndex)?.sortDirection,
-            sortIndex: props.headers.get(originalIndex)?.sortIndex,
+            sortDirection: props.headers.get(column.colId ?? column.field)?.sortDirection,
+            sortIndex: props.headers.get(column.colId ?? column.field)?.sortIndex,
             sortable: (column.sortable !== false) && props.sortingEnabled,
             filterable: column.filterable !== false,
-            hasFilter: props.headers.get(originalIndex)?.hasFilter ?? false,
+            hasFilter: props.headers.get(column.colId ?? column.field)?.hasFilter ?? false,
             core: props.coreRef,
             container: props.outerContainerRef,
             headerRenderers: props.headerRenderers,

@@ -11,6 +11,7 @@ import {
 } from '@gp-grid/core';
 import type {
   ColumnDefinition,
+  ColumnStateUpdate,
   DataSource,
   HighlightingOptions,
 } from '@gp-grid/core';
@@ -77,6 +78,7 @@ export class GpGridBindings<TData = unknown> {
   attach(core: GridCore<TData>): void {
     this.coreRef = core;
     this.touchScroll.syncCore();
+    this.deps.vm.columns.set(core.getColumns());
     this.unsubscribe = core.onBatchInstruction((instructions) => {
       const vm = this.deps.vm;
       const maps = applyBatchInstructions(
@@ -137,6 +139,11 @@ export class GpGridBindings<TData = unknown> {
     const core = this.coreRef;
     if (core === null) return;
     if (this.dataSourceOwner.syncColumns(cols)) core.setColumns(cols);
+  }
+
+  /** Apply a controlled column-state input; explicit commands win. */
+  syncColumnState(updates: ColumnStateUpdate[]): void {
+    this.coreRef?.setColumnState(updates);
   }
 
   syncRows(rows: TData[], dataSource: DataSource<TData> | null): void {

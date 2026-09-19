@@ -17,7 +17,7 @@ import {
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, ColumnMovedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -30,6 +30,8 @@ import CellPeek from "./components/CellPeek.vue";
 const props = withDefaults(
   defineProps<{
     columns: ColumnDefinition[];
+    /** Controlled per-column state; applied through the core whenever it changes. */
+    columnState?: ColumnStateUpdate[];
     dataSource?: DataSource<Row>;
     rowData?: Row[];
     rowHeight: number;
@@ -64,11 +66,11 @@ const props = withDefaults(
     /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
     rowDragEntireRow?: boolean;
     /** Called when a row is dropped after dragging. Consumer handles data reordering. */
-    onRowDragEnd?: (sourceIndex: number, targetIndex: number) => void;
+    onRowDragEnd?: (event: RowDragEndEvent) => void;
     /** Called when a column is resized. */
-    onColumnResized?: (colIndex: number, newWidth: number) => void;
+    onColumnResized?: (event: ColumnResizedEvent) => void;
     /** Called when a column is moved/reordered. */
-    onColumnMoved?: (fromIndex: number, toIndex: number) => void;
+    onColumnMoved?: (event: ColumnMovedEvent) => void;
     /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
     labels?: GridLabelOverrides;
   }>(),
@@ -107,17 +109,17 @@ const scrollLeft = ref(0);
 const { state, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
+  initialColumns: props.columns as unknown as CoreColumnDefinition[],
 });
 
 // Computed values
 const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
 const resolvedLabels = computed(() => resolveGridLabels(props.labels));
 
-// Effective columns: use core-updated columns (after resize/move) or fall back to props.
-// Cast user props to core's ColumnDefinition for internal plumbing — the Vue-widened
-// renderer fields are structurally a superset but core only reads non-renderer props here.
+// Resolved layout owned by the core. The `columns` prop is schema input only;
+// the wrapper never renders it directly after mount.
 const effectiveColumns = computed<CoreColumnDefinition[]>(
-  () => state.value.columns ?? (props.columns as unknown as CoreColumnDefinition[]),
+  () => state.value.columns,
 );
 
 // Create visible columns with original index tracking (for hidden column support)
@@ -282,11 +284,13 @@ function initializeCore(dataSource: DataSource<Row>): void {
       : undefined,
     onWriteRejected: (event) => props.onWriteRejected?.(event),
     rowDragEntireRow: props.rowDragEntireRow ?? false,
-    onRowDragEnd: (src, tgt) => props.onRowDragEnd?.(src, tgt),
-    onColumnResized: (col, w) => props.onColumnResized?.(col, w),
-    onColumnMoved: (from, to) => props.onColumnMoved?.(from, to),
+    onRowDragEnd: (event) => props.onRowDragEnd?.(event),
+    onColumnResized: (event) => props.onColumnResized?.(event),
+    onColumnMoved: (event) => props.onColumnMoved?.(event),
   });
 
+  // The columnState watcher only fires on change; apply the current value here.
+  if (props.columnState) core.setColumnState(props.columnState);
   coreRef.value = core;
   touchScroll.syncCore();
 
@@ -426,6 +430,22 @@ watch(
     if (coreRef.value?.highlight && highlighting) {
       coreRef.value.highlight.updateOptions(highlighting);
     }
+  },
+);
+
+// Reconcile a replacement `columns` array without recreating the core.
+watch(
+  () => props.columns,
+  (columns) => {
+    coreRef.value?.setColumns(columns as unknown as CoreColumnDefinition[]);
+  },
+);
+
+// Apply a controlled column-state input whenever it changes.
+watch(
+  () => props.columnState,
+  (columnState) => {
+    if (columnState) coreRef.value?.setColumnState(columnState);
   },
 );
 

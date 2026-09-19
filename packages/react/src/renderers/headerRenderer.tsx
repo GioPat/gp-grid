@@ -50,6 +50,7 @@ export function renderHeader<TData>(
   const core = coreRef.current;
   const params: HeaderRendererParams = {
     column,
+    columnId: column.colId ?? column.field,
     colIndex,
     sortDirection,
     sortIndex,

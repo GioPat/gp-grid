@@ -54,7 +54,7 @@ const makeSetters = (): BatchChangeSetters => ({
   setEditingCell: vi.fn(),
   setHoverPosition: vi.fn(),
   setPeekCell: vi.fn(),
-  setColumnsOverride: vi.fn(),
+  setColumns: vi.fn(),
   onFilterPopupChange: vi.fn(),
 });
 

@@ -22,10 +22,14 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnFilterModel,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateUpdate,
   DataSource,
   GridCore,
   GridLabelOverrides,
   HighlightingOptions,
+  RowDragEndEvent,
   RowLoadingOptions,
   RowId,
 } from '@gp-grid/core';
@@ -65,6 +69,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   columns = input.required<AngularColumnDefinition[]>();
+  /** Controlled per-column state; applied through the core whenever it changes. */
+  columnState = input<ColumnStateUpdate[] | null | undefined>(null);
   rows = input<unknown[]>([]);
   dataSource = input<DataSource<unknown> | null>(null);
   getRowId = input<((row: unknown) => RowId) | null>(null);
@@ -85,17 +91,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   rowLoading = input<RowLoadingOptions | null>(null);
   sortingEnabled = input<boolean>(true);
   wheelDampening = input<number>(0.1);
-  onRowDragEnd = output<{ source: number; target: number }>();
+  onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onWriteRejected = output<CellWriteRejectedEvent>();
-  onColumnResized = output<{ colIndex: number; newWidth: number }>();
-  onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
+  onColumnResized = output<ColumnResizedEvent>();
+  onColumnMoved = output<ColumnMovedEvent>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
 
   protected readonly vm = new GpGridViewModel({
-    getColumns: () => this.columns(),
     getRows: () => this.rows(),
     getRowHeight: () => this.rowHeight(),
   });
@@ -113,6 +118,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => this.bindings.applyPendingScroll(), { allowSignalWrites: true });
     effect(() => this.bindings.syncHighlighting(this.highlighting()));
     effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]), { allowSignalWrites: true });
+    effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
     effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
   }
 
@@ -132,14 +138,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         rowDragEntireRow: this.rowDragEntireRow(),
       },
       {
-        onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
+        onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
         onWriteRejected: (event) => this.onWriteRejected.emit(event),
-        onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
-        onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
+        onColumnResized: (event) => this.onColumnResized.emit(event),
+        onColumnMoved: (event) => this.onColumnMoved.emit(event),
       },
     );
     this.bindings.attach(core);
+    // The columnState effect ran before the core existed; apply it now.
+    this.bindings.syncColumnState(this.columnState() ?? []);
   }
 
   ngAfterViewInit(): void {
@@ -265,15 +273,15 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   protected onEditValueChange(value: string): void {
-    this.bindings.coreRef?.updateEditValue(value);
+    this.bindings.coreRef?.updateEditValue(value, this.vm.editingCell()?.editId);
   }
 
   protected onEditCommit(): void {
-    this.bindings.coreRef?.commitEdit();
+    this.bindings.coreRef?.commitEdit(this.vm.editingCell()?.editId);
   }
 
   protected onEditCancel(): void {
-    this.bindings.coreRef?.cancelEdit();
+    this.bindings.coreRef?.cancelEdit(this.vm.editingCell()?.editId);
   }
 
   protected onHeaderSort(evt: HeaderSortEvent): void {

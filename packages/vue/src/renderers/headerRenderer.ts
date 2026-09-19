@@ -49,6 +49,7 @@ export function renderHeader(
   } = options;
   const params: HeaderRendererParams = {
     column,
+    columnId: column.colId ?? column.field,
     colIndex,
     sortDirection,
     sortIndex,

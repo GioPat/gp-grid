@@ -18,6 +18,8 @@ export interface RenderEditCellOptions {
   rowIndex: number;
   colIndex: number;
   initialValue: CellValue;
+  /** Session token of the open edit; tags every editor callback. */
+  editId: number;
   core: GridCore | null;
   editRenderers: Record<string, VueEditRenderer>;
   globalEditRenderer?: VueEditRenderer;
@@ -41,6 +43,7 @@ export function renderEditCell(
     rowIndex,
     colIndex,
     initialValue,
+    editId,
     core,
     editRenderers,
     globalEditRenderer,
@@ -59,6 +62,7 @@ export function renderEditCell(
     value: displayValue,
     rowData,
     rowId,
+    columnId: column.colId ?? column.field,
     getValue,
     column,
     rowIndex,
@@ -67,9 +71,9 @@ export function renderEditCell(
     isSelected: true,
     isEditing: true,
     initialValue,
-    onValueChange: (newValue) => core.updateEditValue(newValue),
-    onCommit: () => core.commitEdit(),
-    onCancel: () => core.cancelEdit(),
+    onValueChange: (newValue) => core.updateEditValue(newValue, editId),
+    onCommit: () => core.commitEdit(editId),
+    onCancel: () => core.cancelEdit(editId),
   };
 
   // Check for column-specific renderer
@@ -96,19 +100,19 @@ export function renderEditCell(
     value: initialValue == null ? "" : String(initialValue),
     autofocus: true,
     onFocus: (e: FocusEvent) => (e.target as HTMLInputElement).select(),
-    onInput: (e: Event) => core.updateEditValue((e.target as HTMLInputElement).value),
+    onInput: (e: Event) => core.updateEditValue((e.target as HTMLInputElement).value, editId),
     onKeydown: (e: KeyboardEvent) => {
       e.stopPropagation();
       if (e.key === "Enter") {
-        core.commitEdit();
+        core.commitEdit(editId);
       } else if (e.key === "Escape") {
-        core.cancelEdit();
+        core.cancelEdit(editId);
       } else if (e.key === "Tab") {
         e.preventDefault();
-        core.commitEdit();
+        core.commitEdit(editId);
         core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
       }
     },
-    onBlur: () => core.commitEdit(),
+    onBlur: () => core.commitEdit(editId),
   });
 }

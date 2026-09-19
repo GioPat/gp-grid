@@ -57,6 +57,7 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     value: displayValue,
     rowData,
     rowId,
+    columnId: column.colId ?? column.field,
     getValue,
     column,
     rowIndex,

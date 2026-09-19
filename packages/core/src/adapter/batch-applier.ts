@@ -4,7 +4,7 @@ import type { GridInstruction } from "../types/instructions";
 import type { FilterPopupState, HeaderData, SlotData } from "../types/ui-state";
 import { applyInstruction } from "../state-reducer";
 
-type EditingCell = { row: number; col: number; initialValue: CellValue } | null;
+type EditingCell = { row: number; col: number; initialValue: CellValue; editId: number } | null;
 
 /**
  * A "setters bag" the wrapper provides. Each setter pokes a framework-
@@ -24,13 +24,13 @@ export interface BatchChangeSetters {
   setEditingCell: (v: EditingCell) => void;
   setHoverPosition: (v: CellPosition | null) => void;
   setPeekCell: (v: CellPosition | null) => void;
-  setColumnsOverride: (v: ColumnDefinition[]) => void;
+  setColumns: (v: ColumnDefinition[]) => void;
   onFilterPopupChange: (v: FilterPopupState | null) => void;
 }
 
 type MutableMaps = {
   slots: Map<string, SlotData>;
-  headers: Map<number, HeaderData>;
+  headers: Map<string, HeaderData>;
 };
 
 /**
@@ -42,7 +42,7 @@ type MutableMaps = {
 export const applyBatchInstructions = (
   instructions: readonly GridInstruction[],
   currentSlots: Map<string, SlotData>,
-  currentHeaders: Map<number, HeaderData>,
+  currentHeaders: Map<string, HeaderData>,
   setters: BatchChangeSetters,
 ): MutableMaps => {
   const maps: MutableMaps = {
@@ -66,7 +66,7 @@ const applyPartialState = (
   if (changes.headers !== undefined) replaceMap(maps.headers, changes.headers);
   applyScalarState(changes, setters);
   if (changes.columns !== undefined && changes.columns !== null) {
-    setters.setColumnsOverride(changes.columns);
+    setters.setColumns(changes.columns);
   }
   if (changes.filterPopup !== undefined) {
     setters.onFilterPopupChange(changes.filterPopup);

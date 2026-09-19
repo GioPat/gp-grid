@@ -7,10 +7,14 @@ import type {
   CellRendererParams,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  ColumnMovedEvent,
+  ColumnResizedEvent,
+  ColumnStateUpdate,
   EditRendererParams,
   GridLabelOverrides,
   HeaderRendererParams,
   DataSource,
+  RowDragEndEvent,
   RowLoadingOptions,
 } from "@gp-grid/core";
 
@@ -71,6 +75,8 @@ export interface ColumnDefinition<TData = unknown>
 
 export interface GpGridProps<TData = unknown> {
   columns: ColumnDefinition<TData>[];
+  /** Controlled per-column state; applied through the core whenever it changes. */
+  columnState?: ColumnStateUpdate[];
   dataSource?: DataSource<TData>;
   rowData?: TData[];
   rowHeight: number;
@@ -96,6 +102,14 @@ export interface GpGridProps<TData = unknown> {
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
+  /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
+  rowDragEntireRow?: boolean;
+  /** Called when a row is dropped after dragging. Consumer handles data reordering. */
+  onRowDragEnd?: (event: RowDragEndEvent) => void;
+  /** Called when a column is resized. */
+  onColumnResized?: (event: ColumnResizedEvent) => void;
+  /** Called when a column is moved/reordered. */
+  onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

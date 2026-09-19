@@ -22,6 +22,7 @@ A high-performance, feature lean React data grid component built to manage grids
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Examples](#examples)
+- [Column state and schema lifecycle](#column-state-and-schema-lifecycle)
 - [API Reference](#api-reference)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Styling](#styling)
@@ -476,6 +477,54 @@ function TaskGrid() {
 <Grid columns={columns} rowData={data} rowHeight={36} darkMode={true} />
 ```
 
+## Column state and schema lifecycle
+
+Passing a new `columns` array reconciles the schema by `ColumnId` (`colId ?? field`) in one batch. The core instance is reused: unrelated sort, filter and scroll state survive, surviving columns keep their user width/order/visibility, and removed columns drop their headers and state.
+
+Definition `width`/`hidden` are initial defaults. A definition change only applies when the column has no user override for that property; otherwise call `core.resetColumnState(["id"])` first.
+
+Drive width, visibility and order from your own state with the controlled `columnState` prop:
+
+```tsx
+<Grid
+  columns={columns}
+  rowData={rows}
+  rowHeight={36}
+  columnState={[{ columnId: "city", width: 220 }]}
+/>
+```
+
+### Migration from 0.x
+
+Events are object-shaped in every wrapper; there is no compatibility adapter.
+
+```tsx
+// 0.x
+<Grid
+  columns={columns}
+  rowData={rows}
+  rowHeight={36}
+  onColumnResized={(colIndex, newWidth) => persist(colIndex, newWidth)}
+  onColumnMoved={(from, to) => persistOrder(from, to)}
+  onRowDragEnd={(src, tgt) => persistRowOrder(src, tgt)}
+/>
+
+// 1.0
+<Grid
+  columns={columns}
+  rowData={rows}
+  rowHeight={36}
+  columnState={columnState}
+  onColumnResized={({ columnId, width, viewIndex }) => persist(columnId, width, viewIndex)}
+  onColumnMoved={({ columnId, fromViewIndex, toViewIndex }) => persistOrder(columnId, fromViewIndex, toViewIndex)}
+  onRowDragEnd={({ rowId, fromViewIndex, toViewIndex }) => persistRowOrder(rowId, fromViewIndex, toViewIndex)}
+/>
+```
+
+The old prop-driven `columns[i].width = newWidth` mutation becomes `columnState={[{ columnId: "city", width: newWidth }]}`; `hidden` follows the same shape.
+
+The public website documentation for this package lives outside this repository and should be updated by the maintainer.
+
 ## API Reference
 
 ### GridProps
@@ -483,13 +532,13 @@ function TaskGrid() {
 | Prop              | Type                                  | Default     | Description                                                 |
 | ----------------- | ------------------------------------- | ----------- | ----------------------------------------------------------- |
 | `columns`         | `ColumnDefinition[]`                  | required    | Column definitions                                          |
+| `columnState`     | `ColumnStateUpdate[]`                 | -           | Controlled `{ columnId, width?, hidden?, order? }` state applied through the core |
 | `dataSource`      | `DataSource<TData>`                   | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                             | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                              | required    | Height of each row in pixels                                |
 | `headerHeight`    | `number`                              | `rowHeight` | Height of header row                                        |
 | `overscan`        | `number`                              | `3`         | Number of rows to render outside viewport                   |
-| `showFilters`     | `boolean`                             | `false`     | Show filter row below headers                               |
-| `filterDebounce`  | `number`                              | `300`       | Debounce time for filter input (ms)                         |
+| `getRowId`        | `(row: TData) => RowId`               | -           | Stable row identity; required for mutations                 |
 | `darkMode`        | `boolean`                             | `false`     | Enable dark theme                                           |
 | `cellRenderers`   | `Record<string, ReactCellRenderer>`   | `{}`        | Cell renderer registry                                      |
 | `editRenderers`   | `Record<string, ReactEditRenderer>`   | `{}`        | Edit renderer registry                                      |
@@ -497,6 +546,11 @@ function TaskGrid() {
 | `cellRenderer`    | `ReactCellRenderer`                   | -           | Global fallback cell renderer                               |
 | `editRenderer`    | `ReactEditRenderer`                   | -           | Global fallback edit renderer                               |
 | `headerRenderer`  | `ReactHeaderRenderer`                 | -           | Global fallback header renderer                             |
+| `onColumnResized` | `(event: ColumnResizedEvent) => void` | -           | Called with `{ columnId, width, viewIndex }`                |
+| `onColumnMoved`   | `(event: ColumnMovedEvent) => void`   | -           | Called with `{ columnId, fromViewIndex, toViewIndex }`      |
+| `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -           | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
+| `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
+| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |
 
 ### ColumnDefinition
 
@@ -505,7 +559,7 @@ function TaskGrid() {
 | `field`          | `string`       | Property path in row data (supports dot notation: `"address.city"`) |
 | `colId`          | `string`       | Unique column ID (defaults to `field`)                              |
 | `cellDataType`   | `CellDataType` | `"text"` \| `"number"` \| `"boolean"` \| `"date"` \| `"object"`     |
-| `width`          | `number`       | Column width in pixels                                              |
+| `width`          | `number`       | Initial column width in pixels; live width is core state            |
 | `headerName`     | `string`       | Display name in header (defaults to `field`)                        |
 | `editable`       | `boolean`      | Enable cell editing                                                 |
 | `cellRenderer`   | `string`       | Key in `cellRenderers` registry                                     |
@@ -516,9 +570,12 @@ function TaskGrid() {
 
 ```typescript
 // Cell renderer receives these params
-interface CellRendererParams {
+interface CellRendererParams<TData = unknown> {
   value: CellValue; // Current cell value
-  rowData: Row; // Full row data
+  rowData?: TData; // Source record; absent for record-less rows
+  rowId?: RowId; // Stable row identity, when the source exposes one
+  columnId: string; // `colId ?? field`
+  getValue?: (field: string) => CellValue; // Read another field's raw value
   column: ColumnDefinition; // Column definition
   rowIndex: number; // Row index
   colIndex: number; // Column index
@@ -538,6 +595,7 @@ interface EditRendererParams extends CellRendererParams {
 // Header renderer params
 interface HeaderRendererParams {
   column: ColumnDefinition;
+  columnId: string; // `colId ?? field`
   colIndex: number;
   sortDirection?: "asc" | "desc";
   sortIndex?: number; // For multi-column sort

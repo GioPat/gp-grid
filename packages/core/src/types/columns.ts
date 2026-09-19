@@ -9,6 +9,33 @@ import type {
   HeaderRendererParams,
 } from "./renderers";
 
+/** Normalized column identity: `colId ?? field`. */
+export type ColumnId = string;
+
+/** Live per-column state, keyed by {@link ColumnId}. */
+export interface ColumnState {
+  width?: number;
+  hidden?: boolean;
+  order?: number;
+}
+
+/** A single explicit column-state command. Unset properties are untouched. */
+export interface ColumnStateUpdate {
+  columnId: ColumnId;
+  width?: number;
+  hidden?: boolean;
+  /** Target index in the resolved layout (0-based). */
+  order?: number;
+}
+
+/** Effective column state, as reported by `GridCore.getColumnState()`. */
+export interface ColumnStateSnapshot {
+  columnId: ColumnId;
+  width: number;
+  hidden: boolean;
+  order: number;
+}
+
 /** Column definition */
 export interface ColumnDefinition {
   field: string;

@@ -23,9 +23,14 @@ export type {
 
   // Column definition
   ColumnDefinition,
+  ColumnId,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
 
   // Row ID
   RowId,
+  ViewRow,
 
   // Cell position & range
   CellPosition,
@@ -35,6 +40,9 @@ export type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteRejectionOperation,
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  RowDragEndEvent,
 
   // DataSource
   DataSource,

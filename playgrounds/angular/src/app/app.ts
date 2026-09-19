@@ -138,8 +138,8 @@ export class App implements AfterViewInit {
     }
   }
 
-  protected onRowDragEnd(event: { source: number; target: number }): void {
-    console.log(`Row drag: ${event.source} → ${event.target}`);
+  protected onRowDragEnd(event: { rowId: string | number; fromViewIndex: number; toViewIndex: number }): void {
+    console.log(`Row drag: ${event.fromViewIndex} → ${event.toViewIndex}`);
   }
 
   protected updateRowRandom(): void {

@@ -244,6 +244,10 @@ export function createMutableClientDataSource<TData = unknown>(
       return store.getRowById(id);
     },
 
+    getRecordById(id: RowId): TData | undefined {
+      return store.getRowById(id);
+    },
+
     getTotalRowCount(): number {
       return store.getTotalRowCount();
     },

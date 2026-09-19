@@ -1,7 +1,7 @@
 // packages/vue/src/gridState/useGridState.ts
 
 import { shallowRef, type ShallowRef } from "vue";
-import type { GridInstruction, GridState } from "@gp-grid/core";
+import type { GridInstruction, GridState, InitialStateArgs } from "@gp-grid/core";
 import { createInitialState, applyInstruction } from "@gp-grid/core";
 
 export type { InitialStateArgs } from "@gp-grid/core";
@@ -19,7 +19,7 @@ export { createInitialState } from "@gp-grid/core";
  * scheduler batches multiple synchronous state.value replacements into a
  * single re-render, so no microtask buffering is needed.
  */
-export function useGridState(args?: { initialWidth?: number; initialHeight?: number }): {
+export function useGridState(args?: InitialStateArgs): {
   state: ShallowRef<GridState>;
   applyInstructions: (instructions: GridInstruction[]) => void;
   reset: () => void;

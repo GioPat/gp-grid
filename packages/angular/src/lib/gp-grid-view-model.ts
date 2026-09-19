@@ -17,10 +17,8 @@ import type {
   VisibleColumnInfo,
 } from '@gp-grid/core';
 import type { ActiveFilterPopup, EditingCellState } from './components';
-import type { AngularColumnDefinition } from './types';
 
 export interface GpGridViewModelDeps {
-  getColumns: () => AngularColumnDefinition[];
   getRows: () => unknown[];
   getRowHeight: () => number;
 }
@@ -46,7 +44,7 @@ const INITIAL_DRAG_STATE: DragState = {
  * the angular package, not core.
  */
 export class GpGridViewModel {
-  readonly headerState = signal<Map<number, HeaderData>>(new Map());
+  readonly headerState = signal<Map<string, HeaderData>>(new Map());
   readonly viewportWidth = signal<number>(0);
   readonly scrollLeft = signal<number>(0);
   readonly isLoading = signal<boolean>(false);
@@ -58,7 +56,8 @@ export class GpGridViewModel {
   readonly editingCell = signal<EditingCellState | null>(null);
   readonly hoverPosition = signal<CellPosition | null>(null);
   readonly peekCell = signal<CellPosition | null>(null);
-  readonly columnsOverride = signal<ColumnDefinition[] | null>(null);
+  /** Resolved layout owned by the core; never copied from the columns input. */
+  readonly columns = signal<ColumnDefinition[]>([]);
   readonly dragState = signal<DragState>(INITIAL_DRAG_STATE);
   readonly contentWidth = signal<number>(0);
   readonly contentHeight = signal<number>(0);
@@ -78,9 +77,7 @@ export class GpGridViewModel {
   private filterAnchorEl: HTMLElement | null = null;
 
   constructor(deps: GpGridViewModelDeps) {
-    this.effectiveColumns = computed(() =>
-      this.columnsOverride() ?? (deps.getColumns() as unknown as ColumnDefinition[])
-    );
+    this.effectiveColumns = computed(() => this.columns());
     this.visibleColumnWithIndices = computed(() =>
       this.effectiveColumns()
         .map((col, index) => ({ column: col, originalIndex: index }))
@@ -122,7 +119,7 @@ export class GpGridViewModel {
       setEditingCell: (v) => this.editingCell.set(v),
       setHoverPosition: (v) => this.hoverPosition.set(v),
       setPeekCell: (v) => this.peekCell.set(v),
-      setColumnsOverride: (v) => this.columnsOverride.set(v),
+      setColumns: (v) => this.columns.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };
   }

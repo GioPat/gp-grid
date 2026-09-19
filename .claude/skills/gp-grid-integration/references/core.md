@@ -86,14 +86,14 @@ Every UI change is one of these instructions. Each wrapper has its own dispatch 
 | `MOVE_SLOT` | Update a slot's `translateY` (vertical position). |
 | `SET_ACTIVE_CELL` | Update the active cell highlight. |
 | `SET_SELECTION_RANGE` | Update the selected range highlight. |
-| `START_EDIT` / `STOP_EDIT` | Enter/exit edit mode for a cell. |
+| `START_EDIT` / `STOP_EDIT` | Enter/exit edit mode for a cell. `START_EDIT` carries `editId` (the edit session token) and is re-sent with the current draft as `initialValue` when the edited column moves. |
 | `COMMIT_EDIT` | Edit committed; persist the new value. |
 | `UPDATE_HEADER` | Re-render header (sort indicator changed, filter applied, etc.). |
 | `START_FILL` / `UPDATE_FILL` / `COMMIT_FILL` / `CANCEL_FILL` | Fill handle drag lifecycle. |
 | `OPEN_FILTER_POPUP` / `CLOSE_FILTER_POPUP` | Filter UI lifecycle. |
 | `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle (show/hide loading overlay). |
 | `ROWS_ADDED` / `ROWS_REMOVED` / `ROWS_UPDATED` / `TRANSACTION_PROCESSED` | Mutable data source events. |
-| `COLUMNS_CHANGED` | Columns array changed — re-derive header layout. |
+| `COLUMNS_CHANGED` | Columns replaced — schema reconciles by id in one batch (surviving ids keep live state, definition order is authoritative), then `REMOVE_HEADERS` drops headers for ids no longer present. |
 | `START_COLUMN_RESIZE` / `UPDATE_COLUMN_RESIZE` / `COMMIT_COLUMN_RESIZE` / `CANCEL_COLUMN_RESIZE` | Column resize lifecycle. |
 | `START_COLUMN_MOVE` / `UPDATE_COLUMN_MOVE` / `COMMIT_COLUMN_MOVE` / `CANCEL_COLUMN_MOVE` | Column move lifecycle. |
 | `START_ROW_DRAG` / `UPDATE_ROW_DRAG` / `COMMIT_ROW_DRAG` / `CANCEL_ROW_DRAG` | Row drag lifecycle. |
@@ -154,11 +154,23 @@ grid.setFilter("colId", { /* ColumnFilterModel */ } /* or null */);
 grid.startEdit(rowIndex, colIndex);
 grid.commitEdit();
 grid.cancelEdit();
+// Custom adapters: tag editor callbacks with the session token from START_EDIT /
+// getEditState().editId so a callback from a closed editor is ignored.
+grid.updateEditValue(value, editId);
+grid.commitEdit(editId);
 grid.setDataSource(newDataSource);              // hot-swap, preserves state
 grid.refresh();                                  // re-fetch from data source
 grid.refreshFromTransaction();                   // apply mutable ds queued txns
-grid.getRowCount();
-grid.getRowData(rowIndex);
+grid.getRowCount();                              // displayed view-row count
+grid.getRowData(viewIndex);                      // source record, or undefined
+grid.hasRow(viewIndex);                          // whether the view row exists
+grid.getViewRow(viewIndex);                      // { kind, id, viewIndex, record? } | undefined
+grid.getRecordById(rowId);                       // source record for a stable id
+grid.setColumnState([{ columnId, width, hidden, order }]);
+grid.resetColumnState([columnId]);               // omit arg to reset all
+grid.getColumnState();                           // [{ columnId, width, hidden, order }]
+grid.getSlotGeneration(rowIndex);                // slot recycle guard
+grid.isSlotGenerationCurrent(rowIndex, generation);
 grid.selection.startSelection({ row, col }, { shift, ctrl });
 grid.fill.startFill(/* ... */);
 grid.highlight?.updateOptions(highlighting);
@@ -208,7 +220,7 @@ The minimal wrapper does five things, in order:
 2. **Instantiate `GridCore`** with the user's options.
 3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
-5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved` — back out to the user's API.
+5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.setColumnState`.
 
 For a complete reference implementation, read **`packages/react/src/Grid.tsx`** and **`packages/react/src/gridState/`** end to end. The Vue wrapper (`packages/vue/src/GpGrid.vue` + `packages/vue/src/gridState/`) is the same shape with Vue reactivity. The Angular wrapper (`packages/angular/src/lib/gp-grid.component.ts` + `gp-grid-bindings.ts` + `gp-grid-view-model.ts`) is the same shape with signals.
 
@@ -248,6 +260,8 @@ These are the most useful source files for a deep understanding of the core, in 
 | `packages/core/src/grid-core.ts` | The `GridCore` class — top-level orchestration. |
 | `packages/core/src/types/options.ts` | `GridCoreOptions`, `RowLoadingOptions`. |
 | `packages/core/src/types/columns.ts` | `ColumnDefinition` — every option in the column. |
+| `packages/core/src/column-model.ts` | `ColumnId` resolution, duplicate-id diagnostic, live column state and resolved layout. |
+| `packages/core/src/grid-core-view-sync.ts` | One instruction batch per schema/layout change; `REMOVE_HEADERS` on column removal. |
 | `packages/core/src/data-source/index.ts` | All four data source factories. |
 | `packages/core/src/index.ts` | Full public surface (~250 lines, well organized). |
 | `packages/core/src/adapter/` | Shared primitives every wrapper uses. |
