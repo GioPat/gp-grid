@@ -53,7 +53,7 @@ const TEMPLATE = `
       [style.height.px]="headerHeight()">
       @for (entry of visibleColumnsWithIndices(); track entry.originalIndex; let i = $index) {
         @let colW = columnWidths()[i] ?? 0;
-        @let headerData = headers().get(entry.originalIndex);
+        @let headerData = headers().get(entry.column.colId ?? entry.column.field);
         @let tpl = headerTemplate(entry.column);
         <div
           class="gp-grid-header-cell"
@@ -128,7 +128,7 @@ export class GridHeaderComponent {
   visibleColumnsWithIndices = input.required<VisibleColumnInfo[]>();
   columnPositions = input.required<number[]>();
   columnWidths = input.required<number[]>();
-  headers = input.required<Map<number, HeaderData>>();
+  headers = input.required<Map<string, HeaderData>>();
   sortingEnabled = input<boolean>(true);
   headerRenderers = input<Record<string, HeaderRendererTemplate>>({});
   globalHeaderRenderer = input<HeaderRendererTemplate | null>(null);
@@ -185,6 +185,7 @@ export class GridHeaderComponent {
     const filterable = column.filterable !== false;
     return {
       column,
+      columnId: column.colId ?? column.field,
       colIndex,
       sortDirection: headerData?.sortDirection,
       sortIndex: headerData?.sortIndex,

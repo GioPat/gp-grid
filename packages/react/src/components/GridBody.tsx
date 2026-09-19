@@ -35,7 +35,7 @@ export interface GridBodyProps<TData = unknown> {
   rowsWrapperOffset: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
-  editingCell: { row: number; col: number; initialValue: CellValue } | null;
+  editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   error: string | null;
   isLoading: boolean;
   totalRows: number;
@@ -257,6 +257,7 @@ const GridBodyInner = <TData = unknown>(
                           rowIndex: slot.rowIndex,
                           colIndex: originalIndex,
                           initialValue: editingCell.initialValue,
+                          editId: editingCell.editId,
                           coreRef,
                           editRenderers,
                           globalEditRenderer,

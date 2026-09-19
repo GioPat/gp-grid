@@ -480,7 +480,7 @@ function MainDemo() {
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
           rowDragEntireRow
-          onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
+          onRowDragEnd={({ fromViewIndex, toViewIndex }) => console.log(`Row drag: ${fromViewIndex} → ${toViewIndex}`)}
         />
       </div>
       <div

@@ -34,7 +34,7 @@ const props = defineProps<{
   rowsWrapperOffset: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
-  editingCell: { row: number; col: number; initialValue: CellValue } | null;
+  editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   hoverPosition: CellPosition | null;
   error: string | null;
   isLoading: boolean;
@@ -188,6 +188,7 @@ defineExpose({ bodyRef });
                   rowIndex: slot.rowIndex,
                   colIndex: originalIndex,
                   initialValue: props.editingCell.initialValue,
+                  editId: props.editingCell.editId,
                   core: props.coreRef,
                   editRenderers: props.editRenderers,
                   globalEditRenderer: props.globalEditRenderer,

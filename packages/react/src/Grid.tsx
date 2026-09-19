@@ -43,6 +43,7 @@ export function Grid<TData = unknown>(
 ): React.ReactNode {
   const {
     columns,
+    columnState,
     dataSource: providedDataSource,
     rowData,
     rowHeight,
@@ -87,7 +88,7 @@ export function Grid<TData = unknown>(
   const hasInitializedRef = useRef(false);
   const [state, dispatch] = useReducer(
     gridReducer,
-    { initialWidth, initialHeight },
+    { initialWidth, initialHeight, initialColumns: columns },
     createInitialState,
   ) as [GridState<TData>, React.Dispatch<GridAction>];
 
@@ -165,6 +166,9 @@ export function Grid<TData = unknown>(
   getRowIdRef.current = getRowId;
   const onCellValueChangedRef = useRef(onCellValueChanged);
   onCellValueChangedRef.current = onCellValueChanged;
+  const appliedColumnsRef = useRef(columns);
+  const columnStateRef = useRef(columnState);
+  columnStateRef.current = columnState;
   const onWriteRejectedRef = useRef(onWriteRejected);
   onWriteRejectedRef.current = onWriteRejected;
   const onRowDragEndRef = useRef(onRowDragEnd);
@@ -180,8 +184,9 @@ export function Grid<TData = unknown>(
   const dataSourceRef = useRef(dataSource);
   dataSourceRef.current = dataSource;
 
-  // Effective columns: use core-updated columns (after resize/move) or fall back to props
-  const effectiveColumns = state.columns ?? columns;
+  // Effective columns come from the core's resolved layout only; the columns
+  // prop is schema input and is never rendered directly after mount.
+  const effectiveColumns = state.columns;
 
   // Create visible columns with original index tracking (for hidden column support)
   const visibleColumnsWithIndices = useMemo(
@@ -233,10 +238,11 @@ export function Grid<TData = unknown>(
     // Reset state on re-initialization to clear stale slots from previous core
     // Skip on first initialization (nothing to reset)
     if (hasInitializedRef.current) {
-      dispatch({ type: "RESET" });
+      dispatch({ type: "RESET", columns });
     }
     hasInitializedRef.current = true;
 
+    appliedColumnsRef.current = columns;
     const core = new GridCore<TData>({
       columns,
       dataSource: dataSourceRef.current,
@@ -253,11 +259,13 @@ export function Grid<TData = unknown>(
         : undefined,
       onWriteRejected: (event) => onWriteRejectedRef.current?.(event),
       rowDragEntireRow,
-      onRowDragEnd: (src, tgt) => onRowDragEndRef.current?.(src, tgt),
-      onColumnResized: (col, w) => onColumnResizedRef.current?.(col, w),
-      onColumnMoved: (from, to) => onColumnMovedRef.current?.(from, to),
+      onRowDragEnd: (event) => onRowDragEndRef.current?.(event),
+      onColumnResized: (event) => onColumnResizedRef.current?.(event),
+      onColumnMoved: (event) => onColumnMovedRef.current?.(event),
     });
 
+    // A recreated core starts from definition defaults; re-apply controlled state.
+    if (columnStateRef.current) core.setColumnState(columnStateRef.current);
     coreRef.current = core;
     touchScrollRef.current?.syncCore();
 
@@ -312,7 +320,6 @@ export function Grid<TData = unknown>(
       }
     };
   }, [
-    columns,
     rowHeight,
     totalHeaderHeight,
     overscan,
@@ -322,6 +329,20 @@ export function Grid<TData = unknown>(
     gridRef,
     rowDragEntireRow,
   ]);
+
+  // Push a new `columns` prop into the core without recreating it. The core
+  // reconciles by ColumnId and keeps retained user state, sort, filter and scroll.
+  useEffect(() => {
+    if (appliedColumnsRef.current === columns) return;
+    appliedColumnsRef.current = columns;
+    coreRef.current?.setColumns(columns);
+  }, [columns]);
+
+  // Apply a controlled column-state input whenever it changes.
+  useEffect(() => {
+    if (columnState === undefined) return;
+    coreRef.current?.setColumnState(columnState);
+  }, [columnState]);
 
   // Handle reactive data source changes without re-creating core
   useEffect(() => {

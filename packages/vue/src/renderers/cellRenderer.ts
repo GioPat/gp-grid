@@ -58,6 +58,7 @@ export function renderCell(options: RenderCellOptions): VNode {
     value: displayValue,
     rowData,
     rowId,
+    columnId: column.colId ?? column.field,
     getValue,
     column,
     rowIndex,

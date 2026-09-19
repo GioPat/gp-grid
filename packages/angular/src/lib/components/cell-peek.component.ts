@@ -100,6 +100,7 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
       value: displayValue,
       rowData: data,
       rowId: this.readRowId()?.(rowIndex),
+      columnId: col.colId ?? col.field,
       getValue: (field: string) => (readField ? readField(rowIndex, field) : null),
       column: col,
       rowIndex: this.peekCell().row,

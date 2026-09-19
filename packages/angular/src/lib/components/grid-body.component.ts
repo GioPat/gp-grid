@@ -59,6 +59,7 @@ export interface EditingCellState {
   row: number;
   col: number;
   initialValue: CellValue;
+  editId: number;
 }
 
 @Component({
@@ -172,6 +173,7 @@ export class GridBodyComponent {
       value: displayValue,
       rowData,
       rowId: this.identityAt(rowIndex),
+      columnId: column.colId ?? column.field,
       getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
@@ -221,6 +223,7 @@ export class GridBodyComponent {
       value: displayValue,
       rowData,
       rowId: this.identityAt(rowIndex),
+      columnId: column.colId ?? column.field,
       getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
@@ -230,11 +233,16 @@ export class GridBodyComponent {
       isEditing: true,
       initialValue: ec?.initialValue ?? null,
       onValueChange: (newValue) => {
+        if (this.isOpenEdit(ec?.editId) === false) return;
         const s = newValue === null || newValue === undefined ? '' : String(newValue);
         this.editValueChange.emit(s);
       },
-      onCommit: () => this.editCommit.emit(),
-      onCancel: () => this.editCancel.emit(),
+      onCommit: () => {
+        if (this.isOpenEdit(ec?.editId)) this.editCommit.emit();
+      },
+      onCancel: () => {
+        if (this.isOpenEdit(ec?.editId)) this.editCancel.emit();
+      },
     };
   }
 
@@ -313,6 +321,11 @@ export class GridBodyComponent {
 
   protected asInput(event: Event): HTMLInputElement {
     return event.target as HTMLInputElement;
+  }
+
+  /** A renderer callback captured for an earlier edit session is stale. */
+  private isOpenEdit(editId: number | undefined): boolean {
+    return editId !== undefined && this.editingCell()?.editId === editId;
   }
 
   protected onEditFocus(event: FocusEvent): void {
