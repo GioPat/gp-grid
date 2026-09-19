@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --port 5173",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
+    "start": "ng serve playground-angular --port 5173",
+    "build": "ng build playground-angular",
+    "watch": "ng build playground-angular --watch --configuration development",
     "test": "ng test",
     "serve:ssr:playground-angular": "node dist/playground-angular/server/server.mjs"
   },
