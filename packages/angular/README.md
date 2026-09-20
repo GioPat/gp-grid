@@ -132,6 +132,13 @@ export class App {
 
 `columnState` is an optional input of type `ColumnStateUpdate[]` — `{ columnId, width?, hidden?, order? }` — applied through the core whenever it changes.
 
+`columnLayout` is an optional input of type `"fit" | "fixed"` (default `"fit"`).
+`"fit"` expands columns without an explicit pixel override so their total
+reaches the body scroll container's width; `"fixed"` keeps declared/overridden
+widths and scrolls horizontally. Changing the input switches the mode without
+recreating the core. `getColumnState()` reports `width` only while an explicit
+override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
+
 | Output | Payload |
 | --- | --- |
 | `(onColumnResized)` | `{ columnId, width, viewIndex }` |

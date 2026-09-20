@@ -539,6 +539,7 @@ The public website documentation for this package lives outside this repository 
 | ----------------- | ----------------------------------- | ----------- | ----------------------------------------------------------- |
 | `columns`         | `ColumnDefinition[]`                | required    | Column definitions                                          |
 | `columnState`     | `ColumnStateUpdate[]`               | -           | Controlled `{ columnId, width?, hidden?, order? }` state applied through the core |
+| `columnLayout`   | `"fit" \| "fixed"`                    | `"fit"`    | Displayed-width policy: `"fit"` expands columns to the viewport, `"fixed"` keeps declared/overridden widths |
 | `dataSource`      | `DataSource<TData>`                 | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                           | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                            | required    | Height of each row in pixels                                |
