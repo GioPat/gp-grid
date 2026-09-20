@@ -2,11 +2,12 @@
 // Owns the three column layers: immutable caller definitions, live column
 // state keyed by ColumnId, and the resolved layout everything else reads.
 
+import { isUsableWidth, normalizeColumnWidth } from "./geometry/column-widths";
 import type {
   ColumnDefinition,
   ColumnId,
+  ColumnModelState,
   ColumnState,
-  ColumnStateSnapshot,
   ColumnStateUpdate,
 } from "./types";
 
@@ -79,6 +80,10 @@ export class ColumnModel {
   private readonly orderOverridden = new Set<ColumnId>();
   private layout: ColumnDefinition[] = [];
   private readonly warnedDuplicateIds = new Set<ColumnId>();
+  /** Column ids currently carrying an invalid width that was diagnosed. */
+  private readonly warnedInvalidWidths = new Set<ColumnId>();
+  /** Width-override membership captured before the current state command. */
+  private overriddenBefore: ReadonlySet<ColumnId> = new Set();
 
   constructor(definitions: readonly ColumnDefinition[] = []) {
     this.setDefinitions(definitions);
@@ -126,11 +131,12 @@ export class ColumnModel {
   setState(updates: readonly ColumnStateUpdate[]): ColumnModelChange {
     const beforeOrder = [...this.orderIds];
     const beforeLayout = this.layout;
+    this.overriddenBefore = this.currentOverrides();
     for (const update of updates) {
       if (this.has(update.columnId) === false) continue;
       if (update.width === undefined && update.hidden === undefined) continue;
       const state = this.overrides.get(update.columnId) ?? {};
-      if (update.width !== undefined) state.width = update.width;
+      if (update.width !== undefined) state.width = this.diagnoseWidth(update.columnId, update.width);
       if (update.hidden !== undefined) state.hidden = update.hidden;
       this.overrides.set(update.columnId, state);
     }
@@ -150,6 +156,7 @@ export class ColumnModel {
   resetState(columnIds?: readonly ColumnId[]): ColumnModelChange {
     const beforeOrder = [...this.orderIds];
     const beforeLayout = this.layout;
+    this.overriddenBefore = this.currentOverrides();
     if (columnIds === undefined) {
       this.overrides.clear();
       this.orderOverridden.clear();
@@ -183,14 +190,18 @@ export class ColumnModel {
     return this.layout;
   }
 
-  /** Effective per-column state, in layout order. */
-  getState(): ColumnStateSnapshot[] {
-    return this.layout.map((column, order) => ({
-      columnId: getColumnId(column),
-      width: column.width,
-      hidden: column.hidden ?? false,
-      order,
-    }));
+  /** Width-override and visibility state, in layout order. */
+  getState(): ColumnModelState[] {
+    return this.layout.map((column, order) => {
+      const columnId = getColumnId(column);
+      const state: ColumnModelState = {
+        columnId,
+        hidden: column.hidden ?? false,
+        order,
+      };
+      if (this.isWidthOverridden(columnId)) state.width = column.width;
+      return state;
+    });
   }
 
   ids(): ColumnId[] {
@@ -216,9 +227,28 @@ export class ColumnModel {
   setWidth(columnId: ColumnId, width: number): void {
     if (this.has(columnId) === false) return;
     const state = this.overrides.get(columnId) ?? {};
-    state.width = width;
+    state.width = this.diagnoseWidth(columnId, width);
     this.overrides.set(columnId, state);
     this.resolve();
+  }
+
+  private currentOverrides(): ReadonlySet<ColumnId> {
+    const ids = new Set<ColumnId>();
+    for (const [columnId, state] of this.overrides) {
+      if (state.width !== undefined) ids.add(columnId);
+    }
+    return ids;
+  }
+
+  /** Whether the column carries an explicit pixel width override. */
+  isWidthOverridden(columnId: ColumnId): boolean {
+    return this.overrides.get(columnId)?.width !== undefined;
+  }
+
+  /** Same as {@link isWidthOverridden}, addressed by resolved-layout index. */
+  isWidthOverriddenAt(layoutIndex: number): boolean {
+    const columnId = this.orderIds[layoutIndex];
+    return columnId === undefined ? false : this.isWidthOverridden(columnId);
   }
 
   /** Move a column to a target layout index; returns the applied index. */
@@ -265,10 +295,33 @@ export class ColumnModel {
     return undefined;
   }
 
+  /**
+   * Normalize a stored width and diagnose an invalid one once per column id
+   * until it becomes valid again. The pure resolvers only normalize.
+   */
+  private diagnoseWidth(columnId: ColumnId, width: number): number {
+    if (isUsableWidth(width)) {
+      this.warnedInvalidWidths.delete(columnId);
+      return width;
+    }
+    if (this.warnedInvalidWidths.has(columnId) === false) {
+      this.warnedInvalidWidths.add(columnId);
+      console.warn(`[gp-grid] Invalid width for column "${columnId}"`);
+    }
+    return normalizeColumnWidth(width);
+  }
+
   private resolve(): void {
+    // Diagnostics happen here, once per id, but the caller's definition object
+    // is never mutated: an invalid declared width is normalized in a copy.
     const byId = new Map<ColumnId, ColumnDefinition>();
     for (const definition of this.definitions) {
-      byId.set(getColumnId(definition), definition);
+      const definitionId = getColumnId(definition);
+      const width = this.diagnoseWidth(definitionId, definition.width);
+      byId.set(
+        definitionId,
+        width === definition.width ? definition : { ...definition, width },
+      );
     }
     this.layout = this.orderIds.map((columnId) => {
       const definition = byId.get(columnId)!;
@@ -277,7 +330,7 @@ export class ColumnModel {
         return definition;
       }
       const resolved = { ...definition };
-      if (state.width !== undefined) resolved.width = state.width;
+      if (state.width !== undefined) resolved.width = this.diagnoseWidth(columnId, state.width);
       if (state.hidden !== undefined) resolved.hidden = state.hidden;
       return resolved;
     });
@@ -297,16 +350,31 @@ export class ColumnModel {
     let hiddenChanged = false;
     // Compare per identity: an order change moves entries between indices.
     for (const after of this.layout) {
-      const before = beforeById.get(getColumnId(after));
+      const columnId = getColumnId(after);
+      const before = beforeById.get(columnId);
       if (before === undefined) {
         widthChanged = true;
         hiddenChanged = true;
         continue;
       }
-      if (before.width !== after.width) widthChanged = true;
+      // Override presence is part of the render contract: an override equal to
+      // the definition width still changes how `fit` distributes slack.
+      if (before.width !== after.width || this.overridePresenceChanged(columnId)) {
+        widthChanged = true;
+      }
       if ((before.hidden ?? false) !== (after.hidden ?? false)) hiddenChanged = true;
     }
     const changed = orderChanged || widthChanged || hiddenChanged;
     return changed ? { orderChanged, widthChanged, hiddenChanged } : NO_CHANGE;
+  }
+
+  /**
+   * Whether the override membership of `columnId` differs from the layout
+   * snapshot taken before the command. The snapshot carries the effective
+   * width, so an override equal to the definition width is indistinguishable
+   * by number alone.
+   */
+  private overridePresenceChanged(columnId: ColumnId): boolean {
+    return this.isWidthOverridden(columnId) !== this.overriddenBefore.has(columnId);
   }
 }

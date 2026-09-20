@@ -9,6 +9,7 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
+import type { ColumnLayoutSnapshot } from "./geometry";
 
 // Re-use ColumnDefinition for column change instructions
 
@@ -129,10 +130,14 @@ export interface StopPeekInstruction {
 // Scroll Instructions
 // =============================================================================
 
-/** Programmatic scroll instruction — tells the framework to set container.scrollTop */
+/**
+ * Programmatic scroll instruction. At least one axis is present; an adapter
+ * applies the axes it receives and leaves the others where they are.
+ */
 export interface ScrollToInstruction {
   type: "SCROLL_TO";
-  scrollTop: number;
+  scrollTop?: number;
+  scrollLeft?: number;
 }
 
 // =============================================================================
@@ -142,6 +147,7 @@ export interface ScrollToInstruction {
 /** Set content size instruction */
 export interface SetContentSizeInstruction {
   type: "SET_CONTENT_SIZE";
+  /** Resolved total width of the displayed columns (content px). */
   width: number;
   height: number;
   viewportWidth: number;
@@ -152,6 +158,8 @@ export interface SetContentSizeInstruction {
    * instead of absolute positions (millions of pixels).
    */
   rowsWrapperOffset: number;
+  /** Committed geometry revision this measurement belongs to. */
+  revision: number;
 }
 
 /** Update header instruction */
@@ -247,6 +255,10 @@ export interface DataErrorInstruction {
 export interface ColumnsChangedInstruction {
   type: "COLUMNS_CHANGED";
   columns: ColumnDefinition[];
+  /** Resolved displayed-column layout at the committed revision. */
+  layout: ColumnLayoutSnapshot;
+  /** Committed geometry revision for this batch. */
+  revision: number;
 }
 
 // =============================================================================

@@ -6,11 +6,8 @@ import type {
   InputResult,
   PointerEventData,
 } from "../types/input";
-import {
-  AUTO_SCROLL_SPEED,
-  AUTO_SCROLL_THRESHOLD,
-  DEFAULT_MIN_COLUMN_WIDTH,
-} from "./auto-scroll-util";
+import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
+import { DEFAULT_MIN_COLUMN_WIDTH } from "../geometry/column-widths";
 
 export class ColumnResizeDrag<TData = unknown> {
   private active = false;
@@ -84,6 +81,13 @@ export class ColumnResizeDrag<TData = unknown> {
       colIndex: this.colIndex,
       initialWidth: this.initialWidth,
       currentWidth: this.currentWidth,
+      lineX: this.lineX(),
     };
+  }
+
+  /** Content-space x of the preview edge: committed left plus the ghost width. */
+  private lineX(): number {
+    const bounds = this.core.geometry.getColumnBounds(this.colIndex, "content");
+    return (bounds?.start ?? 0) + this.currentWidth;
   }
 }

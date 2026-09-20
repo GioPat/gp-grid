@@ -15,30 +15,18 @@ import {
   TAP_SLOP_PX,
   ROW_DRAG_HOLD_MS,
 } from "@gp-grid/core";
-import type { SlotData } from "../gridState/types";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface VisibleColumnInfo {
-  column: { colId?: string; field: string };
-  originalIndex: number;
-}
 
 export interface UseInputHandlerOptions {
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number } | null;
   filterPopupOpen: boolean;
-  rowHeight: number;
-  headerHeight: number;
-  columnPositions: number[];
-  columnWidths: number[];
-  /** Visible columns with their original indices (for hidden column support) */
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  slots: Map<string, SlotData>;
-  rowsWrapperOffset: number;
+  /** Cancel an active synthetic fling before a programmatic scroll target. */
+  onBeforeProgrammaticScroll?: () => void;
 }
 
 export interface UseInputHandlerResult {
@@ -80,13 +68,7 @@ export function useInputHandler<TData>(
     selectionRange,
     editingCell,
     filterPopupOpen,
-    rowHeight,
-    headerHeight,
-    columnPositions,
-    columnWidths,
-    visibleColumnsWithIndices,
-    slots,
-    rowsWrapperOffset,
+    onBeforeProgrammaticScroll,
   } = options;
 
   // Auto-scroll interval ref
@@ -123,23 +105,6 @@ export function useInputHandler<TData>(
     columnMove: null,
     rowDrag: null,
   });
-
-  // Update InputHandler deps when options change
-  useEffect(() => {
-    const core = coreRef.current;
-    if (core?.input) {
-      core.input.updateDeps({
-        getHeaderHeight: () => headerHeight,
-        getRowHeight: () => rowHeight,
-        getColumnPositions: () => columnPositions,
-        getColumnCount: () => visibleColumnsWithIndices.length,
-        getOriginalColumnIndex: (visibleIndex: number) => {
-          const info = visibleColumnsWithIndices[visibleIndex];
-          return info ? info.originalIndex : visibleIndex;
-        },
-      });
-    }
-  }, [coreRef, headerHeight, rowHeight, columnPositions, visibleColumnsWithIndices]);
 
   // Get container bounds
   const getContainerBounds = useCallback((): ContainerBounds | null => {
@@ -477,23 +442,19 @@ export function useInputHandler<TData>(
         e.preventDefault();
       }
       if (result.scrollToCell && container) {
-        scrollCellIntoView(
-          core,
-          container,
-          result.scrollToCell.row,
-          rowHeight,
-          slots,
-          rowsWrapperOffset,
-          {
-            colIndex: result.scrollToCell.col,
-            visibleColumns: visibleColumnsWithIndices,
-            columnPositions,
-            columnWidths,
-          }
-        );
+        // Cancel any active touch fling before a programmatic scroll target.
+        onBeforeProgrammaticScroll?.();
+        scrollCellIntoView(core, container, result.scrollToCell.row, result.scrollToCell.col);
       }
     },
-    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset, visibleColumnsWithIndices, columnPositions, columnWidths]
+    [
+      coreRef,
+      containerRef,
+      activeCell,
+      editingCell,
+      filterPopupOpen,
+      onBeforeProgrammaticScroll,
+    ]
   );
 
   const handlePaste = useCallback(

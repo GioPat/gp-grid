@@ -12,8 +12,6 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  calculateScaledColumnPositions,
-  getTotalWidth,
   calculateFillHandlePosition,
   TouchScrollController,
   resolveGridLabels,
@@ -49,6 +47,7 @@ export function Grid<TData = unknown>(
     rowHeight,
     headerHeight = rowHeight,
     overscan = 3,
+    columnLayout = "fit",
     rowLoading,
     sortingEnabled = true,
     darkMode = false,
@@ -88,12 +87,21 @@ export function Grid<TData = unknown>(
   const hasInitializedRef = useRef(false);
   const [state, dispatch] = useReducer(
     gridReducer,
-    { initialWidth, initialHeight, initialColumns: columns },
+    {
+      initialWidth,
+      initialHeight,
+      initialColumns: columns,
+      initialColumnLayout: columnLayout,
+    },
     createInitialState,
   ) as [GridState<TData>, React.Dispatch<GridAction>];
 
   // Computed heights
   const totalHeaderHeight = headerHeight;
+
+  const stopTouchScroll = useCallback(() => {
+    touchScrollRef.current?.stop();
+  }, []);
 
   // Create data source from rowData if not provided
   // Use a ref to cache the created data source and avoid recreating on StrictMode remounts
@@ -188,25 +196,9 @@ export function Grid<TData = unknown>(
   // prop is schema input and is never rendered directly after mount.
   const effectiveColumns = state.columns;
 
-  // Create visible columns with original index tracking (for hidden column support)
-  const visibleColumnsWithIndices = useMemo(
-    () =>
-      effectiveColumns
-        .map((col, index) => ({ column: col, originalIndex: index }))
-        .filter(({ column }) => !column.hidden),
-    [effectiveColumns],
-  );
-
-  // Compute column positions (scaled to fill container when wider) - only for visible columns
-  const { positions: columnPositions, widths: columnWidths } = useMemo(
-    () =>
-      calculateScaledColumnPositions(
-        visibleColumnsWithIndices.map((v) => v.column),
-        state.viewportWidth,
-      ),
-    [visibleColumnsWithIndices, state.viewportWidth],
-  );
-  const totalWidth = getTotalWidth(columnPositions);
+  // Displayed geometry: the core resolves offsets/widths and publishes them.
+  const layoutColumns = state.layout?.columns ?? [];
+  const totalWidth = state.contentWidth;
 
   // Unified input handling (replaces useFillDrag, useSelectionDrag, useKeyboardNavigation)
   const {
@@ -224,13 +216,7 @@ export function Grid<TData = unknown>(
     selectionRange: state.selectionRange,
     editingCell: state.editingCell,
     filterPopupOpen: state.filterPopup?.isOpen ?? false,
-    rowHeight,
-    headerHeight: totalHeaderHeight,
-    columnPositions,
-    columnWidths,
-    visibleColumnsWithIndices,
-    slots: state.slots,
-    rowsWrapperOffset: state.rowsWrapperOffset,
+    onBeforeProgrammaticScroll: stopTouchScroll,
   });
 
   // Initialize GridCore
@@ -238,7 +224,7 @@ export function Grid<TData = unknown>(
     // Reset state on re-initialization to clear stale slots from previous core
     // Skip on first initialization (nothing to reset)
     if (hasInitializedRef.current) {
-      dispatch({ type: "RESET", columns });
+      dispatch({ type: "RESET", columns, columnLayout });
     }
     hasInitializedRef.current = true;
 
@@ -249,6 +235,7 @@ export function Grid<TData = unknown>(
       rowHeight,
       headerHeight: totalHeaderHeight,
       overscan,
+      columnLayout,
       maxFlingVelocity,
       rowLoading,
       sortingEnabled,
@@ -269,23 +256,15 @@ export function Grid<TData = unknown>(
     coreRef.current = core;
     touchScrollRef.current?.syncCore();
 
-    // Set input handler deps immediately after creation
-    // This ensures scaled column positions are used even when the core is recreated
-    // (e.g., when highlighting options change)
-    core.input.updateDeps({
-      getHeaderHeight: () => totalHeaderHeight,
-      getRowHeight: () => rowHeight,
-      getColumnPositions: () => columnPositions,
-      getColumnCount: () => visibleColumnsWithIndices.length,
-      getOriginalColumnIndex: (visibleIndex: number) => {
-        const info = visibleColumnsWithIndices[visibleIndex];
-        return info ? info.originalIndex : visibleIndex;
-      },
-    });
-
-    // Expose core via gridRef prop
+    // Expose core via gridRef prop. React treats a `{ current }` object by
+    // identity, so updating the payload would detach the ref; mutate the
+    // existing handle instead.
     if (gridRef) {
-      gridRef.current = { core };
+      if (gridRef.current) {
+        gridRef.current.core = core;
+      } else {
+        gridRef.current = { core };
+      }
     }
 
     // Subscribe to batched instructions for efficient state updates
@@ -343,6 +322,12 @@ export function Grid<TData = unknown>(
     if (columnState === undefined) return;
     coreRef.current?.setColumnState(columnState);
   }, [columnState]);
+
+  // Switch layout mode without recreating the core; it republishes the
+  // resolved layout and wrappers render the new widths.
+  useEffect(() => {
+    coreRef.current?.setColumnLayout(columnLayout);
+  }, [columnLayout]);
 
   // Handle reactive data source changes without re-creating core
   useEffect(() => {
@@ -449,18 +434,17 @@ export function Grid<TData = unknown>(
     };
   }, []);
 
-  // Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
-  // useLayoutEffect runs before paint, ensuring container.scrollTop matches
-  // the core's expectation before the browser renders the frame.
+  // Apply programmatic scroll from SCROLL_TO instruction (e.g., after
+  // filter/sort or a clamp correction). useLayoutEffect runs before paint, so
+  // the container matches the core's expectation for the first frame.
   useLayoutEffect(() => {
-    if (state.pendingScrollTop !== null) {
-      const container = containerRef.current;
-      if (container) {
-        touchScrollRef.current?.stop();
-        container.scrollTop = state.pendingScrollTop;
-      }
-    }
-  }, [state.pendingScrollTop]);
+    const container = containerRef.current;
+    if (!container) return;
+    if (state.pendingScrollTop === null && state.pendingScrollLeft === null) return;
+    touchScrollRef.current?.stop();
+    if (state.pendingScrollTop !== null) container.scrollTop = state.pendingScrollTop;
+    if (state.pendingScrollLeft !== null) container.scrollLeft = state.pendingScrollLeft;
+  }, [state.pendingScrollTop, state.pendingScrollLeft]);
 
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(
@@ -505,28 +489,21 @@ export function Grid<TData = unknown>(
     [state.slots],
   );
 
-  // Calculate fill handle position (only show for editable columns)
+  // Fill handle position, resolved by core geometry in rows space.
   const fillHandlePosition = useMemo(
     () =>
-      calculateFillHandlePosition({
-        activeCell: state.activeCell,
-        selectionRange: state.selectionRange,
-        slots: state.slots,
-        columns: effectiveColumns,
-        visibleColumnsWithIndices,
-        columnPositions,
-        columnWidths,
-        rowHeight,
-      }),
+      coreRef.current
+        ? calculateFillHandlePosition({
+          core: coreRef.current,
+          activeCell: state.activeCell,
+          selectionRange: state.selectionRange,
+        })
+        : null,
     [
       state.activeCell,
       state.selectionRange,
       state.slots,
-      rowHeight,
-      columnPositions,
-      columnWidths,
-      effectiveColumns,
-      visibleColumnsWithIndices,
+      state.geometryRevision,
     ],
   );
 
@@ -562,9 +539,7 @@ export function Grid<TData = unknown>(
         contentWidth={state.contentWidth}
         totalWidth={totalWidth}
         isLoading={state.isLoading}
-        visibleColumnsWithIndices={visibleColumnsWithIndices}
-        columnPositions={columnPositions}
-        columnWidths={columnWidths}
+        layoutColumns={layoutColumns}
         headers={state.headers}
         sortingEnabled={sortingEnabled}
         onHeaderMouseDown={handleHeaderMouseDown}
@@ -591,9 +566,7 @@ export function Grid<TData = unknown>(
         totalRows={state.totalRows}
         labels={resolvedLabels}
         slotsArray={slotsArray}
-        visibleColumnsWithIndices={visibleColumnsWithIndices}
-        columnPositions={columnPositions}
-        columnWidths={columnWidths}
+        layoutColumns={layoutColumns}
         fillHandlePosition={fillHandlePosition}
         dragState={dragState}
         onScroll={handleScrollWithHeaderSync}
@@ -665,7 +638,8 @@ export function Grid<TData = unknown>(
             getValue={(field) =>
               peekCore?.getFieldValue(peekCell.row, field) ?? null
             }
-            containerRef={outerContainerRef}
+            containerRef={containerRef}
+            core={peekCore}
             cellRenderers={cellRenderers}
             globalCellRenderer={cellRenderer}
             onClose={handlePeekClose}
@@ -674,19 +648,12 @@ export function Grid<TData = unknown>(
       })()}
 
       {/* Column resize line */}
-      {dragState.dragType === "column-resize" && dragState.columnResize && (() => {
-        const visibleIndex = visibleColumnsWithIndices.findIndex(
-          (v) => v.originalIndex === dragState.columnResize!.colIndex,
-        );
-        if (visibleIndex === -1) return null;
-        const lineLeft = (columnPositions[visibleIndex] ?? 0) + dragState.columnResize.currentWidth - scrollLeft;
-        return (
-          <div
-            className="gp-grid-column-resize-line"
-            style={{ left: lineLeft }}
-          />
-        );
-      })()}
+      {dragState.dragType === "column-resize" && dragState.columnResize && (
+        <div
+          className="gp-grid-column-resize-line"
+          style={{ left: dragState.columnResize.lineX - scrollLeft }}
+        />
+      )}
 
       {/* Column move ghost */}
       {dragState.dragType === "column-move" && dragState.columnMove && (() => {
@@ -712,7 +679,7 @@ export function Grid<TData = unknown>(
                 style={{
                   position: "absolute",
                   top: 0,
-                  left: (columnPositions[cm.dropTargetIndex] ?? 0) - scrollLeft,
+                  left: cm.dropIndicatorX - scrollLeft,
                   height: headerHeight,
                 }}
               />

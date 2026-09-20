@@ -96,30 +96,6 @@ export interface DragMoveResult {
 }
 
 // =============================================================================
-// InputHandler Options
-// =============================================================================
-
-/** Options for InputHandler constructor */
-export interface InputHandlerDeps {
-  /** Get header height */
-  getHeaderHeight: () => number;
-  /** Get row height */
-  getRowHeight: () => number;
-  /** Get column positions array (indexed by visible column) */
-  getColumnPositions: () => number[];
-  /** Get visible column count */
-  getColumnCount: () => number;
-  /**
-   * Convert visible column index to original column index.
-   * Used when columns can be hidden. Returns the original index for selection tracking.
-   * If not provided, visible index is used directly (no hidden columns).
-   */
-  getOriginalColumnIndex?: (visibleIndex: number) => number;
-  /** Get column widths array (indexed by visible column) */
-  getColumnWidths?: () => number[];
-}
-
-// =============================================================================
 // Drag State (exposed for UI rendering)
 // =============================================================================
 
@@ -128,6 +104,8 @@ export interface ColumnResizeDragState {
   colIndex: number;
   initialWidth: number;
   currentWidth: number;
+  /** Content-space x of the preview edge; adapters subtract `scrollLeft`. */
+  lineX: number;
 }
 
 /** Column move drag state */
@@ -138,6 +116,8 @@ export interface ColumnMoveDragState {
   dropTargetIndex: number | null;
   ghostWidth: number;
   ghostHeight: number;
+  /** Content-space x of the drop indicator; adapters subtract `scrollLeft`. */
+  dropIndicatorX: number;
 }
 
 /** Row drag state */

@@ -40,8 +40,11 @@ export function useGridState(args?: InitialStateArgs): {
     const workingSlots = new Map(current.slots);
     const workingHeaders = new Map(current.headers);
 
-    // Reset pendingScrollTop each batch — only set when SCROLL_TO is in this batch
-    let mergedChanges: Partial<GridState> = { pendingScrollTop: null };
+    // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
+    let mergedChanges: Partial<GridState> = {
+      pendingScrollTop: null,
+      pendingScrollLeft: null,
+    };
 
     for (const instruction of instructions) {
       const changes = applyInstruction(instruction, workingSlots, workingHeaders);

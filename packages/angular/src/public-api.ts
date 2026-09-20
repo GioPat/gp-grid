@@ -28,6 +28,19 @@ export type {
   ColumnStateUpdate,
   ColumnStateSnapshot,
 
+  // PRD 003 geometry
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
+
   // Row ID
   RowId,
   ViewRow,

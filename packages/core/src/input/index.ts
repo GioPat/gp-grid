@@ -15,6 +15,5 @@ export {
   AUTO_SCROLL_SPEED,
   AUTO_SCROLL_THRESHOLD,
   DRAG_THRESHOLD,
-  DEFAULT_MIN_COLUMN_WIDTH,
   calculateAutoScroll,
 } from "./auto-scroll-util";

@@ -23,6 +23,7 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   ColumnMovedEvent,
+  ColumnLayoutMode,
   ColumnResizedEvent,
   ColumnStateUpdate,
   DataSource,
@@ -86,6 +87,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   highlighting = input<HighlightingOptions | null>(null);
   rowDragEntireRow = input<boolean>(false);
   overscan = input<number>(3);
+  /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
+  columnLayout = input<ColumnLayoutMode>('fit');
   /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. */
   maxFlingVelocity = input<number | undefined>(undefined);
   rowLoading = input<RowLoadingOptions | null>(null);
@@ -100,9 +103,14 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
 
+  // Assigned once `bindings` exists; the view model must not reference it
+  // directly or the two initializers would form a type cycle.
+  private readonly boundCore: { current: GridCore<unknown> | null } = { current: null };
+
   protected readonly vm = new GpGridViewModel({
     getRows: () => this.rows(),
     getRowHeight: () => this.rowHeight(),
+    getCore: () => this.boundCore.current,
   });
 
   private readonly bindings = new GpGridBindings<unknown>({
@@ -120,6 +128,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
     effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
@@ -130,6 +139,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
         overscan: this.overscan(),
+        columnLayout: this.columnLayout(),
         maxFlingVelocity: this.maxFlingVelocity(),
         rowLoading: this.rowLoading() ?? undefined,
         sortingEnabled: this.sortingEnabled(),
@@ -145,6 +155,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
       },
     );
+    this.boundCore.current = core;
     this.bindings.attach(core);
     // The columnState effect ran before the core existed; apply it now.
     this.bindings.syncColumnState(this.columnState() ?? []);
@@ -152,15 +163,13 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (this.isBrowser === false) return;
-    this.bindings.observeViewport(
-      this.container.nativeElement,
-      this.body.scrollContainer.nativeElement,
-    );
+    this.bindings.observeViewport(this.body.scrollContainer.nativeElement);
     document.addEventListener('pointermove', this.onDocumentPointerMove, { passive: false });
     document.addEventListener('pointerup', this.onDocumentPointerUp);
   }
 
   ngOnDestroy(): void {
+    this.boundCore.current = null;
     this.bindings.destroy();
     if (this.isBrowser) {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
@@ -175,6 +184,11 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   get core(): GridCore<unknown> | null {
     return this.bindings.coreRef;
+  }
+
+  /** Body scroll element, provided to overlays that need its screen origin. */
+  protected get bodyScrollContainer(): HTMLElement | null {
+    return this.body?.scrollContainer?.nativeElement ?? null;
   }
 
   protected onBodyScroll(scrollLeft: number): void {

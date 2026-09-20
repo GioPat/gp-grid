@@ -3,16 +3,11 @@ import type {
   ColumnMoveDragState,
   ContainerBounds,
   DragMoveResult,
-  InputHandlerDeps,
   InputResult,
   PointerEventData,
 } from "../types/input";
 import type { SortDirection } from "../types";
-import { findColumnAtX } from "../utils";
-import {
-  AUTO_SCROLL_SPEED,
-  AUTO_SCROLL_THRESHOLD,
-} from "./auto-scroll-util";
+import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
 import { DragGesture } from "./drag-gesture";
 
 export class ColumnMoveDrag<TData = unknown> {
@@ -22,15 +17,9 @@ export class ColumnMoveDrag<TData = unknown> {
   private ghostWidth = 0;
   private ghostHeight = 0;
   private readonly core: GridCore<TData>;
-  private deps: InputHandlerDeps;
 
-  constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
+  constructor(core: GridCore<TData>) {
     this.core = core;
-    this.deps = deps;
-  }
-
-  updateDeps(deps: InputHandlerDeps): void {
-    this.deps = deps;
   }
 
   get isActive(): boolean {
@@ -72,13 +61,14 @@ export class ColumnMoveDrag<TData = unknown> {
     if (this.gesture.track(event) === false) return null;
 
     const { left, width, scrollLeft } = bounds;
-    const mouseX = event.clientX - left + scrollLeft;
-    const columnPositions = this.deps.getColumnPositions();
-    const columnCount = this.deps.getColumnCount();
-    const dropTargetIndex = Math.max(
-      0,
-      Math.min(findColumnAtX(mouseX, columnPositions), columnCount),
-    );
+    const layout = this.core.geometry.getColumnLayout();
+    const hit = this.core.geometry.hitTest({
+      x: event.clientX - left,
+      y: event.clientY - bounds.top,
+      scrollLeft,
+    });
+    // A displayed-column index; past the last column is the end insertion edge.
+    const dropTargetIndex = Math.max(0, Math.min(hit.displayIndex, layout.columns.length));
     this.gesture.dropTargetIndex = dropTargetIndex;
 
     const mouseXInContainer = event.clientX - left;
@@ -105,14 +95,14 @@ export class ColumnMoveDrag<TData = unknown> {
   private commitMove(): void {
     const { dropTargetIndex } = this.gesture;
     if (dropTargetIndex === null) return;
-    const fromOriginal = this.sourceColIndex;
-    const toOriginal = this.deps.getOriginalColumnIndex
-      ? this.deps.getOriginalColumnIndex(
-          Math.min(dropTargetIndex, this.deps.getColumnCount() - 1),
-        )
-      : dropTargetIndex;
-    if (fromOriginal !== toOriginal) {
-      this.core.moveColumn(fromOriginal, toOriginal);
+    // The drop target indexes the displayed columns; `moveColumn` takes
+    // layout indices, which differ once a column is hidden.
+    const displayed = this.core.geometry.getColumnLayout().columns;
+    const toIndex = displayed[Math.min(dropTargetIndex, displayed.length - 1)]?.layoutIndex;
+    if (toIndex === undefined) return;
+    const fromIndex = this.sourceColIndex;
+    if (fromIndex !== toIndex) {
+      this.core.moveColumn(fromIndex, toIndex);
     }
   }
 
@@ -144,6 +134,15 @@ export class ColumnMoveDrag<TData = unknown> {
       dropTargetIndex,
       ghostWidth: this.ghostWidth,
       ghostHeight: this.ghostHeight,
+      dropIndicatorX: this.dropIndicatorX(dropTargetIndex),
     };
+  }
+
+  /** Content-space x of the drop indicator, or the end edge of the layout. */
+  private dropIndicatorX(dropTargetIndex: number | null): number {
+    if (dropTargetIndex === null) return 0;
+    const layout = this.core.geometry.getColumnLayout();
+    const column = layout.columns[dropTargetIndex];
+    return column?.offset ?? layout.totalWidth;
   }
 }

@@ -9,7 +9,7 @@ import {
 import { NgTemplateOutlet } from "@angular/common";
 import type {
   HeaderData,
-  VisibleColumnInfo,
+  DisplayedColumn,
   ColumnDefinition,
   HeaderRendererParams,
   SortDirection,
@@ -51,21 +51,21 @@ const TEMPLATE = `
       [style.transform]="transformStyle()"
       [style.width.px]="innerWidth()"
       [style.height.px]="headerHeight()">
-      @for (entry of visibleColumnsWithIndices(); track entry.originalIndex; let i = $index) {
-        @let colW = columnWidths()[i] ?? 0;
-        @let headerData = headers().get(entry.column.colId ?? entry.column.field);
+      @for (entry of layoutColumns(); track entry.layoutIndex) {
+        @let colW = entry.width;
+        @let headerData = headers().get(entry.columnId);
         @let tpl = headerTemplate(entry.column);
         <div
           class="gp-grid-header-cell"
-          [attr.data-col-index]="entry.originalIndex"
-          [style.left.px]="columnPositions()[i]"
+          [attr.data-col-index]="entry.layoutIndex"
+          [style.left.px]="entry.offset"
           [style.width.px]="colW"
           [style.height.px]="headerHeight()"
-          (pointerdown)="onHeaderPointerDown($event, entry.originalIndex, colW)">
+          (pointerdown)="onHeaderPointerDown($event, entry.layoutIndex, colW)">
           @if (tpl) {
             <ng-container
               [ngTemplateOutlet]="tpl"
-              [ngTemplateOutletContext]="{ $implicit: headerParams(entry.column, entry.originalIndex, headerData) }">
+              [ngTemplateOutletContext]="{ $implicit: headerParams(entry.column, entry.layoutIndex, headerData) }">
             </ng-container>
           } @else {
             <span class="gp-grid-header-text">{{ entry.column.headerName ?? entry.column.field }}</span>
@@ -93,7 +93,7 @@ const TEMPLATE = `
             @if (entry.column.filterable !== false) {
               <span
                 [class]="'gp-grid-filter-icon' + (headerData?.hasFilter ? ' active' : '')"
-                (pointerdown)="onFilterPointerDown($event, entry.originalIndex)">
+                (pointerdown)="onFilterPointerDown($event, entry.layoutIndex)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z"/>
                 </svg>
@@ -103,7 +103,7 @@ const TEMPLATE = `
           @if (entry.column.resizable !== false) {
             <div
               class="gp-grid-header-resize-handle"
-              (pointerdown)="onResizePointerDown($event, entry.originalIndex, colW)">
+              (pointerdown)="onResizePointerDown($event, entry.layoutIndex, colW)">
             </div>
           }
         </div>
@@ -125,9 +125,7 @@ export class GridHeaderComponent {
   contentWidth = input.required<number>();
   totalWidth = input.required<number>();
   isLoading = input.required<boolean>();
-  visibleColumnsWithIndices = input.required<VisibleColumnInfo[]>();
-  columnPositions = input.required<number[]>();
-  columnWidths = input.required<number[]>();
+  layoutColumns = input.required<readonly DisplayedColumn[]>();
   headers = input.required<Map<string, HeaderData>>();
   sortingEnabled = input<boolean>(true);
   headerRenderers = input<Record<string, HeaderRendererTemplate>>({});

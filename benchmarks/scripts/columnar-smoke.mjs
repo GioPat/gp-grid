@@ -198,6 +198,22 @@ const deterministicCase = async (n) => {
     JSON.stringify(scrollRange),
   );
 
+  // Horizontal-only case: the row window must not move, no cells may be read
+  // and no row-data assignment may be triggered by a pure `scrollLeft` change.
+  core.setViewport(SCROLL_TOP, 120, VIEWPORT.width, VIEWPORT.height);
+  const horizontalRange = core.getVisibleRowRange();
+  const readsAfterHorizontal = store.reads();
+  check(
+    `n=${n} horizontal-only reads no cells`,
+    readsAfterHorizontal === 0,
+    `reads=${readsAfterHorizontal}`,
+  );
+  check(
+    `n=${n} horizontal-only keeps the row window`,
+    horizontalRange.start === scrollRange.start && horizontalRange.end === scrollRange.end,
+    `scroll=${JSON.stringify(scrollRange)} horizontal=${JSON.stringify(horizontalRange)}`,
+  );
+
   // Requested values/read bounds for the displayed window: reading the window
   // reads exactly the source rows in it.
   store.resetReads();

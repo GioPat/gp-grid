@@ -4,6 +4,7 @@
 // cross-checks live here, once, instead of in the GridCore constructor.
 
 import type { GridCoreOptions } from "./types";
+import type { ColumnLayoutMode } from "./types/geometry";
 
 // Default momentum ceiling for the synthetic touch scroller, expressed in
 // rows per second and converted to logical px/ms via the row height.
@@ -14,7 +15,8 @@ type DefaultedOption =
   | "overscan"
   | "maxFlingVelocity"
   | "sortingEnabled"
-  | "rowDragEntireRow";
+  | "rowDragEntireRow"
+  | "columnLayout";
 
 /**
  * GridCoreOptions with defaults applied. `columns` is excluded: it is the
@@ -27,6 +29,7 @@ export interface GridCoreConfig<TData>
   readonly maxFlingVelocity: number;
   readonly sortingEnabled: boolean;
   readonly rowDragEntireRow: boolean;
+  readonly columnLayout: ColumnLayoutMode;
 }
 
 export const resolveGridCoreConfig = <TData>(
@@ -34,6 +37,13 @@ export const resolveGridCoreConfig = <TData>(
 ): GridCoreConfig<TData> => {
   if (options.onCellValueChanged && options.getRowId === undefined) {
     throw new Error("getRowId is required when onCellValueChanged is provided");
+  }
+  if (!Number.isFinite(options.rowHeight) || options.rowHeight <= 0) {
+    throw new RangeError(`Invalid rowHeight: ${options.rowHeight}`);
+  }
+  const overscan = options.overscan ?? 3;
+  if (!Number.isSafeInteger(overscan) || overscan < 0) {
+    throw new RangeError(`Invalid overscan: ${overscan}`);
   }
   return {
     dataSource: options.dataSource,
@@ -47,10 +57,11 @@ export const resolveGridCoreConfig = <TData>(
     onColumnResized: options.onColumnResized,
     onColumnMoved: options.onColumnMoved,
     headerHeight: options.headerHeight ?? options.rowHeight,
-    overscan: options.overscan ?? 3,
+    overscan,
     maxFlingVelocity: options.maxFlingVelocity ??
       (DEFAULT_FLING_ROWS_PER_SECOND * options.rowHeight) / 1000,
     sortingEnabled: options.sortingEnabled ?? true,
     rowDragEntireRow: options.rowDragEntireRow ?? false,
+    columnLayout: options.columnLayout ?? "fit",
   };
 };

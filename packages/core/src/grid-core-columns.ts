@@ -17,6 +17,7 @@ import type {
   ColumnStateSnapshot,
   ColumnStateUpdate,
 } from "./types";
+import type { ColumnLayoutSnapshot } from "./types/geometry";
 
 export interface ColumnCoreDeps<TData> {
   batcher: InstructionBatcher;
@@ -26,7 +27,10 @@ export interface ColumnCoreDeps<TData> {
   sortFilter: SortFilterManager<TData>;
   rowData: RowDataManager<TData>;
   view: ViewSync<TData>;
-  computeColumnPositions: () => void;
+  /** Current displayed-column layout, used to compose state snapshots. */
+  getColumnLayout: () => ColumnLayoutSnapshot;
+  /** Commit column/row geometry before a batch captures its revision. */
+  refreshGeometry: () => void;
   reloadAfterSchemaChange: () => Promise<void>;
 }
 
@@ -50,7 +54,15 @@ export const applyColumnStateReset = <TData>(
 
 export const readColumnState = <TData>(
   deps: ColumnCoreDeps<TData>,
-): ColumnStateSnapshot[] => deps.columnModel.getState();
+): ColumnStateSnapshot[] => {
+  const resolved = new Map(
+    deps.getColumnLayout().columns.map((column) => [column.columnId, column.width]),
+  );
+  return deps.columnModel.getState().map((state) => ({
+    ...state,
+    resolvedWidth: resolved.get(state.columnId) ?? 0,
+  }));
+};
 
 /**
  * Replace caller definitions and reconcile everything that depends on column
@@ -70,7 +82,7 @@ export const applySetColumns = <TData>(
   deps.batcher.start();
   try {
     deps.columnModel.setDefinitions(columns);
-    deps.computeColumnPositions();
+    deps.refreshGeometry();
     sortFilterChanged = deps.sortFilter.reconcileColumns(
       new Set(deps.columnModel.ids()),
     );
@@ -143,7 +155,7 @@ const applyColumnStateChange = <TData>(
   if (changed === false) return;
   deps.batcher.start();
   try {
-    deps.computeColumnPositions();
+    deps.refreshGeometry();
     deps.view.syncColumnLayout(change.orderChanged ? "order" : "geometry");
     if (change.orderChanged) deps.selection.clearSelectionRange();
     reconcileColumnTargets(deps, targets);

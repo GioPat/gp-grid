@@ -52,8 +52,14 @@ export const applyInstruction = <TData = unknown>(
       return null;
     }
 
-    case "SCROLL_TO":
-      return { pendingScrollTop: instruction.scrollTop };
+    case "SCROLL_TO": {
+      // Only the axes present: adapters assign every non-null pending value,
+      // and the DOM reads an assigned `undefined` as 0.
+      const pending: Partial<GridState<TData>> = {};
+      if (instruction.scrollTop !== undefined) pending.pendingScrollTop = instruction.scrollTop;
+      if (instruction.scrollLeft !== undefined) pending.pendingScrollLeft = instruction.scrollLeft;
+      return pending;
+    }
 
     case "SET_ACTIVE_CELL":
       return { activeCell: instruction.position };
@@ -96,6 +102,7 @@ export const applyInstruction = <TData = unknown>(
         viewportWidth: instruction.viewportWidth,
         viewportHeight: instruction.viewportHeight,
         rowsWrapperOffset: instruction.rowsWrapperOffset,
+        geometryRevision: instruction.revision,
       };
 
     case "UPDATE_HEADER":
@@ -136,7 +143,11 @@ export const applyInstruction = <TData = unknown>(
       return { isLoading: false, error: instruction.error };
 
     case "COLUMNS_CHANGED":
-      return { columns: instruction.columns };
+      return {
+        columns: instruction.columns,
+        layout: instruction.layout,
+        geometryRevision: instruction.revision,
+      };
 
     default:
       return null;

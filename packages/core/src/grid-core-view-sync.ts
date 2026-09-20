@@ -8,8 +8,8 @@
 // - reconcile():       the dataset or the column set changed; rebuild all.
 // - syncVisibleRows(): the visible window moved or grew; slot sync only.
 //
-// Content size is always emitted before slots are positioned: it refreshes
-// the cached scroll ratio that slot translateY values are computed from.
+// The row axis and windows are committed before content size is emitted, so
+// every instruction in a batch reports one geometry revision.
 
 import type { SlotPoolManager } from "./slot-pool";
 import type {
@@ -20,6 +20,8 @@ import type {
   ViewportState,
 } from "./managers";
 import type { ColumnDefinition } from "./types";
+import type { GridGeometryService } from "./geometry/grid-geometry";
+import type { ColumnLayoutSnapshot } from "./types/geometry";
 
 // With scroll virtualization active a fast fling traverses several rows per
 // frame; overscan below this leaves blank rows behind the fling.
@@ -34,7 +36,8 @@ export interface ViewSyncDeps<TData> {
   highlight: HighlightManager<TData> | null;
   overscan: number;
   getColumns: () => ColumnDefinition[];
-  getColumnPositions: () => number[];
+  /** Built after the managers; only read once construction has finished. */
+  getGeometry: () => GridGeometryService;
   getTotalRows: () => number;
 }
 
@@ -42,10 +45,19 @@ export class ViewSync<TData> {
   private readonly deps: ViewSyncDeps<TData>;
   private hasWarnedAboutScaledOverscan = false;
   private emittedHeaderIds = new Set<string>();
-  private emittedLayout: readonly ColumnDefinition[] | null = null;
+  private emittedLayout: ColumnLayoutSnapshot | null = null;
+  private emittedDefinitions: readonly ColumnDefinition[] | null = null;
 
   constructor(deps: ViewSyncDeps<TData>) {
     this.deps = deps;
+  }
+
+  /**
+   * Commit the row axis to the current row count before any window is read.
+   * Data loads and row-count changes arrive here first.
+   */
+  private syncRowAxis(): void {
+    this.deps.getGeometry().syncWindows();
   }
 
   /**
@@ -57,6 +69,7 @@ export class ViewSync<TData> {
     const { batcher, highlight, slotPool } = this.deps;
     batcher.start();
     try {
+      this.syncRowAxis();
       highlight?.clearAllCaches();
       this.emitContentSize();
       // refreshAllSlots re-reads existing slot data (row contents may have
@@ -78,6 +91,7 @@ export class ViewSync<TData> {
     const { batcher, slotPool } = this.deps;
     batcher.start();
     try {
+      this.syncRowAxis();
       if (contentSizeChanged) this.emitContentSize();
       slotPool.syncSlots();
       this.emitVisibleRange();
@@ -96,6 +110,7 @@ export class ViewSync<TData> {
     const { batcher, highlight, slotPool } = this.deps;
     batcher.start();
     try {
+      this.syncRowAxis();
       this.emitContentSize();
       this.emitHeaders();
       if (change === "order") {
@@ -110,31 +125,53 @@ export class ViewSync<TData> {
   }
 
   emitContentSize(): void {
-    const { batcher, scrollVirtualization, slotPool, viewport } = this.deps;
-    const width = this.deps.getColumnPositions().at(-1) ?? 0;
-    scrollVirtualization.updateContentSize();
+    const { batcher, scrollVirtualization, viewport } = this.deps;
+    const geometry = this.deps.getGeometry();
+    const layout = geometry.getColumnLayout();
+    // Captured after the layout resolves: both instructions report it.
+    const revision = geometry.revision;
     batcher.emit({
       type: "SET_CONTENT_SIZE",
-      width,
+      width: layout.totalWidth,
       height: scrollVirtualization.getVirtualHeight(),
       viewportWidth: viewport.getViewportWidth(),
       viewportHeight: viewport.getViewportHeight(),
-      rowsWrapperOffset: slotPool.getRowsWrapperOffset(),
+      rowsWrapperOffset: this.rowsWrapperOffset(),
+      revision,
     });
+    this.emitColumnLayout(layout, revision);
     this.warnIfOverscanTooLowForScaling();
+  }
+
+  /**
+   * Publish the displayed-column layout when it observably changed. The
+   * instruction reports the committed batch revision; the snapshot keeps the
+   * revision of its own last change.
+   */
+  private emitColumnLayout(layout: ColumnLayoutSnapshot, revision: number): void {
+    const columns = this.deps.getColumns();
+    // The column model builds a new array on every resolve, so its identity
+    // covers any definition change, not only id/width/visibility.
+    const isUnchanged = columns === this.emittedDefinitions && layout === this.emittedLayout;
+    if (isUnchanged) return;
+    this.emittedDefinitions = columns;
+    this.emittedLayout = layout;
+    this.deps.batcher.emit({
+      type: "COLUMNS_CHANGED",
+      columns: [...columns],
+      layout,
+      revision,
+    });
+  }
+
+  private rowsWrapperOffset(): number {
+    return this.deps.getGeometry().getRowGeometry().getMapper().wrapperOffset();
   }
 
   emitHeaders(): void {
     const { batcher, sortFilter } = this.deps;
     const columns = this.deps.getColumns();
     const sortInfoMap = sortFilter.getSortInfoMap();
-
-    // The column model builds a new layout array on every resolve, so its
-    // identity covers any definition change, not only id/width/visibility.
-    if (columns !== this.emittedLayout) {
-      this.emittedLayout = columns;
-      batcher.emit({ type: "COLUMNS_CHANGED", columns: [...columns] });
-    }
 
     const currentIds = new Set<string>();
     for (const column of columns) {
@@ -159,13 +196,18 @@ export class ViewSync<TData> {
   }
 
   emitVisibleRange(): void {
-    const { batcher, scrollVirtualization, slotPool } = this.deps;
-    const visibleRange = scrollVirtualization.getVisibleRowRange();
+    const { batcher } = this.deps;
+    // The geometry window is half-open; the legacy instruction range is
+    // inclusive, and an empty window is `{ start: 0, end: -1 }`.
+    const window = this.deps.getGeometry().getVisibleRowWindow();
+    const legacy = window.end > window.start
+      ? { start: window.start, end: window.end - 1 }
+      : { start: 0, end: -1 };
     batcher.emit({
       type: "UPDATE_VISIBLE_RANGE",
-      start: visibleRange.start,
-      end: visibleRange.end,
-      rowsWrapperOffset: slotPool.getRowsWrapperOffset(),
+      start: legacy.start,
+      end: legacy.end,
+      rowsWrapperOffset: this.rowsWrapperOffset(),
     });
   }
 

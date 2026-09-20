@@ -2,7 +2,6 @@
 
 export {
   calculateColumnPositions,
-  calculateScaledColumnPositions,
   getTotalWidth,
   findColumnAtX,
 } from "./positioning";
@@ -35,14 +34,12 @@ export type {
   BatchInstructionListener,
 } from "./event-emitter";
 
-export { findSlotForRow, scrollCellIntoView } from "./scroll-helpers";
-export type { ColumnScrollGeometry } from "./scroll-helpers";
+export { scrollCellIntoView } from "./scroll-helpers";
 
 export { formatCellValue } from "./format-helpers";
 
 export { calculateFillHandlePosition } from "./fill-helpers";
 export type {
-  VisibleColumnInfo,
   CalculateFillHandlePositionParams,
   FillHandlePosition,
 } from "./fill-helpers";
@@ -57,7 +54,6 @@ export type { BuildRequestOptions } from "./data-source-request";
 
 export { reorderCachedRows } from "./cached-rows";
 
-export { computeColumnPositions } from "./column-positions";
 
 export { readCell, writeCell } from "./cell-access";
 export type { WriteCellDeps } from "./cell-access";

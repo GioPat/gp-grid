@@ -22,6 +22,7 @@ import {
   type CellRendererParams,
   type CellValue,
   type ColumnDefinition,
+  type GridCore,
   type RowId,
 } from '@gp-grid/core';
 import type { CellRendererTemplate } from './grid-body.component';
@@ -63,6 +64,8 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   readFieldValue = input<((rowIndex: number, field: string) => CellValue) | null>(null);
   readRowId = input<((rowIndex: number) => RowId | undefined) | null>(null);
   containerEl = input.required<HTMLElement | null>();
+  /** Bound core; peek anchoring is a geometry query, not a DOM measurement. */
+  core = input<GridCore<unknown> | null>(null);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
   globalCellRenderer = input<CellRendererTemplate | null>(null);
 
@@ -129,6 +132,8 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       this.peekCell();
+      // Read the revision so a geometry change repositions the overlay.
+      this.core()?.geometry.revision;
       this.updatePosition();
     });
   }
@@ -165,18 +170,18 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
     if (!container || !overlay) return;
 
     const peek = this.peekCell();
-    const cellEl = container.querySelector(
-      `[data-cell-row="${peek.row}"][data-cell-col="${peek.col}"]`,
-    ) as HTMLElement | null;
-    if (!cellEl) {
+    const bounds = this.core()?.geometry.getCellBounds(peek.row, peek.col, "viewport");
+    if (bounds === undefined) {
       this.close.emit();
       return;
     }
 
-    const rect = cellEl.getBoundingClientRect();
-    this.top.set(rect.top);
-    this.left.set(rect.left);
-    this.width.set(rect.width);
+    // The overlay is position:fixed, so the cell's viewport-space bounds are
+    // offset by the body client area's screen origin.
+    const origin = container.getBoundingClientRect();
+    this.top.set(origin.top + bounds.top);
+    this.left.set(origin.left + bounds.left);
+    this.width.set(bounds.width);
     this.positioned.set(true);
   }
 

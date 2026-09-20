@@ -10,9 +10,16 @@ import type {
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
+  ColumnLayoutMode,
   GridCore,
   RowDragEndEvent,
 } from "@gp-grid/vue";
+import {
+  createGeometryHooks,
+  createLargeColumnarColumns,
+  createLargeColumnarSource,
+  createNarrowColumns,
+} from "./conformance-geometry";
 
 interface ConformanceRow {
   id: number;
@@ -127,8 +134,9 @@ const createColumnarFixture = () => {
 
 const rows = ref<ConformanceRow[]>(createRows());
 const columns = ref<ColumnDefinition[]>(createColumns());
-const columnarColumns = createColumnarColumns();
+const columnarColumns = ref<ColumnDefinition[]>(createColumnarColumns());
 const fixture = createColumnarFixture();
+const largeColumnarSource = ref<ReturnType<typeof createLargeColumnarSource> | null>(null);
 const mode = ref<"object" | "columnar">("object");
 const revision = ref(0);
 const mounted = ref(true);
@@ -136,6 +144,8 @@ const generation = ref(0);
 const editEvents = ref(0);
 const writeRejected = ref(0);
 const columnState = ref<ColumnStateUpdate[] | undefined>(undefined);
+const columnLayout = ref<ColumnLayoutMode>("fit");
+const hostWidth = ref(600);
 const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
 const eventCounts = { resized: 0, moved: 0, dragged: 0 };
 const coreTokens = new WeakMap<object, number>();
@@ -171,10 +181,37 @@ const replaceColumns = (): void => {
   ];
 };
 
+const useNarrowColumns = (): void => {
+  columns.value = createNarrowColumns();
+};
+
+const useLargeColumnar = (): void => {
+  mode.value = "columnar";
+  columnarColumns.value = createLargeColumnarColumns();
+  largeColumnarSource.value = createLargeColumnarSource();
+  generation.value += 1;
+  revision.value = fixture.source.revision;
+};
+
+const toggleColumnLayout = (): void => {
+  columnLayout.value = columnLayout.value === "fit" ? "fixed" : "fit";
+};
+
+const resizeHost = (): void => {
+  hostWidth.value = hostWidth.value === 600 ? 800 : 600;
+};
+
+const hideColumn = (): void => {
+  columnState.value = [...(columnState.value ?? []), { columnId: "id", hidden: true }];
+};
+
 const reset = (): void => {
   rows.value = createRows();
   columns.value = createColumns();
+  columnarColumns.value = createColumnarColumns();
   columnState.value = undefined;
+  columnLayout.value = "fit";
+  hostWidth.value = 600;
   mode.value = "object";
   mounted.value = true;
   generation.value += 1;
@@ -274,6 +311,7 @@ if (typeof window !== "undefined") {
       eventCounts.moved = 0;
       eventCounts.dragged = 0;
     },
+    ...createGeometryHooks(() => coreOf()),
   };
 }
 </script>
@@ -293,16 +331,22 @@ if (typeof window !== "undefined") {
       <button data-testid="use-columnar" @click="useColumnar">Use columnar</button>
       <button data-testid="use-object" @click="useObject">Use object</button>
       <button data-testid="bump-revision" @click="bumpRevision">Bump revision</button>
+      <button data-testid="use-narrow-columns" @click="useNarrowColumns">Narrow columns</button>
+      <button data-testid="use-large-columnar" @click="useLargeColumnar">Large columnar</button>
+      <button data-testid="toggle-column-layout" @click="toggleColumnLayout">Toggle layout</button>
+      <button data-testid="resize-host" @click="resizeHost">Resize host</button>
+      <button data-testid="hide-column" @click="hideColumn">Hide column</button>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
-    <div data-testid="grid-host" style="width: 600px; height: 360px">
+    <div data-testid="grid-host" :style="{ width: `${hostWidth}px`, height: '360px' }">
       <GpGrid
         v-if="mounted"
         ref="gridRef"
         :key="generation"
         :columns="mode === 'columnar' ? columnarColumns : columns"
         :column-state="columnState"
-        :data-source="mode === 'columnar' ? fixture.source : undefined"
+        :column-layout="columnLayout"
+        :data-source="mode === 'columnar' ? (largeColumnarSource ?? fixture.source) : undefined"
         :row-data="mode === 'columnar' ? undefined : rows"
         :row-height="32"
         :header-height="36"

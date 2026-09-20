@@ -18,6 +18,8 @@ import type {
   EditState,
 } from "./types";
 import type { SelectionManager } from "./selection";
+import { createGridGeometry, toReadonlyGeometry, type GridGeometryService } from "./geometry";
+import type { GeometrySpace, CellBounds, ColumnLayoutMode, GridGeometry } from "./types/geometry";
 import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
@@ -29,7 +31,6 @@ import type {
   ViewportState,
 } from "./managers";
 import { InstructionBatcher } from "./managers";
-import { computeColumnPositions } from "./utils";
 import type { RowDataManager } from "./managers/row-data-manager";
 import { type GridCoreConfig, resolveGridCoreConfig } from "./grid-core-config";
 import { buildGridManagers } from "./grid-core-managers";
@@ -59,7 +60,9 @@ export class GridCore<TData = unknown> {
 
   // Immutable caller definitions, live column state and resolved layout
   private readonly columnModel: ColumnModel;
-  private columnPositions: number[] = [];
+  /** Single owner of column/row geometry; wrappers read this, never recompute. */
+  public readonly geometry: GridGeometry;
+  private readonly geometryService: GridGeometryService;
 
   // Instruction dispatch
   private readonly batcher = new InstructionBatcher();
@@ -92,13 +95,12 @@ export class GridCore<TData = unknown> {
   constructor(options: GridCoreOptions<TData>) {
     this.config = resolveGridCoreConfig(options);
     this.columnModel = new ColumnModel(options.columns);
-    this.computeColumnPositions();
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
       config: this.config,
       getColumns: () => this.columnModel.getLayout(),
-      getColumnPositions: () => this.columnPositions,
+      getGeometry: () => this.geometryService,
     });
     this.rowData = managers.rowData;
     this.selection = managers.selection;
@@ -111,12 +113,33 @@ export class GridCore<TData = unknown> {
     this.sortFilter = managers.sortFilter;
     this.view = managers.view;
 
-    this.input = new InputHandler(this, {
-      getHeaderHeight: () => this.config.headerHeight,
-      getRowHeight: () => this.config.rowHeight,
-      getColumnPositions: () => this.columnPositions,
-      getColumnCount: () => this.columnModel.getLayout().length,
-    });
+    this.geometryService = createGridGeometry(
+      {
+        getRowCount: () => this.rowData.getTotalRows(),
+        getRowHeight: () => this.config.rowHeight,
+        getOverscan: () => this.config.overscan,
+        getColumns: () => this.columnModel.getLayout(),
+        isWidthOverridden: (layoutIndex) => this.columnModel.isWidthOverriddenAt(layoutIndex),
+        getViewport: () => ({
+          width: this.viewport.getViewportWidth(),
+          height: this.viewport.getViewportHeight(),
+          scrollLeft: this.viewport.getScrollLeft(),
+          scrollTop: this.scrollTopOverride ?? this.viewport.getScrollTop(),
+        }),
+        getScrollMapping: () => ({
+          getDomScrollTop: () => this.scrollTopOverride ?? this.viewport.getScrollTop(),
+          toDomScrollTop: (logical) => this.scrollVirtualization.toDomScrollTop(logical),
+          toLogicalScrollTop: (dom) => this.scrollVirtualization.toLogicalScrollTop(dom),
+          isScalingActive: () => this.scrollVirtualization.isScalingActive(),
+          getMaxLogicalScrollTop: () => this.scrollVirtualization.getMaxLogicalScrollTop(),
+        }),
+      },
+      this.config.columnLayout,
+    );
+    this.geometry = toReadonlyGeometry(this.geometryService);
+    this.geometryService.refresh();
+
+    this.input = new InputHandler(this);
   }
 
   // ===========================================================================
@@ -157,6 +180,8 @@ export class GridCore<TData = unknown> {
     width: number,
     height: number,
   ): void {
+    const previousTop = this.viewport.getScrollTop();
+    const previousHeight = this.viewport.getViewportHeight();
     const { changed, viewportSizeChanged } = this.viewport.update(
       this.scrollTopOverride ?? scrollTop,
       scrollLeft,
@@ -165,8 +190,89 @@ export class GridCore<TData = unknown> {
     );
     if (!changed) return;
 
-    this.rowData.requestVisibleRows();
-    this.view.syncVisibleRows(viewportSizeChanged);
+    // One batch: adapters reset the pending scroll per batch, so a correction
+    // delivered ahead of the row sync would be dropped before it is applied.
+    this.batcher.start();
+    try {
+      this.refreshGeometry();
+      const verticalWork =
+        viewportSizeChanged ||
+        previousHeight !== height ||
+        previousTop !== this.viewport.getScrollTop();
+      if (verticalWork) {
+        this.rowData.requestVisibleRows();
+      }
+      this.view.syncVisibleRows(viewportSizeChanged);
+    } finally {
+      this.batcher.flush();
+    }
+  }
+
+  /**
+   * Refresh the committed geometry dependencies before a batch captures its
+   * revision. Also corrects native scroll that a data/layout change left
+   * outside the reachable range.
+   */
+  private refreshGeometry(): void {
+    this.geometryService.refresh();
+    this.emitScrollCorrection();
+  }
+
+  /** Geometry already answers from the clamped sample; this moves the DOM to it. */
+  private emitScrollCorrection(): void {
+    const sampleTop = this.scrollTopOverride ?? this.viewport.getScrollTop();
+    const sampleLeft = this.viewport.getScrollLeft();
+    const { scrollTop, scrollLeft } = this.geometryService.getEffectiveScroll();
+    if (scrollTop === sampleTop && scrollLeft === sampleLeft) return;
+    this.batcher.emit({
+      type: "SCROLL_TO",
+      scrollTop: scrollTop === sampleTop ? undefined : scrollTop,
+      scrollLeft: scrollLeft === sampleLeft ? undefined : scrollLeft,
+    });
+  }
+
+  /**
+   * Switch the displayed-width policy at runtime. A no-op setter emits nothing.
+   */
+  setColumnLayout(mode: ColumnLayoutMode): void {
+    if (this.geometryService.getColumnLayoutMode() === mode) return;
+    this.geometryService.setColumnLayoutMode(mode);
+    this.batcher.start();
+    try {
+      this.refreshGeometry();
+      this.view.emitContentSize();
+      this.view.emitHeaders();
+    } finally {
+      this.batcher.flush();
+    }
+  }
+
+  /** Resolve a cell to viewport/content geometry by identity. */
+  getCellBounds(
+    rowId: RowId,
+    columnId: ColumnId,
+    space: GeometrySpace = "viewport",
+  ): CellBounds | undefined {
+    const viewIndex = this.resolveViewIndex(rowId);
+    if (viewIndex === undefined) return undefined;
+    const layoutIndex = this.geometry
+      .getColumnLayout()
+      .columns.find((column) => column.columnId === columnId)?.layoutIndex;
+    if (layoutIndex === undefined) return undefined;
+    return this.geometry.getCellBounds(viewIndex, layoutIndex, space);
+  }
+
+  /**
+   * Resolve a row identity without scanning a remote or columnar source:
+   * the bounded current window is checked by id, then the resident records.
+   */
+  private resolveViewIndex(rowId: RowId): number | undefined {
+    const window = this.geometry.getRowWindow();
+    for (let viewIndex = window.start; viewIndex < window.end; viewIndex++) {
+      if (this.rowData.getRowId(viewIndex) === rowId) return viewIndex;
+    }
+    const resident = this.rowData.findViewIndexById(rowId);
+    return resident === -1 ? undefined : resident;
   }
 
   // ===========================================================================
@@ -328,16 +434,11 @@ export class GridCore<TData = unknown> {
     }
   }
 
-  private computeColumnPositions(): void {
-    this.columnPositions = computeColumnPositions(this.columnModel.getLayout());
-  }
-
   private columnOperationDeps(): ColumnOperationDeps<TData> {
     return {
       getLayout: () => this.columnModel.getLayout(),
       setColumnWidth: (columnId, width) => this.columnModel.setWidth(columnId, width),
       moveColumn: (fromIndex, toIndex) => this.columnModel.move(fromIndex, toIndex),
-      computeColumnPositions: () => this.computeColumnPositions(),
       view: this.view,
     };
   }
@@ -355,7 +456,6 @@ export class GridCore<TData = unknown> {
     const applied = applyColumnResize(
       colIndex,
       width,
-      this.viewport.getViewportWidth(),
       this.columnOperationDeps(),
     );
     if (applied) {
@@ -424,8 +524,10 @@ export class GridCore<TData = unknown> {
     return this.columnModel.getLayout();
   }
 
+  /** @deprecated Use `geometry.getColumnLayout()`; removed in 1.1. */
   getColumnPositions(): number[] {
-    return [...this.columnPositions];
+    const layout = this.geometry.getColumnLayout();
+    return [...layout.columns.map((column) => column.offset), layout.totalWidth];
   }
 
   /** Number of displayed view rows (after sort/filter). */
@@ -442,7 +544,7 @@ export class GridCore<TData = unknown> {
   }
 
   getTotalWidth(): number {
-    return this.columnPositions.at(- 1) ?? 0;
+    return this.geometry.getColumnLayout().totalWidth;
   }
 
   getTotalHeight(): number {
@@ -480,30 +582,18 @@ export class GridCore<TData = unknown> {
     return this.scrollVirtualization.getScrollRatio();
   }
 
+  /**
+   * @deprecated Inclusive range; use `geometry.getVisibleRowWindow()` (half-open).
+   * Owned by the core maintainer and removed in 1.1.
+   */
   getVisibleRowRange(): { start: number; end: number } {
-    return this.scrollVirtualization.getVisibleRowRange();
+    const window = this.geometry.getVisibleRowWindow();
+    return window.end > window.start
+      ? { start: window.start, end: window.end - 1 }
+      : { start: 0, end: -1 };
   }
 
   /** Used structurally by `scrollCellIntoView` in the framework wrappers. */
-  getScrollTopForRow(rowIndex: number): number {
-    return this.scrollVirtualization.getScrollTopForRow(rowIndex);
-  }
-
-  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
-    return this.scrollVirtualization.getRowIndexAtDisplayY(
-      viewportY,
-      virtualScrollTop,
-    );
-  }
-
-  /**
-   * Get the translateY position for a row inside the rows wrapper.
-   * Accounts for scroll virtualization (compressed coordinates).
-   */
-  getRowTranslateY(rowIndex: number): number {
-    return this.slotPool.getRowTranslateYForIndex(rowIndex);
-  }
-
   getRowData(rowIndex: number): TData | undefined {
     return this.rowData.getRowData(rowIndex);
   }
@@ -639,7 +729,8 @@ export class GridCore<TData = unknown> {
       sortFilter: this.sortFilter,
       rowData: this.rowData,
       view: this.view,
-      computeColumnPositions: () => this.computeColumnPositions(),
+      getColumnLayout: () => this.geometry.getColumnLayout(),
+      refreshGeometry: () => this.refreshGeometry(),
       reloadAfterSchemaChange: () => this.refresh(),
     };
   }

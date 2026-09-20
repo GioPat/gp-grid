@@ -24,6 +24,27 @@ const check = async (name, operation) => {
   }
 };
 
+/**
+ * Width of the first server-rendered header cell, in CSS px. The
+ * deterministic first render resolves the layout against `initialWidth`
+ * before any browser measurement exists.
+ */
+const firstHeaderWidth = (html) => {
+  const match = html.match(/gp-grid-header-cell[^>]*style="([^"]*)"/);
+  if (match === null) throw new Error("No server-rendered header cell found.");
+  const width = /width:\s*([0-9.]+)px/.exec(match[1]);
+  if (width === null) throw new Error(`No width in header style: ${match[1]}`);
+  return Number.parseFloat(width[1]);
+};
+
+const expectWidth = (html, expected, label) => {
+  const actual = firstHeaderWidth(html);
+  if (Math.abs(actual - expected) > 1) {
+    throw new Error(`${label}: expected ${expected}px, rendered ${actual}px`);
+  }
+  return `${actual}px`;
+};
+
 const provenance = collectArtifactProvenance("candidate");
 const artifact = (name) => {
   const found = provenance.packages.find((item) => item.name === name);
@@ -94,6 +115,37 @@ await check("React columnar server render (shell only)", async () => {
   return `${html.length} characters (shell; async rows are not assumed)`;
 });
 
+await check("React fit expands the single column to initialWidth", async () => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const html = renderToString(React.createElement(Grid, {
+    columns,
+    rowData: rows,
+    rowHeight: 32,
+    initialWidth: 500,
+    initialHeight: 300,
+    getRowId: (row) => row.id,
+  }));
+  return expectWidth(html, 500, "React fit");
+});
+
+await check("React fixed keeps the declared 160px column", async () => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const html = renderToString(React.createElement(Grid, {
+    columns,
+    rowData: rows,
+    rowHeight: 32,
+    columnLayout: "fixed",
+    initialWidth: 500,
+    initialHeight: 300,
+    getRowId: (row) => row.id,
+  }));
+  return expectWidth(html, 160, "React fixed");
+});
+
 const vuePackage = path.join(REPOSITORY_ROOT, "playgrounds/vite-vue/package.json");
 await check("Vue native server render", async () => {
   const { createSSRApp, h } = await importFrom("vue", vuePackage);
@@ -106,6 +158,35 @@ await check("Vue native server render", async () => {
   const html = await renderToString(app);
   if (html.includes("gp-grid-container") === false) throw new Error("Vue grid shell was not rendered.");
   return `${html.length} characters`;
+});
+
+await check("Vue fit expands the single column to initialWidth", async () => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const app = createSSRApp({
+    render: () => h(GpGrid, { columns, rowData: rows, rowHeight: 32, initialWidth: 500, initialHeight: 300 }),
+  });
+  return expectWidth(await renderToString(app), 500, "Vue fit");
+});
+
+await check("Vue fixed keeps the declared 160px column", async () => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const app = createSSRApp({
+    render: () => h(GpGrid, {
+      columns,
+      rowData: rows,
+      rowHeight: 32,
+      columnLayout: "fixed",
+      initialWidth: 500,
+      initialHeight: 300,
+    }),
+  });
+  return expectWidth(await renderToString(app), 160, "Vue fixed");
 });
 
 await check("Vue columnar server render (shell only)", async () => {

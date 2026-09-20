@@ -3,6 +3,7 @@
 import type {
   RowId,
   ColumnDefinition,
+  ColumnLayoutMode,
   ColumnMovedEvent,
   ColumnResizedEvent,
   ColumnStateUpdate,
@@ -57,6 +58,12 @@ export interface GridProps<TData = unknown> {
    * Explicit commands win over retained user state and definition defaults.
    */
   columnState?: ColumnStateUpdate[];
+  /**
+   * How displayed column widths are resolved. `"fit"` (default) expands
+   * columns to reach the viewport; `"fixed"` keeps declared/overridden pixel
+   * widths and scrolls horizontally. Changeable at runtime.
+   */
+  columnLayout?: ColumnLayoutMode;
   /** Data source for the grid */
   dataSource?: DataSource<TData>;
   /** Legacy: Raw row data (will be wrapped in a client data source) */

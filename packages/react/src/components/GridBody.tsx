@@ -11,7 +11,7 @@ import type {
   SlotData,
   FillHandlePosition,
   GridLabels,
-  VisibleColumnInfo,
+  DisplayedColumn,
 } from "@gp-grid/core";
 import {
   isCellSelected,
@@ -41,9 +41,7 @@ export interface GridBodyProps<TData = unknown> {
   totalRows: number;
   labels: GridLabels;
   slotsArray: SlotData<TData>[];
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  columnPositions: number[];
-  columnWidths: number[];
+  layoutColumns: readonly DisplayedColumn[];
   fillHandlePosition: FillHandlePosition | null;
   dragState: DragState;
   onScroll: () => void;
@@ -78,9 +76,7 @@ const GridBodyInner = <TData = unknown>(
     totalRows,
     labels,
     slotsArray,
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
+    layoutColumns,
     fillHandlePosition,
     dragState,
     onScroll,
@@ -150,25 +146,25 @@ const GridBodyInner = <TData = unknown>(
                   height: `${rowHeight}px`,
                 }}
               >
-                {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
+                {layoutColumns.map(({ column, layoutIndex, offset, width }) => {
                   const isEditing = isCellEditing(
                     slot.rowIndex,
-                    originalIndex,
+                    layoutIndex,
                     editingCell,
                   );
                   const active = isCellActive(
                     slot.rowIndex,
-                    originalIndex,
+                    layoutIndex,
                     activeCell,
                   );
                   const selected = isCellSelected(
                     slot.rowIndex,
-                    originalIndex,
+                    layoutIndex,
                     selectionRange,
                   );
                   const inFillPreview = isCellInFillPreview(
                     slot.rowIndex,
-                    originalIndex,
+                    layoutIndex,
                     dragState.dragType === "fill",
                     dragState.fillSourceRange,
                     dragState.fillTarget,
@@ -186,7 +182,7 @@ const GridBodyInner = <TData = unknown>(
                   const highlightCellClasses =
                     coreRef.current?.highlight?.computeCombinedCellClasses(
                       slot.rowIndex,
-                      originalIndex,
+                      layoutIndex,
                       column,
                       slot.rowData,
                     ) ?? [];
@@ -194,7 +190,7 @@ const GridBodyInner = <TData = unknown>(
                   // Read the raw value through the core read path so a
                   // record-less (columnar) row renders like an object row.
                   const rawValue =
-                    core?.getCellValue(slot.rowIndex, originalIndex) ?? null;
+                    core?.getCellValue(slot.rowIndex, layoutIndex) ?? null;
                   const rowId = core?.getRowId(slot.rowIndex);
                   const getValue = (field: string): CellValue =>
                     core?.getFieldValue(slot.rowIndex, field) ?? null;
@@ -224,26 +220,26 @@ const GridBodyInner = <TData = unknown>(
 
                   return (
                     <div
-                      key={`${slot.slotId}-${originalIndex}`}
+                      key={`${slot.slotId}-${layoutIndex}`}
                       className={cellClasses}
                       data-cell-row={slot.rowIndex}
-                      data-cell-col={originalIndex}
+                      data-cell-col={layoutIndex}
                       title={titleText || undefined}
                       style={{
                         position: "absolute",
-                        left: `${columnPositions[visibleIndex]}px`,
+                        left: `${offset}px`,
                         top: 0,
-                        width: `${columnWidths[visibleIndex]}px`,
+                        width: `${width}px`,
                         height: `${rowHeight}px`,
                       }}
                       onPointerDown={(e) =>
-                        onCellMouseDown(slot.rowIndex, originalIndex, e)
+                        onCellMouseDown(slot.rowIndex, layoutIndex, e)
                       }
                       onDoubleClick={() =>
-                        onCellDoubleClick(slot.rowIndex, originalIndex)
+                        onCellDoubleClick(slot.rowIndex, layoutIndex)
                       }
                       onMouseEnter={() =>
-                        onCellMouseEnter(slot.rowIndex, originalIndex)
+                        onCellMouseEnter(slot.rowIndex, layoutIndex)
                       }
                       onMouseLeave={onCellMouseLeave}
                     >
@@ -255,7 +251,7 @@ const GridBodyInner = <TData = unknown>(
                           rowId,
                           getValue,
                           rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
+                          colIndex: layoutIndex,
                           initialValue: editingCell.initialValue,
                           editId: editingCell.editId,
                           coreRef,
@@ -269,7 +265,7 @@ const GridBodyInner = <TData = unknown>(
                           rowId,
                           getValue,
                           rowIndex: slot.rowIndex,
-                          colIndex: originalIndex,
+                          colIndex: layoutIndex,
                           isActive: active,
                           isSelected: selected,
                           isEditing,

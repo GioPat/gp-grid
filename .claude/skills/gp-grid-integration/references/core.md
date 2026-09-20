@@ -167,8 +167,13 @@ grid.hasRow(viewIndex);                          // whether the view row exists
 grid.getViewRow(viewIndex);                      // { kind, id, viewIndex, record? } | undefined
 grid.getRecordById(rowId);                       // source record for a stable id
 grid.setColumnState([{ columnId, width, hidden, order }]);
+grid.setColumnLayout("fixed");                   // or "fit" (default)
 grid.resetColumnState([columnId]);               // omit arg to reset all
-grid.getColumnState();                           // [{ columnId, width, hidden, order }]
+grid.getColumnState();                           // [{ columnId, width?, resolvedWidth, hidden, order }]
+grid.geometry.getColumnLayout();                 // { revision, mode, columns, totalWidth }
+grid.geometry.getCellBounds(0, 0, "viewport");   // { top, left, width, height, ... }
+grid.geometry.hitTest({ x: 10, y: 10 });         // { row, displayIndex, col, columnId? }
+grid.geometry.getScrollTarget(12, 0);            // { scrollTop?, scrollLeft? }
 grid.getSlotGeneration(rowIndex);                // slot recycle guard
 grid.isSlotGenerationCurrent(rowIndex, generation);
 grid.selection.startSelection({ row, col }, { shift, ctrl });

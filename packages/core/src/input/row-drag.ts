@@ -2,7 +2,6 @@ import type { GridCore } from "../grid-core";
 import type {
   ContainerBounds,
   DragMoveResult,
-  InputHandlerDeps,
   PointerEventData,
   RowDragState,
 } from "../types/input";
@@ -13,15 +12,9 @@ export class RowDrag<TData = unknown> {
   private readonly gesture = new DragGesture();
   private sourceRowIndex = -1;
   private readonly core: GridCore<TData>;
-  private deps: InputHandlerDeps;
 
-  constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
+  constructor(core: GridCore<TData>) {
     this.core = core;
-    this.deps = deps;
-  }
-
-  updateDeps(deps: InputHandlerDeps): void {
-    this.deps = deps;
   }
 
   get isActive(): boolean {
@@ -41,14 +34,14 @@ export class RowDrag<TData = unknown> {
     if (this.gesture.track(event) === false) return null;
 
     const { top, left, height, width, scrollTop } = bounds;
-    const headerHeight = this.deps.getHeaderHeight();
+    const headerHeight = this.core.getHeaderHeight();
+    // `bounds` is the body scroll container, which starts below the header.
     const viewportY = event.clientY - top;
     const rowCount = this.core.getRowCount();
 
-    const targetRow = Math.max(
-      0,
-      Math.min(this.core.getRowIndexAtDisplayY(viewportY, scrollTop), rowCount),
-    );
+    // The insertion edge includes `rowCount` (drop after the final row).
+    const hit = this.core.geometry.hitTest({ x: 0, y: viewportY, scrollTop });
+    const targetRow = Math.max(0, Math.min(hit.row, rowCount));
     this.gesture.dropTargetIndex = targetRow;
 
     const autoScroll = calculateAutoScroll(
@@ -81,7 +74,7 @@ export class RowDrag<TData = unknown> {
       dropTargetIndex,
       dropIndicatorY: dropTargetIndex === null
         ? 0
-        : this.core.getRowTranslateY(dropTargetIndex),
+        : this.core.geometry.getRowEdgeOffset(dropTargetIndex, "rows") ?? 0,
     };
   }
 }

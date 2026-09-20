@@ -16,15 +16,17 @@ import {
 } from "./managers";
 import { RowDataManager } from "./managers/row-data-manager";
 import { ViewSync } from "./grid-core-view-sync";
+import type { GridGeometryService } from "./geometry/grid-geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import type { CellValue, ColumnDefinition } from "./types";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
   config: GridCoreConfig<TData>;
-  // Columns and their positions are owned (and replaced) by GridCore.
+  // Columns are owned (and replaced) by GridCore.
   getColumns: () => ColumnDefinition[];
-  getColumnPositions: () => number[];
+  /** Built after the managers; only read once construction has finished. */
+  getGeometry: () => GridGeometryService;
 }
 
 export interface GridManagers<TData> {
@@ -44,9 +46,8 @@ export const buildGridManagers = <TData>(
   deps: GridManagersDeps<TData>,
 ): GridManagers<TData> => {
   const { batcher, config, getColumns } = deps;
-  const getRowHeight = (): number => config.rowHeight;
+  const getRowGeometry = () => deps.getGeometry().getRowGeometry();
   const getHeaderHeight = (): number => config.headerHeight;
-  const getOverscan = (): number => config.overscan;
 
   // Managers cross-reference each other through lazy arrow-fn getters.
   // Forward-declare the late ones so callbacks resolve at call time, not at
@@ -61,14 +62,14 @@ export const buildGridManagers = <TData>(
     rowData.setCellValue(row, col, value);
   };
 
+  // Viewport first: the scroll mapping and every later manager read it.
+  viewport = new ViewportState();
+
   const scrollVirtualization = new ScrollVirtualizationManager({
-    getRowHeight,
     getHeaderHeight,
-    getTotalRows,
-    getScrollTop: () => viewport.getScrollTop(),
     getViewportHeight: () => viewport.getViewportHeight(),
+    getAxis: () => getRowGeometry().syncAxis(),
   });
-  viewport = new ViewportState(() => scrollVirtualization.getScrollRatio());
 
   // selection.onInstruction closes over `highlight`, populated below.
   let highlight: HighlightManager<TData> | null = null;
@@ -112,14 +113,9 @@ export const buildGridManagers = <TData>(
   fill.onInstruction((instruction) => batcher.emit(instruction));
 
   const slotPool = new SlotPoolManager({
-    getRowHeight,
-    getHeaderHeight,
-    getOverscan,
-    getScrollTop: () => viewport.getScrollTop(),
-    getViewportHeight: () => viewport.getViewportHeight(),
-    getTotalRows,
-    getScrollRatio: () => scrollVirtualization.getScrollRatio(),
-    getVirtualContentHeight: () => scrollVirtualization.getVirtualContentHeight(),
+    getRowWindow: () => getRowGeometry().getWindow(),
+    getRowCount: getTotalRows,
+    getRowOffset: (rowIndex) => getRowGeometry().getMapper().rowPosition(rowIndex),
     getRowData: (rowIndex) => getCachedRows().get(rowIndex),
     isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
   });
@@ -170,7 +166,7 @@ export const buildGridManagers = <TData>(
     highlight,
     overscan: config.overscan,
     getColumns,
-    getColumnPositions: deps.getColumnPositions,
+    getGeometry: deps.getGeometry,
     getTotalRows,
   });
 
@@ -181,10 +177,9 @@ export const buildGridManagers = <TData>(
     getColumns,
     getSortModel: () => sortFilter.getSortModel(),
     getFilterModel: () => sortFilter.getFilterModel(),
-    getRowHeight,
-    getOverscan,
-    getScrollTop: () => viewport.getScrollTop(),
-    getViewportHeight: () => viewport.getViewportHeight(),
+    getRowWindow: () => getRowGeometry().getWindow(),
+    getVisibleRowWindow: () => getRowGeometry().getVisibleWindow(),
+    getBootstrapRowCount: () => getRowGeometry().getBootstrapRowCount(),
     onCellValueChanged: config.onCellValueChanged,
     onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,

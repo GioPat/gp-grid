@@ -12,7 +12,10 @@ export { createInitialState } from "@gp-grid/core";
 
 export function gridReducer<TData = unknown>(state: GridState<TData>, action: GridAction): GridState<TData> {
   if (action.type === "RESET") {
-    return createInitialState<TData>({ initialColumns: action.columns });
+    return createInitialState<TData>({
+      initialColumns: action.columns,
+      initialColumnLayout: action.columnLayout,
+    });
   }
 
   // Process batch of instructions in one state update
@@ -24,8 +27,11 @@ export function gridReducer<TData = unknown>(state: GridState<TData>, action: Gr
   // Create mutable copies of Maps to batch updates
   const newSlots = new Map(state.slots);
   const newHeaders = new Map(state.headers);
-  // Reset pendingScrollTop each batch — only set when SCROLL_TO is in this batch
-  let stateChanges: Partial<GridState<TData>> = { pendingScrollTop: null };
+  // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
+  let stateChanges: Partial<GridState<TData>> = {
+    pendingScrollTop: null,
+    pendingScrollLeft: null,
+  };
 
   // Apply all instructions
   for (const instruction of instructions) {

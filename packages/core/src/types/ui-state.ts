@@ -8,6 +8,8 @@ import type {
   SortDirection,
   ColumnFilterModel,
 } from "./index";
+import { createSeedColumnLayout } from "../geometry/column-layout";
+import type { ColumnLayoutMode, ColumnLayoutSnapshot } from "./geometry";
 
 // =============================================================================
 // Slot & Header Data Types
@@ -55,29 +57,59 @@ export interface InitialStateArgs {
   initialHeight?: number;
   /** Resolved layout the wrapper renders until the core emits `COLUMNS_CHANGED`. */
   initialColumns?: ColumnDefinition[];
+  /** Displayed-column layout seeded for the deterministic first render. */
+  initialLayout?: ColumnLayoutSnapshot;
+  /** Layout mode seeded alongside `initialLayout`. Default: "fit". */
+  initialColumnLayout?: ColumnLayoutMode;
 }
 
-export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => ({
-  slots: new Map(),
-  activeCell: null,
-  selectionRange: null,
-  editingCell: null,
-  peekCell: null,
-  contentWidth: 0,
-  contentHeight: args?.initialHeight ?? 0,
-  viewportWidth: args?.initialWidth ?? 0,
-  viewportHeight: args?.initialHeight ?? 0,
-  rowsWrapperOffset: 0,
-  headers: new Map(),
-  filterPopup: null,
-  isLoading: false,
-  error: null,
-  totalRows: 0,
-  visibleRowRange: null,
-  hoverPosition: null,
-  columns: args?.initialColumns ?? [],
-  pendingScrollTop: null,
-});
+/**
+ * The deterministic first render (SSR or the frame before the core mounts)
+ * resolves the displayed layout against `initialWidth`; a real measurement
+ * replaces it on the first `SET_CONTENT_SIZE`. Adapters that already hold a
+ * core-resolved snapshot pass `initialLayout` instead.
+ */
+const seedLayout = (
+  args: InitialStateArgs | undefined,
+): ColumnLayoutSnapshot | null => {
+  if (args?.initialLayout !== undefined) return args.initialLayout;
+  const columns = args?.initialColumns ?? [];
+  if (columns.length === 0) return null;
+  return createSeedColumnLayout(
+    columns,
+    args?.initialColumnLayout ?? "fit",
+    args?.initialWidth ?? 0,
+  );
+};
+
+export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => {
+  const layout = seedLayout(args);
+  return {
+    slots: new Map(),
+    activeCell: null,
+    selectionRange: null,
+    editingCell: null,
+    peekCell: null,
+    contentWidth: layout?.totalWidth ?? 0,
+    contentHeight: args?.initialHeight ?? 0,
+    viewportWidth: args?.initialWidth ?? 0,
+    viewportHeight: args?.initialHeight ?? 0,
+    rowsWrapperOffset: 0,
+    headers: new Map(),
+    filterPopup: null,
+    isLoading: false,
+    error: null,
+    totalRows: 0,
+    visibleRowRange: null,
+    hoverPosition: null,
+    columns: args?.initialColumns ?? [],
+    layout,
+    columnLayout: args?.initialColumnLayout ?? "fit",
+    geometryRevision: 0,
+    pendingScrollTop: null,
+    pendingScrollLeft: null,
+  };
+};
 
 // =============================================================================
 // Grid State
@@ -110,6 +142,17 @@ export interface GridState<TData = unknown> {
   hoverPosition: CellPosition | null;
   /** Core-owned resolved layout (ordered columns with effective widths/visibility). */
   columns: ColumnDefinition[];
-  /** Pending programmatic scroll — framework should apply to container and clear */
+  /**
+   * Core-resolved displayed-column layout. `null` until the core publishes
+   * its first snapshot; wrappers that render before mount seed it.
+   */
+  layout: ColumnLayoutSnapshot | null;
+  /** Selected column layout mode, mirrored from the core. */
+  columnLayout: ColumnLayoutMode;
+  /** Last committed geometry revision, for change detection. */
+  geometryRevision: number;
+  /** Pending programmatic vertical scroll — framework applies it and clears it */
   pendingScrollTop: number | null;
+  /** Pending programmatic horizontal scroll — framework applies it and clears it */
+  pendingScrollLeft: number | null;
 }

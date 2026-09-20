@@ -41,6 +41,7 @@ export type {
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,
+  ColumnModelState,
 } from "./columns";
 
 // Filter types
@@ -121,6 +122,21 @@ export type {
   HeaderRendererParams,
 } from "./renderers";
 
+// Geometry types
+export type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
+} from "./geometry";
+
 // Options types
 export type {
   GridCoreOptions,
@@ -138,7 +154,6 @@ export type {
   InputResult,
   KeyboardResult,
   DragMoveResult,
-  InputHandlerDeps,
   DragState,
   ColumnResizeDragState,
   ColumnMoveDragState,

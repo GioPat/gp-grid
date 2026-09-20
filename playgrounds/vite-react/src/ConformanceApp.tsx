@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Grid, createColumnarDataSource } from "@gp-grid/react";
 import type {
+  CellPosition,
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
@@ -9,9 +10,19 @@ import type {
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
+  ColumnLayoutMode,
   GridRef,
   RowDragEndEvent,
+  RowId,
 } from "@gp-grid/react";
+import {
+  createGeometryHooks,
+  createLargeColumnarColumns,
+  createLargeColumnarSource,
+  createNarrowColumns,
+  type CellBoundsSnapshot,
+  type LayoutColumnSnapshot,
+} from "./conformance-geometry";
 
 interface ConformanceRow {
   id: number;
@@ -153,6 +164,10 @@ interface ConformanceHooks {
   filterCount: () => number;
   eventCounts: () => { resized: number; moved: number; dragged: number };
   resetEventCounts: () => void;
+  layoutColumns: () => LayoutColumnSnapshot[];
+  cellBounds: (row: number, layoutIndex: number) => CellBoundsSnapshot | null;
+  identityBounds: (rowId: RowId, columnId: string) => CellBoundsSnapshot | null;
+  activeCell: () => CellPosition | null;
 }
 
 interface EventCounts {
@@ -164,7 +179,8 @@ interface EventCounts {
 export const ConformanceApp = (): React.ReactNode => {
   const [rows, setRows] = useState(createRows);
   const [columns, setColumns] = useState(createColumns);
-  const [columnarColumns] = useState(createColumnarColumns);
+  const [columnarColumns, setColumnarColumns] = useState(createColumnarColumns);
+  const [largeColumnarSource, setLargeColumnarSource] = useState<ReturnType<typeof createLargeColumnarSource> | null>(null);
   const [fixture] = useState(createColumnarFixture);
   const [mode, setMode] = useState<"object" | "columnar">("object");
   const [revision, setRevision] = useState(0);
@@ -173,6 +189,8 @@ export const ConformanceApp = (): React.ReactNode => {
   const [editEvents, setEditEvents] = useState(0);
   const [writeRejected, setWriteRejected] = useState(0);
   const [columnState, setColumnState] = useState<ColumnStateUpdate[] | undefined>(undefined);
+  const [columnLayout, setColumnLayout] = useState<ColumnLayoutMode>("fit");
+  const [hostWidth, setHostWidth] = useState(600);
   const gridRef = useRef<GridRef<ConformanceRow> | null>(null);
   const eventCounts = useRef<EventCounts>({ resized: 0, moved: 0, dragged: 0 });
   const coreTokens = useRef(new WeakMap<object, number>());
@@ -188,10 +206,37 @@ export const ConformanceApp = (): React.ReactNode => {
     ]);
   }, []);
 
+  const useNarrowColumns = useCallback(() => {
+    setColumns(createNarrowColumns());
+  }, []);
+
+  const useLargeColumnar = useCallback(() => {
+    setMode("columnar");
+    setColumnarColumns(createLargeColumnarColumns());
+    setLargeColumnarSource(createLargeColumnarSource());
+    setGeneration((value) => value + 1);
+    setRevision(fixture.source.revision);
+  }, [fixture]);
+
+  const toggleColumnLayout = useCallback(() => {
+    setColumnLayout((current) => (current === "fit" ? "fixed" : "fit"));
+  }, []);
+
+  const resizeHost = useCallback(() => {
+    setHostWidth((current) => (current === 600 ? 800 : 600));
+  }, []);
+
+const hideColumn = useCallback(() => {
+    setColumnState((current) => [...(current ?? []), { columnId: "id", hidden: true }]);
+  }, []);
+
   const reset = useCallback(() => {
     setRows(createRows());
     setColumns(createColumns());
+    setColumnarColumns(createColumnarColumns());
     setColumnState(undefined);
+    setColumnLayout("fit");
+    setHostWidth(600);
     setMode("object");
     setMounted(true);
     setGeneration((value) => value + 1);
@@ -304,6 +349,11 @@ export const ConformanceApp = (): React.ReactNode => {
       resetEventCounts: () => {
         eventCounts.current = { resized: 0, moved: 0, dragged: 0 };
       },
+      ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never),
+      debugState: () => ({
+        coreWidth: gridRef.current?.core?.geometry.getColumnLayout().columns[0]?.width ?? -1,
+        domWidth: (document.querySelector('.gp-grid-header-cell[data-col-index="0"]') as HTMLElement | null)?.style.width ?? null,
+      }),
     };
     (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance = hooks;
     return () => {
@@ -331,16 +381,22 @@ export const ConformanceApp = (): React.ReactNode => {
         <button data-testid="use-columnar" onClick={useColumnar}>Use columnar</button>
         <button data-testid="use-object" onClick={useObject}>Use object</button>
         <button data-testid="bump-revision" onClick={bumpRevision}>Bump revision</button>
+        <button data-testid="use-narrow-columns" onClick={useNarrowColumns}>Narrow columns</button>
+        <button data-testid="use-large-columnar" onClick={useLargeColumnar}>Large columnar</button>
+        <button data-testid="toggle-column-layout" onClick={toggleColumnLayout}>Toggle layout</button>
+        <button data-testid="resize-host" onClick={resizeHost}>Resize host</button>
+        <button data-testid="hide-column" onClick={hideColumn}>Hide column</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
-      <div data-testid="grid-host" style={{ width: 600, height: 360 }}>
+      <div data-testid="grid-host" style={{ width: hostWidth, height: 360 }}>
         {mounted && (
           <Grid
             key={generation}
             gridRef={gridRef}
             columns={isColumnar ? columnarColumns : columns}
             columnState={columnState}
-            dataSource={isColumnar ? fixture.source : undefined}
+            columnLayout={columnLayout}
+            dataSource={isColumnar ? (largeColumnarSource ?? fixture.source) : undefined}
             rowData={isColumnar ? undefined : rows}
             rowHeight={32}
             headerHeight={36}

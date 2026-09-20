@@ -11,13 +11,11 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  calculateScaledColumnPositions,
-  getTotalWidth,
   TouchScrollController,
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnMovedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -37,6 +35,8 @@ const props = withDefaults(
     rowHeight: number;
     headerHeight?: number;
     overscan?: number;
+    /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
+    columnLayout?: ColumnLayoutMode;
     rowLoading?: RowLoadingOptions;
     sortingEnabled?: boolean;
     darkMode?: boolean;
@@ -110,6 +110,7 @@ const { state, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
   initialColumns: props.columns as unknown as CoreColumnDefinition[],
+  initialColumnLayout: props.columnLayout ?? "fit",
 });
 
 // Computed values
@@ -122,22 +123,9 @@ const effectiveColumns = computed<CoreColumnDefinition[]>(
   () => state.value.columns,
 );
 
-// Create visible columns with original index tracking (for hidden column support)
-const visibleColumnsWithIndices = computed(() =>
-  effectiveColumns.value
-    .map((col, index) => ({ column: col, originalIndex: index }))
-    .filter(({ column }) => !column.hidden),
-);
-
-const scaledColumns = computed(() =>
-  calculateScaledColumnPositions(
-    visibleColumnsWithIndices.value.map((v) => v.column),
-    state.value.viewportWidth,
-  ),
-);
-const columnPositions = computed(() => scaledColumns.value.positions);
-const columnWidths = computed(() => scaledColumns.value.widths);
-const totalWidth = computed(() => getTotalWidth(columnPositions.value));
+// Displayed geometry: the core resolves offsets/widths and publishes them.
+const layoutColumns = computed(() => state.value.layout?.columns ?? []);
+const totalWidth = computed(() => state.value.contentWidth);
 const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
 // Input handling
@@ -157,25 +145,16 @@ const {
   selectionRange: computed(() => state.value.selectionRange),
   editingCell: computed(() => state.value.editingCell),
   filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
-  rowHeight: props.rowHeight,
-  headerHeight: totalHeaderHeight.value,
-  columnPositions,
-  columnWidths,
-  visibleColumnsWithIndices,
-  slots: computed(() => state.value.slots),
-  rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
+  onBeforeProgrammaticScroll: () => touchScroll.stop(),
 });
 
-// Fill handle position
+// Fill handle position, resolved by core geometry in rows-wrapper space.
 const { fillHandlePosition } = useFillHandle({
+  coreRef,
   activeCell: computed(() => state.value.activeCell),
   selectionRange: computed(() => state.value.selectionRange),
   slots: computed(() => state.value.slots),
-  columns: effectiveColumns,
-  visibleColumnsWithIndices,
-  columnPositions,
-  columnWidths,
-  rowHeight: props.rowHeight,
+  geometryRevision: computed(() => state.value.geometryRevision),
 });
 
 // Handle scroll
@@ -274,6 +253,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowHeight: props.rowHeight,
     headerHeight: totalHeaderHeight.value,
     overscan: props.overscan,
+    columnLayout: props.columnLayout ?? "fit",
     maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
     sortingEnabled: props.sortingEnabled,
@@ -406,21 +386,28 @@ watch(
   { immediate: true },
 );
 
-// Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
-// flush: 'post' ensures the DOM has been updated before we set scrollTop.
+// Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM has
+// been updated before the scroll positions are written.
 watch(
-  () => state.value.pendingScrollTop,
-  (scrollTop) => {
-    if (scrollTop !== null) {
-      const container = bodyContainerRef.value;
-      if (container) {
-        // A programmatic scroll wins over any in-flight synthetic fling.
-        touchScroll.stop();
-        container.scrollTop = scrollTop;
-      }
-    }
+  () => [state.value.pendingScrollTop, state.value.pendingScrollLeft] as const,
+  ([scrollTop, scrollLeft]) => {
+    const container = bodyContainerRef.value;
+    if (container === null) return;
+    if (scrollTop === null && scrollLeft === null) return;
+    // A programmatic scroll wins over any in-flight synthetic fling.
+    touchScroll.stop();
+    if (scrollTop !== null) container.scrollTop = scrollTop;
+    if (scrollLeft !== null) container.scrollLeft = scrollLeft;
   },
   { flush: "post" },
+);
+
+// Switch layout mode without recreating the core.
+watch(
+  () => props.columnLayout,
+  (mode) => {
+    coreRef.value?.setColumnLayout(mode ?? "fit");
+  },
 );
 
 // Watch for highlighting prop changes
@@ -470,9 +457,7 @@ defineExpose({
       :content-width="state.contentWidth"
       :total-width="totalWidth"
       :is-loading="state.isLoading"
-      :visible-columns-with-indices="visibleColumnsWithIndices"
-      :column-positions="columnPositions"
-      :column-widths="columnWidths"
+      :layout-columns="layoutColumns"
       :headers="state.headers"
       :sorting-enabled="sortingEnabled"
       :on-header-mouse-down="handleHeaderMouseDown"
@@ -500,9 +485,7 @@ defineExpose({
       :total-rows="state.totalRows"
       :labels="resolvedLabels"
       :slots-array="slotsArray"
-      :visible-columns-with-indices="visibleColumnsWithIndices"
-      :column-positions="columnPositions"
-      :column-widths="columnWidths"
+      :layout-columns="layoutColumns"
       :fill-handle-position="fillHandlePosition"
       :drag-state="dragState"
       :on-scroll="handleScrollWithHeaderSync"
@@ -567,7 +550,7 @@ defineExpose({
       :column="peekContext.column"
       :row-data="peekContext.rowData"
       :core="coreRef"
-      :container-ref="outerContainerRef"
+      :container-ref="bodyContainerRef"
       :cell-renderers="cellRenderers ?? {}"
       :global-cell-renderer="cellRenderer"
       @close="handlePeekClose"
@@ -578,7 +561,7 @@ defineExpose({
       v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
       class="gp-grid-column-resize-line"
       :style="{
-        left: `${(columnPositions[visibleColumnsWithIndices.findIndex(v => v.originalIndex === dragState.columnResize!.colIndex)] ?? 0) + dragState.columnResize!.currentWidth - scrollLeft}px`,
+        left: `${dragState.columnResize!.lineX - scrollLeft}px`,
       }"
     />
 
@@ -599,7 +582,7 @@ defineExpose({
         v-if="dragState.columnMove!.dropTargetIndex !== null"
         class="gp-grid-column-drop-indicator"
         :style="{
-          left: `${(columnPositions[dragState.columnMove!.dropTargetIndex!] ?? 0) - scrollLeft}px`,
+          left: `${dragState.columnMove.dropIndicatorX - scrollLeft}px`,
           height: `${totalHeaderHeight}px`,
         }"
       />

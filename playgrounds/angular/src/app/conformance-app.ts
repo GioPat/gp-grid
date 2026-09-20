@@ -9,9 +9,17 @@ import type {
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
+  ColumnLayoutMode,
   GridCore,
   RowDragEndEvent,
+  RowId,
 } from '@gp-grid/angular';
+import {
+  createGeometryHooks,
+  createLargeColumnarColumns,
+  createLargeColumnarSource,
+  createNarrowColumns,
+} from './conformance-geometry';
 
 interface ConformanceRow {
   id: number;
@@ -142,15 +150,21 @@ const createColumnarFixture = () => {
         <button data-testid="use-columnar" (click)="useColumnar()">Use columnar</button>
         <button data-testid="use-object" (click)="useObject()">Use object</button>
         <button data-testid="bump-revision" (click)="bumpRevision()">Bump revision</button>
+        <button data-testid="use-narrow-columns" (click)="useNarrowColumns()">Narrow columns</button>
+        <button data-testid="use-large-columnar" (click)="useLargeColumnar()">Large columnar</button>
+        <button data-testid="toggle-column-layout" (click)="toggleColumnLayout()">Toggle layout</button>
+        <button data-testid="resize-host" (click)="resizeHost()">Resize host</button>
+        <button data-testid="hide-column" (click)="hideColumn()">Hide column</button>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
-      <div data-testid="grid-host" style="width: 600px; height: 360px">
+      <div data-testid="grid-host" [style.width.px]="hostWidth()" style="height: 360px">
         @if (mounted()) {
           @if (mode() === 'columnar') {
             <gp-grid
-              [columns]="columnarColumns"
+              [columns]="columnarColumns()"
               [columnState]="columnState()"
-              [dataSource]="columnarSource"
+              [columnLayout]="columnLayout()"
+              [dataSource]="largeColumnarSource() ?? columnarSource"
               [rows]="emptyRows"
               [rowHeight]="32"
               [headerHeight]="36"
@@ -164,6 +178,7 @@ const createColumnarFixture = () => {
             <gp-grid
               [columns]="columns()"
               [columnState]="columnState()"
+              [columnLayout]="columnLayout()"
               [rows]="rows()"
               [rowHeight]="32"
               [headerHeight]="36"
@@ -184,7 +199,8 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
 
   private readonly fixture = createColumnarFixture();
   protected readonly columnarSource = this.fixture.source;
-  protected readonly columnarColumns = createColumnarColumns();
+  protected readonly largeColumnarSource = signal<ReturnType<typeof createLargeColumnarSource> | null>(null);
+  protected readonly columnarColumns = signal<AngularColumnDefinition[]>(createColumnarColumns());
   protected readonly emptyRows: unknown[] = [];
   protected readonly rows = signal<ConformanceRow[]>(createRows());
   protected readonly columns = signal<AngularColumnDefinition[]>(createColumns());
@@ -195,6 +211,8 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   protected readonly editEvents = signal(0);
   protected readonly writeRejected = signal(0);
   protected readonly columnState = signal<ColumnStateUpdate[]>([]);
+  protected readonly columnLayout = signal<ColumnLayoutMode>('fit');
+  protected readonly hostWidth = signal(600);
   private readonly eventCounts = { resized: 0, moved: 0, dragged: 0 };
   private readonly coreTokens = new WeakMap<object, number>();
   private nextCoreToken = 1;
@@ -244,12 +262,33 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
         this.eventCounts.moved = 0;
         this.eventCounts.dragged = 0;
       },
+      ...createGeometryHooks(() => (this.coreOf() ?? null) as never),
     };
   }
 
   ngOnDestroy(): void {
     if (typeof window === 'undefined') return;
     delete (window as unknown as { __gpConformance?: unknown }).__gpConformance;
+  }
+
+  protected useNarrowColumns(): void {
+    this.columns.set(createNarrowColumns());
+  }
+
+  protected useLargeColumnar(): void {
+    this.mode.set('columnar');
+    this.columnarColumns.set(createLargeColumnarColumns());
+    this.largeColumnarSource.set(createLargeColumnarSource());
+    this.generation.update((value) => value + 1);
+    this.revision.set(this.fixture.source.revision);
+  }
+
+  protected toggleColumnLayout(): void {
+    this.columnLayout.update((current) => (current === 'fit' ? 'fixed' : 'fit'));
+  }
+
+  protected resizeHost(): void {
+    this.hostWidth.update((current) => (current === 600 ? 800 : 600));
   }
 
   protected replaceColumns(): void {
@@ -260,10 +299,15 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     ]);
   }
 
+  protected hideColumn(): void {
+    this.columnState.update((current) => [...current, { columnId: 'id', hidden: true }]);
+  }
+
   protected reset(): void {
     this.mounted.set(false);
     this.rows.set(createRows());
     this.columns.set(createColumns());
+    this.columnarColumns.set(createColumnarColumns());
     this.columnState.set([]);
     this.mode.set('object');
     this.editEvents.set(0);

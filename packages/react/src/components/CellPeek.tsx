@@ -11,6 +11,7 @@ import type {
   CellPosition,
   CellValue,
   ColumnDefinition,
+  GridCore,
   RowId,
 } from "@gp-grid/core";
 import { bindPeekSelectAll } from "@gp-grid/core";
@@ -29,6 +30,8 @@ export interface CellPeekProps<TData = unknown> {
   /** Read another field's raw value at this row without a record. */
   getValue?: (field: string) => CellValue;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  /** Bound core; peek anchoring is a geometry query, not a DOM measurement. */
+  core: GridCore<TData> | null;
   cellRenderers: Record<string, ReactCellRenderer>;
   globalCellRenderer?: ReactCellRenderer;
   onClose: () => void;
@@ -56,6 +59,7 @@ export function CellPeek<TData = unknown>({
   rowId,
   getValue,
   containerRef,
+  core,
   cellRenderers,
   globalCellRenderer,
   onClose,
@@ -68,23 +72,22 @@ export function CellPeek<TData = unknown>({
     const overlay = overlayRef.current;
     if (!container || !overlay) return;
 
-    const cellEl = container.querySelector(
-      `[data-cell-row="${peekCell.row}"][data-cell-col="${peekCell.col}"]`,
-    ) as HTMLElement | null;
-    if (!cellEl) {
-      // Cell scrolled out of view — close the peek.
+    // The portal is position:fixed; the cell's viewport-space bounds are
+    // offset by the body client area's screen origin.
+    const bounds = core?.geometry.getCellBounds(peekCell.row, peekCell.col, "viewport");
+    if (bounds === undefined) {
       onClose();
       return;
     }
 
-    const cellRect = cellEl.getBoundingClientRect();
+    const origin = container.getBoundingClientRect();
     setStyle({
-      top: cellRect.top,
-      left: cellRect.left,
-      width: cellRect.width,
+      top: origin.top + bounds.top,
+      left: origin.left + bounds.left,
+      width: bounds.width,
       visibility: "visible",
     });
-  }, [containerRef, peekCell.row, peekCell.col, onClose]);
+  }, [containerRef, core, peekCell.row, peekCell.col, onClose]);
 
   useLayoutEffect(() => {
     updatePosition();

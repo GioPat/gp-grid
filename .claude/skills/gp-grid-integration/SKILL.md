@@ -55,7 +55,7 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 |---|---|---|
 | `field` | required | Property path on the row. Dot notation supported: `"address.city"`. |
 | `cellDataType` | required | One of: `"text"`, `"number"`, `"boolean"`, `"date"` (Date object), `"dateString"` (ISO string `"2026-05-10"`), `"dateTime"` (Date object with time), `"dateTimeString"` (ISO string with time `"2026-05-10T14:30:00Z"`), `"object"`. Match the underlying TypeScript type — `string` fields backed by ISO dates should use `"dateString"`/`"dateTimeString"`, NOT `"date"` (which expects an actual `Date` instance and will misformat strings). |
-| `width` | required | Width in pixels. Columns are scaled up linearly if total < container width. |
+| `width` | required | Declared width in pixels. In the default `columnLayout: "fit"` the columns without an explicit resize override expand proportionally so their total reaches the viewport; `fit` never shrinks, and `columnLayout: "fixed"` keeps the declared widths and scrolls horizontally. A width that is not positive and finite falls back to `50`. |
 | `colId` | `field` | Unique column id (useful when two columns share a `field`). |
 | `headerName` | `field` | Display name shown in the header. |
 | `editable` | `false` | Inline editing on this column. |
@@ -70,6 +70,28 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. |
 | `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the fixed row height (rows do **not** auto-grow). Only affects the default text renderer, not custom `cellRenderer` output. |
 | `computeRowClasses` / `computeColumnClasses` / `computeCellClasses` | none | Per-column/row/cell highlighting overrides — see Highlighting below. |
+
+### Column layout (`columnLayout`)
+
+`columnLayout` selects how displayed widths are resolved and is available on the
+core (`GridCoreOptions`) and every wrapper (`Grid` / `GpGrid` / `gp-grid`):
+
+- `"fit"` (default) — columns without an explicit override expand so the total
+  reaches the viewport width. An explicit override always keeps its exact
+  pixel width and the slack is shared by the rest.
+- `"fixed"` — displayed width equals the declared/overridden width; leftover
+  space stays empty and the grid scrolls horizontally.
+
+Changing it at runtime republishes the layout without recreating the core
+(`coreRef.current.setColumnLayout("fixed")`). A manual resize stores the pixel
+override directly: `core.getColumnState()` reports `width` only while an
+override exists, plus `resolvedWidth` (the displayed CSS px, `0` while hidden).
+
+Advanced adapters read geometry from `core.geometry` rather than recomputing
+positions: `getColumnLayout()`, `getCellBounds(row, col, space)`,
+`hitTest({ x, y })`, `getScrollTarget(row, col)` and `getContentSize()`. The
+three coordinate spaces are `"content"`, `"viewport"` (default) and `"rows"`.
+See [docs/features/column-layout.md](../../../docs/features/column-layout.md).
 
 ### Data sources — pick one
 

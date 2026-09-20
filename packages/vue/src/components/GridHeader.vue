@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ColumnDefinition, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
+import type { ColumnDefinition, DisplayedColumn, HeaderData } from "@gp-grid/core";
 import type { GridCore } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { Row, VueHeaderRenderer } from "../types";
@@ -10,9 +10,7 @@ const props = defineProps<{
   contentWidth: number;
   totalWidth: number;
   isLoading: boolean;
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  columnPositions: number[];
-  columnWidths: number[];
+  layoutColumns: readonly DisplayedColumn[];
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
@@ -40,21 +38,21 @@ const props = defineProps<{
       }"
     >
       <div
-        v-for="({ column, originalIndex }, visibleIndex) in props.visibleColumnsWithIndices"
+        v-for="{ column, layoutIndex, offset, width } in props.layoutColumns"
         :key="column.colId ?? column.field"
         class="gp-grid-header-cell"
-        :data-col-index="originalIndex"
+        :data-col-index="layoutIndex"
         :style="{
-          left: `${props.columnPositions[visibleIndex]}px`,
-          width: `${props.columnWidths[visibleIndex]}px`,
+          left: `${offset}px`,
+          width: `${width}px`,
           height: `${props.headerHeight}px`,
         }"
-        @pointerdown="(e: PointerEvent) => props.onHeaderMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, props.headerHeight, e)"
+        @pointerdown="(e: PointerEvent) => props.onHeaderMouseDown(layoutIndex, width, props.headerHeight, e)"
       >
         <component
           :is="renderHeader({
             column,
-            colIndex: originalIndex,
+            colIndex: layoutIndex,
             sortDirection: props.headers.get(column.colId ?? column.field)?.sortDirection,
             sortIndex: props.headers.get(column.colId ?? column.field)?.sortIndex,
             sortable: (column.sortable !== false) && props.sortingEnabled,
@@ -69,7 +67,7 @@ const props = defineProps<{
         <div
           v-if="column.resizable !== false"
           class="gp-grid-header-resize-handle"
-          @pointerdown.stop="(e: PointerEvent) => props.onHeaderResizeMouseDown(originalIndex, props.columnWidths[visibleIndex] ?? 0, e)"
+          @pointerdown.stop="(e: PointerEvent) => props.onHeaderResizeMouseDown(layoutIndex, width, e)"
         />
       </div>
     </div>

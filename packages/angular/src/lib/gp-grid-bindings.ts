@@ -11,6 +11,7 @@ import {
 } from '@gp-grid/core';
 import type {
   ColumnDefinition,
+  ColumnLayoutMode,
   ColumnStateUpdate,
   DataSource,
   HighlightingOptions,
@@ -92,24 +93,25 @@ export class GpGridBindings<TData = unknown> {
     });
 
     core.initialize();
-    core.input.updateDeps({
-      getHeaderHeight: this.deps.getHeaderHeight,
-      getRowHeight: this.deps.getRowHeight,
-      getColumnPositions: () => this.deps.vm.columnPositions(),
-      getColumnCount: () => this.deps.vm.visibleColumnWithIndices().length,
-      getOriginalColumnIndex: (visibleIndex) =>
-        this.deps.vm.visibleColumnWithIndices()[visibleIndex]?.originalIndex ?? visibleIndex,
-    });
   }
 
-  observeViewport(container: HTMLElement, bodyEl: HTMLElement): void {
-    this.deps.vm.viewportWidth.set(container.clientWidth);
-    this.resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) this.deps.vm.viewportWidth.set(entry.contentRect.width);
-    });
-    this.resizeObserver.observe(container);
-    this.coreRef?.setViewport(0, 0, container.clientWidth, bodyEl.clientHeight);
+  /**
+   * Report the body scroll container's measurements. The body element — not
+   * the outer container — owns the client area and the scrollbars, so its
+   * `clientWidth` is the viewport width the layout resolves against.
+   */
+  observeViewport(bodyEl: HTMLElement): void {
+    const report = (): void => {
+      this.coreRef?.setViewport(
+        bodyEl.scrollTop,
+        bodyEl.scrollLeft,
+        bodyEl.clientWidth,
+        bodyEl.clientHeight,
+      );
+    };
+    report();
+    this.resizeObserver = new ResizeObserver(() => report());
+    this.resizeObserver.observe(bodyEl);
     // Synthetic touch scrolling: takes over touch gestures only when scroll
     // virtualization compresses the DOM scroll space; inert otherwise.
     this.touchScroll.attach();
@@ -155,31 +157,31 @@ export class GpGridBindings<TData = unknown> {
 
   applyPendingScroll(): void {
     const top = this.deps.vm.pendingScrollTop();
+    const left = this.deps.vm.pendingScrollLeft();
     const body = this.deps.getBody();
-    if (top !== null && body) {
-      this.touchScroll.stop();
+    if (body === null) return;
+    if (top === null && left === null) return;
+    this.touchScroll.stop();
+    if (top !== null) {
       body.scrollTop = top;
       this.deps.vm.pendingScrollTop.set(null);
     }
+    if (left !== null) {
+      body.scrollLeft = left;
+      this.deps.vm.pendingScrollLeft.set(null);
+    }
+  }
+
+  /** Switch the displayed-width policy without recreating the core. */
+  syncColumnLayout(mode: ColumnLayoutMode): void {
+    this.coreRef?.setColumnLayout(mode);
   }
 
   scrollToCell(cell: { row: number; col: number }): void {
     const core = this.coreRef;
     const body = this.deps.getBody();
     if (core === null || body === null) return;
-    scrollCellIntoView(
-      core,
-      body,
-      cell.row,
-      this.deps.getRowHeight(),
-      this.deps.vm.slots(),
-      this.deps.vm.rowsWrapperOffset(),
-      {
-        colIndex: cell.col,
-        visibleColumns: this.deps.vm.visibleColumnWithIndices(),
-        columnPositions: this.deps.vm.columnPositions(),
-        columnWidths: this.deps.vm.columnWidths(),
-      },
-    );
+    this.touchScroll.stop();
+    scrollCellIntoView(core, body, cell.row, cell.col);
   }
 }

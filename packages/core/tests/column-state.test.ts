@@ -82,9 +82,11 @@ describe("GridCore column state", () => {
     grid.setColumns([def("b"), def("c")]);
 
     expect(ids(grid)).toEqual(["b", "c"]);
+    // `b` keeps its exact override; `c` keeps its definition width because
+    // the core has no measured viewport in this test.
     expect(grid.getColumnState()).toEqual([
-      { columnId: "b", width: storedWidth, hidden: false, order: 0 },
-      { columnId: "c", width: 100, hidden: false, order: 1 },
+      { columnId: "b", width: storedWidth, resolvedWidth: 180, hidden: false, order: 0 },
+      { columnId: "c", resolvedWidth: 100, hidden: false, order: 1 },
     ]);
 
     const removed = instructions.filter((i) => i.type === "REMOVE_HEADERS");
@@ -143,7 +145,9 @@ describe("GridCore column state", () => {
     expect(grid.getColumnState()[0]?.width).toBe(250);
 
     grid.resetColumnState(["a"]);
-    expect(grid.getColumnState()[0]?.width).toBe(100);
+    expect(grid.getColumnState()[0]?.width).toBeUndefined();
+    // Without a measured viewport the definition width is used as-is.
+    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
   });
 
   it("diagnoses a duplicate column id once and keeps the first definition", () => {
@@ -281,7 +285,14 @@ describe("GridCore column state", () => {
 
   it("ignores a commit tagged with a superseded slot generation", async () => {
     const onCellValueChanged = vi.fn();
+    const data = Array.from({ length: 1_000 }, (_, index) => ({
+      id: index,
+      a: `a${index}`,
+      b: "",
+      c: "",
+    }));
     const grid = createGrid([def("a", { editable: true })], {
+      data,
       getRowId: (row) => row.id,
       onCellValueChanged,
     });

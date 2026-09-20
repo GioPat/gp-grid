@@ -5,6 +5,7 @@
 
 import type { DataSource, ColumnDefinition, ColumnId, FilterModel, SortModel } from "./types";
 import { getColumnId } from "./column-model";
+import { normalizeColumnWidth } from "./geometry/column-widths";
 import type { SlotPoolManager } from "./slot-pool";
 import type { HighlightManager } from "./managers";
 import type { ViewSync } from "./grid-core-view-sync";
@@ -13,11 +14,10 @@ import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 export interface ColumnOperationDeps<TData> {
   /** Current resolved layout. Never mutated by these operations. */
   getLayout: () => ColumnDefinition[];
-  /** Write the stored width for a column ID and re-resolve the layout. */
-  setColumnWidth: (columnId: ColumnId, storedWidth: number) => void;
+  /** Write the pixel width override for a column ID and re-resolve the layout. */
+  setColumnWidth: (columnId: ColumnId, width: number) => void;
   /** Move a column and re-resolve; returns the applied target index or null. */
   moveColumn: (fromIndex: number, toIndex: number) => number | null;
-  computeColumnPositions: () => void;
   view: ViewSync<TData>;
 }
 
@@ -29,50 +29,21 @@ export interface ColumnOperationResult {
 }
 
 /**
- * Convert a desired displayed width to the stored width that produces it
- * after `calculateScaledColumnPositions` redistributes leftover viewport
- * space across visible columns.
- *
- * Why: the resize handle reports the scaled (displayed) width the user
- * dragged to, but redistribution would scale it up again on the next
- * render, leaving the column wider than the ghost. Back-solving keeps
- * the post-redistribution width equal to the displayed width.
+ * Manual resize writes the pixel override directly: an override is never
+ * rescaled, so the displayed width matches what the user dragged.
  */
-const computeStoredWidthForDisplayed = (
-  colIndex: number,
-  displayedWidth: number,
-  viewportWidth: number,
-  columns: ColumnDefinition[],
-): number => {
-  if (viewportWidth <= 0) return displayedWidth;
-  let otherTotal = 0;
-  for (let i = 0; i < columns.length; i++) {
-    if (i === colIndex) continue;
-    const col = columns[i];
-    if (!col || col.hidden) continue;
-    otherTotal += col.width;
-  }
-  if (otherTotal <= 0) return displayedWidth;
-  if (displayedWidth + otherTotal >= viewportWidth) return displayedWidth;
-  return (displayedWidth * otherTotal) / (viewportWidth - displayedWidth);
-};
-
 export const applyColumnResize = <TData>(
   colIndex: number,
   displayedWidth: number,
-  viewportWidth: number,
   deps: ColumnOperationDeps<TData>,
 ): { columnId: ColumnId; width: number } | null => {
-  const layout = deps.getLayout();
-  const column = layout[colIndex];
+  const column = deps.getLayout()[colIndex];
   if (column === undefined) return null;
-  const storedWidth = column.hidden
-    ? displayedWidth
-    : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, layout);
-  deps.setColumnWidth(getColumnId(column), storedWidth);
-  deps.computeColumnPositions();
+  // The stored width and the reported width agree with the applied one.
+  const width = normalizeColumnWidth(displayedWidth);
+  deps.setColumnWidth(getColumnId(column), width);
   deps.view.syncColumnLayout("geometry");
-  return { columnId: getColumnId(column), width: displayedWidth };
+  return { columnId: getColumnId(column), width };
 };
 
 export const applyColumnMove = <TData>(
@@ -84,7 +55,6 @@ export const applyColumnMove = <TData>(
   if (column === undefined) return null;
   const adjustedTo = deps.moveColumn(fromIndex, toIndex);
   if (adjustedTo === null) return null;
-  deps.computeColumnPositions();
   deps.view.syncColumnLayout("order");
   return {
     columnId: getColumnId(column),

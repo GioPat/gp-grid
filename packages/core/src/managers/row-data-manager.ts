@@ -36,10 +36,12 @@ export interface RowDataManagerOptions<TData> {
   getColumns: () => ColumnDefinition[];
   getSortModel: () => SortModel[];
   getFilterModel: () => FilterModel;
-  getRowHeight: () => number;
-  getOverscan: () => number;
-  getScrollTop: () => number;
-  getViewportHeight: () => number;
+  /** Overscanned half-open row window from the geometry service. */
+  getRowWindow: () => { start: number; end: number };
+  /** Exact half-open visible row window from the geometry service. */
+  getVisibleRowWindow: () => { start: number; end: number };
+  /** Finite row estimate for the first load, while the row axis is still empty. */
+  getBootstrapRowCount: () => number;
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   getRowId?: (row: TData) => RowId;
   /** Called when a write is refused because the source is read-only. */
@@ -480,28 +482,31 @@ export class RowDataManager<TData = unknown> {
     return this.dataSource.loadMode === "paginated";
   }
 
+  /**
+   * Bootstrap paging without inventing an infinite axis: the row axis is
+   * empty until the first response, so the viewport estimate sizes the load.
+   */
   private getInitialPaginatedRange(): RowWindowRange {
-    const visibleRange = this.getPaginatedLoadRange(true);
     return {
       startRow: 0,
       endRow: Math.max(
         this.rowWindowLoader.getPageSize(),
-        visibleRange.endRow,
+        this.getPaginatedLoadRange(true).endRow,
+        this.options.getBootstrapRowCount(),
       ),
     };
   }
 
+  /** Load range adapted from the geometry windows, capped by a known total. */
   private getPaginatedLoadRange(includeOverscan: boolean): RowWindowRange {
-    const rowHeight = this.options.getRowHeight();
-    const viewportHeight = this.options.getViewportHeight();
-    const scrollTop = this.options.getScrollTop();
-    const extraRows = includeOverscan ? this.options.getOverscan() : 0;
-    const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - extraRows);
-    const estimatedEndRow =
-      Math.ceil((scrollTop + viewportHeight) / rowHeight) + extraRows + 1;
+    const window = includeOverscan
+      ? this.options.getRowWindow()
+      : this.options.getVisibleRowWindow();
+    const startRow = Math.max(0, window.start);
+    const estimatedEndRow = Math.max(startRow, window.end);
     const endRow = this.totalRows > 0
       ? Math.min(this.totalRows, estimatedEndRow)
       : estimatedEndRow;
-    return { startRow, endRow: Math.max(startRow, endRow) };
+    return { startRow, endRow };
   }
 }

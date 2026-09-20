@@ -509,6 +509,46 @@ Column and row interaction events are object-shaped.
 - `getRowData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
 - `getRowCount()` — the number of displayed view rows (after sort/filter).
 
+## Column layout and geometry
+
+Core owns grid geometry. `columnLayout` selects how displayed widths are
+resolved and is changeable at runtime with `GridCore.setColumnLayout(mode)`:
+
+- `"fit"` (default) expands columns without an explicit pixel override so
+  their total reaches the viewport. It never shrinks; a manual override keeps
+  its exact width and the slack is shared by the rest.
+- `"fixed"` keeps declared/overridden widths and leaves leftover space empty.
+
+`core.geometry` is a read-only query surface over the committed layout:
+
+| Query | Answer |
+| --- | --- |
+| `revision` | Committed layout revision (columns, row axis, viewport dimensions and mapping parameters — not raw scroll) |
+| `getColumnLayout()` | `{ revision, mode, columns, totalWidth }` per displayed column |
+| `getRowWindow()` / `getVisibleRowWindow()` | Half-open `{ start, end }` |
+| `getRowBounds(i, space?)` / `getColumnBounds(layoutIndex, space?)` / `getCellBounds(i, layoutIndex, space?)` | Bounds in the requested space |
+| `hitTest({ x, y })` / `getScrollTarget(row, col)` | Pointer target / DOM scroll offsets |
+| `getContentSize()` | Logical body size in `"content"` coordinates |
+
+`GridCore.getCellBounds(rowId, columnId, space?)` resolves identities through
+the bounded current row window and the resident records; a remote or columnar
+identity outside that window answers `undefined` and is never materialized.
+
+### Coordinate spaces
+
+- **`content`** — logical, uncompressed px; the header is excluded.
+- **`viewport`** — content minus the logical scroll offsets, relative to the
+  body client area's top-left (the default).
+- **`rows`** — local to the rows wrapper (the space of `MOVE_SLOT.translateY`);
+  equal to `content` unless vertical scrolling is compressed.
+
+Adapters report raw DOM scroll samples and normalized dimensions; core maps
+them to logical coordinates and clamps them, emitting a `SCROLL_TO` correction
+when the sample was out of range. A measured zero-height viewport renders no
+rows; until the first measurement core assumes 600 px. A width-only viewport
+update performs no row work. Windows are half-open; legacy inclusive APIs adapt at
+the boundary as `{ start, end: end - 1 }` (`{ start: 0, end: -1 }` when empty).
+
 ## Creating a Framework Adapter
 
 To integrate @gp-grid/core with any UI framework:
@@ -517,6 +557,8 @@ To integrate @gp-grid/core with any UI framework:
 2. **Maintain UI state** by processing instructions
 3. **Render slots** based on the slot pool state
 4. **Forward user interactions** back to GridCore
+5. **Render columns from `COLUMNS_CHANGED.layout`** and report viewport
+   measurements through `setViewport`; never recompute widths or positions
 
 ### Example: Minimal Adapter Pattern
 
@@ -621,6 +663,7 @@ class MyGridAdapter {
 | ----------- | ------------------------- |
 | `selection` | SelectionManager instance |
 | `fill`      | FillManager instance      |
+| `geometry`  | Read-only geometry queries (bounds, hit test, scroll target, layout) |
 
 ## Donations
 

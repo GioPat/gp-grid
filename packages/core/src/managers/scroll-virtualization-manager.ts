@@ -9,16 +9,17 @@
 // We use 10M to be safe and leave room for other content
 const MAX_SCROLL_HEIGHT = 10_000_000;
 
+import type { VirtualAxis } from "../geometry/virtual-axis";
+
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface ScrollVirtualizationManagerOptions {
-  getRowHeight: () => number;
   getHeaderHeight: () => number;
-  getTotalRows: () => number;
-  getScrollTop: () => number;
   getViewportHeight: () => number;
+  /** Row axis: the only source of the row extent and row boundaries. */
+  getAxis: () => VirtualAxis;
 }
 
 // =============================================================================
@@ -30,6 +31,9 @@ export class ScrollVirtualizationManager {
   private naturalContentHeight: number = 0;
   private virtualContentHeight: number = 0;
   private scrollRatio: number = 1;
+  private syncedAxis: VirtualAxis | null = null;
+  private syncedHeaderHeight = -1;
+  private syncedViewportHeight = -1;
 
   // Dependencies
   private readonly options: ScrollVirtualizationManagerOptions;
@@ -43,39 +47,46 @@ export class ScrollVirtualizationManager {
   // ===========================================================================
 
   /**
-   * Update scroll virtualization state based on current row count.
-   * Should be called whenever totalRows changes.
+   * Recompute only when the axis or a dimension changed. Every reader goes
+   * through here, so a resize or row-count change never maps with a stale ratio.
    */
-  updateContentSize(): { naturalHeight: number; virtualHeight: number; scrollRatio: number } {
-    const totalRows = this.options.getTotalRows();
-    const rowHeight = this.options.getRowHeight();
+  private sync(): void {
+    const axis = this.options.getAxis();
     const headerHeight = this.options.getHeaderHeight();
     const viewportHeight = this.options.getViewportHeight();
+    const isCurrent =
+      axis === this.syncedAxis &&
+      headerHeight === this.syncedHeaderHeight &&
+      viewportHeight === this.syncedViewportHeight;
+    if (isCurrent) return;
+    this.syncedAxis = axis;
+    this.syncedHeaderHeight = headerHeight;
+    this.syncedViewportHeight = viewportHeight;
 
-    const naturalRowHeight = totalRows * rowHeight;
-    this.naturalContentHeight = naturalRowHeight + headerHeight;
-
-    if (this.naturalContentHeight > MAX_SCROLL_HEIGHT) {
-      this.virtualContentHeight = MAX_SCROLL_HEIGHT;
-
-      // The body sizer is (virtualContentHeight - headerHeight).
-      // The actual scrollable range in the DOM is (sizer - viewportHeight).
-      // We want that range to map exactly to the natural row scroll range
-      // (naturalRowHeight - viewportHeight), so the user can always drag
-      // the scrollbar to reach the last row.
-      const virtualScrollRange = this.virtualContentHeight - headerHeight - viewportHeight;
-      // Round up to the nearest row boundary so that at max scrollTop the last row
-      // is always fully visible (not partially clipped by a fractional viewport height).
-      const naturalScrollRange = Math.ceil((naturalRowHeight - viewportHeight) / rowHeight) * rowHeight;
-
-      this.scrollRatio = naturalScrollRange > 0
-        ? virtualScrollRange / naturalScrollRange
-        : 1;
-    } else {
+    const rowExtent = axis.extent;
+    this.naturalContentHeight = rowExtent + headerHeight;
+    if (this.naturalContentHeight <= MAX_SCROLL_HEIGHT) {
       this.virtualContentHeight = this.naturalContentHeight;
       this.scrollRatio = 1;
+      return;
     }
+    this.virtualContentHeight = MAX_SCROLL_HEIGHT;
 
+    // The body sizer is (virtualContentHeight - headerHeight).
+    // The actual scrollable range in the DOM is (sizer - viewportHeight).
+    // We want that range to map exactly to the natural row scroll range
+    // (rowExtent - viewportHeight), so the user can always drag the
+    // scrollbar to reach the last row.
+    const virtualScrollRange = this.virtualContentHeight - headerHeight - viewportHeight;
+    // Round up to the nearest row boundary so that at max scrollTop the last row
+    // is always fully visible (not partially clipped by a fractional viewport height).
+    const naturalScrollRange = this.roundUpToRowBoundary(rowExtent - viewportHeight);
+    this.scrollRatio = naturalScrollRange > 0 ? virtualScrollRange / naturalScrollRange : 1;
+  }
+
+  /** Current sizes and ratio for the row axis and viewport. */
+  updateContentSize(): { naturalHeight: number; virtualHeight: number; scrollRatio: number } {
+    this.sync();
     return {
       naturalHeight: this.naturalContentHeight,
       virtualHeight: this.virtualContentHeight,
@@ -92,28 +103,16 @@ export class ScrollVirtualizationManager {
    * When scaling is active, scrollRatio < 1 and scroll positions are compressed.
    */
   isScalingActive(): boolean {
+    this.sync();
     return this.scrollRatio < 1;
-  }
-
-  /**
-   * Get the natural (uncapped) content height.
-   * Useful for debugging or displaying actual content size.
-   */
-  getNaturalHeight(): number {
-    const totalRows = this.options.getTotalRows();
-    const rowHeight = this.options.getRowHeight();
-    const headerHeight = this.options.getHeaderHeight();
-    return this.naturalContentHeight || (totalRows * rowHeight + headerHeight);
   }
 
   /**
    * Get the virtual (capped) content height for DOM use.
    */
   getVirtualHeight(): number {
-    const totalRows = this.options.getTotalRows();
-    const rowHeight = this.options.getRowHeight();
-    const headerHeight = this.options.getHeaderHeight();
-    return this.virtualContentHeight || (totalRows * rowHeight + headerHeight);
+    this.sync();
+    return this.virtualContentHeight;
   }
 
   /**
@@ -121,71 +120,48 @@ export class ScrollVirtualizationManager {
    * Returns 1 when no virtualization is needed, < 1 when content exceeds browser limits.
    */
   getScrollRatio(): number {
+    this.sync();
     return this.scrollRatio;
   }
 
-  /**
-   * Get the visible row range (excluding overscan).
-   * Returns the first and last row indices that are actually visible in the viewport.
-   * Includes partially visible rows to avoid false positives when clicking on edge rows.
-   */
-  getVisibleRowRange(): { start: number; end: number } {
-    const viewportHeight = this.options.getViewportHeight();
-    const scrollTop = this.options.getScrollTop();
-    const rowHeight = this.options.getRowHeight();
-    const totalRows = this.options.getTotalRows();
-
-    // The header is rendered outside the scroll container, so viewportHeight
-    // already represents only the body content area
-    const contentHeight = viewportHeight;
-    const firstVisibleRow = Math.max(0, Math.floor(scrollTop / rowHeight));
-    // Use ceil and subtract 1 to include any partially visible row at the bottom
-    const lastVisibleRow = Math.min(
-      totalRows - 1,
-      Math.ceil((scrollTop + contentHeight) / rowHeight) - 1
-    );
-    return { start: firstVisibleRow, end: Math.max(firstVisibleRow, lastVisibleRow) };
+  private rowExtent(): number {
+    return this.options.getAxis().extent;
   }
 
   /**
-   * Get the scroll position needed to bring a row into view.
-   * Accounts for scroll scaling when active.
+   * First row boundary at or after `logicalOffset`. This replaces the old
+   * `ceil(range / rowHeight) * rowHeight`; the axis owns the arithmetic.
    */
-  getScrollTopForRow(rowIndex: number): number {
-    const rowHeight = this.options.getRowHeight();
-    const naturalScrollTop = rowIndex * rowHeight;
-    // Apply scroll ratio to convert natural position to virtual scroll position
-    return naturalScrollTop * this.scrollRatio;
+  private roundUpToRowBoundary(logicalOffset: number): number {
+    const axis = this.options.getAxis();
+    const index = axis.indexAt(logicalOffset);
+    if (index >= axis.count) return axis.extent;
+    const boundary = axis.getOffset(index);
+    return boundary < logicalOffset ? axis.getOffset(index + 1) : boundary;
   }
 
   /**
-   * Get the row index at a given viewport Y position.
-   * Accounts for scroll scaling when active.
-   * @param viewportY Y position in viewport (physical pixels below header, NOT including scroll)
-   * @param virtualScrollTop Current scroll position from container.scrollTop (virtual/scaled)
+   * Maximum logical (content) scroll top reachable through the DOM scroller.
+   * Compressed scrolling maps the DOM range onto the row-rounded natural
+   * range, so its end is that same row boundary.
    */
-  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
-    const rowHeight = this.options.getRowHeight();
-
-    // Convert virtual scroll position to natural position
-    const naturalScrollTop = this.scrollRatio < 1
-      ? virtualScrollTop / this.scrollRatio
-      : virtualScrollTop;
-
-    // Natural Y = viewport offset + natural scroll position
-    const naturalY = viewportY + naturalScrollTop;
-    return Math.floor(naturalY / rowHeight);
+  getMaxLogicalScrollTop(): number {
+    const natural = Math.max(0, this.rowExtent() - this.options.getViewportHeight());
+    return this.isScalingActive() ? this.roundUpToRowBoundary(natural) : natural;
   }
-
-  // ===========================================================================
-  // Internal Access (for GridCore)
-  // ===========================================================================
 
   /**
-   * Get the virtual content height for external use
-   * @internal
+   * Convert a DOM scroll sample to a logical (content) scroll top.
    */
-  getVirtualContentHeight(): number {
-    return this.virtualContentHeight;
+  toLogicalScrollTop(domScrollTop: number): number {
+    return this.isScalingActive() ? domScrollTop / this.scrollRatio : domScrollTop;
   }
+
+  /**
+   * Convert a logical (content) scroll top to a DOM scroll sample.
+   */
+  toDomScrollTop(logicalScrollTop: number): number {
+    return this.isScalingActive() ? logicalScrollTop * this.scrollRatio : logicalScrollTop;
+  }
+
 }

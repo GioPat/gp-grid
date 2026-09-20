@@ -12,7 +12,6 @@ import type {
   InputResult,
   KeyboardResult,
   DragMoveResult,
-  InputHandlerDeps,
   DragState,
 } from "./types/input";
 import {
@@ -45,7 +44,6 @@ const cycleSortDirection = (
 
 export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
-  private deps: InputHandlerDeps;
 
   readonly columnResize: ColumnResizeDrag<TData>;
   readonly columnMove: ColumnMoveDrag<TData>;
@@ -56,22 +54,14 @@ export class InputHandler<TData = unknown> {
   private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
 
-  constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
+  constructor(core: GridCore<TData>) {
     this.core = core;
-    this.deps = deps;
     this.columnResize = new ColumnResizeDrag(core);
-    this.columnMove = new ColumnMoveDrag(core, deps);
-    this.rowDrag = new RowDrag(core, deps);
+    this.columnMove = new ColumnMoveDrag(core);
+    this.rowDrag = new RowDrag(core);
     this.selectionDrag = new SelectionDrag(core);
     this.fillDrag = new FillDrag(core);
     this.keyboard = new KeyboardHandler(core);
-  }
-
-  /** Update dependencies (called when options change) */
-  updateDeps(deps: Partial<InputHandlerDeps>): void {
-    this.deps = { ...this.deps, ...deps };
-    this.columnMove.updateDeps(this.deps);
-    this.rowDrag.updateDeps(this.deps);
   }
 
   // ---------------------------------------------------------------------------
@@ -305,7 +295,7 @@ export class InputHandler<TData = unknown> {
     const isActive = this.selectionDrag.isActive || this.fillDrag.isActive;
     if (isActive === false) return null;
 
-    const target = computeCellTarget(this.core, this.deps, event, bounds);
+    const target = computeCellTarget(this.core, event, bounds);
     this.selectionDrag.moveToTarget(target.row, target.col);
     this.fillDrag.moveToTarget(target.row, target.col);
     return {
