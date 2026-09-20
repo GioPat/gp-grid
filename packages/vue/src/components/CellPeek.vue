@@ -34,23 +34,27 @@ const positioned = ref(false);
 
 let rafId: number | null = null;
 
+// The portal is position:fixed, so the cell's viewport-space bounds are
+// offset by the body client area's screen origin.
 const updatePosition = (): void => {
   const container = props.containerRef;
   const overlay = overlayRef.value;
   if (!container || !overlay) return;
 
-  const cellEl = container.querySelector(
-    `[data-cell-row="${props.peekCell.row}"][data-cell-col="${props.peekCell.col}"]`,
-  ) as HTMLElement | null;
-  if (!cellEl) {
+  const bounds = props.core?.geometry.getCellBounds(
+    props.peekCell.row,
+    props.peekCell.col,
+    "viewport",
+  );
+  if (bounds === undefined) {
     emit("close");
     return;
   }
 
-  const rect = cellEl.getBoundingClientRect();
-  top.value = rect.top;
-  left.value = rect.left;
-  width.value = rect.width;
+  const origin = container.getBoundingClientRect();
+  top.value = origin.top + bounds.top;
+  left.value = origin.left + bounds.left;
+  width.value = bounds.width;
   positioned.value = true;
 };
 
@@ -92,7 +96,7 @@ onUnmounted(() => {
 });
 
 watch(
-  () => [props.peekCell.row, props.peekCell.col],
+  () => [props.peekCell.row, props.peekCell.col, props.core?.geometry.revision ?? 0],
   () => updatePosition(),
   { flush: "post" },
 );

@@ -4,9 +4,9 @@ import {
   ref,
   watch,
   onUnmounted,
-  type Ref,
   type ShallowRef,
   type ComputedRef,
+  type Ref,
 } from "vue";
 import type {
   GridCore,
@@ -16,8 +16,6 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
-  SlotData,
-  VisibleColumnInfo,
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
@@ -27,22 +25,13 @@ import {
 } from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
-// Re-export for backwards compatibility
-export type { VisibleColumnInfo } from "@gp-grid/core";
-
 export interface UseInputHandlerOptions {
   activeCell: ComputedRef<CellPosition | null>;
   selectionRange: ComputedRef<CellRange | null>;
   editingCell: ComputedRef<{ row: number; col: number } | null>;
   filterPopupOpen: ComputedRef<boolean>;
-  rowHeight: number;
-  headerHeight: number;
-  columnPositions: ComputedRef<number[]>;
-  columnWidths: ComputedRef<number[]>;
-  /** Visible columns with their original indices (for hidden column support) */
-  visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
-  slots: ComputedRef<Map<string, SlotData>>;
-  rowsWrapperOffset: ComputedRef<number>;
+  /** Cancel an active synthetic fling before a programmatic scroll target. */
+  onBeforeProgrammaticScroll?: () => void;
 }
 
 export interface UseInputHandlerResult {
@@ -80,13 +69,6 @@ export function useInputHandler<TData = unknown>(
     selectionRange,
     editingCell,
     filterPopupOpen,
-    rowHeight,
-    headerHeight,
-    columnPositions,
-    columnWidths,
-    visibleColumnsWithIndices,
-    slots,
-    rowsWrapperOffset,
   } = options;
 
   // Drag state for UI (mirrors core's InputHandler state)
@@ -133,33 +115,6 @@ export function useInputHandler<TData = unknown>(
       }
     }
   });
-
-  // Update InputHandler deps when options change
-  watch(
-    [
-      () => headerHeight,
-      () => rowHeight,
-      columnPositions,
-      visibleColumnsWithIndices,
-    ],
-    () => {
-      const core = coreRef.value;
-      if (core?.input) {
-        const visible = visibleColumnsWithIndices.value;
-        core.input.updateDeps({
-          getHeaderHeight: () => headerHeight,
-          getRowHeight: () => rowHeight,
-          getColumnPositions: () => columnPositions.value,
-          getColumnCount: () => visible.length,
-          getOriginalColumnIndex: (visibleIndex: number) => {
-            const info = visible[visibleIndex];
-            return info ? info.originalIndex : visibleIndex;
-          },
-        });
-      }
-    },
-    { immediate: true },
-  );
 
   // Get container bounds
   function getContainerBounds(): ContainerBounds | null {
@@ -477,20 +432,9 @@ export function useInputHandler<TData = unknown>(
       e.preventDefault();
     }
     if (result.scrollToCell && container) {
-      scrollCellIntoView(
-        core,
-        container,
-        result.scrollToCell.row,
-        rowHeight,
-        slots.value,
-        rowsWrapperOffset.value,
-        {
-          colIndex: result.scrollToCell.col,
-          visibleColumns: visibleColumnsWithIndices.value,
-          columnPositions: columnPositions.value,
-          columnWidths: columnWidths.value,
-        },
-      );
+      // Cancel any active touch fling before a programmatic scroll target.
+      options.onBeforeProgrammaticScroll?.();
+      scrollCellIntoView(core, container, result.scrollToCell.row, result.scrollToCell.col);
     }
   }
 

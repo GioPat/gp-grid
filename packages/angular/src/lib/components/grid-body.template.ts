@@ -1,6 +1,6 @@
 export const GRID_BODY_TEMPLATE = `<div
   #scrollContainer
-  style="height: 100%; overflow: auto; position: relative;"
+  style="height: 100%; width: 100%; min-width: 0; overflow: auto; position: relative;"
   (scroll)="onScroll()">
     <div
       style="position: relative; min-width: 100%"
@@ -19,27 +19,27 @@ export const GRID_BODY_TEMPLATE = `<div
               [style.width.px]="innerWidth()"
               [style.height.px]="rowHeight()"
             >
-              @for (entry of visibleColumnWithIndices(); track entry.originalIndex; let i = $index) {
-                @let editing = isEditing(slot.rowIndex, entry.originalIndex);
+              @for (entry of layoutColumns(); track entry.layoutIndex) {
+                @let editing = isEditing(slot.rowIndex, entry.layoutIndex);
                 <div
-                  [class]="cellClass(slot.rowIndex, entry.originalIndex, entry.column, slot.rowData)"
+                  [class]="cellClass(slot.rowIndex, entry.layoutIndex, entry.column, slot.rowData)"
                   style="position: absolute; top: 0;"
                   [attr.data-cell-row]="slot.rowIndex"
-                  [attr.data-cell-col]="entry.originalIndex"
-                  [style.left.px]="columnPositions()[i]"
-                  [style.width.px]="columnWidths()[i]"
+                  [attr.data-cell-col]="entry.layoutIndex"
+                  [style.left.px]="entry.offset"
+                  [style.width.px]="entry.width"
                   [style.height.px]="rowHeight()"
-                  (pointerdown)="cellPointerDown.emit({ rowIndex: slot.rowIndex, colIndex: entry.originalIndex, event: $event })"
-                  (mouseenter)="cellPointerEnter.emit({ rowIndex: slot.rowIndex, colIndex: entry.originalIndex })"
+                  (pointerdown)="cellPointerDown.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex, event: $event })"
+                  (mouseenter)="cellPointerEnter.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
                   (mouseleave)="cellPointerLeave.emit()"
-                  (dblclick)="cellDoubleClick.emit({ rowIndex: slot.rowIndex, colIndex: entry.originalIndex })"
+                  (dblclick)="cellDoubleClick.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
                 >
                   @if (editing) {
                     @let etpl = editTemplate(entry.column);
                     @if (etpl) {
                       <ng-container
                         [ngTemplateOutlet]="etpl"
-                        [ngTemplateOutletContext]="{ $implicit: editParams(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }">
+                        [ngTemplateOutletContext]="{ $implicit: editParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }">
                       </ng-container>
                     } @else {
                       <input
@@ -57,10 +57,10 @@ export const GRID_BODY_TEMPLATE = `<div
                     @if (tpl) {
                       <ng-container
                         [ngTemplateOutlet]="tpl"
-                        [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }">
+                        [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }">
                       </ng-container>
                     } @else {
-                      <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.originalIndex) }}</span>
+                      <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }}</span>
                     }
                   }
                 </div>

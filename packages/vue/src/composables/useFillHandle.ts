@@ -1,18 +1,21 @@
-// packages/vue/src/composables/useFillHandle.ts
+import { computed, type ComputedRef, type ShallowRef } from "vue";
+import type {
+  CellPosition,
+  CellRange,
+  FillHandlePosition,
+  GridCore,
+  SlotData,
+} from "@gp-grid/core";
+import { calculateFillHandlePosition } from "@gp-grid/core";
 
-import { computed, type ComputedRef } from "vue";
-import type { CellPosition, CellRange, ColumnDefinition, SlotData } from "@gp-grid/core";
-import { calculateFillHandlePosition, type VisibleColumnInfo, type FillHandlePosition } from "@gp-grid/core";
-
-export interface UseFillHandleOptions {
+export interface UseFillHandleOptions<TData = unknown> {
+  coreRef: ShallowRef<GridCore<TData> | null>;
   activeCell: ComputedRef<CellPosition | null>;
   selectionRange: ComputedRef<CellRange | null>;
+  /** Replaced on every batch: row recycling and scrolling move the handle. */
   slots: ComputedRef<Map<string, SlotData>>;
-  columns: ComputedRef<ColumnDefinition[]>;
-  visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
-  columnPositions: ComputedRef<number[]>;
-  columnWidths: ComputedRef<number[]>;
-  rowHeight: number;
+  /** Bumps when the committed geometry revision changes. */
+  geometryRevision: ComputedRef<number>;
 }
 
 export interface UseFillHandleResult {
@@ -20,25 +23,24 @@ export interface UseFillHandleResult {
 }
 
 /**
- * Composable for calculating the fill handle position.
- * The fill handle appears at the bottom-right corner of the selection
- * when all selected columns are editable.
+ * Fill handle position, resolved by core geometry in rows-wrapper space.
  */
-export const useFillHandle = (options: UseFillHandleOptions): UseFillHandleResult => {
-  const { activeCell, selectionRange, slots, columns, visibleColumnsWithIndices, columnPositions, columnWidths, rowHeight } = options;
+export const useFillHandle = <TData = unknown>(
+  options: UseFillHandleOptions<TData>,
+): UseFillHandleResult => {
+  const { coreRef, activeCell, selectionRange, slots, geometryRevision } = options;
 
-  const fillHandlePosition = computed(() =>
-    calculateFillHandlePosition({
+  const fillHandlePosition = computed(() => {
+    void slots.value;
+    void geometryRevision.value;
+    const core = coreRef.value;
+    if (core === null) return null;
+    return calculateFillHandlePosition({
+      core,
       activeCell: activeCell.value,
       selectionRange: selectionRange.value,
-      slots: slots.value,
-      columns: columns.value,
-      visibleColumnsWithIndices: visibleColumnsWithIndices.value,
-      columnPositions: columnPositions.value,
-      columnWidths: columnWidths.value,
-      rowHeight,
-    }),
-  );
+    });
+  });
 
   return { fillHandlePosition };
 };

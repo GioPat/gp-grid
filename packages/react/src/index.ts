@@ -81,6 +81,18 @@ export type {
 
   // Instructions (for advanced use cases)
   GridInstruction,
+  // PRD 003 geometry
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
 } from "@gp-grid/core";
 
 // Re-export data source factories

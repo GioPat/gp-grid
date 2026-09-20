@@ -11,7 +11,6 @@ import type {
   ColumnFilterModel,
   DragState,
   GridLabels,
-  VisibleColumnInfo,
 } from '@gp-grid/core';
 import { defaultGridLabels, formatLabel } from '@gp-grid/core';
 import { FilterPopupComponent } from './filter-popup.component';
@@ -94,8 +93,6 @@ export class GridOverlaysComponent {
   headerHeight = input.required<number>();
   rowHeight = input.required<number>();
   dragState = input.required<DragState>();
-  visibleColumnWithIndices = input.required<VisibleColumnInfo[]>();
-  columnPositions = input.required<number[]>();
   scrollLeft = input.required<number>();
   effectiveColumns = input.required<ColumnDefinition[]>();
   totalWidth = input.required<number>();
@@ -112,12 +109,7 @@ export class GridOverlaysComponent {
   protected resizeLineLeft = computed<number>(() => {
     const cr = this.dragState().columnResize;
     if (cr === null) return 0;
-    const visibleIndex = this.visibleColumnWithIndices().findIndex(
-      v => v.originalIndex === cr.colIndex
-    );
-    if (visibleIndex === -1) return 0;
-    const positions = this.columnPositions();
-    return (positions[visibleIndex] ?? 0) + cr.currentWidth - this.scrollLeft();
+    return cr.lineX - this.scrollLeft();
   });
 
   protected columnMove = computed(() => {
@@ -140,8 +132,7 @@ export class GridOverlaysComponent {
   protected columnMoveDropLeft = computed<number | null>(() => {
     const cm = this.columnMove();
     if (cm === null || cm.dropTargetIndex === null) return null;
-    const positions = this.columnPositions();
-    return (positions[cm.dropTargetIndex] ?? 0) - this.scrollLeft();
+    return cm.dropIndicatorX - this.scrollLeft();
   });
 
   protected rowDragGhostWidth = computed<number>(() => Math.min(300, this.totalWidth()));

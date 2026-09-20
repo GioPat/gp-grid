@@ -165,6 +165,18 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
+  // PRD 003 geometry
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
   // Input handler types
   PointerEventData,
   KeyEventData,

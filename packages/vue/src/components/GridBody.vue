@@ -11,7 +11,7 @@ import type {
   FillHandlePosition,
   GridLabels,
   RowId,
-  VisibleColumnInfo,
+  DisplayedColumn,
 } from "@gp-grid/core";
 import {
   isCellSelected,
@@ -41,9 +41,7 @@ const props = defineProps<{
   totalRows: number;
   labels: GridLabels;
   slotsArray: SlotData[];
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  columnPositions: number[];
-  columnWidths: number[];
+  layoutColumns: readonly DisplayedColumn[];
   fillHandlePosition: FillHandlePosition | null;
   dragState: DragState;
   onScroll: () => void;
@@ -159,34 +157,34 @@ defineExpose({ bodyRef });
           }"
         >
           <div
-            v-for="({ column, originalIndex }, visibleIndex) in props.visibleColumnsWithIndices"
+            v-for="{ column, layoutIndex, offset, width } in props.layoutColumns"
             :key="`${slot.slotId}-${column.colId ?? column.field}`"
-            :class="getCellClasses(slot.rowIndex, originalIndex, column, slot.rowData, props.hoverPosition)"
+            :class="getCellClasses(slot.rowIndex, layoutIndex, column, slot.rowData, props.hoverPosition)"
             :data-cell-row="slot.rowIndex"
-            :data-cell-col="originalIndex"
+            :data-cell-col="layoutIndex"
             :style="{
               position: 'absolute',
-              left: `${props.columnPositions[visibleIndex]}px`,
+              left: `${offset}px`,
               top: 0,
-              width: `${props.columnWidths[visibleIndex]}px`,
+              width: `${width}px`,
               height: `${props.rowHeight}px`,
             }"
-            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, originalIndex, e)"
-            @dblclick="() => props.onCellDoubleClick(slot.rowIndex, originalIndex)"
-            @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, originalIndex)"
+            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, layoutIndex, e)"
+            @dblclick="() => props.onCellDoubleClick(slot.rowIndex, layoutIndex)"
+            @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, layoutIndex)"
             @mouseleave="props.onCellMouseLeave"
           >
             <!-- Edit mode -->
-            <template v-if="isCellEditing(slot.rowIndex, originalIndex, props.editingCell) && props.editingCell">
+            <template v-if="isCellEditing(slot.rowIndex, layoutIndex, props.editingCell) && props.editingCell">
               <component
                 :is="renderEditCell({
                   column,
                   rowData: slot.rowData,
-                  rawValue: getRawValue(slot.rowIndex, originalIndex),
+                  rawValue: getRawValue(slot.rowIndex, layoutIndex),
                   rowId: getRowIdAt(slot.rowIndex),
                   getValue: (field) => getFieldValueAt(slot.rowIndex, field),
                   rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
+                  colIndex: layoutIndex,
                   initialValue: props.editingCell.initialValue,
                   editId: props.editingCell.editId,
                   core: props.coreRef,
@@ -201,13 +199,13 @@ defineExpose({ bodyRef });
                 :is="renderCell({
                   column,
                   rowData: slot.rowData,
-                  rawValue: getRawValue(slot.rowIndex, originalIndex),
+                  rawValue: getRawValue(slot.rowIndex, layoutIndex),
                   rowId: getRowIdAt(slot.rowIndex),
                   getValue: (field) => getFieldValueAt(slot.rowIndex, field),
                   rowIndex: slot.rowIndex,
-                  colIndex: originalIndex,
-                  isActive: isCellActive(slot.rowIndex, originalIndex, props.activeCell),
-                  isSelected: isCellSelected(slot.rowIndex, originalIndex, props.selectionRange),
+                  colIndex: layoutIndex,
+                  isActive: isCellActive(slot.rowIndex, layoutIndex, props.activeCell),
+                  isSelected: isCellSelected(slot.rowIndex, layoutIndex, props.selectionRange),
                   isEditing: false,
                   cellRenderers: props.cellRenderers,
                   globalCellRenderer: props.globalCellRenderer,

@@ -1,12 +1,10 @@
 // packages/vue/src/composables/useGpGrid.ts
 
-import { ref, computed, onMounted, onUnmounted, watch, type Ref, type ComputedRef, type ShallowRef } from "vue";
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, type Ref, type ComputedRef, type ShallowRef } from "vue";
 import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
-  calculateScaledColumnPositions,
-  getTotalWidth,
   isCellSelected,
   isCellActive,
   isCellEditing,
@@ -17,6 +15,8 @@ import {
 import type {
   RowId,
   ColumnDefinition,
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
   ColumnFilterModel,
   CellValueChangedEvent,
   DataSource,
@@ -27,7 +27,7 @@ import type {
   RowLoadingOptions,
 } from "@gp-grid/core";
 import { useGridState } from "../gridState";
-import { useInputHandler, type VisibleColumnInfo } from "./useInputHandler";
+import { useInputHandler } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";
 import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "../types";
 
@@ -42,6 +42,8 @@ export interface UseGpGridOptions<TData = unknown> {
   rowHeight: number;
   headerHeight?: number;
   overscan?: number;
+  /** Displayed-width policy. Default: "fit". */
+  columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
   sortingEnabled?: boolean;
   darkMode?: boolean;
@@ -64,7 +66,7 @@ export interface UseGpGridOptions<TData = unknown> {
 export interface UseGpGridResult<TData = unknown> {
   // Refs
   containerRef: Ref<HTMLDivElement | null>;
-  coreRef: Ref<GridCore<TData> | null>;
+  coreRef: ShallowRef<GridCore<TData> | null>;
 
   // State
   state: ShallowRef<GridState>;
@@ -72,8 +74,8 @@ export interface UseGpGridResult<TData = unknown> {
 
   // Computed
   totalHeaderHeight: ComputedRef<number>;
-  columnPositions: ComputedRef<number[]>;
-  columnWidths: ComputedRef<number[]>;
+  /** Resolved displayed-column layout published by the core. */
+  layout: ComputedRef<ColumnLayoutSnapshot | null>;
   totalWidth: ComputedRef<number>;
   fillHandlePosition: ComputedRef<{ top: number; left: number } | null>;
 
@@ -115,7 +117,7 @@ export function useGpGrid<TData = unknown>(
 ): UseGpGridResult<TData> {
   // Refs
   const containerRef = ref<HTMLDivElement | null>(null);
-  const coreRef = ref<GridCore<TData> | null>(null);
+  const coreRef = shallowRef<GridCore<TData> | null>(null);
 
   // Synthetic touch scrolling for scaled grids (attached in onMounted)
   const touchScroll = new TouchScrollController<TData>({
@@ -124,28 +126,18 @@ export function useGpGrid<TData = unknown>(
     isBrowser: typeof window !== "undefined",
   });
 
-  // State
-  const { state, applyInstructions } = useGridState();
+  // Seeded so the pre-mount/SSR render shows the definition layout before the
+  // core publishes its first resolved snapshot.
+  const { state, applyInstructions } = useGridState({
+    initialColumns: options.columns,
+    initialColumnLayout: options.columnLayout ?? "fit",
+  });
 
   // Computed values
   const totalHeaderHeight = computed(() => options.headerHeight ?? options.rowHeight);
 
-  // Create visible columns with original index tracking (for hidden column support)
-  const visibleColumnsWithIndices = computed<VisibleColumnInfo[]>(() =>
-    options.columns
-      .map((col, index) => ({ column: col, originalIndex: index }))
-      .filter(({ column }) => !column.hidden),
-  );
-
-  const scaledColumns = computed(() =>
-    calculateScaledColumnPositions(
-      visibleColumnsWithIndices.value.map((v) => v.column),
-      state.value.viewportWidth,
-    ),
-  );
-  const columnPositions = computed(() => scaledColumns.value.positions);
-  const columnWidths = computed(() => scaledColumns.value.widths);
-  const totalWidth = computed(() => getTotalWidth(columnPositions.value));
+  const layout = computed(() => state.value.layout);
+  const totalWidth = computed(() => state.value.contentWidth);
   const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
   // Input handling
@@ -159,7 +151,7 @@ export function useGpGrid<TData = unknown>(
     handleWheel,
     dragState,
   } = useInputHandler<TData>(
-    coreRef as Ref<GridCore<TData> | null>,
+    coreRef,
     containerRef,
     computed(() => options.columns),
     {
@@ -167,13 +159,7 @@ export function useGpGrid<TData = unknown>(
       selectionRange: computed(() => state.value.selectionRange),
       editingCell: computed(() => state.value.editingCell),
       filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
-      rowHeight: options.rowHeight,
-      headerHeight: totalHeaderHeight.value,
-      columnPositions,
-      columnWidths,
-      visibleColumnsWithIndices,
-      slots: computed(() => state.value.slots),
-      rowsWrapperOffset: computed(() => state.value.rowsWrapperOffset),
+      onBeforeProgrammaticScroll: () => touchScroll.stop(),
     },
   );
 
@@ -230,6 +216,7 @@ export function useGpGrid<TData = unknown>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       overscan: options.overscan ?? 3,
+      columnLayout: options.columnLayout ?? "fit",
       maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
       sortingEnabled: options.sortingEnabled ?? true,
@@ -286,18 +273,17 @@ export function useGpGrid<TData = unknown>(
     }
   });
 
-  // Apply programmatic scroll from SCROLL_TO instruction (e.g., after filter/sort).
-  // flush: 'post' ensures the DOM has been updated before we set scrollTop.
+  // Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM
+  // has been updated before the scroll positions are written.
   watch(
-    () => state.value.pendingScrollTop,
-    (scrollTop) => {
-      if (scrollTop !== null) {
-        const container = containerRef.value;
-        if (container) {
-          touchScroll.stop();
-          container.scrollTop = scrollTop;
-        }
-      }
+    () => [state.value.pendingScrollTop, state.value.pendingScrollLeft] as const,
+    ([scrollTop, scrollLeft]) => {
+      const container = containerRef.value;
+      if (container === null) return;
+      if (scrollTop === null && scrollLeft === null) return;
+      touchScroll.stop();
+      if (scrollTop !== null) container.scrollTop = scrollTop;
+      if (scrollLeft !== null) container.scrollLeft = scrollLeft;
     },
     { flush: "post" },
   );
@@ -321,6 +307,14 @@ export function useGpGrid<TData = unknown>(
     { immediate: true },
   );
 
+  // Switch layout mode without recreating the core.
+  watch(
+    () => options.columnLayout,
+    (mode) => {
+      coreRef.value?.setColumnLayout(mode ?? "fit");
+    },
+  );
+
   // Watch for highlighting option changes
   watch(
     () => options.highlighting,
@@ -331,22 +325,19 @@ export function useGpGrid<TData = unknown>(
     },
   );
 
-  // Calculate fill handle position using composable
+  // Fill handle position, resolved by core geometry in rows-wrapper space.
   const { fillHandlePosition } = useFillHandle({
+    coreRef,
     activeCell: computed(() => state.value.activeCell),
     selectionRange: computed(() => state.value.selectionRange),
     slots: computed(() => state.value.slots),
-    columns: computed(() => options.columns),
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
-    rowHeight: options.rowHeight,
+    geometryRevision: computed(() => state.value.geometryRevision),
   });
 
   return {
     // Refs
     containerRef,
-    coreRef: coreRef as Ref<GridCore<TData> | null>,
+    coreRef,
 
     // State
     state,
@@ -354,8 +345,7 @@ export function useGpGrid<TData = unknown>(
 
     // Computed
     totalHeaderHeight,
-    columnPositions,
-    columnWidths,
+    layout,
     totalWidth,
     fillHandlePosition,
 

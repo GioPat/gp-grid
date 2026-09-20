@@ -3,6 +3,7 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnLayoutMode,
   ColumnMovedEvent,
   ColumnResizedEvent,
   DataSource,
@@ -18,6 +19,7 @@ export interface BuildGridCoreInputs<TData> {
   rowHeight: number;
   headerHeight: number;
   overscan: number;
+  columnLayout: ColumnLayoutMode | undefined;
   maxFlingVelocity: number | undefined;
   rowLoading: RowLoadingOptions | undefined;
   sortingEnabled: boolean;
@@ -48,6 +50,7 @@ export const buildGridCore = <TData>(
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
     overscan: inputs.overscan,
+    columnLayout: inputs.columnLayout,
     maxFlingVelocity: inputs.maxFlingVelocity,
     rowLoading: inputs.rowLoading,
     sortingEnabled: inputs.sortingEnabled,

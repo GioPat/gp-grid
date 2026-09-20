@@ -9,7 +9,7 @@ import {
   isCellInFillPreview,
   isCellSelected,
   SlotData,
-  VisibleColumnInfo,
+  DisplayedColumn,
   CellPosition,
   CellRange,
   CellValue,
@@ -78,10 +78,8 @@ export class GridBodyComponent {
   contentHeight = input.required<number>();
   rowsWrapperOffset = input.required<number>();
   slotsArray = input.required<SlotData[]>();
-  visibleColumnWithIndices = input.required<VisibleColumnInfo[]>();
   totalWidth = input.required<number>();
-  columnPositions = input.required<number[]>();
-  columnWidths = input.required<number[]>();
+  layoutColumns = input.required<readonly DisplayedColumn[]>();
   totalRows = input.required<number>();
   activeCell = input<CellPosition | null>(null);
   selectionRange = input<CellRange | null>(null);

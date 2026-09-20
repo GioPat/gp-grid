@@ -1,7 +1,7 @@
 // packages/react/src/components/GridHeader.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
+import type { GridCore, ColumnDefinition, SortDirection, HeaderData, DisplayedColumn } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { ReactHeaderRenderer } from "../types";
 
@@ -11,9 +11,7 @@ export interface GridHeaderProps<TData = unknown> {
   contentWidth: number;
   totalWidth: number;
   isLoading: boolean;
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  columnPositions: number[];
-  columnWidths: number[];
+  layoutColumns: readonly DisplayedColumn[];
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
@@ -33,9 +31,7 @@ export const GridHeader = <TData = unknown>(
     contentWidth,
     totalWidth,
     isLoading,
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
+    layoutColumns,
     headers,
     sortingEnabled,
     onHeaderMouseDown,
@@ -61,26 +57,25 @@ export const GridHeader = <TData = unknown>(
           height: headerHeight,
         }}
       >
-        {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
+        {layoutColumns.map(({ column, layoutIndex, offset, width }) => {
           const headerInfo = headers.get(column.colId ?? column.field);
-          const colW = columnWidths[visibleIndex] ?? 0;
           return (
             <div
               key={column.colId ?? column.field}
               className="gp-grid-header-cell"
-              data-col-index={originalIndex}
+              data-col-index={layoutIndex}
               style={{
-                left: `${columnPositions[visibleIndex]}px`,
-                width: `${colW}px`,
+                left: `${offset}px`,
+                width: `${width}px`,
                 height: `${headerHeight}px`,
               }}
               onPointerDown={(e) =>
-                onHeaderMouseDown(originalIndex, colW, headerHeight, e)
+                onHeaderMouseDown(layoutIndex, width, headerHeight, e)
               }
             >
               {renderHeader({
                 column,
-                colIndex: originalIndex,
+                colIndex: layoutIndex,
                 sortDirection: headerInfo?.sortDirection,
                 sortIndex: headerInfo?.sortIndex,
                 sortable: (column.sortable !== false) && sortingEnabled,
@@ -96,7 +91,7 @@ export const GridHeader = <TData = unknown>(
                   className="gp-grid-header-resize-handle"
                   onPointerDown={(e) => {
                     e.stopPropagation();
-                    onHeaderResizeMouseDown(originalIndex, colW, e);
+                    onHeaderResizeMouseDown(layoutIndex, width, e);
                   }}
                 />
               )}
