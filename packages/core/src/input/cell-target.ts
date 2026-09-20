@@ -1,6 +1,5 @@
 import type { GridCore } from "../grid-core";
-import type { ContainerBounds, InputHandlerDeps, PointerEventData } from "../types/input";
-import { findColumnAtX } from "../utils";
+import type { ContainerBounds, PointerEventData } from "../types/input";
 import { calculateAutoScroll } from "./auto-scroll-util";
 
 export interface CellTarget {
@@ -9,6 +8,10 @@ export interface CellTarget {
   autoScroll: { dx: number; dy: number } | null;
 }
 
+/** Nearest item for a sentinel index; an empty axis has no target (-1). */
+const clampItemIndex = (index: number, count: number): number =>
+  count === 0 ? -1 : Math.min(Math.max(index, 0), count - 1);
+
 /**
  * Project a pointer position (during a selection/fill drag) onto a cell
  * index plus auto-scroll hints. Shared by selection-drag and fill-drag
@@ -16,35 +19,30 @@ export interface CellTarget {
  */
 export const computeCellTarget = <TData>(
   core: GridCore<TData>,
-  deps: InputHandlerDeps,
   event: PointerEventData,
   bounds: ContainerBounds,
 ): CellTarget => {
   const { top, left, width, height, scrollTop, scrollLeft } = bounds;
-  const columnPositions = deps.getColumnPositions();
-  const columnCount = deps.getColumnCount();
+  const headerHeight = core.getHeaderHeight();
 
-  const viewportY = event.clientY - top;
-  const mouseX = event.clientX - left + scrollLeft;
-
-  const row = Math.max(
-    0,
-    Math.min(core.getRowIndexAtDisplayY(viewportY, scrollTop), core.getRowCount() - 1),
-  );
-  const visibleColIndex = Math.max(
-    0,
-    Math.min(findColumnAtX(mouseX, columnPositions), columnCount - 1),
-  );
-  const col = deps.getOriginalColumnIndex
-    ? deps.getOriginalColumnIndex(visibleColIndex)
-    : visibleColIndex;
+  // `bounds` is the body scroll container: the header sits outside it, so
+  // `top` is already the first row's edge.
+  const hit = core.geometry.hitTest({
+    x: event.clientX - left,
+    y: event.clientY - top,
+    scrollTop,
+    scrollLeft,
+  });
+  const displayed = core.geometry.getColumnLayout().columns;
+  const row = clampItemIndex(hit.row, core.getRowCount());
+  const col = displayed[clampItemIndex(hit.displayIndex, displayed.length)]?.layoutIndex ?? -1;
 
   const autoScroll = calculateAutoScroll(
     event.clientY - top,
     event.clientX - left,
     height,
     width,
-    deps.getHeaderHeight(),
+    headerHeight,
   );
   return { row, col, autoScroll };
 };

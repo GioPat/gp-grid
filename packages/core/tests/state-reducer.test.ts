@@ -173,6 +173,22 @@ describe("applyInstruction", () => {
       expect(result).toEqual({ pendingScrollTop: 512 });
     });
 
+    it("SCROLL_TO leaves an omitted axis out of the changes", () => {
+      const horizontal = applyInstruction<Row>(
+        { type: "SCROLL_TO", scrollLeft: 120 },
+        slots,
+        headers,
+      );
+      expect(horizontal).toStrictEqual({ pendingScrollLeft: 120 });
+
+      const vertical = applyInstruction<Row>(
+        { type: "SCROLL_TO", scrollTop: 512 },
+        slots,
+        headers,
+      );
+      expect(vertical).toStrictEqual({ pendingScrollTop: 512 });
+    });
+
     it("SET_ACTIVE_CELL returns the provided position", () => {
       const result = applyInstruction<Row>(
         { type: "SET_ACTIVE_CELL", position: { row: 2, col: 3 } },

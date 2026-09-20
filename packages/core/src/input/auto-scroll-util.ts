@@ -1,7 +1,6 @@
 export const AUTO_SCROLL_THRESHOLD = 40;
 export const AUTO_SCROLL_SPEED = 10;
 export const DRAG_THRESHOLD = 5;
-export const DEFAULT_MIN_COLUMN_WIDTH = 50;
 
 export const calculateAutoScroll = (
   mouseYInContainer: number,

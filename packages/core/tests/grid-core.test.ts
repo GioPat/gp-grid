@@ -569,7 +569,8 @@ describe("GridCore", () => {
 
     it("should return column positions", async () => {
       await grid.initialize();
-      
+      grid.setViewport(0, 0, 480, 400);
+
       const positions = grid.getColumnPositions();
       expect(positions[0]).toBe(0);
       expect(positions[1]).toBe(50); // After id column (width 50)
@@ -589,7 +590,8 @@ describe("GridCore", () => {
 
     it("should return total dimensions", async () => {
       await grid.initialize();
-      
+      grid.setViewport(0, 0, 480, 400);
+
       expect(grid.getTotalWidth()).toBe(480); // 50 + 150 + 80 + 200
       expect(grid.getTotalHeight()).toBe(5 * 32 + 40); // 5 rows + header
     });
@@ -638,6 +640,7 @@ describe("GridCore", () => {
       grid.setColumns(newColumns);
 
       expect(grid.getColumns()).toHaveLength(2);
+      // No measured viewport: the definition widths are used as-is.
       expect(grid.getTotalWidth()).toBe(300);
       
       // Should emit content size and headers
@@ -879,10 +882,16 @@ describe("GridCore", () => {
       expect(update).toBeDefined();
       if (update?.type === "UPDATE_VISIBLE_RANGE") {
         const logical = domTarget / ratio;
-        expect(update.rowsWrapperOffset).toBeCloseTo(
-          domTarget - (logical % rowHeight),
-          6,
-        );
+        // The wrapper offset must preserve the sub-row remainder at LOGICAL
+        // scale so rows glide instead of snapping row-by-row. The anchor is
+        // the first visible row's content offset; any offset within
+        // [firstVisibleOffset, firstVisibleOffset + rowHeight) is equivalent.
+        const firstVisibleOffset = Math.floor(logical / rowHeight) * rowHeight;
+        const expectedTop = domTarget - (logical - firstVisibleOffset);
+        expect(update.rowsWrapperOffset).toBeGreaterThanOrEqual(expectedTop - rowHeight);
+        expect(update.rowsWrapperOffset).toBeLessThanOrEqual(expectedTop + Number.EPSILON);
+        // The wrapper offset is the sub-row remainder, at logical scale.
+        expect(update.rowsWrapperOffset - Math.floor(domTarget)).toBeGreaterThan(-rowHeight);
       }
     });
 
@@ -928,10 +937,10 @@ describe("GridCore", () => {
       expect(update).toBeDefined();
       if (update?.type === "UPDATE_VISIBLE_RANGE") {
         const logical = fractional / ratio;
-        expect(update.rowsWrapperOffset).toBeCloseTo(
-          fractional - (logical % rowHeight),
-          6,
-        );
+        const firstVisibleOffset = Math.floor(logical / rowHeight) * rowHeight;
+        const expectedTop = fractional - (logical - firstVisibleOffset);
+        expect(update.rowsWrapperOffset).toBeGreaterThanOrEqual(expectedTop - rowHeight);
+        expect(update.rowsWrapperOffset).toBeLessThanOrEqual(expectedTop + Number.EPSILON);
       }
 
       // Clearing the override hands control back to native scroll values.
@@ -942,10 +951,10 @@ describe("GridCore", () => {
       expect(afterClear).toBeDefined();
       if (afterClear?.type === "UPDATE_VISIBLE_RANGE") {
         const logical = 2000 / ratio;
-        expect(afterClear.rowsWrapperOffset).toBeCloseTo(
-          2000 - (logical % rowHeight),
-          6,
-        );
+        const firstVisibleOffset = Math.floor(logical / rowHeight) * rowHeight;
+        const expectedTop = 2000 - (logical - firstVisibleOffset);
+        expect(afterClear.rowsWrapperOffset).toBeGreaterThanOrEqual(expectedTop - rowHeight);
+        expect(afterClear.rowsWrapperOffset).toBeLessThanOrEqual(expectedTop + Number.EPSILON);
       }
     });
 

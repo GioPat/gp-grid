@@ -73,10 +73,10 @@ export const isRowVisible = (
   row: number,
   visibleRowRange: { start: number; end: number } | null,
 ): boolean => {
-  // No range or invalid range means show everything (permissive default)
+  // `null` means "not initialized yet": show everything.
   if (!visibleRowRange) return true;
-  // If end is negative or less than start, the range is invalid - show everything
-  if (visibleRowRange.end < 0 || visibleRowRange.start > visibleRowRange.end) return true;
+  // `{ start: 0, end: -1 }` is the empty inclusive range: no visible rows.
+  if (visibleRowRange.end < visibleRowRange.start) return false;
   return row >= visibleRowRange.start && row <= visibleRowRange.end;
 };
 

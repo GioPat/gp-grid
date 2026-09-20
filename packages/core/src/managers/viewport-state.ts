@@ -1,27 +1,32 @@
 // packages/core/src/managers/viewport-state.ts
-// Owns the grid's viewport measurements and the scroll-ratio mapping
-// between visual (DOM) scrollTop and logical (content) scrollTop.
+// Owns the grid's viewport measurements and the raw DOM scroll samples the
+// core reported. Converting a sample to logical (content) coordinates is
+// geometry's job now, so this class never needs the scroll ratio.
 
 export interface ViewportUpdateResult {
   changed: boolean;
   viewportSizeChanged: boolean;
 }
 
+/**
+ * Height estimate until the adapter reports a measurement (SSR, first paint).
+ * A measured zero is a collapsed host and stays zero.
+ */
+const UNMEASURED_VIEWPORT_HEIGHT = 600;
+
 export class ViewportState {
   private scrollTop = 0;
   private scrollLeft = 0;
-  private viewportWidth = 800;
-  private viewportHeight = 600;
-  private readonly getScrollRatio: () => number;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
+  private isMeasured = false;
 
-  constructor(getScrollRatio: () => number) {
-    this.getScrollRatio = getScrollRatio;
-  }
-
+  /** Raw DOM vertical scroll sample; geometry maps it to logical space. */
   getScrollTop(): number {
     return this.scrollTop;
   }
 
+  /** Raw DOM horizontal scroll sample. */
   getScrollLeft(): number {
     return this.scrollLeft;
   }
@@ -31,7 +36,7 @@ export class ViewportState {
   }
 
   getViewportHeight(): number {
-    return this.viewportHeight;
+    return this.isMeasured ? this.viewportHeight : UNMEASURED_VIEWPORT_HEIGHT;
   }
 
   /**
@@ -45,9 +50,6 @@ export class ViewportState {
   /**
    * Apply a new viewport state. Returns what actually changed so the
    * caller can decide which side effects to run.
-   *
-   * When `scrollRatio < 1` (virtual-scroll active), the DOM-reported
-   * scrollTop is mapped to a logical scrollTop in content coordinates.
    */
   update(
     scrollTop: number,
@@ -55,18 +57,18 @@ export class ViewportState {
     width: number,
     height: number,
   ): ViewportUpdateResult {
-    const scrollRatio = this.getScrollRatio();
-    const effectiveScrollTop = scrollRatio < 1 ? scrollTop / scrollRatio : scrollTop;
-
+    // The first measurement replaces the estimate even when it reads 0 × 0.
+    const isFirstMeasurement = this.isMeasured === false;
+    this.isMeasured = true;
     const viewportSizeChanged =
-      this.viewportWidth !== width || this.viewportHeight !== height;
+      isFirstMeasurement || this.viewportWidth !== width || this.viewportHeight !== height;
     const changed =
-      this.scrollTop !== effectiveScrollTop ||
+      this.scrollTop !== scrollTop ||
       this.scrollLeft !== scrollLeft ||
       viewportSizeChanged;
 
     if (changed) {
-      this.scrollTop = effectiveScrollTop;
+      this.scrollTop = scrollTop;
       this.scrollLeft = scrollLeft;
       this.viewportWidth = width;
       this.viewportHeight = height;

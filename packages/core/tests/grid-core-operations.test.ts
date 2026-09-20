@@ -37,46 +37,61 @@ const createGrid = (
 const widthOf = (grid: GridCore<TestRow>, columnId: string): number | undefined =>
   grid.getColumnState().find((state) => state.columnId === columnId)?.width;
 
-describe("column resize stored width", () => {
-  it("back-solves the stored width when the columns leave viewport space", () => {
+describe("column resize stores the pixel override directly", () => {
+  it("keeps the exact width in fit even when the columns leave viewport space", () => {
     const grid = createGrid([def("a"), def("b"), def("c")]);
     grid.setViewport(0, 0, 800, 400);
 
     grid.setColumnWidth(1, 200);
 
-    // 200 displayed with 200 px of other columns in 800 px: 200 * 200 / 600.
-    expect(widthOf(grid, "b")).toBeCloseTo(66.67, 2);
+    expect(widthOf(grid, "b")).toBe(200);
+    const layout = grid.geometry.getColumnLayout();
+    expect(layout.columns.map((column) => column.width)).toEqual([300, 200, 300]);
+    expect(layout.totalWidth).toBe(800);
   });
 
-  it("stores the displayed width when the columns already fill the viewport", () => {
+  it("keeps the exact width when the columns already overflow the viewport", () => {
     const grid = createGrid([def("a"), def("b"), def("c")]);
     grid.setViewport(0, 0, 250, 400);
 
     grid.setColumnWidth(1, 200);
 
     expect(widthOf(grid, "b")).toBe(200);
+    expect(grid.geometry.getColumnLayout().columns.map((column) => column.width)).toEqual([
+      100, 200, 100,
+    ]);
   });
 
-  it("ignores hidden columns when distributing the remaining space", () => {
-    const grid = createGrid([def("a", { hidden: true }), def("b"), def("c")]);
+  it("resizes a hidden column without affecting the displayed layout", () => {
+    const grid = createGrid([def("a", { hidden: true }), def("b")]);
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(1, 200);
+    grid.setColumnWidth(0, 240);
 
-    // Only c (100 px) shares the space: 200 * 100 / 600.
-    expect(widthOf(grid, "b")).toBeCloseTo(33.33, 2);
+    expect(widthOf(grid, "a")).toBe(240);
+    expect(grid.geometry.getColumnLayout().columns.map((column) => column.columnId)).toEqual([
+      "b",
+    ]);
   });
 
-  it("stores the displayed width for a single visible column", () => {
-    const grid = createGrid([def("a")]);
+  it("reports the override and the measured width through the resize event", () => {
+    const onColumnResized = vi.fn();
+    const grid = createGrid([def("a"), def("b")], { onColumnResized });
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(0, 300);
+    grid.setColumnWidth(0, 240);
 
-    expect(widthOf(grid, "a")).toBe(300);
+    expect(onColumnResized).toHaveBeenCalledWith({
+      columnId: "a",
+      width: 240,
+      viewIndex: 0,
+    });
+    const state = grid.getColumnState()[0]!;
+    expect(state.width).toBe(240);
+    expect(state.resolvedWidth).toBe(240);
   });
 
-  it("stores the displayed width while the container reports no width", () => {
+  it("stores a width while the container reports no width", () => {
     const grid = createGrid([def("a"), def("b")]);
     grid.setViewport(0, 0, 0, 400);
 
@@ -85,13 +100,16 @@ describe("column resize stored width", () => {
     expect(widthOf(grid, "a")).toBe(240);
   });
 
-  it("stores the displayed width for a hidden column", () => {
-    const grid = createGrid([def("a", { hidden: true }), def("b")]);
+  it("removes the override on reset and restores proportional widths", () => {
+    const grid = createGrid([def("a"), def("b")]);
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(0, 240);
+    grid.setColumnWidth(0, 100);
+    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
 
-    expect(widthOf(grid, "a")).toBe(240);
+    grid.resetColumnState(["a"]);
+    expect(grid.getColumnState()[0]?.width).toBeUndefined();
+    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(400);
   });
 
   it("ignores a resize of a column index outside the layout", () => {
@@ -101,7 +119,8 @@ describe("column resize stored width", () => {
     grid.setColumnWidth(5, 240);
 
     expect(onColumnResized).not.toHaveBeenCalled();
-    expect(widthOf(grid, "a")).toBe(100);
+    expect(widthOf(grid, "a")).toBeUndefined();
+    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
   });
 });
 

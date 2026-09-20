@@ -111,9 +111,10 @@ describe("ColumnModel", () => {
     expect(diff.removed).toEqual(["a"]);
     expect(diff.added).toEqual(["c"]);
     expect(model.ids()).toEqual(["b", "c"]);
+    // An override is the only source of `width`; definitions supply defaults.
     expect(model.getState()).toEqual([
-      { columnId: "b", width: 100, hidden: false, order: 0 },
-      { columnId: "c", width: 100, hidden: false, order: 1 },
+      { columnId: "b", hidden: false, order: 0 },
+      { columnId: "c", hidden: false, order: 1 },
     ]);
   });
 
@@ -131,6 +132,62 @@ describe("ColumnModel", () => {
       hiddenChanged: false,
     });
     expect(model.setState([{ columnId: "a", width: 180 }]).widthChanged).toBe(false);
+  });
+
+  it("tracks width-override presence", () => {
+    const model = new ColumnModel([def("a", { width: 100 }), def("b", { width: 100 })]);
+    expect(model.isWidthOverridden("a")).toBe(false);
+    expect(model.isWidthOverriddenAt(0)).toBe(false);
+
+    model.setState([{ columnId: "a", width: 100 }]);
+    expect(model.isWidthOverridden("a")).toBe(true);
+    expect(model.isWidthOverriddenAt(1)).toBe(false);
+
+    model.resetState(["a"]);
+    expect(model.isWidthOverridden("a")).toBe(false);
+    expect(model.isWidthOverriddenAt(5)).toBe(false);
+  });
+
+  it("reports a width change when an override equal to the definition width is set or reset", () => {
+    const model = new ColumnModel([def("a", { width: 100 }), def("b", { width: 100 })]);
+
+    expect(model.setState([{ columnId: "a", width: 100 }])).toEqual({
+      orderChanged: false,
+      widthChanged: true,
+      hiddenChanged: false,
+    });
+    // The value is unchanged, so a second identical command is a no-op.
+    expect(model.setState([{ columnId: "a", width: 100 }]).widthChanged).toBe(false);
+
+    // Removing the override restores the same number but changes the contract.
+    expect(model.resetState(["a"])).toEqual({
+      orderChanged: false,
+      widthChanged: true,
+      hiddenChanged: false,
+    });
+  });
+
+  it("diagnoses an invalid width once per column id until it is valid again", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const model = new ColumnModel([def("a", { width: 0 }), def("b")]);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[gp-grid] Invalid width for column "a"');
+    expect(model.getLayout()[0]?.width).toBe(50);
+
+    // A repeated resolve does not warn again.
+    model.setWidth("b", 120);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // An invalid override is normalized in the same way.
+    model.setWidth("b", Number.NaN);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(model.getLayout()[1]?.width).toBe(50);
+
+    // Becoming valid clears the memory, so a later regression warns again.
+    model.setWidth("b", 90);
+    model.setWidth("b", -1);
+    expect(warn).toHaveBeenCalledTimes(3);
   });
 
   it("does not write to frozen caller definitions", () => {

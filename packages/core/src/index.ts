@@ -187,6 +187,21 @@ export type {
 /** Direction type from selection */
 export type { Direction } from "./selection";
 
+/** Geometry query surface */
+export type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
+} from "./types/geometry";
+
 /** Input handler types */
 export type {
   PointerEventData,
@@ -195,7 +210,6 @@ export type {
   InputResult,
   KeyboardResult,
   DragMoveResult,
-  InputHandlerDeps,
   DragState,
   ColumnResizeDragState,
   ColumnMoveDragState,
@@ -206,10 +220,9 @@ export type {
 // Shared UI Utilities (for framework wrappers)
 // =============================================================================
 
-/** Positioning utilities */
+/** Positioning utilities (standalone known-width lists) */
 export {
   calculateColumnPositions,
-  calculateScaledColumnPositions,
   getTotalWidth,
   findColumnAtX,
 } from "./utils/positioning";
@@ -240,7 +253,6 @@ export { applyInstruction } from "./state-reducer";
 
 /** Scroll helpers */
 export { scrollCellIntoView } from "./utils/scroll-helpers";
-export type { ColumnScrollGeometry } from "./utils/scroll-helpers";
 
 /** Format helpers */
 export { formatCellValue } from "./utils/format-helpers";
@@ -248,7 +260,6 @@ export { formatCellValue } from "./utils/format-helpers";
 /** Fill handle helpers */
 export { calculateFillHandlePosition } from "./utils/fill-helpers";
 export type {
-  VisibleColumnInfo,
   CalculateFillHandlePositionParams,
   FillHandlePosition,
 } from "./utils/fill-helpers";

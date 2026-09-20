@@ -28,7 +28,6 @@ const expectedExports = [
   "setFieldValue",
   // Positioning utilities
   "calculateColumnPositions",
-  "calculateScaledColumnPositions",
   "getTotalWidth",
   "findColumnAtX",
   // Class name utilities

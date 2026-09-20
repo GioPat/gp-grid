@@ -1,5 +1,6 @@
 import type { CellValue, CellPosition, CellRange } from "../types/basic";
 import type { ColumnDefinition } from "../types/columns";
+import type { ColumnLayoutMode, ColumnLayoutSnapshot } from "../types/geometry";
 import type { GridInstruction } from "../types/instructions";
 import type { FilterPopupState, HeaderData, SlotData } from "../types/ui-state";
 import { applyInstruction } from "../state-reducer";
@@ -19,12 +20,19 @@ export interface BatchChangeSetters {
   setErrorMessage: (v: string | null) => void;
   setTotalRows: (v: number) => void;
   setPendingScrollTop: (v: number | null) => void;
+  setPendingScrollLeft: (v: number | null) => void;
   setActiveCell: (v: CellPosition | null) => void;
   setSelectionRange: (v: CellRange | null) => void;
   setEditingCell: (v: EditingCell) => void;
   setHoverPosition: (v: CellPosition | null) => void;
   setPeekCell: (v: CellPosition | null) => void;
   setColumns: (v: ColumnDefinition[]) => void;
+  /** Resolved displayed-column layout at the committed geometry revision. */
+  setLayout?: (v: ColumnLayoutSnapshot) => void;
+  /** Selected column layout mode, mirrored from the core. */
+  setColumnLayout?: (v: ColumnLayoutMode) => void;
+  /** Committed geometry revision, for wrapper-side change detection. */
+  setGeometryRevision?: (v: number) => void;
   onFilterPopupChange: (v: FilterPopupState | null) => void;
 }
 
@@ -68,6 +76,9 @@ const applyPartialState = (
   if (changes.columns !== undefined && changes.columns !== null) {
     setters.setColumns(changes.columns);
   }
+  if (changes.layout !== undefined && changes.layout !== null) {
+    setters.setLayout?.(changes.layout);
+  }
   if (changes.filterPopup !== undefined) {
     setters.onFilterPopupChange(changes.filterPopup);
   }
@@ -84,6 +95,8 @@ const applyScalarState = (
   if (changes.error !== undefined) setters.setErrorMessage(changes.error);
   if (changes.totalRows !== undefined) setters.setTotalRows(changes.totalRows);
   if (changes.pendingScrollTop !== undefined) setters.setPendingScrollTop(changes.pendingScrollTop);
+  if (changes.pendingScrollLeft !== undefined) setters.setPendingScrollLeft(changes.pendingScrollLeft);
+  if (changes.geometryRevision !== undefined) setters.setGeometryRevision?.(changes.geometryRevision);
   if (changes.activeCell !== undefined) setters.setActiveCell(changes.activeCell);
   if (changes.selectionRange !== undefined) setters.setSelectionRange(changes.selectionRange);
   if (changes.editingCell !== undefined) setters.setEditingCell(changes.editingCell);

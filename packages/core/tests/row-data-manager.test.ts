@@ -56,6 +56,14 @@ const createManager = (
   const loadedNotifications: boolean[] = [];
   batcher.subscribe((batch) => instructions.push(...batch));
 
+  // The manager reads geometry windows; these mirror the old harness math
+  // (rowHeight 20, overscan 0, viewport 100, scrollTop 0). A test may override
+  // the scroll/viewport numbers the window is derived from.
+  const metrics = { scrollTop: 0, viewportHeight: 100, rowHeight: 20, overscan: 0 };
+  const visibleWindow = () => ({
+    start: Math.max(0, Math.floor(metrics.scrollTop / metrics.rowHeight)),
+    end: Math.ceil((metrics.scrollTop + metrics.viewportHeight) / metrics.rowHeight),
+  });
   const manager = new RowDataManager<TestRow>({
     dataSource,
     rowLoading,
@@ -63,10 +71,12 @@ const createManager = (
     getColumns: () => columns,
     getSortModel: () => [],
     getFilterModel: () => ({}),
-    getRowHeight: () => 20,
-    getOverscan: () => 0,
-    getScrollTop: () => 0,
-    getViewportHeight: () => 100,
+    getRowWindow: () => ({
+      start: Math.max(0, visibleWindow().start - metrics.overscan),
+      end: visibleWindow().end + metrics.overscan,
+    }),
+    getVisibleRowWindow: () => visibleWindow(),
+    getBootstrapRowCount: () => 0,
     onRowsLoaded: (totalRowsChanged) => {
       loadedNotifications.push(totalRowsChanged);
     },
@@ -219,10 +229,7 @@ describe("RowDataManager", () => {
         },
       },
       undefined,
-      {
-        getScrollTop: () => 1_000,
-        getViewportHeight: () => 100,
-      },
+      { getVisibleRowWindow: () => ({ start: 50, end: 55 }), getRowWindow: () => ({ start: 50, end: 55 }) },
     );
     manager.setTotalRows(5);
 

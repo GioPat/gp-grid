@@ -13,6 +13,7 @@ import type {
   RowDragEndEvent,
 } from "./events";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
+import type { ColumnLayoutMode } from "./geometry";
 import type { HighlightingOptions } from "./highlighting";
 
 /** Row loading mode used by GridCore. "auto" follows the data source preference. */
@@ -49,6 +50,14 @@ export interface GridCoreOptions<TData = unknown> {
   dataSource: DataSource<TData>;
   /** Row height */
   rowHeight: number;
+  /**
+   * How displayed column widths are resolved. `"fit"` (default) expands
+   * columns that have no explicit width override so their total reaches the
+   * viewport; `"fixed"` always uses the declared/overridden pixel widths and
+   * lets the grid scroll horizontally. Change at runtime with
+   * `GridCore.setColumnLayout`.
+   */
+  columnLayout?: ColumnLayoutMode;
   /** Header height: Default to row height */
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */

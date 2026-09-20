@@ -8,22 +8,12 @@ import { createBatchInstructionEmitter } from "./utils";
 // =============================================================================
 
 export interface SlotPoolManagerOptions {
-  /** Get current row height */
-  getRowHeight: () => number;
-  /** Get current header height */
-  getHeaderHeight: () => number;
-  /** Get overscan count */
-  getOverscan: () => number;
-  /** Get current scroll top position (natural, not virtual) */
-  getScrollTop: () => number;
-  /** Get viewport height */
-  getViewportHeight: () => number;
-  /** Get total row count */
-  getTotalRows: () => number;
-  /** Get scroll ratio for virtualization (1 = no virtualization) */
-  getScrollRatio: () => number;
-  /** Get virtual content height */
-  getVirtualContentHeight: () => number;
+  /** Overscanned half-open row window the pool should keep mounted. */
+  getRowWindow: () => { start: number; end: number };
+  /** Displayed view-row count. */
+  getRowCount: () => number;
+  /** `translateY` of a row inside the rows wrapper (rows space). */
+  getRowOffset: (rowIndex: number) => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
   /**
@@ -105,37 +95,19 @@ export class SlotPoolManager {
   // ===========================================================================
 
   /**
-   * Synchronize slots with current viewport position.
-   * This implements the slot recycling strategy.
+   * Synchronize slots with the current row window. The window is half-open
+   * and already overscanned, so no row arithmetic happens here.
    */
   syncSlots(): void {
-    const scrollTop = this.options.getScrollTop();
-    const rowHeight = this.options.getRowHeight();
-    const viewportHeight = this.options.getViewportHeight();
-    const totalRows = this.options.getTotalRows();
-    const overscan = this.options.getOverscan();
-
-    // The header is rendered outside the scroll container, so viewportHeight
-    // already represents only the body content area
-    const contentHeight = viewportHeight;
-
-    const visibleStartRow = Math.max(
-      0,
-      Math.floor(scrollTop / rowHeight) - overscan
-    );
-    const visibleEndRow = Math.min(
-      totalRows - 1,
-      Math.ceil((scrollTop + contentHeight) / rowHeight) + overscan
-    );
-
-    if (totalRows === 0 || visibleEndRow < visibleStartRow) {
+    const window = this.options.getRowWindow();
+    if (window.end <= window.start) {
       // No rows to display - destroy all slots
       this.destroyAllSlots();
       return;
     }
 
     const requiredRows = new Set<number>();
-    for (let row = visibleStartRow; row <= visibleEndRow; row++) {
+    for (let row = window.start; row < window.end; row++) {
       requiredRows.add(row);
     }
 
@@ -200,7 +172,7 @@ export class SlotPoolManager {
         rowIndex,
         rowData,
         generation,
-        translateY: this.getRowTranslateY(rowIndex),
+        translateY: this.options.getRowOffset(rowIndex),
       });
       instructions.push({ type: "CREATE_SLOT", slotId, generation });
     } else {
@@ -209,13 +181,13 @@ export class SlotPoolManager {
       slot.rowIndex = rowIndex;
       slot.rowData = rowData;
       slot.generation = generation;
-      slot.translateY = this.getRowTranslateY(rowIndex);
+      slot.translateY = this.options.getRowOffset(rowIndex);
     }
 
     this.state.rowToSlot.set(rowIndex, slotId);
     instructions.push(
       { type: "ASSIGN_SLOT", slotId, rowIndex, rowData, generation },
-      { type: "MOVE_SLOT", slotId, translateY: this.getRowTranslateY(rowIndex) },
+      { type: "MOVE_SLOT", slotId, translateY: this.options.getRowOffset(rowIndex) },
     );
   }
 
@@ -224,7 +196,7 @@ export class SlotPoolManager {
    */
   private updateSlotPositions(instructions: GridInstruction[]): void {
     for (const [slotId, slot] of this.state.slots) {
-      const expectedY = this.getRowTranslateY(slot.rowIndex);
+      const expectedY = this.options.getRowOffset(slot.rowIndex);
       if (slot.translateY !== expectedY) {
         slot.translateY = expectedY;
         instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY });
@@ -265,15 +237,15 @@ export class SlotPoolManager {
    */
   refreshAllSlots(): void {
     const instructions: GridInstruction[] = [];
-    const totalRows = this.options.getTotalRows();
+    const rowCount = this.options.getRowCount();
 
     for (const [slotId, slot] of this.state.slots) {
       // Check if row index is still valid and data is available
-      if (slot.rowIndex >= 0 && slot.rowIndex < totalRows) {
+      if (slot.rowIndex >= 0 && slot.rowIndex < rowCount) {
         if (this.options.isRowAvailable(slot.rowIndex) === false) continue;
         const rowData = this.options.getRowData(slot.rowIndex);
 
-        const translateY = this.getRowTranslateY(slot.rowIndex);
+        const translateY = this.options.getRowOffset(slot.rowIndex);
         const generation = this.state.nextGeneration++;
 
         slot.rowData = rowData;
@@ -310,73 +282,5 @@ export class SlotPoolManager {
         generation,
       });
     }
-  }
-
-  // ===========================================================================
-  // Position Calculation
-  // ===========================================================================
-
-  /**
-   * Calculate the translateY position for a row.
-   * Handles scroll virtualization for very large datasets.
-   *
-   * When virtualization is active (scrollRatio < 1), we use viewport-relative
-   * positioning to keep translateY values small. This prevents browser rendering
-   * issues that occur at extreme pixel values (millions of pixels).
-   *
-   * Note: The header is rendered outside the content sizer, so row positions
-   * start at 0 (not headerHeight) within the rows container.
-   */
-  private getRowTranslateY(rowIndex: number): number {
-    const rowHeight = this.options.getRowHeight();
-    const scrollRatio = this.options.getScrollRatio();
-    const scrollTop = this.options.getScrollTop();
-
-    // Calculate the natural position for this row (no headerHeight since header is outside)
-    const naturalY = rowIndex * rowHeight;
-
-    if (scrollRatio >= 1) {
-      return naturalY;
-    }
-
-    // With virtualization active, position rows relative to the first visible row.
-    // This keeps translateY values small (0 to viewportHeight + overscan buffer)
-    // instead of millions of pixels.
-    const firstVisibleRowIndex = Math.floor(scrollTop / rowHeight);
-    const firstVisibleRowY = firstVisibleRowIndex * rowHeight;
-
-    // Row's position relative to first visible row
-    return naturalY - firstVisibleRowY;
-  }
-
-  /**
-   * Get the translateY position for a row inside the rows wrapper.
-   * Public accessor for use by input handler (e.g., drop indicator positioning).
-   */
-  getRowTranslateYForIndex(rowIndex: number): number {
-    return this.getRowTranslateY(rowIndex);
-  }
-
-  /**
-   * Get the Y offset for the rows wrapper container.
-   * When virtualization is active, this positions the wrapper so rows
-   * with small translateY values appear at the correct scroll position.
-   */
-  getRowsWrapperOffset(): number {
-    const scrollRatio = this.options.getScrollRatio();
-    const scrollTop = this.options.getScrollTop();
-    const rowHeight = this.options.getRowHeight();
-
-    if (scrollRatio >= 1) {
-      return 0; // No wrapper offset needed without virtualization
-    }
-
-    // Position the wrapper so the first visible row lands exactly at its
-    // logical position: wrapper + translateY(row) - domScrollTop must equal
-    // rowY - logicalScrollTop. The sub-row remainder is kept at logical
-    // scale — compressing it by the scroll ratio would make rows crawl
-    // between row boundaries and then snap a full row when crossing one.
-    const subRowOffset = scrollTop % rowHeight;
-    return scrollTop * scrollRatio - subRowOffset;
   }
 }

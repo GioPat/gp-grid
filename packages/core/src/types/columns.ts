@@ -28,10 +28,24 @@ export interface ColumnStateUpdate {
   order?: number;
 }
 
-/** Effective column state, as reported by `GridCore.getColumnState()`. */
+/**
+ * Effective column state, as reported by `GridCore.getColumnState()`.
+ * `width` is present only while an explicit pixel override exists; the
+ * displayed width is always available as `resolvedWidth`.
+ */
 export interface ColumnStateSnapshot {
   columnId: ColumnId;
-  width: number;
+  width?: number;
+  /** Displayed width in CSS px, `0` while the column is hidden. Output-only. */
+  resolvedWidth: number;
+  hidden: boolean;
+  order: number;
+}
+
+/** Column state as stored by `ColumnModel`, before geometry resolves widths. */
+export interface ColumnModelState {
+  columnId: ColumnId;
+  width?: number;
   hidden: boolean;
   order: number;
 }
