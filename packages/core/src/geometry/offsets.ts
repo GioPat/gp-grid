@@ -31,7 +31,7 @@ export const buildOffsets = (sizes: readonly number[]): number[] => {
  * the first edge. Clamped by callers that need an item index.
  */
 export const searchOffsets = (offsets: readonly number[], offset: number): number => {
-  if (Number.isNaN(offset) || offset < (offsets[0] ?? 0)) {
+  if (offsets.length === 0 || Number.isNaN(offset) || offset < offsets[0]!) {
     return -1;
   }
   const lastIndex = offsets.length - 1;
@@ -60,13 +60,10 @@ export const clampIndex = (index: number, count: number): number => {
     return -1;
   }
   const integer = Math.trunc(index);
-  if (!Number.isFinite(integer)) {
-    return integer > 0 ? count : 0;
-  }
-  if (integer < 0) {
+  if (Number.isNaN(integer)) {
     return 0;
   }
-  return integer > count ? count : integer;
+  return Math.min(Math.max(integer, 0), count);
 };
 
 export const assertPositiveFinite = (value: number, label: string): void => {

@@ -22,10 +22,8 @@ export interface RowGeometryDeps {
   /** Row count and height; `count` is the displayed view-row count. */
   getRowCount(): number;
   getRowHeight(): number;
-  /** Body content-area dimensions: height excludes the header. */
+  /** Body content-area height: excludes the header. */
   getViewportHeight(): number;
-  getViewportWidth(): number;
-  getScrollLeft(): number;
   getOverscan(): number;
   mapping: RowScrollMapping;
 }
@@ -35,9 +33,6 @@ export interface RowMapper {
   toDomScrollTop(logical: number): number;
   /** Logical scroll top for the effective scroll sample. */
   getLogicalScrollTop(): number;
-  getViewportHeight(): number;
-  getViewportWidth(): number;
-  getScrollLeft(): number;
   hasVerticalCompression(): boolean;
   getMaxLogicalScrollTop(): number;
   /** DOM position for a logical scroll top, clamped to the reachable range. */
@@ -82,7 +77,6 @@ export interface RowGeometry {
  */
 const createMapper = (deps: RowGeometryDeps, getAxis: () => VirtualAxis): RowMapper => {
   const { mapping } = deps;
-  const getViewportHeight = (): number => deps.getViewportHeight();
 
   const getLogicalScrollTop = (): number =>
     mapping.toLogicalScrollTop(mapping.getDomScrollTop());
@@ -108,9 +102,6 @@ const createMapper = (deps: RowGeometryDeps, getAxis: () => VirtualAxis): RowMap
     toLogicalScrollTop: (dom) => mapping.toLogicalScrollTop(dom),
     toDomScrollTop: (logical) => mapping.toDomScrollTop(logical),
     getLogicalScrollTop,
-    getViewportHeight,
-    getViewportWidth: () => deps.getViewportWidth(),
-    getScrollLeft: () => deps.getScrollLeft(),
     hasVerticalCompression: () => mapping.isScalingActive(),
     getMaxLogicalScrollTop,
     toDomScrollTopClamped,
@@ -126,11 +117,8 @@ const createMapper = (deps: RowGeometryDeps, getAxis: () => VirtualAxis): RowMap
   };
 };
 
-const clampFirstVisible = (index: number, count: number): number => {
-  if (count === 0) return 0;
-  if (index < 0) return 0;
-  return index > count ? count : index;
-};
+const clampFirstVisible = (index: number, count: number): number =>
+  Math.min(Math.max(index, 0), count);
 
 export const createRowGeometry = (deps: RowGeometryDeps): RowGeometry => {
   let count = -1;

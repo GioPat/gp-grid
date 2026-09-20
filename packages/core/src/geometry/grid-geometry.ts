@@ -99,8 +99,6 @@ export const createGridGeometry = (
     getRowCount: () => deps.getRowCount(),
     getRowHeight: () => deps.getRowHeight(),
     getViewportHeight: () => viewportOf(deps).height,
-    getViewportWidth: () => viewportOf(deps).width,
-    getScrollLeft: scrollLeftOf,
     getOverscan: () => deps.getOverscan(),
     mapping: {
       getDomScrollTop: scrollTopOf,
@@ -293,6 +291,5 @@ export const createGridGeometry = (
 
 const clampRowSentinel = (row: number, count: number): number => {
   if (count === 0) return -1;
-  if (row < 0) return -1;
-  return row > count ? count : row;
+  return Math.min(Math.max(row, -1), count);
 };

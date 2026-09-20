@@ -63,9 +63,9 @@ export const resolveColumnWidths = (
   if (baseTotal === 0 || baseTotal >= viewportWidth - tolerance) return base;
   if (flexibleCount === 0) return base;
 
+  // The base total is below the viewport here, so the slack left by the
+  // overrides always exceeds the flexible total: the scale is above 1.
   const slack = viewportWidth - overrideTotal;
-  if (slack <= flexibleTotal - tolerance) return base;
-
   const scale = slack / flexibleTotal;
   return base.map((width, i) => (sources[i]!.overridden ? width : width * scale));
 };

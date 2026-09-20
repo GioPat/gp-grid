@@ -95,6 +95,8 @@ export const resolveColumnLayout = (
   return { revision, mode: input.mode, columns, totalWidth };
 };
 
+const notOverridden = (): boolean => false;
+
 /**
  * Resolve a displayed layout for a definition-only seed (SSR's deterministic
  * first render) where no live override exists and the model is not yet built.
@@ -105,7 +107,7 @@ export const createSeedColumnLayout = (
   viewportWidth: number,
 ): ColumnLayoutSnapshot =>
   resolveColumnLayout(
-    { columns, mode, width: viewportWidth, isOverridden: () => false },
+    { columns, mode, width: viewportWidth, isOverridden: notOverridden },
     null,
     0,
   );
@@ -130,7 +132,7 @@ export const createColumnLayoutResolver = (
   let mode = initialMode;
   let width = 0;
   let columns: readonly ColumnDefinition[] = [];
-  let isOverridden: (layoutIndex: number) => boolean = () => false;
+  let isOverridden: (layoutIndex: number) => boolean = notOverridden;
   let layout: ColumnLayoutSnapshot | null = null;
   let resolvedMode: ColumnLayoutMode | null = null;
 
