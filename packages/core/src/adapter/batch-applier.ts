@@ -58,22 +58,20 @@ export const applyBatchInstructions = (
     headers: new Map(currentHeaders),
   };
   for (const instruction of instructions) {
+    // Slot and header instructions mutate the maps in place and answer null.
     const changes = applyInstruction(instruction, maps.slots, maps.headers);
     if (changes === null) continue;
-    applyPartialState(changes, maps, setters);
+    applyPartialState(changes, setters);
   }
   return maps;
 };
 
 const applyPartialState = (
   changes: NonNullable<ReturnType<typeof applyInstruction>>,
-  maps: MutableMaps,
   setters: BatchChangeSetters,
 ): void => {
-  if (changes.slots !== undefined) replaceMap(maps.slots, changes.slots);
-  if (changes.headers !== undefined) replaceMap(maps.headers, changes.headers);
   applyScalarState(changes, setters);
-  if (changes.columns !== undefined && changes.columns !== null) {
+  if (changes.columns !== undefined) {
     setters.setColumns(changes.columns);
   }
   if (changes.layout !== undefined && changes.layout !== null) {
@@ -102,9 +100,4 @@ const applyScalarState = (
   if (changes.editingCell !== undefined) setters.setEditingCell(changes.editingCell);
   if (changes.hoverPosition !== undefined) setters.setHoverPosition(changes.hoverPosition);
   if (changes.peekCell !== undefined) setters.setPeekCell(changes.peekCell);
-};
-
-const replaceMap = <K, V>(target: Map<K, V>, source: Map<K, V>): void => {
-  target.clear();
-  source.forEach((v, k) => target.set(k, v));
 };
