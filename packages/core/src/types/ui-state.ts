@@ -82,31 +82,34 @@ const seedLayout = (
   );
 };
 
-export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => ({
-  slots: new Map(),
-  activeCell: null,
-  selectionRange: null,
-  editingCell: null,
-  peekCell: null,
-  contentWidth: seedLayout(args)?.totalWidth ?? 0,
-  contentHeight: args?.initialHeight ?? 0,
-  viewportWidth: args?.initialWidth ?? 0,
-  viewportHeight: args?.initialHeight ?? 0,
-  rowsWrapperOffset: 0,
-  headers: new Map(),
-  filterPopup: null,
-  isLoading: false,
-  error: null,
-  totalRows: 0,
-  visibleRowRange: null,
-  hoverPosition: null,
-  columns: args?.initialColumns ?? [],
-  layout: seedLayout(args),
-  columnLayout: args?.initialColumnLayout ?? "fit",
-  geometryRevision: 0,
-  pendingScrollTop: null,
-  pendingScrollLeft: null,
-});
+export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => {
+  const layout = seedLayout(args);
+  return {
+    slots: new Map(),
+    activeCell: null,
+    selectionRange: null,
+    editingCell: null,
+    peekCell: null,
+    contentWidth: layout?.totalWidth ?? 0,
+    contentHeight: args?.initialHeight ?? 0,
+    viewportWidth: args?.initialWidth ?? 0,
+    viewportHeight: args?.initialHeight ?? 0,
+    rowsWrapperOffset: 0,
+    headers: new Map(),
+    filterPopup: null,
+    isLoading: false,
+    error: null,
+    totalRows: 0,
+    visibleRowRange: null,
+    hoverPosition: null,
+    columns: args?.initialColumns ?? [],
+    layout,
+    columnLayout: args?.initialColumnLayout ?? "fit",
+    geometryRevision: 0,
+    pendingScrollTop: null,
+    pendingScrollLeft: null,
+  };
+};
 
 // =============================================================================
 // Grid State
