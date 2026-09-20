@@ -120,6 +120,15 @@ describe("public geometry surface", () => {
     }
     expect(Object.isFrozen(grid.geometry)).toBe(true);
 
+    expect(grid.geometry.getRowBounds(2)).toEqual({ start: 64, end: 96 });
+    expect(grid.geometry.getColumnBounds(1)).toEqual({ start: 200, end: 600 });
+    expect(grid.geometry.getRowEdgeOffset(100, "content")).toBe(3200);
+    expect(grid.geometry.getContentSize()).toEqual({
+      width: 600,
+      height: 3200,
+      coordinateSpace: "content",
+    });
+
     grid.setColumnLayout("fit");
     expect(grid.geometry.getColumnLayout().mode).toBe("fit");
     const before = grid.geometry.revision;

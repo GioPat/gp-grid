@@ -5,8 +5,6 @@ interface HarnessOptions {
   rowCount?: number;
   rowHeight?: number;
   viewportHeight?: number;
-  viewportWidth?: number;
-  scrollLeft?: number;
   domScrollTop?: number;
   overscan?: number;
   ratio?: number;
@@ -17,8 +15,6 @@ const createRows = (options: HarnessOptions = {}) => {
     getRowCount: () => options.rowCount ?? 1000,
     getRowHeight: () => options.rowHeight ?? 32,
     getViewportHeight: () => options.viewportHeight ?? 320,
-    getViewportWidth: () => options.viewportWidth ?? 400,
-    getScrollLeft: () => options.scrollLeft ?? 0,
     getOverscan: () => options.overscan ?? 3,
     mapping: {
       getDomScrollTop: () => options.domScrollTop ?? 0,
@@ -61,6 +57,20 @@ describe("row geometry windows", () => {
   it("covers a fractional viewport height", () => {
     const rows = createRows({ domScrollTop: 50.5, viewportHeight: 300.5 });
     expect(rows.getVisibleWindow()).toEqual({ start: 1, end: 11 });
+  });
+});
+
+describe("bootstrap row estimate", () => {
+  it("covers the viewport plus overscan and rounds a partial row up", () => {
+    expect(createRows({ rowCount: 0, viewportHeight: 320, overscan: 3 }).getBootstrapRowCount()).toBe(13);
+    expect(createRows({ rowCount: 0, viewportHeight: 330, overscan: 0 }).getBootstrapRowCount()).toBe(11);
+  });
+
+  it("requests nothing for a collapsed or unmeasurable viewport", () => {
+    expect(createRows({ viewportHeight: 0, overscan: 5 }).getBootstrapRowCount()).toBe(0);
+    expect(createRows({ viewportHeight: -10 }).getBootstrapRowCount()).toBe(0);
+    expect(createRows({ viewportHeight: Number.NaN }).getBootstrapRowCount()).toBe(0);
+    expect(createRows({ viewportHeight: Number.POSITIVE_INFINITY }).getBootstrapRowCount()).toBe(0);
   });
 });
 
@@ -107,6 +117,26 @@ describe("rows-space invariant", () => {
   });
 });
 
+describe("rows-space anchor", () => {
+  it("clamps the anchor to the first row for a sample before the content", () => {
+    const rows = createRows({ rowCount: 1000, domScrollTop: -500, ratio: 0.5 });
+    expect(rows.getMapper().rowPosition(0)).toBe(0);
+    expect(rows.getMapper().rowPosition(3)).toBe(96);
+  });
+
+  it("clamps the anchor to the end edge for a sample past the content", () => {
+    const rows = createRows({ rowCount: 1000, domScrollTop: 1_000_000, ratio: 0.5 });
+    expect(rows.getMapper().rowPosition(1000)).toBe(0);
+    expect(rows.getMapper().rowPosition(999)).toBe(-32);
+  });
+
+  it("anchors an empty axis at zero", () => {
+    const rows = createRows({ rowCount: 0, domScrollTop: 400, ratio: 0.5 });
+    expect(rows.getMapper().rowPosition(0)).toBe(0);
+    expect(rows.getMapper().wrapperOffset()).toBe(400 - 800);
+  });
+});
+
 describe("scroll mapping", () => {
   it("converts between DOM and logical only when compression is active", () => {
     const plain = createRows({ domScrollTop: 500 });
@@ -144,6 +174,16 @@ describe("scroll mapping", () => {
     expect(compressedMapper.toDomScrollTopClamped(0)).toBe(0);
     expect(compressedMapper.toDomScrollTopClamped(Number.MAX_SAFE_INTEGER))
       .toBeCloseTo(compressedMapper.toDomScrollTop(compressedMapper.getMaxLogicalScrollTop()), 3);
+  });
+});
+
+describe("compressed range without scroll", () => {
+  it("answers 0 instead of dividing by an empty logical range", () => {
+    // Content shorter than the viewport while a mapping still reports scaling.
+    const rows = createRows({ rowCount: 5, viewportHeight: 320, ratio: 0.5 });
+    expect(rows.getMapper().getMaxLogicalScrollTop()).toBe(0);
+    expect(rows.getMapper().toDomScrollTopClamped(64)).toBe(0);
+    expect(rows.getMapper().toDomScrollTopClamped(-64)).toBe(0);
   });
 });
 

@@ -380,6 +380,35 @@ describe("GridGeometry — scroll targets", () => {
   });
 });
 
+describe("GridGeometry — guards", () => {
+  it("rejects a cell on a row outside the axis", () => {
+    const harness = createHarness({ rowCount: 10 });
+    expect(harness.geometry.getCellBounds(10, 0)).toBeUndefined();
+    expect(harness.geometry.getCellBounds(-1, 0)).toBeUndefined();
+  });
+
+  it("ignores a layout mode that is already active", () => {
+    const harness = createHarness({ mode: "fit" });
+    harness.geometry.refresh();
+    const before = harness.geometry.revision;
+    harness.geometry.setColumnLayoutMode("fit");
+    expect(harness.geometry.revision).toBe(before);
+    expect(harness.geometry.getColumnLayoutMode()).toBe("fit");
+  });
+
+  it("leaves an oversized row alone once its top is aligned", () => {
+    const harness = createHarness({ rowCount: 100, viewportHeight: 20, scrollTop: 64 });
+    expect(harness.geometry.getScrollTarget(2, 0)).toEqual({});
+    expect(harness.geometry.getScrollTarget(3, 0)).toEqual({ scrollTop: 96 });
+  });
+
+  it("reads a non-finite scroll sample as 0", () => {
+    const harness = createHarness({ rowCount: 100, scrollTop: Number.NaN, scrollLeft: Number.POSITIVE_INFINITY });
+    expect(harness.geometry.getEffectiveScroll()).toEqual({ scrollTop: 0, scrollLeft: 0 });
+    expect(harness.geometry.getVisibleRowWindow()).toEqual({ start: 0, end: 10 });
+  });
+});
+
 describe("GridGeometry — out-of-range scroll samples", () => {
   it("answers windows, bounds and hit tests from the clamped sample", () => {
     const harness = createHarness({

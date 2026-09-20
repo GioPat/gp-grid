@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createColumnLayoutResolver,
+  createSeedColumnLayout,
   resolveColumnLayout,
   type ColumnLayoutInput,
 } from "../src/geometry/column-layout";
@@ -102,7 +103,27 @@ describe("resolveColumnLayout", () => {
   });
 });
 
+describe("createSeedColumnLayout", () => {
+  it("resolves a definition-only layout at revision 0", () => {
+    const seed = createSeedColumnLayout(
+      [column("a", 100), column("b", 100, { hidden: true }), column("c", 100)],
+      "fit",
+      400,
+    );
+    expect(seed.revision).toBe(0);
+    expect(seed.columns.map((c) => [c.columnId, c.layoutIndex, c.width])).toEqual([
+      ["a", 0, 200],
+      ["c", 2, 200],
+    ]);
+  });
+});
+
 describe("createColumnLayoutResolver", () => {
+  it("answers an empty layout before any input arrives", () => {
+    const resolver = createColumnLayoutResolver("fixed", () => 1);
+    expect(resolver.get()).toEqual({ revision: 1, mode: "fixed", columns: [], totalWidth: 0 });
+  });
+
   it("lazily resolves with the caller's revision", () => {
     let revision = 5;
     const resolver = createColumnLayoutResolver("fit", () => revision);
