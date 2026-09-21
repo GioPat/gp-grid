@@ -24,6 +24,7 @@ import type {
   ColumnFilterModel,
   ColumnMovedEvent,
   ColumnLayoutMode,
+  ColumnPin,
   ColumnResizedEvent,
   ColumnStateUpdate,
   DataSource,
@@ -300,6 +301,10 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected onHeaderSort(evt: HeaderSortEvent): void {
     this.bindings.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
+  }
+
+  protected onHeaderPin(evt: { columnId: string; pinned: ColumnPin | null }): void {
+    this.bindings.coreRef?.setColumnPinned(evt.columnId, evt.pinned);
   }
 
   protected onWheel(event: WheelEvent): void {

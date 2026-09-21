@@ -11,6 +11,7 @@ import type {
   HeaderData,
   DisplayedColumn,
   ColumnDefinition,
+  ColumnPin,
   HeaderRendererParams,
   SortDirection,
 } from '@gp-grid/core';
@@ -135,6 +136,7 @@ export class GridHeaderComponent {
   filterPointerDown = output<FilterPointerDownEvent>();
   resizePointerDown = output<ResizePointerDownEvent>();
   headerSort = output<HeaderSortEvent>();
+  headerPin = output<{ columnId: string; pinned: ColumnPin | null }>();
   headerFilterOpen = output<{ colIndex: number; anchorEl: HTMLElement }>();
 
   protected innerWidth = computed(() =>
@@ -190,12 +192,14 @@ export class GridHeaderComponent {
       sortable,
       filterable,
       hasFilter: headerData?.hasFilter ?? false,
+      pinned: column.pinned ?? null,
       onSort: (direction, addToExisting) => {
         if (sortable) {
           const colId = column.colId ?? column.field;
           this.headerSort.emit({ colId, direction, addToExisting });
         }
       },
+      onPinChange: (pinned) => this.headerPin.emit({ columnId: column.colId ?? column.field, pinned }),
       onFilterClick: () => {
         // The anchor is looked up via data-col-index — same pattern as the default filter icon.
         // No-op here; consumers using a custom header template should use the exposed callback.

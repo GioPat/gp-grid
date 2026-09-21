@@ -651,7 +651,7 @@ export function Grid<TData = unknown>(
       {dragState.dragType === "column-resize" && dragState.columnResize && (
         <div
           className="gp-grid-column-resize-line"
-          style={{ left: dragState.columnResize.lineX - scrollLeft }}
+          style={{ left: dragState.columnResize.lineX }}
         />
       )}
 
@@ -679,7 +679,7 @@ export function Grid<TData = unknown>(
                 style={{
                   position: "absolute",
                   top: 0,
-                  left: cm.dropIndicatorX - scrollLeft,
+                  left: cm.dropIndicatorX,
                   height: headerHeight,
                 }}
               />

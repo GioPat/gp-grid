@@ -22,6 +22,7 @@ export const GP_GRID_TEMPLATE = `
         (filterPointerDown)="onFilterPointerDown($event)"
         (resizePointerDown)="onResizePointerDown($event)"
         (headerSort)="onHeaderSort($event)"
+        (headerPin)="onHeaderPin($event)"
       />
       <gp-grid-body
         [rowHeight]="rowHeight()"

@@ -561,7 +561,7 @@ defineExpose({
       v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
       class="gp-grid-column-resize-line"
       :style="{
-        left: `${dragState.columnResize!.lineX - scrollLeft}px`,
+        left: `${dragState.columnResize!.lineX}px`,
       }"
     />
 
@@ -582,7 +582,7 @@ defineExpose({
         v-if="dragState.columnMove!.dropTargetIndex !== null"
         class="gp-grid-column-drop-indicator"
         :style="{
-          left: `${dragState.columnMove.dropIndicatorX - scrollLeft}px`,
+          left: `${dragState.columnMove.dropIndicatorX}px`,
           height: `${totalHeaderHeight}px`,
         }"
       />

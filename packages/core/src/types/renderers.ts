@@ -3,6 +3,7 @@
 
 import type { CellValue, RowId, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
+import type { ColumnPin } from "./geometry";
 
 /**
  * Cell renderer params.
@@ -77,8 +78,12 @@ export interface HeaderRendererParams {
   filterable: boolean;
   /** Whether column has an active filter */
   hasFilter: boolean;
+  /** Requested pin of the header's column, or `null` while unpinned. */
+  pinned: ColumnPin | null;
   /** On sort */
   onSort: (direction: SortDirection | null, addToExisting: boolean) => void;
   /** On filter click */
   onFilterClick: () => void;
+  /** Request a pin change; `null` unpins. */
+  onPinChange: (pinned: ColumnPin | null) => void;
 }

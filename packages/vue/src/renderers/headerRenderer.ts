@@ -56,10 +56,14 @@ export function renderHeader(
     sortable,
     filterable,
     hasFilter,
+    pinned: column.pinned ?? null,
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
         core.setSort(column.colId ?? column.field, direction, addToExisting);
       }
+    },
+    onPinChange: (pinned) => {
+      core?.setColumnPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {

@@ -109,7 +109,7 @@ export class GridOverlaysComponent {
   protected resizeLineLeft = computed<number>(() => {
     const cr = this.dragState().columnResize;
     if (cr === null) return 0;
-    return cr.lineX - this.scrollLeft();
+    return cr.lineX;
   });
 
   protected columnMove = computed(() => {
@@ -132,7 +132,7 @@ export class GridOverlaysComponent {
   protected columnMoveDropLeft = computed<number | null>(() => {
     const cm = this.columnMove();
     if (cm === null || cm.dropTargetIndex === null) return null;
-    return cm.dropIndicatorX - this.scrollLeft();
+    return cm.dropIndicatorX;
   });
 
   protected rowDragGhostWidth = computed<number>(() => Math.min(300, this.totalWidth()));

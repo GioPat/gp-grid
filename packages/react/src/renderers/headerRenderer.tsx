@@ -1,7 +1,13 @@
 // packages/react/src/renderers/headerRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
+import type {
+  GridCore,
+  ColumnDefinition,
+  ColumnPin,
+  SortDirection,
+  HeaderRendererParams,
+} from "@gp-grid/core";
 import type { ReactHeaderRenderer } from "../types";
 
 const needsDistinctValues = (column: ColumnDefinition): boolean => {
@@ -26,6 +32,9 @@ export interface RenderHeaderOptions<TData> {
   headerRenderers: Record<string, ReactHeaderRenderer>;
   globalHeaderRenderer?: ReactHeaderRenderer;
 }
+
+/** Requested pin of the header's column; `null` while unpinned. */
+const pinOf = (column: ColumnDefinition): ColumnPin | null => column.pinned ?? null;
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -57,10 +66,14 @@ export function renderHeader<TData>(
     sortable,
     filterable,
     hasFilter,
+    pinned: pinOf(column),
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
         core.setSort(column.colId ?? column.field, direction, addToExisting);
       }
+    },
+    onPinChange: (pinned) => {
+      core?.setColumnPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {
