@@ -25,7 +25,10 @@ const cell = (page: Page, row: number, col: number): Locator =>
 
 const hideFirstColumn = async (page: Page): Promise<void> => {
   await page.getByTestId("hide-column").click();
+  // The hidden "id" keeps layout index 0, so no header carries it and the
+  // surviving columns keep their own indices: no renumbering.
   await expect(page.locator('.gp-grid-header-cell[data-col-index="0"]')).toHaveCount(0);
+  await expect(page.locator('.gp-grid-header-cell[data-col-index="7"]')).toHaveCount(1);
 };
 
 test("a horizontal scroll correction keeps the vertical position", async ({ page }, testInfo) => {
@@ -75,6 +78,13 @@ test("a header drag drops on the indicated column past a hidden column", async (
   await page.mouse.up();
 
   // "score" takes the slot of "name"; the hidden "id" keeps layout index 0.
+  const displayed = (): Promise<string[]> =>
+    readHook<{ columnId: string }[]>(page, "layoutColumns").then((all) =>
+      all.map((column) => column.columnId),
+    );
+  await expect.poll(displayed).toEqual([
+    "score", "name", "city", "team", "status", "note", "code",
+  ]);
   await expect.poll(() => columnIds(page)).toEqual([
     "id", "score", "name", "city", "team", "status", "note", "code",
   ]);
