@@ -1,9 +1,10 @@
 // packages/core/src/geometry/grid-geometry.ts
 // The numeric geometry authority. Composes the row axis/mapping with the
-// column layout snapshot and answers every size/offset/window/hit-test/scroll
-// query in named coordinate spaces. All inputs are injected callbacks.
+// column layout, region admission and the center window, and answers every
+// size/offset/window/hit-test/scroll query in named coordinate spaces. All
+// inputs are injected callbacks.
 
-import type { ColumnDefinition } from "../types/columns";
+import type { ColumnDefinition, ColumnId } from "../types/columns";
 import type {
   AxisBounds,
   CellBounds,
@@ -12,15 +13,18 @@ import type {
   ContentSize,
   GeometrySpace,
   GridGeometry,
+  ResolvedColumn,
+  ResolvedColumnGeometry,
   ScrollTarget,
   ViewportPoint,
 } from "../types/geometry";
 import type { ColumnLayoutResolver } from "./column-layout";
 import { createColumnLayoutResolver } from "./column-layout";
-import { createColumnIndex, type ColumnIndex } from "./column-index";
+import { createColumnGeometry } from "./column-geometry";
 import { createRowGeometry } from "./row-geometry";
 import type { RowGeometry, RowGeometryDeps, RowScrollMapping } from "./row-geometry";
 import { resolveScrollTarget } from "./scroll-target";
+import { createColumnWindowResolver } from "./column-window";
 import {
   clampScroll,
   createMaxScrollTop,
@@ -34,6 +38,7 @@ export interface GridGeometryDeps {
   getRowCount(): number;
   getRowHeight(): number;
   getOverscan(): number;
+  getColumnOverscan(): number;
   getColumns(): readonly ColumnDefinition[];
   /** Width-override membership per resolved-layout index. */
   isWidthOverridden(layoutIndex: number): boolean;
@@ -45,14 +50,20 @@ export interface GridGeometryDeps {
 export interface GridGeometryService extends GridGeometry {
   /**
    * Refresh the committed dependencies (row axis, viewport dimensions,
-   * mapping) and the column layout before a batch captures its revision.
+   * mapping) and the column layout/window before a batch captures its
+   * revision.
    */
   refresh(): ColumnLayoutSnapshot;
   /** Commit the current row window and bump the revision if it moved. */
   syncWindows(): void;
+  /** Commit the column window and bump the revision when it moved. */
+  syncColumnWindow(): boolean;
   setColumnLayoutMode(mode: ColumnLayoutMode): void;
   getColumnLayoutMode(): ColumnLayoutMode;
   getRowGeometry(): RowGeometry;
+  /** Columns kept mounted outside the window, keyed and bounded. */
+  retainColumns(key: string, columnIds: readonly ColumnId[]): void;
+  releaseColumns(key: string): void;
   /** Scroll offsets every query answers from; differs from the DOM sample when it is out of range. */
   getEffectiveScroll(): { scrollTop: number; scrollLeft: number };
 }
@@ -89,10 +100,7 @@ export const createGridGeometry = (
   );
   const clampTop = (scrollTop: number): number =>
     clampScroll(scrollTop, maxScrollTop(viewportOf(deps).height));
-  const clampLeft = (scrollLeft: number): number =>
-    clampScroll(scrollLeft, resolveLayout().totalWidth - viewportOf(deps).width);
   const scrollTopOf = (): number => clampTop(viewportOf(deps).scrollTop);
-  const scrollLeftOf = (): number => clampLeft(viewportOf(deps).scrollLeft);
 
   const buildRowGeometry = deps.createRowGeometry ?? createRowGeometry;
   const rowGeometry = buildRowGeometry({
@@ -122,23 +130,25 @@ export const createGridGeometry = (
       isOverridden: (layoutIndex) => deps.isWidthOverridden(layoutIndex),
     });
 
-  // Rebuilt only when the snapshot is replaced, never per query.
-  let indexed: { layout: ColumnLayoutSnapshot; index: ColumnIndex } | null = null;
-  const columnIndexOf = (layout: ColumnLayoutSnapshot): ColumnIndex => {
-    if (indexed?.layout !== layout) indexed = { layout, index: createColumnIndex(layout) };
-    return indexed.index;
+  // Region mapping and center prefixes are rebuilt only when the layout or
+  // the viewport width changes, never per scroll sample.
+  let geometryCache: { layout: ColumnLayoutSnapshot; geometry: ResolvedColumnGeometry } | null = null;
+  const resolveColumnGeometry = (): ResolvedColumnGeometry => {
+    const layout = resolveLayout();
+    if (geometryCache?.layout !== layout) {
+      geometryCache = { layout, geometry: createColumnGeometry(layout) };
+    }
+    return geometryCache.geometry;
   };
 
-  /** Only viewport space is scrolled: the rows wrapper sits inside the scrolling content. */
-  const columnLeft = (offset: number, space: GeometrySpace): number =>
-    space === "viewport" ? offset - scrollLeftOf() : offset;
+  const windowResolver = createColumnWindowResolver({
+    getLayout: resolveLayout,
+    getScrollLeft: () => viewportOf(deps).scrollLeft,
+    getViewportWidth: () => viewportOf(deps).width,
+    getOverscan: () => deps.getColumnOverscan(),
+  });
 
-  /** Row top in `space`; viewport space subtracts the logical scroll top. */
-  const rowTop = (viewIndex: number, space: GeometrySpace): number => {
-    if (space === "rows") return rowGeometry.getMapper().rowPosition(viewIndex);
-    if (space === "viewport") return rowGeometry.getRowViewportTop(viewIndex);
-    return rowGeometry.getRowOffset(viewIndex);
-  };
+  const scrollLeftOf = (): number => windowResolver.getScrollLeft();
 
   const refreshWindows = (): void => {
     const nextWindow = rowGeometry.getWindow();
@@ -161,12 +171,28 @@ export const createGridGeometry = (
     bumpRevision();
   };
 
+  const displayedOf = (layoutIndex: number): ResolvedColumn | undefined =>
+    resolveColumnGeometry().byLayoutIndex.get(layoutIndex);
+
+  const rowTop = (viewIndex: number, space: GeometrySpace): number => {
+    if (space === "rows") return rowGeometry.getMapper().rowPosition(viewIndex);
+    if (space === "viewport") return rowGeometry.getRowViewportTop(viewIndex);
+    return rowGeometry.getRowOffset(viewIndex);
+  };
+
+  const columnLeft = (column: ResolvedColumn, space: GeometrySpace): number => {
+    if (space === "viewport") {
+      return resolveColumnGeometry().viewportLeft(column.layoutIndex, scrollLeftOf()) ?? column.offset;
+    }
+    return column.offset;
+  };
+
   const getBounds = (
     viewIndex: number,
     layoutIndex: number,
     space: GeometrySpace,
   ): CellBounds | undefined => {
-    const column = columnIndexOf(resolveLayout()).byLayoutIndex(layoutIndex);
+    const column = displayedOf(layoutIndex);
     if (column === undefined) return undefined;
     rowGeometry.syncAxis();
     if (isRowIndex(viewIndex, rowGeometry.getAxis().count) === false) return undefined;
@@ -176,7 +202,7 @@ export const createGridGeometry = (
       layoutIndex,
       columnId: column.columnId,
       top: rowTop(viewIndex, space),
-      left: columnLeft(column.offset, space),
+      left: columnLeft(column, space),
       width: column.width,
       height: deps.getRowHeight(),
     };
@@ -190,19 +216,23 @@ export const createGridGeometry = (
     rowGeometry.syncAxis();
     const axis = rowGeometry.getAxis();
     const layout = resolveLayout();
-    const column = columnIndexOf(layout).byLayoutIndex(layoutIndex);
+    const column = displayedOf(layoutIndex);
     if (column === undefined || isRowIndex(viewIndex, axis.count) === false) return {};
+    const scrollLeft = from?.scrollLeft ?? scrollLeftOf();
     return resolveScrollTarget({
       axis,
       mapper: rowGeometry.getMapper(),
       layout,
       column,
+      region: column.region,
+      // The target is a displayed column, so the clip lookup cannot miss.
+      centerClip: resolveColumnGeometry().clip(layoutIndex)!,
       viewIndex,
       rowHeight: deps.getRowHeight(),
       viewport: viewportOf(deps),
       from: {
         scrollTop: from?.scrollTop ?? scrollTopOf(),
-        scrollLeft: from?.scrollLeft ?? scrollLeftOf(),
+        scrollLeft,
       },
     });
   };
@@ -221,6 +251,13 @@ export const createGridGeometry = (
       rowGeometry.syncAxis();
       refreshWindows();
     },
+    syncColumnWindow: () => {
+      const moved = windowResolver.commit();
+      // A window move is a real geometry change (B6): the same revision
+      // invalidation a row-window move triggers.
+      if (moved) bumpRevision();
+      return moved;
+    },
     setColumnLayoutMode: (mode) => {
       if (layoutResolver.getMode() === mode) return;
       layoutResolver.setMode(mode);
@@ -230,6 +267,7 @@ export const createGridGeometry = (
     },
     getColumnLayoutMode: () => layoutResolver.getMode(),
     getColumnLayout: () => resolveLayout(),
+    getColumnWindow: () => windowResolver.get(),
     getRowWindow: () => {
       service.syncWindows();
       return rowGeometry.getWindow();
@@ -239,6 +277,12 @@ export const createGridGeometry = (
       return rowGeometry.getVisibleWindow();
     },
     getRowGeometry: () => rowGeometry,
+    retainColumns: (key, columnIds) => {
+      windowResolver.retain(key, columnIds);
+    },
+    releaseColumns: (key) => {
+      windowResolver.retain(key, []);
+    },
     getEffectiveScroll: () => ({ scrollTop: scrollTopOf(), scrollLeft: scrollLeftOf() }),
     getRowBounds: (viewIndex, space = "viewport") => {
       rowGeometry.syncAxis();
@@ -247,10 +291,19 @@ export const createGridGeometry = (
       return { start, end: start + deps.getRowHeight() };
     },
     getColumnBounds: (layoutIndex, space = "viewport") => {
-      const column = columnIndexOf(resolveLayout()).byLayoutIndex(layoutIndex);
+      const column = displayedOf(layoutIndex);
       if (column === undefined) return undefined;
-      const left = columnLeft(column.offset, space);
-      return { start: left, end: left + column.width };
+      const start = columnLeft(column, space);
+      return { start, end: start + column.width };
+    },
+    getColumn: (layoutIndex) => displayedOf(layoutIndex),
+    getColumnClip: (layoutIndex) => resolveColumnGeometry().clip(layoutIndex),
+    getCenterClip: () => {
+      const layout = resolveLayout();
+      return {
+        start: layout.regions.startWidth,
+        end: layout.regions.startWidth + layout.regions.centerViewportWidth,
+      };
     },
     getCellBounds: (viewIndex, layoutIndex, space = "viewport") =>
       getBounds(viewIndex, layoutIndex, space),
@@ -258,22 +311,27 @@ export const createGridGeometry = (
       rowGeometry.getRowEdgeOffset(boundaryIndex, space),
     hitTest: (point: ViewportPoint) => {
       const domScrollTop = Number.isFinite(point.scrollTop) ? clampTop(point.scrollTop!) : scrollTopOf();
-      const scrollLeft = Number.isFinite(point.scrollLeft) ? clampLeft(point.scrollLeft!) : scrollLeftOf();
+      const scrollLeft = Number.isFinite(point.scrollLeft)
+        ? windowResolver.clampScrollLeft(point.scrollLeft!)
+        : scrollLeftOf();
       rowGeometry.syncAxis();
       const axis = rowGeometry.getAxis();
-      const layout = resolveLayout();
+      const geometry = resolveColumnGeometry();
 
       // The point arrives in DOM/viewport px; the axis is addressed in
       // logical content px, so the sample is mapped before the lookup.
       const logicalScrollTop = rowGeometry.getMapper().toLogicalScrollTop(domScrollTop);
       const row = axis.count === 0 ? -1 : axis.indexAt(point.y + logicalScrollTop);
-      const displayIndex = columnIndexOf(layout).indexAt(point.x + scrollLeft);
-      const column = layout.columns[displayIndex];
+      const displayIndex = geometry.columns.length === 0
+        ? -1
+        : geometry.displayedAt(point.x, scrollLeft);
+      const column = geometry.columns[displayIndex];
       return {
         row: clampRowSentinel(row, axis.count),
         displayIndex,
         col: column?.layoutIndex ?? -1,
         columnId: column?.columnId,
+        region: column?.region ?? null,
       };
     },
     getScrollTarget,

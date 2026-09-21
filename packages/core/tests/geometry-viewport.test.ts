@@ -22,8 +22,20 @@ interface Harness {
   queries: () => number;
 }
 
+const wideColumns = (count: number): ColumnDefinition[] =>
+  Array.from({ length: count }, (_, index) => ({
+    field: `c${index}`,
+    cellDataType: "text",
+    width: 100,
+  }));
+
 const createGrid = (
-  options: { rowCount?: number; viewportWidth?: number; columnLayout?: "fit" | "fixed" } = {},
+  options: {
+    rowCount?: number;
+    viewportWidth?: number;
+    columnLayout?: "fit" | "fixed";
+    columns?: ColumnDefinition[];
+  } = {},
 ): Harness => {
   const source: DataSource<Row> = {
     query: async (request: DataSourceRequest) => {
@@ -36,7 +48,7 @@ const createGrid = (
   };
   let queryCount = 0;
   const grid = new GridCore<Row>({
-    columns: columns(),
+    columns: options.columns ?? columns(),
     dataSource: source,
     rowHeight: 32,
     headerHeight: 32,
@@ -92,6 +104,45 @@ describe("geometry viewport updates", () => {
       expect(harness.grid.geometry.getColumnLayout()).toBe(first);
     }
     expect(harness.grid.geometry.getColumnLayout().revision).toBe(first.revision);
+  });
+
+  it("issues zero source queries and only window moves across 1,000 horizontal updates", async () => {
+    const harness = createGrid({
+      rowCount: 1_000,
+      viewportWidth: 320,
+      columnLayout: "fixed",
+      columns: wideColumns(500),
+    });
+    await harness.grid.initialize();
+    harness.grid.setViewport(0, 0, 320, 320);
+    harness.grid.setColumnState([{ columnId: "c0", pinned: "start" }]);
+
+    const queriesBefore = harness.queries();
+    harness.instructions.length = 0;
+    for (let step = 1; step <= 1_000; step += 1) {
+      harness.grid.setViewport(0, step * 30, 320, 320);
+    }
+
+    expect(harness.queries()).toBe(queriesBefore);
+    const types = new Set(typesOf(harness.instructions));
+    expect([...types]).toEqual(["SET_COLUMN_WINDOW"]);
+    expect(harness.instructions.length).toBeGreaterThan(0);
+    expect(harness.instructions.length).toBeLessThan(1_000);
+  });
+
+  it("emits nothing for a horizontal scroll inside the overscan margin", async () => {
+    const harness = createGrid({
+      rowCount: 1_000,
+      viewportWidth: 320,
+      columnLayout: "fixed",
+      columns: wideColumns(500),
+    });
+    await harness.grid.initialize();
+    harness.grid.setViewport(0, 0, 320, 320);
+
+    harness.instructions.length = 0;
+    harness.grid.setViewport(0, 4, 320, 320);
+    expect(harness.instructions).toEqual([]);
   });
 
   it("updates the layout when the same window gets a new width", async () => {

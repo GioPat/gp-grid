@@ -16,6 +16,10 @@ export const toReadonlyGeometry = (service: GridGeometry): GridGeometry =>
     getVisibleRowWindow: () => service.getVisibleRowWindow(),
     getRowBounds: (viewIndex, space) => service.getRowBounds(viewIndex, space),
     getColumnBounds: (layoutIndex, space) => service.getColumnBounds(layoutIndex, space),
+    getColumn: (layoutIndex) => service.getColumn(layoutIndex),
+    getColumnClip: (layoutIndex) => service.getColumnClip(layoutIndex),
+    getCenterClip: () => service.getCenterClip(),
+    getColumnWindow: () => service.getColumnWindow(),
     getCellBounds: (viewIndex, layoutIndex, space) =>
       service.getCellBounds(viewIndex, layoutIndex, space),
     getRowEdgeOffset: (boundaryIndex, space) => service.getRowEdgeOffset(boundaryIndex, space),

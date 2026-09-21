@@ -9,6 +9,7 @@ import type {
 import type { ColumnDefinition } from "./columns";
 import type {
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   RowDragEndEvent,
 } from "./events";
@@ -63,6 +64,11 @@ export interface GridCoreOptions<TData = unknown> {
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
   /**
+   * Extra center columns to mount per side, in CSS px, beyond the visible
+   * center clip. Default: 240. Must be finite and non-negative.
+   */
+  columnOverscan?: number;
+  /**
    * Maximum velocity (logical px/ms) that stacked touch flicks can
    * accumulate while scroll virtualization is active (datasets exceeding
    * the browser scroll limit). Higher values traverse huge datasets faster
@@ -93,4 +99,9 @@ export interface GridCoreOptions<TData = unknown> {
   onColumnResized?: (event: ColumnResizedEvent) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
+  /**
+   * Called after an explicit pin command, the header unpin control or a
+   * cross-region column drag changed a column's requested pin.
+   */
+  onColumnPinned?: (event: ColumnPinnedEvent) => void;
 }

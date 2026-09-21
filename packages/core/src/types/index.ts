@@ -24,6 +24,7 @@ export type {
 export type {
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
 } from "./events";
 
@@ -110,6 +111,7 @@ export type {
   DataLoadedInstruction,
   DataErrorInstruction,
   ColumnsChangedInstruction,
+  SetColumnWindowInstruction,
   GridInstruction,
   InstructionListener,
   BatchInstructionListener,
@@ -126,6 +128,10 @@ export type {
 export type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
+  ColumnPin,
+  ColumnRegion,
+  ColumnRegionLayout,
+  ColumnWindowSnapshot,
   DisplayedColumn,
   GeometrySpace,
   AxisBounds,

@@ -3,6 +3,7 @@
 
 import type { RowId } from "./basic";
 import type { ColumnId } from "./columns";
+import type { ColumnPin } from "./geometry";
 
 /** Emitted after a column width command. `viewIndex` is the resolved-layout index. */
 export interface ColumnResizedEvent {
@@ -17,6 +18,12 @@ export interface ColumnMovedEvent {
   columnId: ColumnId;
   fromViewIndex: number;
   toViewIndex: number;
+}
+
+/** Emitted after a column's requested pin changed; `null` means unpinned. */
+export interface ColumnPinnedEvent {
+  columnId: ColumnId;
+  pinned: ColumnPin | null;
 }
 
 /**

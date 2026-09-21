@@ -118,6 +118,7 @@ export class GridCore<TData = unknown> {
         getRowCount: () => this.rowData.getTotalRows(),
         getRowHeight: () => this.config.rowHeight,
         getOverscan: () => this.config.overscan,
+        getColumnOverscan: () => this.config.columnOverscan,
         getColumns: () => this.columnModel.getLayout(),
         isWidthOverridden: (layoutIndex) => this.columnModel.isWidthOverriddenAt(layoutIndex),
         getViewport: () => ({

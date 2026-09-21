@@ -20,6 +20,33 @@ export {
 } from "./column-layout";
 export { createColumnIndex, type ColumnIndex } from "./column-index";
 export {
+  partitionByPin,
+  flattenPartition,
+  regionBounds,
+  regionOfPin,
+  clampIndexToRegion,
+  baseIndexOfLayout,
+  type ColumnPartition,
+} from "./column-order";
+export {
+  EMPTY_REGION_LAYOUT,
+  getColumnRegionLayout,
+  regionAtIndex,
+} from "./column-regions";
+export {
+  UNMEASURED_CENTER_EXTENT,
+  buildCenterOffsets,
+  resolveCenterRange,
+  type CenterRangeInput,
+} from "./column-range";
+export {
+  MAX_RETAINED_COLUMNS,
+  MAX_RETENTION_KEYS,
+  mergeRetained,
+  resolveColumnWindow,
+} from "./column-window";
+export { createColumnGeometry } from "./column-geometry";
+export {
   createRowGeometry,
   type RowGeometry,
   type RowGeometryDeps,

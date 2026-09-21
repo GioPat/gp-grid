@@ -191,6 +191,10 @@ export type { Direction } from "./selection";
 export type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
+  ColumnPin,
+  ColumnRegion,
+  ColumnRegionLayout,
+  ColumnWindowSnapshot,
   DisplayedColumn,
   GeometrySpace,
   AxisBounds,
