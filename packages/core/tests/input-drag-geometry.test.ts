@@ -139,6 +139,27 @@ describe("pointer drags resolve through geometry", () => {
     const result = grid.input.handleDragMove(pointerAt(250, 3 * ROW_HEIGHT + 4), bounds);
     expect(result).toMatchObject({ targetRow: 3 });
   });
+
+  it("drops before the indicated end pin when base and displayed orders differ", async () => {
+    const grid = await createGrid();
+    try {
+      grid.setColumnPinned("b", "end");
+      expect(columnIds(grid)).toEqual(["a", "c", "b"]);
+
+      grid.input.handleHeaderMouseDown(0, 100, HEADER_HEIGHT, pointerAt(50, -10));
+      grid.input.handleDragMove(pointerAt(250, -10), bounds);
+      expect(grid.input.getDragState().columnMove).toMatchObject({
+        dropTargetIndex: 2,
+        dropIndicatorX: 200,
+      });
+      grid.input.handleDragEnd();
+
+      expect(columnIds(grid)).toEqual(["c", "a", "b"]);
+      expect(grid.getColumnState().find((column) => column.columnId === "a")?.pinned).toBe("end");
+    } finally {
+      grid.destroy();
+    }
+  });
 });
 
 describe("scroll corrections", () => {

@@ -19,7 +19,7 @@ import type {
 } from "./types";
 import type { SelectionManager } from "./selection";
 import { createGridGeometry, toReadonlyGeometry, type GridGeometryService } from "./geometry";
-import type { GeometrySpace, CellBounds, ColumnLayoutMode, GridGeometry } from "./types/geometry";
+import type { GeometrySpace, CellBounds, ColumnLayoutMode, ColumnPin, GridGeometry } from "./types/geometry";
 import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
@@ -37,6 +37,7 @@ import { buildGridManagers } from "./grid-core-managers";
 import { ColumnModel } from "./column-model";
 import {
   type ColumnCoreDeps,
+  applyColumnPin,
   applyColumnStateReset,
   applyColumnStateUpdates,
   applySetColumns,
@@ -101,6 +102,7 @@ export class GridCore<TData = unknown> {
       config: this.config,
       getColumns: () => this.columnModel.getLayout(),
       getGeometry: () => this.geometryService,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
     });
     this.rowData = managers.rowData;
     this.selection = managers.selection;
@@ -356,8 +358,19 @@ export class GridCore<TData = unknown> {
 
   startEdit(row: number, col: number): boolean {
     // The edit manager owns the read-only check so a refused, editable cell
-    // reports through the shared write-rejection diagnostic.
-    return this.editManager.startEdit(row, col);
+    // reports through the shared write-rejection diagnostic. Retention is
+    // registered only for an edit that will open, inside the same batch that
+    // publishes START_EDIT and the window mounting its editor (B7): a refused
+    // edit neither drops the current editor's keep-alive nor emits anything.
+    if (this.editManager.canEdit(col) === false) return this.editManager.startEdit(row, col);
+    const columnId = this.columnModel.idAt(col);
+    this.batcher.start();
+    try {
+      if (columnId !== undefined) this.retainEditColumn(columnId);
+      return this.editManager.startEdit(row, col);
+    } finally {
+      this.batcher.flush();
+    }
   }
 
   /**
@@ -462,6 +475,12 @@ export class GridCore<TData = unknown> {
       getLayout: () => this.columnModel.getLayout(),
       setColumnWidth: (columnId, width) => this.columnModel.setWidth(columnId, width),
       moveColumn: (fromIndex, toIndex) => this.columnModel.move(fromIndex, toIndex),
+      columnModel: this.columnModel,
+      selection: this.selection,
+      editManager: this.editManager,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      refreshGeometry: () => this.refreshGeometry(),
+      batcher: this.batcher,
       view: this.view,
     };
   }
@@ -495,13 +514,28 @@ export class GridCore<TData = unknown> {
    */
   moveColumn(fromIndex: number, toIndex: number): void {
     const applied = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
-    if (applied) {
-      this.config.onColumnMoved?.({
+    if (applied === null) return;
+    if (applied.pinChanged) {
+      this.config.onColumnPinned?.({
         columnId: applied.columnId,
-        fromViewIndex: applied.fromViewIndex,
-        toViewIndex: applied.toViewIndex,
+        pinned: applied.pinned ?? null,
       });
     }
+    this.config.onColumnMoved?.({
+      columnId: applied.columnId,
+      fromViewIndex: applied.fromViewIndex,
+      toViewIndex: applied.toViewIndex,
+    });
+  }
+
+  /**
+   * Pin a column against the inline start or end edge, or unpin it with
+   * `null`. Only a pin change moves a column between regions; the base order
+   * is untouched, so unpinning returns it to its base-order slot.
+   */
+  setColumnPinned(columnId: ColumnId, pinned: ColumnPin | null): void {
+    if (applyColumnPin(this.columnDeps(), columnId, pinned) === false) return;
+    this.config.onColumnPinned?.({ columnId, pinned });
   }
 
   /**
@@ -754,8 +788,18 @@ export class GridCore<TData = unknown> {
       view: this.view,
       getColumnLayout: () => this.geometry.getColumnLayout(),
       refreshGeometry: () => this.refreshGeometry(),
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       reloadAfterSchemaChange: () => this.refresh(),
     };
+  }
+
+  /** Bounded keep-alive for the edited column (B7), published as a batch. */
+  private retainEditColumn(columnId: ColumnId | null): void {
+    this.geometryService.retainColumns(
+      "edit",
+      columnId === null ? [] : [columnId],
+    );
+    this.view.syncEditRetention();
   }
 
   /**

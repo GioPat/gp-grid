@@ -85,8 +85,23 @@ describe("GridCore column state", () => {
     // `b` keeps its exact override; `c` keeps its definition width because
     // the core has no measured viewport in this test.
     expect(grid.getColumnState()).toEqual([
-      { columnId: "b", width: storedWidth, resolvedWidth: 180, hidden: false, order: 0 },
-      { columnId: "c", resolvedWidth: 100, hidden: false, order: 1 },
+      {
+        columnId: "b",
+        width: storedWidth,
+        resolvedWidth: 180,
+        hidden: false,
+        order: 0,
+        pinned: null,
+        region: "center",
+      },
+      {
+        columnId: "c",
+        resolvedWidth: 100,
+        hidden: false,
+        order: 1,
+        pinned: null,
+        region: "center",
+      },
     ]);
 
     const removed = instructions.filter((i) => i.type === "REMOVE_HEADERS");

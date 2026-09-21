@@ -2,6 +2,7 @@
 // Column definition types
 
 import type { CellDataType, CellValue } from "./basic";
+import type { ColumnPin, ColumnRegion } from "./geometry";
 import type { HighlightContext } from "./highlighting";
 import type {
   CellRendererParams,
@@ -17,6 +18,8 @@ export interface ColumnState {
   width?: number;
   hidden?: boolean;
   order?: number;
+  /** `null` is an explicit unpin that beats a definition default. */
+  pinned?: ColumnPin | null;
 }
 
 /** A single explicit column-state command. Unset properties are untouched. */
@@ -26,6 +29,8 @@ export interface ColumnStateUpdate {
   hidden?: boolean;
   /** Target index in the resolved layout (0-based). */
   order?: number;
+  /** Pin command; `null` unpins even when the definition declares a pin. */
+  pinned?: ColumnPin | null;
 }
 
 /**
@@ -40,6 +45,10 @@ export interface ColumnStateSnapshot {
   resolvedWidth: number;
   hidden: boolean;
   order: number;
+  /** Requested pin, or `null` while the column is unpinned. */
+  pinned: ColumnPin | null;
+  /** Effective region, or `null` while the column is hidden. Output-only. */
+  region: ColumnRegion | null;
 }
 
 /** Column state as stored by `ColumnModel`, before geometry resolves widths. */
@@ -48,6 +57,7 @@ export interface ColumnModelState {
   width?: number;
   hidden: boolean;
   order: number;
+  pinned: ColumnPin | null;
 }
 
 /** Column definition */
@@ -64,6 +74,12 @@ export interface ColumnDefinition {
   filterable?: boolean;
   /** Whether column is hidden. Hidden columns are not rendered but still exist in the definition. Default: false */
   hidden?: boolean;
+  /**
+   * Definition-level pin. `"start"`/`"end"` abut that viewport edge;
+   * `undefined` leaves the column in the scrolling center. An explicit
+   * `ColumnStateUpdate.pinned: null` overrides this default.
+   */
+  pinned?: ColumnPin;
   /** Whether column is resizable by dragging the header edge. Default: true */
   resizable?: boolean;
   /** Minimum width in pixels when resizing. Default: 50 */

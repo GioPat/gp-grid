@@ -3,21 +3,40 @@
 // function encapsulates the batch-emit + cache-maintenance sequence for
 // a single mutation so the GridCore facade stays thin.
 
-import type { DataSource, ColumnDefinition, ColumnId, FilterModel, SortModel } from "./types";
+import type {
+  DataSource,
+  ColumnDefinition,
+  ColumnId,
+  ColumnPin,
+  FilterModel,
+  SortModel,
+} from "./types";
 import { getColumnId } from "./column-model";
+import type { ColumnMoveResult } from "./column-model";
 import { normalizeColumnWidth } from "./geometry/column-widths";
 import type { SlotPoolManager } from "./slot-pool";
 import type { HighlightManager } from "./managers";
+import type { InstructionBatcher } from "./managers/instruction-batcher";
 import type { ViewSync } from "./grid-core-view-sync";
+import {
+  captureColumnTargets,
+  reconcileColumnTargets,
+  syncEditRetention,
+  type ColumnTargetDeps,
+  type EditRetentionDeps,
+} from "./grid-core-columns";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
-export interface ColumnOperationDeps<TData> {
+export interface ColumnOperationDeps<TData> extends ColumnTargetDeps, EditRetentionDeps {
   /** Current resolved layout. Never mutated by these operations. */
   getLayout: () => ColumnDefinition[];
   /** Write the pixel width override for a column ID and re-resolve the layout. */
   setColumnWidth: (columnId: ColumnId, width: number) => void;
-  /** Move a column and re-resolve; returns the applied target index or null. */
-  moveColumn: (fromIndex: number, toIndex: number) => number | null;
+  /** Move a column and re-resolve; returns the applied target or null. */
+  moveColumn: (fromIndex: number, toIndex: number) => ColumnMoveResult | null;
+  /** Commit column/row geometry before a batch captures its revision. */
+  refreshGeometry: () => void;
+  batcher: InstructionBatcher;
   view: ViewSync<TData>;
 }
 
@@ -26,6 +45,9 @@ export interface ColumnOperationResult {
   columnId: ColumnId;
   fromViewIndex: number;
   toViewIndex: number;
+  /** Requested pin the move adopted, when the move changed it. */
+  pinned?: ColumnPin | null;
+  pinChanged: boolean;
 }
 
 /**
@@ -41,9 +63,19 @@ export const applyColumnResize = <TData>(
   if (column === undefined) return null;
   // The stored width and the reported width agree with the applied one.
   const width = normalizeColumnWidth(displayedWidth);
-  deps.setColumnWidth(getColumnId(column), width);
-  deps.view.syncColumnLayout("geometry");
-  return { columnId: getColumnId(column), width };
+  const columnId = getColumnId(column);
+  // Commit the window through the shared geometry path before the batch
+  // publishes it: an uncommitted resolve would make the next scroll sample
+  // look like a window move (B6 requires no batch for an unchanged window).
+  deps.batcher.start();
+  try {
+    deps.setColumnWidth(columnId, width);
+    deps.refreshGeometry();
+    deps.view.syncColumnLayout("geometry");
+  } finally {
+    deps.batcher.flush();
+  }
+  return { columnId, width };
 };
 
 export const applyColumnMove = <TData>(
@@ -53,13 +85,28 @@ export const applyColumnMove = <TData>(
 ): ColumnOperationResult | null => {
   const column = deps.getLayout()[fromIndex];
   if (column === undefined) return null;
-  const adjustedTo = deps.moveColumn(fromIndex, toIndex);
-  if (adjustedTo === null) return null;
-  deps.view.syncColumnLayout("order");
+  // A move repartitions by pin, so everything addressed by a column index
+  // follows its identity, exactly like a column-state command (B7).
+  const targets = captureColumnTargets(deps);
+  let applied: ColumnMoveResult | null = null;
+  deps.batcher.start();
+  try {
+    applied = deps.moveColumn(fromIndex, toIndex);
+    if (applied === null) return null;
+    deps.refreshGeometry();
+    deps.view.syncColumnLayout("order");
+    deps.selection.clearSelectionRange();
+    reconcileColumnTargets(deps, targets);
+    syncEditRetention(deps);
+  } finally {
+    deps.batcher.flush();
+  }
   return {
     columnId: getColumnId(column),
     fromViewIndex: fromIndex,
-    toViewIndex: adjustedTo,
+    toViewIndex: applied.toIndex,
+    pinned: applied.pinned,
+    pinChanged: applied.pinChanged,
   };
 };
 

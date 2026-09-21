@@ -72,15 +72,28 @@ export class ColumnMoveDrag<TData = unknown> {
     this.gesture.dropTargetIndex = dropTargetIndex;
 
     const mouseXInContainer = event.clientX - left;
-    let scrollDx = 0;
-    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
-      scrollDx = -AUTO_SCROLL_SPEED;
-    } else if (mouseXInContainer > width - AUTO_SCROLL_THRESHOLD) {
-      scrollDx = AUTO_SCROLL_SPEED;
-    }
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
+    const autoScroll = this.moveAutoScroll(mouseXInContainer, width);
 
     return { targetRow: 0, targetCol: dropTargetIndex, autoScroll };
+  }
+
+  /** Horizontal auto-scroll applies only inside the scrolling center clip. */
+  private moveAutoScroll(
+    mouseXInContainer: number,
+    containerWidth: number,
+  ): { dx: number; dy: number } | null {
+    const layout = this.core.geometry.getColumnLayout();
+    const source = layout.columns.find(
+      (column) => column.layoutIndex === this.sourceColIndex,
+    );
+    if (source?.region !== "center" || layout.regions.centerViewportWidth <= 0) return null;
+    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
+      return { dx: -AUTO_SCROLL_SPEED, dy: 0 };
+    }
+    if (mouseXInContainer > containerWidth - AUTO_SCROLL_THRESHOLD) {
+      return { dx: AUTO_SCROLL_SPEED, dy: 0 };
+    }
+    return null;
   }
 
   end(cycleSortDirection: (current: SortDirection | null | undefined) => SortDirection | null): void {
@@ -138,11 +151,18 @@ export class ColumnMoveDrag<TData = unknown> {
     };
   }
 
-  /** Content-space x of the drop indicator, or the end edge of the layout. */
+  /** Viewport-space x of the drop indicator, or the end edge of the layout. */
   private dropIndicatorX(dropTargetIndex: number | null): number {
     if (dropTargetIndex === null) return 0;
     const layout = this.core.geometry.getColumnLayout();
     const column = layout.columns[dropTargetIndex];
-    return column?.offset ?? layout.totalWidth;
+    if (column === undefined) {
+      return this.core.geometry.getColumnBounds(
+        layout.columns.at(-1)?.layoutIndex ?? -1,
+        "viewport",
+      )?.end ?? layout.totalWidth;
+    }
+    return this.core.geometry.getColumnBounds(column.layoutIndex, "viewport")?.start
+      ?? column.offset;
   }
 }

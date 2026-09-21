@@ -13,6 +13,7 @@ import type { ViewSync } from "./grid-core-view-sync";
 import type {
   ColumnDefinition,
   ColumnId,
+  ColumnPin,
   RowId,
   ColumnStateSnapshot,
   ColumnStateUpdate,
@@ -31,6 +32,8 @@ export interface ColumnCoreDeps<TData> {
   getColumnLayout: () => ColumnLayoutSnapshot;
   /** Commit column/row geometry before a batch captures its revision. */
   refreshGeometry: () => void;
+  /** Keep the edited column mounted while an edit is open. */
+  retainEditColumn: (columnId: ColumnId | null) => void;
   reloadAfterSchemaChange: () => Promise<void>;
 }
 
@@ -40,6 +43,8 @@ export const applyColumnStateUpdates = <TData>(
   updates: ColumnStateUpdate[],
 ): void => {
   const targets = captureColumnTargets(deps);
+  const hiding = new Set(updates.filter((update) => update.hidden === true).map((u) => u.columnId));
+  commitHiddenEdit(deps, (columnId) => hiding.has(columnId));
   applyColumnStateChange(deps, deps.columnModel.setState(updates), targets);
 };
 
@@ -49,19 +54,58 @@ export const applyColumnStateReset = <TData>(
   columnIds?: ColumnId[],
 ): void => {
   const targets = captureColumnTargets(deps);
+  // Only an edit on a column that is about to become hidden is committed: a
+  // reset of width/order/pin leaves the editor in place (B7).
+  commitHiddenEdit(deps, (columnId) => isHiddenAfterReset(deps, columnId, columnIds));
   applyColumnStateChange(deps, deps.columnModel.resetState(columnIds), targets);
+};
+
+/** Whether dropping a column's state restores a hidden definition default. */
+const isHiddenAfterReset = <TData>(
+  deps: ColumnCoreDeps<TData>,
+  columnId: ColumnId,
+  columnIds: readonly ColumnId[] | undefined,
+): boolean => {
+  if (columnIds !== undefined && columnIds.includes(columnId) === false) return false;
+  return deps.columnModel.getDefinitions().get(columnId)?.hidden === true;
+};
+
+/**
+ * Pin a column against a viewport edge, or unpin it with `null`. Handled
+ * downstream exactly like an order change; returns whether anything changed.
+ */
+export const applyColumnPin = <TData>(
+  deps: ColumnCoreDeps<TData>,
+  columnId: ColumnId,
+  pinned: ColumnPin | null,
+): boolean => {
+  const before = deps.columnModel.getPin(columnId);
+  if (deps.columnModel.has(columnId) === false) return false;
+  if (before === pinned) return false;
+  const targets = captureColumnTargets(deps);
+  deps.columnModel.setPinned(columnId, pinned);
+  applyColumnStateChange(
+    deps,
+    { orderChanged: true, widthChanged: false, hiddenChanged: false, pinChanged: true },
+    targets,
+  );
+  return true;
 };
 
 export const readColumnState = <TData>(
   deps: ColumnCoreDeps<TData>,
 ): ColumnStateSnapshot[] => {
-  const resolved = new Map(
-    deps.getColumnLayout().columns.map((column) => [column.columnId, column.width]),
+  const displayed = new Map(
+    deps.getColumnLayout().columns.map((column) => [column.columnId, column]),
   );
-  return deps.columnModel.getState().map((state) => ({
-    ...state,
-    resolvedWidth: resolved.get(state.columnId) ?? 0,
-  }));
+  return deps.columnModel.getState().map((state) => {
+    const column = displayed.get(state.columnId);
+    return {
+      ...state,
+      resolvedWidth: column?.width ?? 0,
+      region: column?.region ?? null,
+    };
+  });
 };
 
 /**
@@ -120,13 +164,20 @@ const hasSameOrder = (before: readonly ColumnId[], after: readonly ColumnId[]): 
   before.length === after.length && before.every((id, index) => id === after[index]);
 
 /** Column identities of everything addressed by a column index. */
-interface ColumnTargets {
+export interface ColumnTargets {
   edit: ColumnId | undefined;
   peek: ColumnId | undefined;
   active: ColumnId | undefined;
 }
 
-const captureColumnTargets = <TData>(deps: ColumnCoreDeps<TData>): ColumnTargets => {
+/** Managers an identity reconciliation reads and writes. */
+export interface ColumnTargetDeps {
+  columnModel: ColumnModel;
+  selection: SelectionManager;
+  editManager: EditManager;
+}
+
+export const captureColumnTargets = (deps: ColumnTargetDeps): ColumnTargets => {
   const edit = deps.editManager.getState();
   const peek = deps.editManager.getPeekState();
   const activeCell = deps.selection.getActiveCell();
@@ -137,10 +188,7 @@ const captureColumnTargets = <TData>(deps: ColumnCoreDeps<TData>): ColumnTargets
   };
 };
 
-const reconcileColumnTargets = <TData>(
-  deps: ColumnCoreDeps<TData>,
-  targets: ColumnTargets,
-): void => {
+export const reconcileColumnTargets = (deps: ColumnTargetDeps, targets: ColumnTargets): void => {
   reconcileEditState(deps, targets.edit);
   reconcilePeekState(deps, targets.peek);
   reconcileActiveCell(deps, targets.active);
@@ -151,22 +199,54 @@ const applyColumnStateChange = <TData>(
   change: ColumnModelChange,
   targets: ColumnTargets,
 ): void => {
-  const changed = change.orderChanged || change.widthChanged || change.hiddenChanged;
+  const changed =
+    change.orderChanged || change.widthChanged || change.hiddenChanged || change.pinChanged;
   if (changed === false) return;
+  // A pin change reorders the visual layout and must not be published as a
+  // geometry-only change, which would leave cell contents behind.
+  const orderChange = change.orderChanged || change.pinChanged;
   deps.batcher.start();
   try {
     deps.refreshGeometry();
-    deps.view.syncColumnLayout(change.orderChanged ? "order" : "geometry");
-    if (change.orderChanged) deps.selection.clearSelectionRange();
+    deps.view.syncColumnLayout(orderChange ? "order" : "geometry");
+    if (orderChange) deps.selection.clearSelectionRange();
     reconcileColumnTargets(deps, targets);
+    syncEditRetention(deps);
   } finally {
     deps.batcher.flush();
   }
 };
 
-/** Cancel an edit whose column was removed, or follow it to its new index. */
-const reconcileEditState = <TData>(
+/**
+ * Commit an edit whose column is about to leave the displayed layout. The
+ * editor's value is never discarded silently.
+ */
+const commitHiddenEdit = <TData>(
   deps: ColumnCoreDeps<TData>,
+  willHide: (columnId: ColumnId) => boolean,
+): void => {
+  const edit = deps.editManager.getState();
+  if (edit === null) return;
+  const editingColumnId = deps.columnModel.idAt(edit.col);
+  if (editingColumnId === undefined || willHide(editingColumnId) === false) return;
+  deps.editManager.commit(edit.editId);
+};
+
+/** Keep the edited column mounted outside the center window while it is open. */
+export interface EditRetentionDeps {
+  columnModel: ColumnModel;
+  editManager: EditManager;
+  retainEditColumn: (columnId: ColumnId | null) => void;
+}
+
+export const syncEditRetention = (deps: EditRetentionDeps): void => {
+  const edit = deps.editManager.getState();
+  deps.retainEditColumn(edit === null ? null : deps.columnModel.idAt(edit.col) ?? null);
+};
+
+/** Cancel an edit whose column was removed, or follow it to its new index. */
+const reconcileEditState = (
+  deps: ColumnTargetDeps,
   previousColumnId: ColumnId | undefined,
 ): void => {
   const edit = deps.editManager.getState();
@@ -180,8 +260,8 @@ const reconcileEditState = <TData>(
   deps.editManager.remapColumn(nextIndex);
 };
 
-const reconcilePeekState = <TData>(
-  deps: ColumnCoreDeps<TData>,
+const reconcilePeekState = (
+  deps: ColumnTargetDeps,
   previousColumnId: ColumnId | undefined,
 ): void => {
   if (deps.editManager.getPeekState() === null) return;
@@ -195,8 +275,8 @@ const reconcilePeekState = <TData>(
 };
 
 /** Follow the active cell's column identity to its new index, or clear it. */
-const reconcileActiveCell = <TData>(
-  deps: ColumnCoreDeps<TData>,
+const reconcileActiveCell = (
+  deps: ColumnTargetDeps,
   previousColumnId: ColumnId | undefined,
 ): void => {
   const activeCell = deps.selection.getActiveCell();

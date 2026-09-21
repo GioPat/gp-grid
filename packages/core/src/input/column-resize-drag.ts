@@ -59,12 +59,30 @@ export class ColumnResizeDrag<TData = unknown> {
     this.currentWidth = newWidth;
 
     const mouseXInContainer = event.clientX - bounds.left;
-    const scrollDx = mouseXInContainer > bounds.width - AUTO_SCROLL_THRESHOLD
-      ? AUTO_SCROLL_SPEED
-      : 0;
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
+    const autoScroll = this.resizeAutoScroll(mouseXInContainer, bounds.width);
 
     return { targetRow: 0, targetCol: this.colIndex, autoScroll };
+  }
+
+  /**
+   * Only center columns can scroll horizontally, and only while the center
+   * clip holds more than it shows.
+   */
+  private resizeAutoScroll(
+    mouseXInContainer: number,
+    containerWidth: number,
+  ): { dx: number; dy: number } | null {
+    if (this.isCenterColumn() === false) return null;
+    const atEnd = mouseXInContainer > containerWidth - AUTO_SCROLL_THRESHOLD;
+    const atStart = mouseXInContainer < AUTO_SCROLL_THRESHOLD;
+    if (atEnd === false && atStart === false) return null;
+    return { dx: atEnd ? AUTO_SCROLL_SPEED : -AUTO_SCROLL_SPEED, dy: 0 };
+  }
+
+  private isCenterColumn(): boolean {
+    const layout = this.core.geometry.getColumnLayout();
+    const column = layout.columns.find((candidate) => candidate.layoutIndex === this.colIndex);
+    return column?.region === "center" && layout.regions.centerViewportWidth > 0;
   }
 
   end(): void {
@@ -85,9 +103,9 @@ export class ColumnResizeDrag<TData = unknown> {
     };
   }
 
-  /** Content-space x of the preview edge: committed left plus the ghost width. */
+  /** Viewport-space x of the preview edge: current left plus the ghost width. */
   private lineX(): number {
-    const bounds = this.core.geometry.getColumnBounds(this.colIndex, "content");
+    const bounds = this.core.geometry.getColumnBounds(this.colIndex, "viewport");
     return (bounds?.start ?? 0) + this.currentWidth;
   }
 }
