@@ -82,14 +82,17 @@ export class GpGridBindings<TData = unknown> {
     this.deps.vm.columns.set(core.getColumns());
     this.unsubscribe = core.onBatchInstruction((instructions) => {
       const vm = this.deps.vm;
+      // The applier is copy-on-write: a map the batch did not touch comes back
+      // by reference, so the signal's own equality check suppresses the
+      // notification without the binding comparing anything.
       const maps = applyBatchInstructions(
         instructions,
         vm.slots(),
         vm.headerState(),
         vm.batchSetters,
       );
-      vm.slots.set(new Map(maps.slots));
-      vm.headerState.set(new Map(maps.headers));
+      vm.slots.set(maps.slots);
+      vm.headerState.set(maps.headers);
     });
 
     core.initialize();

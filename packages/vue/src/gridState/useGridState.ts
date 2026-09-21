@@ -37,8 +37,10 @@ export function useGridState(args?: InitialStateArgs): {
    */
   const applyInstructions = (instructions: GridInstruction[]): void => {
     const current = state.value;
-    const workingSlots = new Map(current.slots);
-    const workingHeaders = new Map(current.headers);
+    // Copy-on-write: a window-only batch mutates no map, so both keep their
+    // identity and dependent computeds skip re-evaluating.
+    let workingSlots = current.slots;
+    let workingHeaders = current.headers;
 
     // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
     let mergedChanges: Partial<GridState> = {
@@ -47,6 +49,20 @@ export function useGridState(args?: InitialStateArgs): {
     };
 
     for (const instruction of instructions) {
+      switch (instruction.type) {
+        case "CREATE_SLOT":
+        case "DESTROY_SLOT":
+        case "ASSIGN_SLOT":
+        case "MOVE_SLOT":
+          if (workingSlots === current.slots) workingSlots = new Map(current.slots);
+          break;
+        case "UPDATE_HEADER":
+        case "REMOVE_HEADERS":
+          if (workingHeaders === current.headers) workingHeaders = new Map(current.headers);
+          break;
+        default:
+          break;
+      }
       const changes = applyInstruction(instruction, workingSlots, workingHeaders);
       if (changes) {
         Object.assign(mergedChanges, changes);

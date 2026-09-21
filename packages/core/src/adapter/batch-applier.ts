@@ -59,17 +59,35 @@ export const applyBatchInstructions = (
   currentHeaders: Map<string, HeaderData>,
   setters: BatchChangeSetters,
 ): MutableMaps => {
-  const maps: MutableMaps = {
-    slots: new Map(currentSlots),
-    headers: new Map(currentHeaders),
-  };
+  // Copy-on-write: a window-only batch leaves both maps untouched, so the
+  // wrapper's reactive containers keep their identity and skip re-rendering.
+  let slots: Map<string, SlotData> | null = null;
+  let headers: Map<string, HeaderData> | null = null;
+  const mapsOf = (): MutableMaps => ({
+    slots: slots ?? currentSlots,
+    headers: headers ?? currentHeaders,
+  });
   for (const instruction of instructions) {
+    switch (instruction.type) {
+      case "CREATE_SLOT":
+      case "DESTROY_SLOT":
+      case "ASSIGN_SLOT":
+      case "MOVE_SLOT":
+        slots ??= new Map(currentSlots);
+        break;
+      case "UPDATE_HEADER":
+      case "REMOVE_HEADERS":
+        headers ??= new Map(currentHeaders);
+        break;
+      default:
+        break;
+    }
     // Slot and header instructions mutate the maps in place and answer null.
-    const changes = applyInstruction(instruction, maps.slots, maps.headers);
+    const changes = applyInstruction(instruction, mapsOf().slots, mapsOf().headers);
     if (changes === null) continue;
     applyPartialState(changes, setters);
   }
-  return maps;
+  return mapsOf();
 };
 
 const applyPartialState = (
