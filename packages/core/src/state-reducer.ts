@@ -149,6 +149,12 @@ export const applyInstruction = <TData = unknown>(
         geometryRevision: instruction.revision,
       };
 
+    case "SET_COLUMN_WINDOW":
+      return {
+        columnWindow: instruction.window,
+        geometryRevision: instruction.revision,
+      };
+
     default:
       return null;
   }

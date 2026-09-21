@@ -1,6 +1,10 @@
 import type { CellValue, CellPosition, CellRange } from "../types/basic";
 import type { ColumnDefinition } from "../types/columns";
-import type { ColumnLayoutMode, ColumnLayoutSnapshot } from "../types/geometry";
+import type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+} from "../types/geometry";
 import type { GridInstruction } from "../types/instructions";
 import type { FilterPopupState, HeaderData, SlotData } from "../types/ui-state";
 import { applyInstruction } from "../state-reducer";
@@ -29,6 +33,8 @@ export interface BatchChangeSetters {
   setColumns: (v: ColumnDefinition[]) => void;
   /** Resolved displayed-column layout at the committed geometry revision. */
   setLayout?: (v: ColumnLayoutSnapshot) => void;
+  /** Center columns to mount at the committed geometry revision. */
+  setColumnWindow?: (v: ColumnWindowSnapshot) => void;
   /** Selected column layout mode, mirrored from the core. */
   setColumnLayout?: (v: ColumnLayoutMode) => void;
   /** Committed geometry revision, for wrapper-side change detection. */
@@ -76,6 +82,9 @@ const applyPartialState = (
   }
   if (changes.layout !== undefined && changes.layout !== null) {
     setters.setLayout?.(changes.layout);
+  }
+  if (changes.columnWindow !== undefined && changes.columnWindow !== null) {
+    setters.setColumnWindow?.(changes.columnWindow);
   }
   if (changes.filterPopup !== undefined) {
     setters.onFilterPopupChange(changes.filterPopup);

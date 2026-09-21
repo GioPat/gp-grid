@@ -191,19 +191,31 @@ export class GridCore<TData = unknown> {
     );
     if (!changed) return;
 
+    // A raw horizontal scroll cannot change which rows are visible: it only
+    // moves the mounted center window, and an unchanged range emits nothing.
+    // A vertical move still has to publish the column window when both axes
+    // moved in one sample.
+    const verticalWork =
+      viewportSizeChanged || previousHeight !== height || previousTop !== this.viewport.getScrollTop();
+    if (verticalWork === false) {
+      this.view.syncColumnWindowOnly(
+        () => this.emitScrollCorrection(),
+        () => this.hasScrollCorrection(),
+      );
+      return;
+    }
+
     // One batch: adapters reset the pending scroll per batch, so a correction
     // delivered ahead of the row sync would be dropped before it is applied.
+    // Geometry was committed once by `refreshGeometry`, so every instruction
+    // in this batch reports the same revision; the window is published here
+    // because a vertical-only slot sync does not re-emit content size.
     this.batcher.start();
     try {
       this.refreshGeometry();
-      const verticalWork =
-        viewportSizeChanged ||
-        previousHeight !== height ||
-        previousTop !== this.viewport.getScrollTop();
-      if (verticalWork) {
-        this.rowData.requestVisibleRows();
-      }
+      this.rowData.requestVisibleRows();
       this.view.syncVisibleRows(viewportSizeChanged);
+      this.view.publishColumnWindow();
     } finally {
       this.batcher.flush();
     }
@@ -211,25 +223,35 @@ export class GridCore<TData = unknown> {
 
   /**
    * Refresh the committed geometry dependencies before a batch captures its
-   * revision. Also corrects native scroll that a data/layout change left
-   * outside the reachable range.
+   * revision. The column window is committed here too, so a viewport or
+   * layout change publishes one geometry revision, not one per emitter. Also
+   * corrects native scroll that a data/layout change left outside the
+   * reachable range.
    */
   private refreshGeometry(): void {
     this.geometryService.refresh();
+    this.geometryService.syncColumnWindow();
     this.emitScrollCorrection();
   }
 
   /** Geometry already answers from the clamped sample; this moves the DOM to it. */
   private emitScrollCorrection(): void {
+    if (this.hasScrollCorrection() === false) return;
     const sampleTop = this.scrollTopOverride ?? this.viewport.getScrollTop();
     const sampleLeft = this.viewport.getScrollLeft();
     const { scrollTop, scrollLeft } = this.geometryService.getEffectiveScroll();
-    if (scrollTop === sampleTop && scrollLeft === sampleLeft) return;
     this.batcher.emit({
       type: "SCROLL_TO",
       scrollTop: scrollTop === sampleTop ? undefined : scrollTop,
       scrollLeft: scrollLeft === sampleLeft ? undefined : scrollLeft,
     });
+  }
+
+  private hasScrollCorrection(): boolean {
+    const sampleTop = this.scrollTopOverride ?? this.viewport.getScrollTop();
+    const sampleLeft = this.viewport.getScrollLeft();
+    const { scrollTop, scrollLeft } = this.geometryService.getEffectiveScroll();
+    return scrollTop !== sampleTop || scrollLeft !== sampleLeft;
   }
 
   /**

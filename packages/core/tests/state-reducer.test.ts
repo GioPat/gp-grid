@@ -449,6 +449,42 @@ describe("applyInstruction", () => {
       );
       expect(result).toEqual({ columns });
     });
+
+    it("SET_COLUMN_WINDOW and COLUMNS_CHANGED report the committed revision", () => {
+      const layout = {
+        revision: 2,
+        mode: "fit" as const,
+        totalWidth: 120,
+        regions: {
+          centerStart: 0,
+          centerEnd: 1,
+          startWidth: 0,
+          endWidth: 0,
+          endOffset: 120,
+          centerViewportWidth: 400,
+        },
+        columns: [],
+      };
+      const window = {
+        layout,
+        range: { start: 0, end: 0 },
+        start: [],
+        center: [],
+        end: [],
+      };
+
+      expect(applyInstruction<Row>(
+        { type: "SET_COLUMN_WINDOW", window, revision: 9 },
+        slots,
+        headers,
+      )).toEqual({ columnWindow: window, geometryRevision: 9 });
+
+      expect(applyInstruction<Row>(
+        { type: "COLUMNS_CHANGED", columns: [column], layout, revision: 10 },
+        slots,
+        headers,
+      )).toEqual({ columns: [column], layout, geometryRevision: 10 });
+    });
   });
 
   describe("instructions without reducer-side effects", () => {
