@@ -17,7 +17,31 @@ All notable changes to gp-grid will be documented in this file.
 - `SCROLL_TO` now carries an optional `scrollLeft` alongside `scrollTop`
 - See [Column layout and geometry](./features/column-layout.md)
 
+#### Column virtualization and pinning (PRD 004)
+- Pin state: `ColumnPin` (`"start" | "end"`), `ColumnDefinition.pinned` as a definition default, `ColumnState`/`ColumnStateUpdate.pinned` (`null` unpins even against a definition default), and `ColumnStateSnapshot.pinned` (requested) plus output-only `region` (effective, `null` while hidden)
+- `GridCore.setColumnPinned(columnId, pinned)` and the `onColumnPinned({ columnId, pinned })` option, fired by that command, the header toggle and a cross-region header drag; `setColumnState` stays silent
+- Region-partitioned layout: `ColumnRegion`, `ResolvedColumn` (`region`, `regionOffset`), `ColumnRegionLayout` and `ColumnLayoutSnapshot.regions`
+- `GridState.columnWindow` (`ColumnWindowSnapshot`) with the `SET_COLUMN_WINDOW` instruction and `BatchChangeSetters.setColumnWindow`, replacing per-column iteration with an admitted start/end plus bounded center window
+- `columnOverscan` (CSS px per side, default `240`) on `GridCore` and as a prop/input of every wrapper
+- `core.geometry.getColumnClip(layoutIndex)` and the resolved `region` on `hitTest` results
+- Inline-axis adapter kit: `readIsRtl`, `toInlineX`, `toPhysicalX`, `inlineOffset`, `readContainerBounds`, `fixedLeftForInline` and `normalizeHorizontalKey`, plus `ContainerBounds.rtl`
+- `GridIcon`/`defaultPinIcon` and the wrapper `pinIcon` values; `HeaderRendererParams.pinned`/`onPinChange` for custom pin UI
+- `GridLabels.pinColumn`/`unpinColumn`; the default header renders a pin toggle
+- `FillHandlePosition.region` (its `left` is now region-local)
+- See [Column pinning](./features/column-pinning.md)
+
 ### Changed
+
+#### Column virtualization and pinning (PRD 004)
+- **Breaking (0.x → 1.0):** `lineX` and `dropIndicatorX` on drag state are viewport x; a wrapper no longer subtracts its own `scrollLeft`. Custom adapters render them directly and remain direction-agnostic.
+- **Breaking (0.x → 1.0):** `ContainerBounds` now describes the client box (`rect.left + clientLeft`, `clientWidth`, so the scrollbar is excluded on either side) with an inline-start-relative `scrollLeft` (the DOM value negated in RTL) and an optional `rtl`. Build it with `readContainerBounds` instead of hand-assembling the fields.
+- **Breaking (0.x → 1.0):** `GridLabels` gained the required fields `pinColumn` and `unpinColumn`; a full `GridLabels` object literal must include them. `GridLabelOverrides` stays fully optional.
+- Wrappers render `state.columnWindow` instead of every `state.layout.columns` entry, and key cells and headers by `columnId`, so a column keeps its DOM node when it changes region.
+- A `scrollLeft`-only viewport update performs no row work: no source queries, no slot sync and no batch unless the mounted range moved.
+- The column of an open editor stays mounted outside the window until the edit commits or cancels; hiding that column commits the edit first.
+- Focus and keyboard navigation step to the next displayed column instead of a hidden one.
+- Core CSS and wrapper inline styles use logical properties (`inset-inline-start`, `border-inline-end`), and the wrappers read `dir` at mount and on resize — a `dir` flip without a resize needs a remount.
+- Headers and cells expose `aria-colindex`, and the grid exposes `role="grid"` with `aria-colcount`/`aria-rowcount`.
 
 #### Core geometry ownership (PRD 003)
 - Column widths, offsets and row geometry are resolved once in core; wrappers render `state.layout.columns` instead of computing scaled positions. `fit` is still the default and expands proportionally, but it never shrinks.
@@ -99,6 +123,48 @@ Invalid widths and diagnostics:
 // and warns once per column id
 core.setColumnState([{ columnId: "name", width: 0 }]);
 // [gp-grid] Invalid width for column "name"
+```
+
+Pinned columns (PRD 004):
+
+```ts
+// declarative definition default
+const columns = [{ field: "id", pinned: "start" }, { field: "name" }];
+
+// runtime command; `null` unpins even against a definition default
+core.setColumnPinned("name", "end");
+core.setColumnPinned("name", null);
+core.getColumnState(); // region tells you where it actually rendered
+
+// event on GridCore and every wrapper
+new GridCore({ columns, onColumnPinned: ({ columnId, pinned }) => { /* ... */ } });
+```
+
+Rendering the mounted window (custom adapters and wrappers):
+
+```ts
+// before: every displayed column, positioned by its content offset
+for (const column of state.layout.columns) { /* ... */ }
+
+// after: pins plus the bounded center window, each in its own region container
+const { start, center, end } = state.columnWindow ?? {};
+for (const column of center) {
+  cell.style.insetInlineStart = `${column.regionOffset}px`;
+}
+```
+
+Viewport-space drag overlays and inline-relative input:
+
+```ts
+// before: a wrapper converted content x and assembled the bounds by hand
+line.style.left = `${dragState.lineX - container.scrollLeft}px`;
+
+// after: `lineX`/`dropIndicatorX` are already viewport x
+line.style.left = `${dragState.lineX}px`;
+
+// and its input bounds come from the adapter kit, so RTL is a value, not a branch
+import { readContainerBounds, toPointerEventData } from "@gp-grid/core";
+core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl));
 ```
 
 

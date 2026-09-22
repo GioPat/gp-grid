@@ -30,6 +30,7 @@ A framework-agnostic TypeScript library for building high-performance data grids
 - [Data Sources](#data-sources)
 - [Types Reference](#types-reference)
 - [Column identity and state](#column-identity-and-state)
+- [Column layout and geometry](#column-layout-and-geometry)
 - [Creating a Framework Adapter](#creating-a-framework-adapter)
 - [API Reference](#api-reference)
 - [Donations](#donations)
@@ -444,7 +445,7 @@ interface HeaderRendererParams {
 
 Definition defaults < retained user state < explicit commands.
 
-A definition's `width`, `hidden` and position are initial defaults only. State retained from resizing, moving or hiding survives a `columns` replacement; passing a new array reference is never a reset. Definition order stays authoritative until a column is moved with `moveColumn`/`setColumnState({ order })`.
+A definition's `width`, `hidden`, `pinned` and position are initial defaults only. State retained from resizing, moving, hiding or pinning survives a `columns` replacement; passing a new array reference is never a reset. Definition order stays authoritative until a column is moved with `moveColumn`/`setColumnState({ order })`.
 
 ### Commands
 
@@ -454,21 +455,28 @@ interface ColumnStateUpdate {
   width?: number;
   hidden?: boolean;
   order?: number;
+  pinned?: "start" | "end" | null;
 }
 
 interface ColumnStateSnapshot {
   columnId: string;
-  width: number;
+  width?: number; // present only while an explicit pixel override exists
+  resolvedWidth: number; // displayed CSS px, 0 while hidden
   hidden: boolean;
   order: number;
+  pinned: "start" | "end" | null; // requested pin
+  region: "start" | "center" | "end" | null; // effective, null while hidden
 }
 ```
 
 | Command | Behavior |
 | --- | --- |
-| `setColumnState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. |
+| `setColumnState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. `pinned: null` unpins even against a definition default. Silent, like every state command. |
 | `resetColumnState(columnIds?)` | Drop user state. No argument resets every column to its definition defaults; IDs reset only those columns. |
-| `getColumnState()` | Effective width, visibility and order per column, in layout order. |
+| `getColumnState()` | Effective width, visibility, order and pin per column, in layout order. |
+| `setColumnPinned(columnId, pinned)` | Pin a column to the inline start or end (`null` unpins). Fires `onColumnPinned`. |
+
+Only a pin change moves a column between regions; `order` clamps into the column's own region, and unpinning returns it to its base-order slot.
 
 ### Duplicate ids
 
@@ -496,7 +504,10 @@ Column and row interaction events are object-shaped.
 | --- | --- |
 | `onColumnResized` | `{ columnId, width, viewIndex }` |
 | `onColumnMoved` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `onColumnPinned` | `{ columnId, pinned }` (`null` when unpinned) |
 | `onRowDragEnd` | `{ rowId, fromViewIndex, toViewIndex }` |
+
+`onColumnPinned` fires for `setColumnPinned`, the header pin toggle and a cross-region header drag — not for `setColumnState`.
 
 `CellValueChangedEvent` gained `columnId`; `colIndex` remains and is the current view column index. Cell, edit and header renderer params gained `columnId` as well.
 
@@ -527,7 +538,9 @@ resolved and is changeable at runtime with `GridCore.setColumnLayout(mode)`:
 | `getColumnLayout()` | `{ revision, mode, columns, totalWidth }` per displayed column |
 | `getRowWindow()` / `getVisibleRowWindow()` | Half-open `{ start, end }` |
 | `getRowBounds(i, space?)` / `getColumnBounds(layoutIndex, space?)` / `getCellBounds(i, layoutIndex, space?)` | Bounds in the requested space |
-| `hitTest({ x, y })` / `getScrollTarget(row, col)` | Pointer target / DOM scroll offsets |
+| `hitTest({ x, y })` / `getScrollTarget(row, col)` | Pointer target (with the resolved `region`) / DOM scroll offsets |
+| `getColumnClip(layoutIndex)` | Viewport x-range of the region a column renders in |
+| `getColumnWindow()` | The mounted window: `{ layout, range, start, center, end }` |
 | `getContentSize()` | Logical body size in `"content"` coordinates |
 
 `GridCore.getCellBounds(rowId, columnId, space?)` resolves identities through
@@ -549,6 +562,42 @@ rows; until the first measurement core assumes 600 px. A width-only viewport
 update performs no row work. Windows are half-open; legacy inclusive APIs adapt at
 the boundary as `{ start, end: end - 1 }` (`{ start: 0, end: -1 }` when empty).
 
+### Column pinning and the mounted window
+
+`ColumnDefinition.pinned` and `ColumnStateUpdate.pinned` request `"start"` or
+`"end"`. The resolved layout is the stable partition `start | center | end`, so
+index spaces, selection and fill stay contiguous in visual order; unpinning
+returns a column to its base-order slot. Admission walks start pins outer to
+inner while `used + width <= viewportWidth`, then end pins on what is left; the
+first rejection closes its region, and a rejected pin keeps its request while
+rendering as a center column until it fits. An unmeasured viewport admits all.
+
+`GridState.columnWindow` is what a wrapper mounts:
+
+```ts
+interface ColumnWindowSnapshot {
+  layout: ColumnLayoutSnapshot;
+  range: AxisBounds; // half-open displayed-index range of center columns
+  start: readonly ResolvedColumn[];
+  center: readonly ResolvedColumn[]; // range plus retained columns
+  end: readonly ResolvedColumn[];
+}
+```
+
+`columnOverscan` (default `240`) is the CSS px of center columns kept mounted
+past each clip edge. A `scrollLeft`-only `setViewport` runs only this sync — no
+source queries, no slot work and no batch unless the mounted range moved. An
+open editor's column is retained outside the range until the edit ends, and
+hiding it commits the edit first.
+
+Core never reads `direction`: every x is an offset from the inline-start edge,
+and `adapter/inline-axis.ts` is the only direction-aware code. `readIsRtl`,
+`toInlineX`, `toPhysicalX`, `inlineOffset`, `readContainerBounds`,
+`fixedLeftForInline` and `normalizeHorizontalKey` are exported for adapters;
+`ContainerBounds` describes the client box with an inline-relative `scrollLeft`
+and an optional `rtl`. A `dir` flip without a resize needs a remount. See
+[Column pinning](../../docs/features/column-pinning.md).
+
 ## Creating a Framework Adapter
 
 To integrate @gp-grid/core with any UI framework:
@@ -557,8 +606,9 @@ To integrate @gp-grid/core with any UI framework:
 2. **Maintain UI state** by processing instructions
 3. **Render slots** based on the slot pool state
 4. **Forward user interactions** back to GridCore
-5. **Render columns from `COLUMNS_CHANGED.layout`** and report viewport
-   measurements through `setViewport`; never recompute widths or positions
+5. **Render `COLUMNS_CHANGED.layout` / `SET_COLUMN_WINDOW`** and report viewport
+   measurements through `setViewport`; never recompute widths, positions or the
+   mounted window
 
 ### Example: Minimal Adapter Pattern
 
@@ -639,9 +689,11 @@ class MyGridAdapter {
 | `initialize()`                                      | Initialize grid and load initial data      |
 | `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
 | `setColumns(columns)`                               | Reconcile definitions by `ColumnId`        |
-| `setColumnState(updates)`                           | Apply explicit width/hidden/order commands |
+| `setColumnState(updates)`                           | Apply explicit width/hidden/order/pin commands |
 | `resetColumnState(columnIds?)`                      | Drop user column state                     |
-| `getColumnState()`                                  | Effective width/hidden/order per column    |
+| `getColumnState()`                                  | Effective width/hidden/order/pin per column |
+| `setColumnPinned(columnId, pinned)`                 | Pin a column to an edge, or unpin with `null` |
+| `setColumnLayout(mode)`                             | Select `"fit"` or `"fixed"` displayed widths |
 | `setSort(colId, direction, addToExisting)`          | Set column sort                            |
 | `setFilter(colId, value)`                           | Set column filter                          |
 | `startEdit(row, col)`                               | Start editing a cell                       |

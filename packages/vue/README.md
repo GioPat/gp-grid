@@ -36,6 +36,7 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - **Column Filtering**: Built-in filter row with debounced input
 - **Cell Editing**: Double-click or press Enter to edit, with custom editor support
 - **Fill Handle**: Excel-like drag-to-fill for editable cells
+- **Column Pin**: Pin columns to the start or end edge; a bounded column window keeps wide grids flat
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
@@ -529,6 +530,39 @@ Events are object-shaped in every wrapper; there is no compatibility adapter.
 
 The old prop-driven `columns[i].width = newWidth` mutation becomes `:column-state="[{ columnId: 'city', width: newWidth }]"`; `hidden` follows the same shape.
 
+## Column pinning
+
+Set `pinned: "start"` or `"end"` on a definition, or drive it at runtime through
+the exposed core (`.value` unwraps the `ShallowRef`):
+`gridRef.value.core.setColumnPinned(columnId, "start")`. `"start"`/`"end"` abut
+that edge; `null` unpins. A pin is a request: when the viewport cannot fit it
+the column renders in the scrolling center and is admitted again once there is
+room, so read the effective `region` from `core.getColumnState()` rather than
+assuming the request took effect.
+
+The default header renders a pin toggle — override its glyph with `pin-icon` and
+its accessible names with `labels.pinColumn`/`labels.unpinColumn`. A custom
+header renderer receives `pinned` and `onPinChange(pinned)` and can supply its
+own control.
+
+```vue
+<template>
+  <GpGrid
+    :columns="[{ field: 'id', pinned: 'start' }, { field: 'name' }]"
+    :row-data="rows"
+    :row-height="36"
+    :column-overscan="240"
+    :on-column-pinned="({ columnId, pinned }) => persistPin(columnId, pinned)"
+  />
+</template>
+```
+
+Only the admitted pins plus a window of center columns are mounted, so a
+1,000-column grid renders about as many cells as a 20-column one.
+`column-overscan` is the CSS px of center columns kept mounted past each edge
+(default `240`). An open editor keeps its column mounted until the edit ends.
+See [Column pinning](../../docs/features/column-pinning.md).
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference
@@ -538,8 +572,9 @@ The public website documentation for this package lives outside this repository 
 | Prop              | Type                                | Default     | Description                                                 |
 | ----------------- | ----------------------------------- | ----------- | ----------------------------------------------------------- |
 | `columns`         | `ColumnDefinition[]`                | required    | Column definitions                                          |
-| `columnState`     | `ColumnStateUpdate[]`               | -           | Controlled `{ columnId, width?, hidden?, order? }` state applied through the core |
+| `columnState`     | `ColumnStateUpdate[]`               | -           | Controlled `{ columnId, width?, hidden?, order?, pinned? }` state applied through the core |
 | `columnLayout`   | `"fit" \| "fixed"`                    | `"fit"`    | Displayed-width policy: `"fit"` expands columns to the viewport, `"fixed"` keeps declared/overridden widths |
+| `columnOverscan` | `number`                             | `240`       | CSS px of center columns kept mounted past each clip edge    |
 | `dataSource`      | `DataSource<TData>`                 | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                           | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                            | required    | Height of each row in pixels                                |
@@ -555,8 +590,10 @@ The public website documentation for this package lives outside this repository 
 | `cellRenderer`    | `VueCellRenderer`                   | -           | Global fallback cell renderer                               |
 | `editRenderer`    | `VueEditRenderer`                   | -           | Global fallback edit renderer                               |
 | `headerRenderer`  | `VueHeaderRenderer`                 | -           | Global fallback header renderer                             |
+| `pinIcon`         | `GridIcon`                          | push-pin    | SVG used by the default header's pin toggle (`:pin-icon`)   |
 | `onColumnResized` | `(event: ColumnResizedEvent) => void` | -         | Called with `{ columnId, width, viewIndex }`                |
 | `onColumnMoved`   | `(event: ColumnMovedEvent) => void`   | -         | Called with `{ columnId, fromViewIndex, toViewIndex }`      |
+| `onColumnPinned`  | `(event: ColumnPinnedEvent) => void`  | -         | Called with `{ columnId, pinned }` when a pin changes       |
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -         | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
 | `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |
@@ -574,6 +611,7 @@ The public website documentation for this package lives outside this repository 
 | `cellRenderer`   | `string`       | Key in `cellRenderers` registry                                     |
 | `editRenderer`   | `string`       | Key in `editRenderers` registry                                     |
 | `headerRenderer` | `string`       | Key in `headerRenderers` registry                                   |
+| `pinned`         | `"start" \| "end"` | Initial pin against that viewport edge; an explicit `pinned: null` command unpins |
 
 ### Renderer Types
 

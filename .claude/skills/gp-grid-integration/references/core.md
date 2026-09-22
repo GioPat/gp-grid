@@ -99,6 +99,7 @@ Every UI change is one of these instructions. Each wrapper has its own dispatch 
 | `START_ROW_DRAG` / `UPDATE_ROW_DRAG` / `COMMIT_ROW_DRAG` / `CANCEL_ROW_DRAG` | Row drag lifecycle. |
 | `SET_HOVER_POSITION` | Update hover position (drives highlighting). |
 | `SET_CONTENT_SIZE` | Update virtual content size (for the inner scroll surface). |
+| `SET_COLUMN_WINDOW` | Publish `GridState.columnWindow` — the admitted pins plus the bounded center window a wrapper mounts instead of every displayed column. |
 
 The full set is exported from `@gp-grid/core` as discriminated TypeScript types (`CreateSlotInstruction`, `DestroySlotInstruction`, etc., all under the `GridInstruction` union).
 
@@ -115,7 +116,6 @@ container.addEventListener("scroll", () => {
     container.clientHeight,
   );
 });
-
 cell.addEventListener("pointerdown", (e) => {
   grid.input.cellPointerDown(rowIndex, colIndex, toPointerEventData(e));
 });
@@ -128,6 +128,14 @@ container.addEventListener("paste", (e) => {
   grid.input.pasteText(e.clipboardData?.getData("text/plain") ?? "", editingCell, filterPopupOpen);
 });
 ```
+
+Pointer drags also need the container's client box, which carries the direction:
+`grid.input.handleDragMove(toPointerEventData(e), readContainerBounds(bodyEl))`.
+Core reads no `direction` itself — it works in inline-start-relative x, so build
+bounds with `readContainerBounds` and convert physical x with `toInlineX` /
+`toPhysicalX`; `normalizeHorizontalKey(key, rtl)` swaps the horizontal arrows in
+RTL. `scrollLeft` in `ContainerBounds` is the inline-relative value (the DOM
+value negated in RTL), while `grid.setViewport` takes the physical DOM value.
 
 The core exposes a unified `InputHandler` (`grid.input`) that returns small actions (`{ preventDefault, focusContainer, ... }`) you apply to the original event. There's also an **adapter kit** with shared primitives:
 
@@ -166,13 +174,16 @@ grid.getRowData(viewIndex);                      // source record, or undefined
 grid.hasRow(viewIndex);                          // whether the view row exists
 grid.getViewRow(viewIndex);                      // { kind, id, viewIndex, record? } | undefined
 grid.getRecordById(rowId);                       // source record for a stable id
-grid.setColumnState([{ columnId, width, hidden, order }]);
+grid.setColumnState([{ columnId, width, hidden, order, pinned }]);
+grid.setColumnPinned(columnId, "start");         // "end", or null to unpin
 grid.setColumnLayout("fixed");                   // or "fit" (default)
 grid.resetColumnState([columnId]);               // omit arg to reset all
-grid.getColumnState();                           // [{ columnId, width?, resolvedWidth, hidden, order }]
-grid.geometry.getColumnLayout();                 // { revision, mode, columns, totalWidth }
+grid.getColumnState();                           // [{ columnId, width?, resolvedWidth, hidden, order, pinned, region }]
+grid.geometry.getColumnLayout();                 // { revision, mode, columns, totalWidth, regions }
+grid.geometry.getColumnWindow();                 // { layout, range, start, center, end }
+grid.geometry.getColumnClip(0);                  // viewport x-range of that column's region
 grid.geometry.getCellBounds(0, 0, "viewport");   // { top, left, width, height, ... }
-grid.geometry.hitTest({ x: 10, y: 10 });         // { row, displayIndex, col, columnId? }
+grid.geometry.hitTest({ x: 10, y: 10 });         // { row, displayIndex, col, columnId?, region }
 grid.geometry.getScrollTarget(12, 0);            // { scrollTop?, scrollLeft? }
 grid.getSlotGeneration(rowIndex);                // slot recycle guard
 grid.isSlotGenerationCurrent(rowIndex, generation);
@@ -225,7 +236,8 @@ The minimal wrapper does five things, in order:
 2. **Instantiate `GridCore`** with the user's options.
 3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
-5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.setColumnState`.
+5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved`, `onColumnPinned` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.setColumnState`.
+6. **Render the mounted column window**, not every displayed column: `GridState.columnWindow` gives `start` / `center` / `end` resolved columns, each with a region-local `regionOffset`. Key cells and headers by `columnId` so a column keeps its DOM node when it changes region, and place `lineX` / `dropIndicatorX` (viewport x) and the fill handle's region-local `left` directly.
 
 For a complete reference implementation, read **`packages/react/src/Grid.tsx`** and **`packages/react/src/gridState/`** end to end. The Vue wrapper (`packages/vue/src/GpGrid.vue` + `packages/vue/src/gridState/`) is the same shape with Vue reactivity. The Angular wrapper (`packages/angular/src/lib/gp-grid.component.ts` + `gp-grid-bindings.ts` + `gp-grid-view-model.ts`) is the same shape with signals.
 
@@ -242,7 +254,8 @@ Adapters can call `formatCellValue` (exported from `@gp-grid/core`) to match the
 
 ### Localization and long text
 
-- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridLabelOverrides`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(overrides)`, and `formatLabel(template, params)`. The official wrappers resolve a `GridLabelOverrides` prop into full labels and pass them to their filter popup / body; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
+- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridLabelOverrides`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(overrides)`, and `formatLabel(template, params)`. The pin toggle uses `pinColumn` and `unpinColumn`. The official wrappers resolve a `GridLabelOverrides` prop into full labels and pass them to their UI; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
+- **Pin icon:** `GridIcon` is `{ path: string; viewBox?: string }`; `defaultPinIcon` is the framework-neutral SVG definition used by the wrappers.
 - **Long text:** `ColumnDefinition.wrapText` (default `false`) makes the default renderer wrap overflowing text onto new lines instead of truncating with an ellipsis. The canonical CSS already ships the `.gp-grid-cell--wrap` and `.gp-grid-cell-content` rules, so adapters that apply the core's cell classes get this for free.
 
 ## CSS

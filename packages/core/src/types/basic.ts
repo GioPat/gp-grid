@@ -21,7 +21,7 @@ export type RowId = string | number;
 /**
  * A displayed row and its identity. Built on request — the grid never
  * allocates one per row. 002 only produces `kind: "record"`; groups and
- * aggregates arrive with later PRDs.
+ * aggregates are planned for later releases.
  */
 export interface ViewRow<TData = unknown> {
   kind: "record";

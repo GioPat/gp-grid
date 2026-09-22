@@ -7,6 +7,7 @@ A high-performance virtualized data grid for React applications.
 - [Sorting](./features/sorting.md) - Column sorting with multi-column support
 - [Filtering](./features/filtering.md) - Type-aware filtering with popup UI
 - [Column layout and geometry](./features/column-layout.md) - Width modes, overrides, geometry queries and coordinate spaces
+- [Column pinning](./features/column-pinning.md) - Start/end pins, viewport admission, the mounted column window, `columnOverscan` and RTL
 - [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only) - Borrowed columns, read-only access, and revision refresh with inferred or explicit row counts
 
 ## Changelog

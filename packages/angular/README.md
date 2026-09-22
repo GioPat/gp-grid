@@ -130,7 +130,7 @@ export class App {
 
 ## Column state and events
 
-`columnState` is an optional input of type `ColumnStateUpdate[]` — `{ columnId, width?, hidden?, order? }` — applied through the core whenever it changes.
+`columnState` is an optional input of type `ColumnStateUpdate[]` — `{ columnId, width?, hidden?, order?, pinned? }` — applied through the core whenever it changes.
 
 `columnLayout` is an optional input of type `"fit" | "fixed"` (default `"fit"`).
 `"fit"` expands columns without an explicit pixel override so their total
@@ -139,10 +139,22 @@ widths and scrolls horizontally. Changing the input switches the mode without
 recreating the core. `getColumnState()` reports `width` only while an explicit
 override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
 
+`columnOverscan` (default `240` CSS px) is how far past each clip edge center
+columns stay mounted. `pinIcon` replaces the default header pin-toggle SVG.
+
+Pinning: set `pinned: "start"` or `"end"` on a definition, or call
+`core.setColumnPinned(columnId, "start" | "end" | null)` on the exposed core
+(`grid.core` via `@ViewChild`). A pin is a request — when the viewport cannot
+fit it the column renders in the scrolling center and is admitted again once
+there is room, so read `region` from `getColumnState()`. Only the admitted pins
+plus a window of center columns are mounted. See
+[Column pinning](../../docs/features/column-pinning.md).
+
 | Output | Payload |
 | --- | --- |
 | `(onColumnResized)` | `{ columnId, width, viewIndex }` |
 | `(onColumnMoved)` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `(onColumnPinned)` | `{ columnId, pinned }` (`null` when unpinned) |
 | `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
 
@@ -153,7 +165,8 @@ override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
   [dataSource]="grid.dataSource"
   [rowHeight]="36"
   (onColumnResized)="onResized($event)"
-  (onColumnMoved)="onMoved($event)" />
+  (onColumnMoved)="onMoved($event)"
+  (onColumnPinned)="onPinned($event)" />
 ```
 
 ### Migration from 0.x
