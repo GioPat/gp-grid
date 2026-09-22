@@ -37,7 +37,7 @@ const TEMPLATE = `
     />
   }
   @if (isResizing()) {
-    <div class="gp-grid-column-resize-line" [style.left.px]="resizeLineLeft()"></div>
+    <div class="gp-grid-column-resize-line" [style.inset-inline-start.px]="resizeLineLeft()"></div>
   }
   @if (isLoading()) {
     <div
@@ -64,7 +64,7 @@ const TEMPLATE = `
     @if (columnMoveDropLeft() !== null) {
       <div
         class="gp-grid-column-drop-indicator"
-        [style.left.px]="columnMoveDropLeft()"
+        [style.inset-inline-start.px]="columnMoveDropLeft()"
         [style.height.px]="headerHeight()"></div>
     }
   }

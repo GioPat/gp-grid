@@ -19,6 +19,9 @@ import type {
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
+  readContainerBounds,
+  readIsRtl,
+  normalizeHorizontalKey,
   PendingCellTapController,
   TAP_SLOP_PX,
   ROW_DRAG_HOLD_MS,
@@ -116,19 +119,11 @@ export function useInputHandler<TData = unknown>(
     }
   });
 
-  // Get container bounds
+  // Get container bounds (client box, inline-relative scroll)
   function getContainerBounds(): ContainerBounds | null {
     const container = containerRef.value;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: container.scrollTop,
-      scrollLeft: container.scrollLeft,
-    };
+    if (container === null) return null;
+    return readContainerBounds(container);
   }
 
   // Convert pointer event to PointerEventData
@@ -418,7 +413,9 @@ export function useInputHandler<TData = unknown>(
 
     const result = core.input.handleKeyDown(
       {
-        key: e.key,
+        // Arrows are normalized here, not in core: selection is
+        // direction-agnostic and the editor sees the physical key.
+        key: normalizeHorizontalKey(e.key, readIsRtl(container)),
         shiftKey: e.shiftKey,
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,

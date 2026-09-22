@@ -1,6 +1,7 @@
 // packages/vue/src/composables/useAutoScroll.ts
 
 import { ref, onUnmounted, type Ref } from "vue";
+import { readIsRtl, toPhysicalX } from "@gp-grid/core";
 
 const AUTO_SCROLL_INTERVAL = 16; // ~60fps
 
@@ -20,11 +21,13 @@ export function useAutoScroll(
     if (autoScrollInterval.value) {
       clearInterval(autoScrollInterval.value);
     }
+    // Horizontal deltas are inline-relative; sample the direction once.
+    const rtl = readIsRtl(containerRef.value);
     autoScrollInterval.value = setInterval(() => {
       const container = containerRef.value;
       if (container) {
         container.scrollTop += dy;
-        container.scrollLeft += dx;
+        container.scrollLeft += toPhysicalX(dx, rtl);
         onTick?.();
       }
     }, AUTO_SCROLL_INTERVAL);

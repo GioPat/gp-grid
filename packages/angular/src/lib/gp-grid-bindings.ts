@@ -7,7 +7,10 @@ import {
   PendingRowDragController,
   TouchScrollController,
   applyBatchInstructions,
+  readIsRtl,
   scrollCellIntoView,
+  toInlineX,
+  toPhysicalX,
 } from '@gp-grid/core';
 import type {
   ColumnDefinition,
@@ -44,6 +47,12 @@ export class GpGridBindings<TData = unknown> {
   coreRef: GridCore<TData> | null = null;
   private unsubscribe: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private rtl = false;
+
+  /** Inline direction sampled from the body element; a `dir` flip needs a remount. */
+  get isRtl(): boolean {
+    return this.rtl;
+  }
 
   constructor(private readonly deps: GpGridBindingsDeps) {
     this.autoScroll = new AutoScrollDriver(
@@ -105,9 +114,11 @@ export class GpGridBindings<TData = unknown> {
    */
   observeViewport(bodyEl: HTMLElement): void {
     const report = (): void => {
+      this.rtl = readIsRtl(bodyEl);
+      this.touchScroll.resetDirection();
       this.coreRef?.setViewport(
         bodyEl.scrollTop,
-        bodyEl.scrollLeft,
+        toInlineX(bodyEl.scrollLeft, this.rtl),
         bodyEl.clientWidth,
         bodyEl.clientHeight,
       );
@@ -170,7 +181,7 @@ export class GpGridBindings<TData = unknown> {
       this.deps.vm.pendingScrollTop.set(null);
     }
     if (left !== null) {
-      body.scrollLeft = left;
+      body.scrollLeft = toPhysicalX(left, this.rtl);
       this.deps.vm.pendingScrollLeft.set(null);
     }
   }

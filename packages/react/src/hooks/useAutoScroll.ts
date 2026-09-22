@@ -1,6 +1,7 @@
 // packages/react/src/hooks/useAutoScroll.ts
 
 import { useRef, useCallback } from "react";
+import { readIsRtl, toPhysicalX } from "@gp-grid/core";
 
 // Auto-scroll configuration
 const SCROLL_THRESHOLD = 40; // pixels from edge to trigger scroll
@@ -64,11 +65,12 @@ export function useAutoScroll(): AutoScrollResult {
         scrollDeltaX = SCROLL_SPEED;
       }
 
-      // Start auto-scroll if needed
+      // Start auto-scroll if needed; horizontal deltas are inline-relative.
       if (scrollDeltaX !== 0 || scrollDeltaY !== 0) {
+        const rtl = readIsRtl(container);
         autoScrollIntervalRef.current = setInterval(() => {
           container.scrollTop += scrollDeltaY;
-          container.scrollLeft += scrollDeltaX;
+          container.scrollLeft += toPhysicalX(scrollDeltaX, rtl);
         }, SCROLL_INTERVAL);
       }
     },

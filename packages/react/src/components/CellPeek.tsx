@@ -14,7 +14,7 @@ import type {
   GridCore,
   RowId,
 } from "@gp-grid/core";
-import { bindPeekSelectAll } from "@gp-grid/core";
+import { bindPeekSelectAll, fixedLeftForInline } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import type { ReactCellRenderer } from "../types";
 
@@ -41,6 +41,7 @@ interface PeekStyle {
   top: number;
   left: number;
   width: number;
+  clipPath: string;
   visibility: "visible" | "hidden";
 }
 
@@ -48,6 +49,7 @@ const HIDDEN_STYLE: PeekStyle = {
   top: 0,
   left: 0,
   width: 0,
+  clipPath: "inset(0)",
   visibility: "hidden",
 };
 
@@ -80,11 +82,30 @@ export function CellPeek<TData = unknown>({
       return;
     }
 
+    // Keep the cell's layout width so its content does not reflow, then clip
+    // the portion covered by either pin region.
+    const clip = core?.geometry.getColumnClip(peekCell.col);
+    if (clip !== undefined && (bounds.left >= clip.end || bounds.left + bounds.width <= clip.start)) {
+      onClose();
+      return;
+    }
+    const inlineStart = clip === undefined ? bounds.left : Math.max(bounds.left, clip.start);
+    const inlineEnd =
+      clip === undefined
+        ? bounds.left + bounds.width
+        : Math.min(bounds.left + bounds.width, clip.end);
+    const clippedWidth = inlineEnd - inlineStart;
+    const left = fixedLeftForInline(container, bounds.left, bounds.width);
+    const clippedLeft = fixedLeftForInline(container, inlineStart, clippedWidth);
+    const leftInset = Math.max(0, clippedLeft - left);
+    const rightInset = Math.max(0, left + bounds.width - clippedLeft - clippedWidth);
+
     const origin = container.getBoundingClientRect();
     setStyle({
       top: origin.top + bounds.top,
-      left: origin.left + bounds.left,
+      left,
       width: bounds.width,
+      clipPath: `inset(0 ${rightInset}px 0 ${leftInset}px)`,
       visibility: "visible",
     });
   }, [containerRef, core, peekCell.row, peekCell.col, onClose]);
@@ -172,6 +193,7 @@ export function CellPeek<TData = unknown>({
         top: style.top,
         left: style.left,
         width: style.width,
+        clipPath: style.clipPath,
         visibility: style.visibility,
       }}
     >
