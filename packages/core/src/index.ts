@@ -299,6 +299,13 @@ export type {
  */
 export {
   toPointerEventData,
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
+  inlineOffset,
+  readContainerBounds,
+  fixedLeftForInline,
+  normalizeHorizontalKey,
   AutoScrollDriver,
   PendingRowDragController,
   PendingCellTapController,

@@ -39,20 +39,30 @@ export interface KeyEventData {
   metaKey: boolean;
 }
 
-/** Container bounds and scroll position */
+/**
+ * Container bounds and scroll position.
+ *
+ * Describes the client box (border and, in RTL, the left-hand scrollbar
+ * excluded) with inline-start-relative scroll positions, so core input stays
+ * direction-agnostic: `scrollLeft` is the offset from the inline-start edge,
+ * which is the DOM value negated in RTL. Build it with the `readIsRtl`,
+ * `toInlineX` and `toPhysicalX` helpers from the adapter kit.
+ */
 export interface ContainerBounds {
-  /** Top position relative to viewport */
+  /** Top of the client box, relative to the viewport */
   top: number;
-  /** Left position relative to viewport */
+  /** Left edge of the client box, relative to the viewport */
   left: number;
-  /** Container width */
+  /** Client box width */
   width: number;
-  /** Container height */
+  /** Client box height */
   height: number;
   /** Current scroll top position */
   scrollTop: number;
-  /** Current scroll left position */
+  /** Inline-start-relative scroll position (the DOM value, negated in RTL) */
   scrollLeft: number;
+  /** Inline direction of the container; defaults to LTR */
+  rtl?: boolean;
 }
 
 // =============================================================================

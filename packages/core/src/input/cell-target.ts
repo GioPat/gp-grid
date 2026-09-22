@@ -1,5 +1,6 @@
 import type { GridCore } from "../grid-core";
 import type { ContainerBounds, PointerEventData } from "../types/input";
+import { inlineOffset } from "../adapter/inline-axis";
 import { calculateAutoScroll } from "./auto-scroll-util";
 
 export interface CellTarget {
@@ -22,13 +23,14 @@ export const computeCellTarget = <TData>(
   event: PointerEventData,
   bounds: ContainerBounds,
 ): CellTarget => {
-  const { top, left, width, height, scrollTop, scrollLeft } = bounds;
+  const { top, width, height, scrollTop, scrollLeft } = bounds;
   const headerHeight = core.getHeaderHeight();
+  const viewportX = inlineOffset(bounds, event.clientX);
 
   // `bounds` is the body scroll container: the header sits outside it, so
   // `top` is already the first row's edge.
   const hit = core.geometry.hitTest({
-    x: event.clientX - left,
+    x: viewportX,
     y: event.clientY - top,
     scrollTop,
     scrollLeft,
@@ -39,7 +41,7 @@ export const computeCellTarget = <TData>(
 
   const autoScroll = calculateAutoScroll(
     event.clientY - top,
-    event.clientX - left,
+    viewportX,
     height,
     width,
     headerHeight,

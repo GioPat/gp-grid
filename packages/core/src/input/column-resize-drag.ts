@@ -7,6 +7,7 @@ import type {
   PointerEventData,
 } from "../types/input";
 import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
+import { inlineOffset, toInlineX } from "../adapter/inline-axis";
 import { DEFAULT_MIN_COLUMN_WIDTH } from "../geometry/column-widths";
 
 export class ColumnResizeDrag<TData = unknown> {
@@ -51,14 +52,17 @@ export class ColumnResizeDrag<TData = unknown> {
     const column = this.core.getColumns()[this.colIndex];
     const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
     const maxWidth = column?.maxWidth;
-    let newWidth = this.initialWidth + (event.clientX - this.startX);
+    // In RTL the inline-end edge the handle sits on is the left one, so a
+    // leftward drag grows the column.
+    const dragged = toInlineX(event.clientX - this.startX, bounds.rtl === true);
+    let newWidth = this.initialWidth + dragged;
     newWidth = Math.max(minWidth, newWidth);
     if (maxWidth !== undefined) {
       newWidth = Math.min(maxWidth, newWidth);
     }
     this.currentWidth = newWidth;
 
-    const mouseXInContainer = event.clientX - bounds.left;
+    const mouseXInContainer = inlineOffset(bounds, event.clientX);
     const autoScroll = this.resizeAutoScroll(mouseXInContainer, bounds.width);
 
     return { targetRow: 0, targetCol: this.colIndex, autoScroll };

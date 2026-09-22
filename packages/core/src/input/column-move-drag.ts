@@ -8,6 +8,7 @@ import type {
 } from "../types/input";
 import type { SortDirection } from "../types";
 import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
+import { inlineOffset } from "../adapter/inline-axis";
 import { DragGesture } from "./drag-gesture";
 
 export class ColumnMoveDrag<TData = unknown> {
@@ -60,10 +61,11 @@ export class ColumnMoveDrag<TData = unknown> {
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult | null {
     if (this.gesture.track(event) === false) return null;
 
-    const { left, width, scrollLeft } = bounds;
+    const { width, scrollLeft } = bounds;
     const layout = this.core.geometry.getColumnLayout();
+    const viewportX = inlineOffset(bounds, event.clientX);
     const hit = this.core.geometry.hitTest({
-      x: event.clientX - left,
+      x: viewportX,
       y: event.clientY - bounds.top,
       scrollLeft,
     });
@@ -71,8 +73,7 @@ export class ColumnMoveDrag<TData = unknown> {
     const dropTargetIndex = Math.max(0, Math.min(hit.displayIndex, layout.columns.length));
     this.gesture.dropTargetIndex = dropTargetIndex;
 
-    const mouseXInContainer = event.clientX - left;
-    const autoScroll = this.moveAutoScroll(mouseXInContainer, width);
+    const autoScroll = this.moveAutoScroll(viewportX, width);
 
     return { targetRow: 0, targetCol: dropTargetIndex, autoScroll };
   }

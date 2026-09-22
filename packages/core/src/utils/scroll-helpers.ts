@@ -1,6 +1,7 @@
 // packages/core/src/utils/scroll-helpers.ts
 
 import type { GridCore } from "../grid-core";
+import { readIsRtl, toInlineX, toPhysicalX } from "../adapter/inline-axis";
 
 /**
  * Scroll a cell into view on both axes using the geometry service.
@@ -18,10 +19,13 @@ export const scrollCellIntoView = <TData>(
   col: number,
   from?: { scrollTop?: number; scrollLeft?: number },
 ): void => {
+  const rtl = readIsRtl(container);
   const target = core.geometry.getScrollTarget(row, col, {
     scrollTop: from?.scrollTop ?? container.scrollTop,
-    scrollLeft: from?.scrollLeft ?? container.scrollLeft,
+    scrollLeft: toInlineX(from?.scrollLeft ?? container.scrollLeft, rtl),
   });
   if (target.scrollTop !== undefined) container.scrollTop = target.scrollTop;
-  if (target.scrollLeft !== undefined) container.scrollLeft = target.scrollLeft;
+  if (target.scrollLeft !== undefined) {
+    container.scrollLeft = toPhysicalX(target.scrollLeft, rtl);
+  }
 };
