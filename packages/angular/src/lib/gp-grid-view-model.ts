@@ -49,6 +49,8 @@ const INITIAL_DRAG_STATE: DragState = {
 export class GpGridViewModel {
   readonly headerState = signal<Map<string, HeaderData>>(new Map());
   readonly viewportWidth = signal<number>(0);
+  /** Physical direction used by header actions. */
+  readonly rtl = signal<boolean>(false);
   /** DOM scroll offset (physical: negative in RTL); the header negates it. */
   readonly scrollLeft = signal<number>(0);
   readonly isLoading = signal<boolean>(false);

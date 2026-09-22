@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
 import { h, Fragment, type VNode } from "vue";
-import type { GridCore, GridIcon, ColumnDefinition, SortDirection, HeaderRendererParams, GridLabels } from "@gp-grid/core";
+import type { GridCore, GridIcon, ColumnDefinition, ColumnPin, SortDirection, HeaderRendererParams, GridLabels } from "@gp-grid/core";
 import type { VueHeaderRenderer } from "../types";
 import { invokeRenderer } from "./utils";
 
@@ -22,6 +22,7 @@ export interface RenderHeaderOptions {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  rtl: boolean;
   labels: GridLabels;
   pinIcon: GridIcon;
   core: GridCore | null;
@@ -29,6 +30,25 @@ export interface RenderHeaderOptions {
   headerRenderers: Record<string, VueHeaderRenderer>;
   globalHeaderRenderer?: VueHeaderRenderer;
 }
+
+const nextPin = (pinned: ColumnPin | null, rtl: boolean): ColumnPin | null => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  const right: ColumnPin = rtl ? "start" : "end";
+  if (pinned === null) return left;
+  if (pinned === left) return right;
+  return null;
+};
+
+const nextPinLabel = (
+  pinned: ColumnPin | null,
+  rtl: boolean,
+  labels: GridLabels,
+): string => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  if (pinned === null) return labels.pinLeftColumn;
+  if (pinned === left) return labels.pinRightColumn;
+  return labels.unpinColumn;
+};
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -44,6 +64,7 @@ export function renderHeader(
     sortable,
     filterable,
     hasFilter,
+    rtl,
     labels,
     pinIcon,
     core,
@@ -110,7 +131,7 @@ export function renderHeader(
 
   // Default header controls
   const isPinned = params.pinned !== null;
-  const pinLabel = isPinned ? labels.unpinColumn : labels.pinColumn;
+  const pinLabel = nextPinLabel(params.pinned, rtl, labels);
   const pinButton = h(
     "button",
     {
@@ -125,7 +146,7 @@ export function renderHeader(
       },
       onClick: (e: MouseEvent) => {
         e.stopPropagation();
-        params.onPinChange(isPinned ? null : "start");
+        params.onPinChange(nextPin(params.pinned, rtl));
       },
     },
     [

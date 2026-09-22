@@ -18,6 +18,7 @@ export interface GridHeaderCellProps<TData = unknown> {
   headerHeight: number;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
   labels: GridLabels;
   onHeaderMouseDown: (
     colIndex: number,
@@ -43,6 +44,7 @@ export const GridHeaderCell = <TData = unknown>(
     headerHeight,
     headers,
     sortingEnabled,
+    rtl,
     labels,
     onHeaderMouseDown,
     onHeaderResizeMouseDown,
@@ -78,6 +80,7 @@ export const GridHeaderCell = <TData = unknown>(
         sortable: definition.sortable !== false && sortingEnabled,
         filterable: definition.filterable !== false,
         hasFilter: headerInfo?.hasFilter ?? false,
+        rtl,
         labels,
         coreRef,
         containerRef: outerContainerRef,

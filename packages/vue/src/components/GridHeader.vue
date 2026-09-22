@@ -16,6 +16,7 @@ const props = defineProps<{
   displayedIndexOf: (columnId: string) => number;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
@@ -37,6 +38,7 @@ const cellProps = (column: ResolvedColumn) => ({
   headerHeight: props.headerHeight,
   headers: props.headers,
   sortingEnabled: props.sortingEnabled,
+  rtl: props.rtl,
   labels: props.labels,
   onHeaderMouseDown: props.onHeaderMouseDown,
   onHeaderResizeMouseDown: props.onHeaderResizeMouseDown,

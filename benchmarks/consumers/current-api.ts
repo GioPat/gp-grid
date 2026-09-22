@@ -77,7 +77,10 @@ const windowRange = core.geometry.getColumnWindow().range;
 const clip = core.geometry.getColumnClip(0);
 const fillHandle: FillHandlePosition | null = null;
 const headerPinControl = (params: HeaderRendererParams): void => {
-  params.onPinChange(params.pinned === null ? "start" : null);
+  let nextPin: ColumnPin | null = null;
+  if (params.pinned === null) nextPin = "start";
+  if (params.pinned === "start") nextPin = "end";
+  params.onPinChange(nextPin);
 };
 
 // Bounds by identity, layout revision and the geometry queries.

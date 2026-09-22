@@ -115,6 +115,7 @@ export class GpGridBindings<TData = unknown> {
   observeViewport(bodyEl: HTMLElement): void {
     const report = (): void => {
       this.rtl = readIsRtl(bodyEl);
+      this.deps.vm.rtl.set(this.rtl);
       this.touchScroll.resetDirection();
       this.coreRef?.setViewport(
         bodyEl.scrollTop,

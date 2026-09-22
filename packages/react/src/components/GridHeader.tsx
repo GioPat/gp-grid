@@ -25,6 +25,7 @@ export interface GridHeaderProps<TData = unknown> {
   displayedIndexOf: (columnId: string) => number;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
@@ -53,6 +54,7 @@ export const GridHeader = <TData = unknown>(
     displayedIndexOf,
     headers,
     sortingEnabled,
+    rtl,
     labels,
     onHeaderMouseDown,
     onHeaderResizeMouseDown,
@@ -71,6 +73,7 @@ export const GridHeader = <TData = unknown>(
       headerHeight={headerHeight}
       headers={headers}
       sortingEnabled={sortingEnabled}
+      rtl={rtl}
       labels={labels}
       onHeaderMouseDown={onHeaderMouseDown}
       onHeaderResizeMouseDown={onHeaderResizeMouseDown}

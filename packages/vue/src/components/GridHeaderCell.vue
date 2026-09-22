@@ -10,6 +10,7 @@ const props = defineProps<{
   headerHeight: number;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
@@ -31,6 +32,7 @@ const headerContent = () =>
     sortable: props.column.column.sortable !== false && props.sortingEnabled,
     filterable: props.column.column.filterable !== false,
     hasFilter: headerInfo()?.hasFilter ?? false,
+    rtl: props.rtl,
     labels: props.labels,
     core: props.coreRef,
     container: props.outerContainerRef,

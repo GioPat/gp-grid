@@ -76,9 +76,9 @@ const TEMPLATE = `
             type="button"
             class="gp-grid-pin-button"
             [class.active]="entry.column.pinned"
-            [attr.aria-label]="entry.column.pinned ? labels().unpinColumn : labels().pinColumn"
+            [attr.aria-label]="nextPinLabel(entry.column.pinned ?? null)"
             [attr.aria-pressed]="entry.column.pinned ? 'true' : 'false'"
-            [title]="entry.column.pinned ? labels().unpinColumn : labels().pinColumn"
+            [title]="nextPinLabel(entry.column.pinned ?? null)"
             (pointerdown)="onPinPointerDown($event)"
             (click)="onPinClick($event, entry.columnId, entry.column.pinned ?? null)">
             <svg
@@ -205,6 +205,7 @@ export class GridHeaderComponent {
   displayedIndexOf = input<(columnId: string) => number>(() => 0);
   headers = input.required<Map<string, HeaderData>>();
   sortingEnabled = input<boolean>(true);
+  rtl = input<boolean>(false);
   labels = input<GridLabels>(defaultGridLabels);
   headerRenderers = input<Record<string, HeaderRendererTemplate>>({});
   globalHeaderRenderer = input<HeaderRendererTemplate | null>(null);
@@ -245,7 +246,22 @@ export class GridHeaderComponent {
 
   protected onPinClick(event: MouseEvent, columnId: string, pinned: ColumnPin | null): void {
     event.stopPropagation();
-    this.headerPin.emit({ columnId, pinned: pinned === null ? 'start' : null });
+    this.headerPin.emit({ columnId, pinned: this.nextPin(pinned) });
+  }
+
+  protected nextPinLabel(pinned: ColumnPin | null): string {
+    const left: ColumnPin = this.rtl() ? 'end' : 'start';
+    if (pinned === null) return this.labels().pinLeftColumn;
+    if (pinned === left) return this.labels().pinRightColumn;
+    return this.labels().unpinColumn;
+  }
+
+  private nextPin(pinned: ColumnPin | null): ColumnPin | null {
+    const left: ColumnPin = this.rtl() ? 'end' : 'start';
+    const right: ColumnPin = this.rtl() ? 'start' : 'end';
+    if (pinned === null) return left;
+    if (pinned === left) return right;
+    return null;
   }
 
   protected onHeaderPointerDown(event: PointerEvent, colIndex: number, colWidth: number): void {

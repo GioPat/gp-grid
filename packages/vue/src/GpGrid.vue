@@ -494,6 +494,7 @@ defineExpose({
       :displayed-index-of="displayedIndexOf"
       :headers="state.headers"
       :sorting-enabled="sortingEnabled"
+      :rtl="rtl"
       :labels="resolvedLabels"
       :on-header-mouse-down="handleHeaderMouseDown"
       :on-header-resize-mouse-down="handleHeaderResizeMouseDown"

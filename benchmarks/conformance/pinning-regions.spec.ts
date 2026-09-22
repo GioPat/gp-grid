@@ -46,19 +46,26 @@ test("pins admit, reject and re-admit around a zero-width center clip", async ({
   expect(pinStyle.pressed).toBe("true");
   expect(pinStyle.radius).toBe("4px");
 
-  const inactivePin = page.locator('.gp-grid-header-cell[data-cell-region="center"] .gp-grid-pin-button').first();
-  await expect(inactivePin).toHaveAttribute("aria-pressed", "false");
-  expect(await inactivePin.evaluate(element => getComputedStyle(element).opacity)).toBe("0.55");
-  await inactivePin.click();
+  const cityPin = page.getByRole("columnheader", { name: /City/ }).locator(".gp-grid-pin-button");
+  await expect(cityPin).toHaveAttribute("aria-pressed", "false");
+  await expect(cityPin).toHaveAccessibleName("Pin left");
+  expect(await cityPin.evaluate(element => getComputedStyle(element).opacity)).toBe("0.55");
+  await cityPin.click();
   await expect.poll(async () =>
     (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
   ).toBe("start");
-  const cityPin = page.locator('.gp-grid-header-cell[data-col-index="2"] .gp-grid-pin-button');
   await expect(cityPin).toHaveAttribute("aria-pressed", "true");
+  await expect(cityPin).toHaveAccessibleName("Pin right");
+  await cityPin.click();
+  await expect.poll(async () =>
+    (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
+  ).toBe("end");
+  await expect(cityPin).toHaveAccessibleName("Unpin");
   await cityPin.click();
   await expect.poll(async () =>
     (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
   ).toBeNull();
+  await expect(cityPin).toHaveAccessibleName("Pin left");
 
   const separator = await page.locator('.gp-grid-pin-header[data-pin-region="end"]').evaluate((element) => {
     const style = getComputedStyle(element, "::before");
@@ -96,6 +103,23 @@ test("pins admit, reject and re-admit around a zero-width center clip", async ({
   expect(Math.abs(rtlPin.x + rtlPin.width - (rtlBox.left + rtlBox.width)))
     .toBeLessThanOrEqual(TOLERANCE);
 
+  // Labels name physical sides, while the core stores logical start/end.
+  await expect(cityPin).toHaveAccessibleName("Pin left");
+  await cityPin.click();
+  await expect.poll(async () =>
+    (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
+  ).toBe("end");
+  await expect(cityPin).toHaveAccessibleName("Pin right");
+  await cityPin.click();
+  await expect.poll(async () =>
+    (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
+  ).toBe("start");
+  await expect(cityPin).toHaveAccessibleName("Unpin");
+  await cityPin.click();
+  await expect.poll(async () =>
+    (await columnState(page)).find((entry) => entry.columnId === "city")?.pinned ?? null,
+  ).toBeNull();
+
   await remountTo(page, "ltr");
   await expectPinCount(page, 2, 1);
 
@@ -122,8 +146,8 @@ test("pins admit, reject and re-admit around a zero-width center clip", async ({
   expect(rejected.find((entry) => entry.columnId === "code"))
     .toMatchObject({ pinned: "end", region: "center" });
 
-  // The active pin toggle restores the scrolling center.
-  await page.locator('.gp-grid-pin-header[data-pin-region="start"] .gp-grid-pin-button.active').click();
+  // Clearing the pins restores the scrolling center.
+  await page.getByTestId("unpin-all").click();
   await expect.poll(async () => (await columnWindow(page))?.range.end ?? 0)
     .toBeGreaterThan(0);
   await expect.poll(() => page.locator('[data-cell-row="0"][data-cell-region="center"]').count())

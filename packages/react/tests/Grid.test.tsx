@@ -602,14 +602,20 @@ describe("Grid", () => {
       expect(document.querySelector('[data-cell-col="2"]')?.getAttribute("aria-colindex")).toBe("3");
     });
 
-    it("should toggle the localized pin control and render a custom icon", async () => {
+    it("should cycle the localized pin control and render a custom icon", async () => {
       stubViewport(400, 200);
+      const gridRef: MutableRefObject<GridRef<TestRow> | null> = { current: null };
       render(
         <Grid
           {...createDefaultProps({
             columns: pinnedColumns,
-            labels: { pinColumn: "Épingler", unpinColumn: "Détacher" },
+            labels: {
+              pinLeftColumn: "Épingler à gauche",
+              pinRightColumn: "Épingler à droite",
+              unpinColumn: "Détacher",
+            },
           })}
+          gridRef={gridRef}
           pinIcon={{ path: "M1 1h2v2H1z", viewBox: "0 0 4 4" }}
         />,
       );
@@ -618,30 +624,49 @@ describe("Grid", () => {
         expect(document.querySelector(".gp-grid-pin--start")).toBeTruthy();
       });
 
-      const buttons = screen.getAllByLabelText("Détacher");
-      expect(buttons.length).toBeGreaterThan(0);
-      const unpinButton = buttons[0]!;
-      expect(unpinButton.getAttribute("aria-pressed")).toBe("true");
-      expect(unpinButton.querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 4 4");
-      expect(unpinButton.querySelector("path")?.getAttribute("d")).toBe("M1 1h2v2H1z");
+      const idPin = (): HTMLButtonElement => {
+        const header = Array.from(document.querySelectorAll(".gp-grid-header-cell"))
+          .find((cell) => cell.querySelector(".gp-grid-header-text")?.textContent === "id");
+        const button = header?.querySelector<HTMLButtonElement>(".gp-grid-pin-button");
+        if (button === undefined || button === null) {
+          throw new Error("ID pin button is not mounted");
+        }
+        return button;
+      };
+
+      expect(idPin().getAttribute("aria-label")).toBe("Épingler à droite");
+      expect(idPin().getAttribute("aria-pressed")).toBe("true");
+      expect(idPin().querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 4 4");
+      expect(idPin().querySelector("path")?.getAttribute("d")).toBe("M1 1h2v2H1z");
 
       await act(async () => {
-        fireEvent.click(unpinButton);
+        fireEvent.click(idPin());
       });
 
       await waitFor(() => {
-        expect(document.querySelector(".gp-grid-pin--start")).toBeNull();
+        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+          .toBe("end");
       });
-      expect(document.querySelector('[data-cell-col="0"]')?.getAttribute("data-cell-region")).toBe("center");
+      expect(idPin().getAttribute("aria-label")).toBe("Détacher");
 
-      const pinButton = screen.getAllByLabelText("Épingler")[0]!;
-      expect(pinButton.getAttribute("aria-pressed")).toBe("false");
       await act(async () => {
-        fireEvent.click(pinButton);
+        fireEvent.click(idPin());
       });
       await waitFor(() => {
-        expect(document.querySelector(".gp-grid-pin--start")).toBeTruthy();
+        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+          .toBeNull();
       });
+      expect(idPin().getAttribute("aria-label")).toBe("Épingler à gauche");
+      expect(idPin().getAttribute("aria-pressed")).toBe("false");
+
+      await act(async () => {
+        fireEvent.click(idPin());
+      });
+      await waitFor(() => {
+        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+          .toBe("start");
+      });
+      expect(idPin().getAttribute("aria-label")).toBe("Épingler à droite");
     });
 
     it("should keep an open editor mounted when its column leaves the window", async () => {

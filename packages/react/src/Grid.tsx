@@ -7,6 +7,7 @@ import React, {
   useReducer,
   useCallback,
   useMemo,
+  useState,
 } from "react";
 import {
   GridCore,
@@ -92,6 +93,7 @@ export function Grid<TData = unknown>(
   const touchScrollRef = useRef<TouchScrollController<TData> | null>(null);
   /** Inline direction, resampled on mount and on every container resize. */
   const rtlRef = useRef(false);
+  const [rtl, setRtl] = useState(false);
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
   const hasInitializedRef = useRef(false);
   const [state, dispatch] = useReducer(
@@ -311,7 +313,9 @@ export function Grid<TData = unknown>(
     // This ensures column scaling happens before first paint
     const container = containerRef.current;
     if (container) {
-      rtlRef.current = readIsRtl(container);
+      const nextRtl = readIsRtl(container);
+      rtlRef.current = nextRtl;
+      setRtl(nextRtl);
       syncViewport(core, container);
     }
 
@@ -414,7 +418,9 @@ export function Grid<TData = unknown>(
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      rtlRef.current = readIsRtl(container);
+      const nextRtl = readIsRtl(container);
+      rtlRef.current = nextRtl;
+      setRtl(nextRtl);
       touchScrollRef.current?.resetDirection();
       syncViewport(core, container);
     });
@@ -574,6 +580,7 @@ export function Grid<TData = unknown>(
         displayedIndexOf={displayedIndexOf}
         headers={state.headers}
         sortingEnabled={sortingEnabled}
+        rtl={rtl}
         labels={resolvedLabels}
         onHeaderMouseDown={handleHeaderMouseDown}
         onHeaderResizeMouseDown={handleHeaderResizeMouseDown}

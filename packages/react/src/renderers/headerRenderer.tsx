@@ -29,6 +29,7 @@ export interface RenderHeaderOptions<TData> {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  rtl: boolean;
   /** Resolved labels used by the default header controls. */
   labels: GridLabels;
   pinIcon: GridIcon;
@@ -40,6 +41,27 @@ export interface RenderHeaderOptions<TData> {
 
 /** Requested pin of the header's column; `null` while unpinned. */
 const pinOf = (column: ColumnDefinition): ColumnPin | null => column.pinned ?? null;
+
+/** Return the next physical pin position in the default control's cycle. */
+const nextPin = (pinned: ColumnPin | null, rtl: boolean): ColumnPin | null => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  const right: ColumnPin = rtl ? "start" : "end";
+  if (pinned === null) return left;
+  if (pinned === left) return right;
+  return null;
+};
+
+/** Describe the action performed by the next click. */
+const nextPinLabel = (
+  pinned: ColumnPin | null,
+  rtl: boolean,
+  labels: GridLabels,
+): string => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  if (pinned === null) return labels.pinLeftColumn;
+  if (pinned === left) return labels.pinRightColumn;
+  return labels.unpinColumn;
+};
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -55,6 +77,7 @@ export function renderHeader<TData>(
     sortable,
     filterable,
     hasFilter,
+    rtl,
     labels,
     pinIcon,
     coreRef,
@@ -121,21 +144,22 @@ export function renderHeader<TData>(
   }
 
   // Default header controls
+  const pinLabel = nextPinLabel(params.pinned, rtl, labels);
   return (
     <>
       <button
         type="button"
         className={`gp-grid-pin-button${params.pinned !== null ? " active" : ""}`}
-        aria-label={params.pinned === null ? labels.pinColumn : labels.unpinColumn}
+        aria-label={pinLabel}
         aria-pressed={params.pinned !== null}
-        title={params.pinned === null ? labels.pinColumn : labels.unpinColumn}
+        title={pinLabel}
         onPointerDown={(e) => {
           e.stopPropagation();
           e.preventDefault();
         }}
         onClick={(e) => {
           e.stopPropagation();
-          params.onPinChange(params.pinned === null ? "start" : null);
+          params.onPinChange(nextPin(params.pinned, rtl));
         }}
       >
         <svg aria-hidden="true" width="16" height="16" viewBox={pinIcon.viewBox ?? "0 0 24 24"}>

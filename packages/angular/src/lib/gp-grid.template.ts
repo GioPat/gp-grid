@@ -21,6 +21,7 @@ export const GP_GRID_TEMPLATE = `
         [displayedIndexOf]="vm.displayedIndexOf()"
         [headers]="vm.headerState()"
         [sortingEnabled]="sortingEnabled()"
+        [rtl]="vm.rtl()"
         [labels]="resolvedLabels()"
         [headerRenderers]="headerRenderers()"
         [globalHeaderRenderer]="headerRenderer()"
