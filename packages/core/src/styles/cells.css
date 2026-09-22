@@ -7,7 +7,10 @@
 .gp-grid-rows-wrapper {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
+  /* Flex anchors the zero-height pin overlays; rows themselves are absolute. */
+  display: flex;
+  align-items: flex-start;
   /* Keep wrapper below the sticky header (z-index: 10) */
   z-index: 1;
   will-change: transform; 
@@ -16,12 +19,73 @@
 .gp-grid-row {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
 }
 
 /* Row background - :where() for zero specificity, so user highlight classes always win */
 :where(.gp-grid-row) {
   background-color: var(--gp-grid-bg);
+}
+
+/* =============================================================================
+   Pinned Column Containers
+   ============================================================================= */
+
+/* Sticky inside the transformed rows wrapper: the center cells scroll beneath
+   the container while it stays on the viewport's inline edge. */
+.gp-grid-pin {
+  position: sticky;
+  /* Stay above active/editing center cells and their fill handle. */
+  z-index: 12;
+  display: flex;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.gp-grid-pin--start {
+  inset-inline-start: 0;
+}
+
+/* `margin-inline-start: auto` parks the end container on the row's inline end,
+   which is what makes `inset-inline-end: 0` stick it to the viewport edge. */
+.gp-grid-pin--end {
+  inset-inline-end: 0;
+  margin-inline-start: auto;
+}
+
+.gp-grid-pin--end::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  z-index: 1;
+  pointer-events: none;
+  background-color: var(--gp-grid-border);
+}
+
+/* Opaque, so center cells scrolling underneath stay hidden. `inherit` carries
+   a row highlight background onto the pin. */
+:where(.gp-grid-pin) {
+  background: inherit;
+}
+
+/* Zero-height sticky overlay hosting a pin region's fill handle. */
+.gp-grid-pin-overlay {
+  position: sticky;
+  z-index: 13;
+  height: 0;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.gp-grid-pin-overlay--start {
+  inset-inline-start: 0;
+}
+
+.gp-grid-pin-overlay--end {
+  inset-inline-end: 0;
+  margin-inline-start: auto;
 }
 
 /* Structural properties - required for grid layout */
@@ -65,7 +129,7 @@
   padding: 0 12px;
   cursor: cell;
   color: var(--gp-grid-text);
-  border-right: 1px solid var(--gp-grid-border-light);
+  border-inline-end: 1px solid var(--gp-grid-border-light);
   border-bottom: 1px solid var(--gp-grid-border-light);
   background-color: transparent;
 }
