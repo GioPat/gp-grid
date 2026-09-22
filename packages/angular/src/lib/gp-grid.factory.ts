@@ -5,6 +5,7 @@ import type {
   ColumnDefinition,
   ColumnLayoutMode,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   DataSource,
   HighlightingOptions,
@@ -19,6 +20,7 @@ export interface BuildGridCoreInputs<TData> {
   rowHeight: number;
   headerHeight: number;
   overscan: number;
+  columnOverscan: number | undefined;
   columnLayout: ColumnLayoutMode | undefined;
   maxFlingVelocity: number | undefined;
   rowLoading: RowLoadingOptions | undefined;
@@ -34,6 +36,7 @@ export interface BuildGridCoreEmitters<TData> {
   onWriteRejected: (event: CellWriteRejectedEvent) => void;
   onColumnResized: (event: ColumnResizedEvent) => void;
   onColumnMoved: (event: ColumnMovedEvent) => void;
+  onColumnPinned: (event: ColumnPinnedEvent) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -50,6 +53,7 @@ export const buildGridCore = <TData>(
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
     overscan: inputs.overscan,
+    columnOverscan: inputs.columnOverscan,
     columnLayout: inputs.columnLayout,
     maxFlingVelocity: inputs.maxFlingVelocity,
     rowLoading: inputs.rowLoading,
@@ -62,5 +66,6 @@ export const buildGridCore = <TData>(
     onWriteRejected: emitters.onWriteRejected,
     onColumnResized: emitters.onColumnResized,
     onColumnMoved: emitters.onColumnMoved,
+    onColumnPinned: emitters.onColumnPinned,
   });
 };

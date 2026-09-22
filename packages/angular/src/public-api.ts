@@ -27,11 +27,18 @@ export type {
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,
+  GridIcon,
 
-  // PRD 003 geometry
+  // Geometry
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   DisplayedColumn,
+  // Column virtualization and pinning
+  ColumnPin,
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
+  FillHandlePosition,
   GeometrySpace,
   AxisBounds,
   CellBounds,
@@ -55,6 +62,7 @@ export type {
   WriteRejectionOperation,
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
 
   // DataSource

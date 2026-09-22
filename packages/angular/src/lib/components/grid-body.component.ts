@@ -9,7 +9,8 @@ import {
   isCellInFillPreview,
   isCellSelected,
   SlotData,
-  DisplayedColumn,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
   CellPosition,
   CellRange,
   CellValue,
@@ -19,6 +20,7 @@ import {
   EditRendererParams,
   FillHandlePosition,
   DragState,
+  GridCore,
   GridLabels,
   defaultGridLabels,
 } from "@gp-grid/core";
@@ -79,11 +81,15 @@ export class GridBodyComponent {
   rowsWrapperOffset = input.required<number>();
   slotsArray = input.required<SlotData[]>();
   totalWidth = input.required<number>();
-  layoutColumns = input.required<readonly DisplayedColumn[]>();
+  columnWindow = input.required<ColumnWindowSnapshot | null>();
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf = input<(columnId: string) => number>(() => 0);
   totalRows = input.required<number>();
   activeCell = input<CellPosition | null>(null);
   selectionRange = input<CellRange | null>(null);
   editingCell = input<EditingCellState | null>(null);
+  /** Bound core supplies the live draft when a region change remounts an editor. */
+  core = input<GridCore<unknown> | null>(null);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
   globalCellRenderer = input<CellRendererTemplate | null>(null);
   editRenderers = input<Record<string, EditRendererTemplate>>({});
@@ -118,6 +124,17 @@ export class GridBodyComponent {
   protected sizerHeight = computed(() =>
     Math.max(this.contentHeight() - this.totalHeaderHeight(), 0),
   );
+
+  /** Region partitions of the mounted column window; empty before it publishes. */
+  protected startColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.start ?? []);
+
+  protected centerColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.center ?? []);
+
+  protected endColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.end ?? []);
+
+  protected startWidth = computed(() => this.columnWindow()?.layout.regions.startWidth ?? 0);
+
+  protected endWidth = computed(() => this.columnWindow()?.layout.regions.endWidth ?? 0);
 
   protected rowDropIndicator = computed(() => {
     const ds = this.dragState();
@@ -229,7 +246,7 @@ export class GridBodyComponent {
       isActive: true,
       isSelected: true,
       isEditing: true,
-      initialValue: ec?.initialValue ?? null,
+      initialValue: this.currentEditValue(ec),
       onValueChange: (newValue) => {
         if (this.isOpenEdit(ec?.editId) === false) return;
         const s = newValue === null || newValue === undefined ? '' : String(newValue);
@@ -311,10 +328,15 @@ export class GridBodyComponent {
     return isCellEditing(rowIndex, colIndex, this.editingCell());
   }
 
+  private currentEditValue(editing: EditingCellState | null): CellValue {
+    if (editing === null) return null;
+    const live = this.core()?.getEditState();
+    return live?.editId === editing.editId ? live.currentValue : editing.initialValue;
+  }
+
   protected editInitialValue(): string {
-    const ec = this.editingCell();
-    if (ec === null || ec.initialValue === null || ec.initialValue === undefined) return '';
-    return String(ec.initialValue);
+    const value = this.currentEditValue(this.editingCell());
+    return value === null || value === undefined ? '' : String(value);
   }
 
   protected asInput(event: Event): HTMLInputElement {
@@ -328,6 +350,23 @@ export class GridBodyComponent {
 
   protected onEditFocus(event: FocusEvent): void {
     (event.target as HTMLInputElement).select();
+  }
+
+  protected onEditBlur(event: FocusEvent): void {
+    const blurred = event.target as HTMLInputElement;
+    const grid = blurred.closest('.gp-grid-container');
+    const editId = this.editingCell()?.editId;
+    if (editId === undefined) return;
+    requestAnimationFrame(() => {
+      const replacement = grid?.querySelector<HTMLInputElement>(
+        `.gp-grid-edit-input[data-edit-id="${editId}"]`,
+      );
+      if (replacement && replacement !== blurred) {
+        replacement.focus();
+        return;
+      }
+      if (this.isOpenEdit(editId)) this.editCommit.emit();
+    });
   }
 
   protected onEditKeyDown(event: KeyboardEvent): void {
