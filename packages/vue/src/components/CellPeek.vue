@@ -6,7 +6,7 @@ import type {
   ColumnDefinition,
   GridCore,
 } from "@gp-grid/core";
-import { bindPeekSelectAll } from "@gp-grid/core";
+import { bindPeekSelectAll, fixedLeftForInline } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import type { Row, VueCellRenderer } from "../types";
 
@@ -30,6 +30,7 @@ const overlayRef = ref<HTMLDivElement | null>(null);
 const top = ref(0);
 const left = ref(0);
 const width = ref(0);
+const clipPath = ref("inset(0)");
 const positioned = ref(false);
 
 let rafId: number | null = null;
@@ -51,10 +52,28 @@ const updatePosition = (): void => {
     return;
   }
 
+  // Keep the cell's layout width so its content does not reflow, then clip
+  // the portion covered by either pin region.
+  const clip = props.core?.geometry.getColumnClip(props.peekCell.col);
+  if (clip !== undefined && (bounds.left >= clip.end || bounds.left + bounds.width <= clip.start)) {
+    emit("close");
+    return;
+  }
+  const inlineStart = clip === undefined ? bounds.left : Math.max(bounds.left, clip.start);
+  const inlineEnd = clip === undefined
+    ? bounds.left + bounds.width
+    : Math.min(bounds.left + bounds.width, clip.end);
+  const clippedWidth = inlineEnd - inlineStart;
+  const fullLeft = fixedLeftForInline(container, bounds.left, bounds.width);
+  const clippedLeft = fixedLeftForInline(container, inlineStart, clippedWidth);
+  const leftInset = Math.max(0, clippedLeft - fullLeft);
+  const rightInset = Math.max(0, fullLeft + bounds.width - clippedLeft - clippedWidth);
+
   const origin = container.getBoundingClientRect();
   top.value = origin.top + bounds.top;
-  left.value = origin.left + bounds.left;
+  left.value = fullLeft;
   width.value = bounds.width;
+  clipPath.value = `inset(0 ${rightInset}px 0 ${leftInset}px)`;
   positioned.value = true;
 };
 
@@ -106,6 +125,7 @@ const overlayStyle = computed(() => ({
   top: `${top.value}px`,
   left: `${left.value}px`,
   width: `${width.value}px`,
+  clipPath: clipPath.value,
   visibility: positioned.value ? ("visible" as const) : ("hidden" as const),
 }));
 

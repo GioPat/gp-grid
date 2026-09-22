@@ -76,6 +76,7 @@ export class TouchScrollController<TData = unknown> {
     const el = this.deps.getScrollEl();
     if (el === null) return;
     this.attachedEl = el;
+    this.scroll.resetDirection();
     this.policy = new TouchPolicy(el, this.deps.getCore);
     this.policy.sync();
     el.addEventListener("touchstart", this.onTouchStart, { passive: true });
@@ -97,6 +98,14 @@ export class TouchScrollController<TData = unknown> {
   /** Rebind policy updates after the host replaces its GridCore instance. */
   syncCore(): void {
     this.policy?.sync();
+  }
+
+  /**
+   * Drop the bridge's cached inline direction; call after a resize or remount
+   * so it reads `scrollLeft` the way the wrapper and the gesture do.
+   */
+  resetDirection(): void {
+    this.scroll.resetDirection();
   }
 
   /** Cancel an in-flight fling (call before programmatic scrollTop writes). */
@@ -129,6 +138,9 @@ export class TouchScrollController<TData = unknown> {
   };
 
   private startTouchGesture(event: Event): void {
+    // Resample before `stop()`: its release reports the live position through
+    // the bridge, which must not keep a direction older than this gesture's.
+    this.scroll.resetDirection();
     // Catching the content mid-fling carries its velocity into the next
     // flick, so repeated same-direction flicks stack speed up to the cap.
     const carriedVelocity = this.fling.currentVelocity;

@@ -7,6 +7,7 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
@@ -19,6 +20,8 @@ import {
   createLargeColumnarColumns,
   createLargeColumnarSource,
   createNarrowColumns,
+  createWideColumns,
+  createWideSource,
 } from "./conformance-geometry";
 
 interface ConformanceRow {
@@ -141,13 +144,14 @@ const mode = ref<"object" | "columnar">("object");
 const revision = ref(0);
 const mounted = ref(true);
 const generation = ref(0);
+const rtl = ref(false);
 const editEvents = ref(0);
 const writeRejected = ref(0);
 const columnState = ref<ColumnStateUpdate[] | undefined>(undefined);
 const columnLayout = ref<ColumnLayoutMode>("fit");
 const hostWidth = ref(600);
 const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
-const eventCounts = { resized: 0, moved: 0, dragged: 0 };
+const eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
 const coreTokens = new WeakMap<object, number>();
 let nextCoreToken = 1;
 
@@ -193,6 +197,30 @@ const useLargeColumnar = (): void => {
   revision.value = fixture.source.revision;
 };
 
+/** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
+const useWideColumns = (count: number): void => {
+  mode.value = "columnar";
+  columnarColumns.value = createWideColumns(count);
+  largeColumnarSource.value = createWideSource(count);
+  generation.value += 1;
+};
+
+const pinColumns = (): void => {
+  columnState.value = [
+    { columnId: "id", pinned: "start" },
+    { columnId: "name", pinned: "start" },
+    { columnId: "code", pinned: "end" },
+  ];
+};
+
+const unpinAll = (): void => {
+  columnState.value = undefined;
+  const core = coreOf();
+  for (const column of core?.getColumns() ?? []) {
+    core?.setColumnPinned(column.colId ?? column.field, null);
+  }
+};
+
 const toggleColumnLayout = (): void => {
   columnLayout.value = columnLayout.value === "fit" ? "fixed" : "fit";
 };
@@ -214,12 +242,14 @@ const reset = (): void => {
   hostWidth.value = 600;
   mode.value = "object";
   mounted.value = true;
+  rtl.value = false;
   generation.value += 1;
   editEvents.value = 0;
   writeRejected.value = 0;
   eventCounts.resized = 0;
   eventCounts.moved = 0;
   eventCounts.dragged = 0;
+  eventCounts.pinned = 0;
 };
 
 const remount = async (): Promise<void> => {
@@ -227,6 +257,11 @@ const remount = async (): Promise<void> => {
   await nextTick();
   generation.value += 1;
   mounted.value = true;
+};
+
+const toggleRtl = async (): Promise<void> => {
+  rtl.value = !rtl.value;
+  await remount();
 };
 
 const useColumnar = (): void => {
@@ -269,6 +304,9 @@ const onColumnMoved = (_event: ColumnMovedEvent): void => {
 const onRowDragEnd = (_event: RowDragEndEvent): void => {
   eventCounts.dragged += 1;
 };
+const onColumnPinned = (_event: ColumnPinnedEvent): void => {
+  eventCounts.pinned += 1;
+};
 
 const applyColumnState = (): void => {
   columnState.value = [{ columnId: "city", width: 260 }];
@@ -310,7 +348,9 @@ if (typeof window !== "undefined") {
       eventCounts.resized = 0;
       eventCounts.moved = 0;
       eventCounts.dragged = 0;
+      eventCounts.pinned = 0;
     },
+    useWideColumns,
     ...createGeometryHooks(() => coreOf()),
   };
 }
@@ -321,6 +361,7 @@ if (typeof window !== "undefined") {
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap">
       <button data-testid="reset" @click="reset">Reset</button>
       <button data-testid="remount" @click="remount">Remount</button>
+      <button data-testid="toggle-rtl" @click="toggleRtl">Toggle RTL</button>
       <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
       <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
       <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
@@ -333,12 +374,15 @@ if (typeof window !== "undefined") {
       <button data-testid="bump-revision" @click="bumpRevision">Bump revision</button>
       <button data-testid="use-narrow-columns" @click="useNarrowColumns">Narrow columns</button>
       <button data-testid="use-large-columnar" @click="useLargeColumnar">Large columnar</button>
+      <button data-testid="use-wide-columns" @click="useWideColumns(1000)">Wide columns</button>
+      <button data-testid="pin-columns" @click="pinColumns">Pin columns</button>
+      <button data-testid="unpin-all" @click="unpinAll">Unpin all</button>
       <button data-testid="toggle-column-layout" @click="toggleColumnLayout">Toggle layout</button>
       <button data-testid="resize-host" @click="resizeHost">Resize host</button>
       <button data-testid="hide-column" @click="hideColumn">Hide column</button>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
-    <div data-testid="grid-host" :style="{ width: `${hostWidth}px`, height: '360px' }">
+    <div data-testid="grid-host" :dir="rtl ? 'rtl' : 'ltr'" :style="{ width: `${hostWidth}px`, height: '360px' }">
       <GpGrid
         v-if="mounted"
         ref="gridRef"
@@ -356,6 +400,7 @@ if (typeof window !== "undefined") {
         :on-column-resized="onColumnResized"
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"
+        :on-column-pinned="onColumnPinned"
       />
     </div>
   </main>

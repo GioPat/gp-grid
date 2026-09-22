@@ -9,7 +9,7 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
-import type { ColumnLayoutSnapshot } from "./geometry";
+import type { ColumnLayoutSnapshot, ColumnWindowSnapshot } from "./geometry";
 
 // Re-use ColumnDefinition for column change instructions
 
@@ -261,6 +261,17 @@ export interface ColumnsChangedInstruction {
   revision: number;
 }
 
+/**
+ * The mounted column window moved or its retained set changed. Emitted with
+ * every layout change, on a center-range move and on a retained-set change.
+ */
+export interface SetColumnWindowInstruction {
+  type: "SET_COLUMN_WINDOW";
+  window: ColumnWindowSnapshot;
+  /** Committed geometry revision the window was resolved at. */
+  revision: number;
+}
+
 // =============================================================================
 // Union Type
 // =============================================================================
@@ -304,7 +315,8 @@ export type GridInstruction =
   | DataLoadedInstruction
   | DataErrorInstruction
   /** Column changes */
-  | ColumnsChangedInstruction;
+  | ColumnsChangedInstruction
+  | SetColumnWindowInstruction;
 
 // =============================================================================
 // Instruction Listeners

@@ -5,6 +5,7 @@ import type {
   ColumnDefinition,
   ColumnLayoutMode,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateUpdate,
   DataSource,
@@ -14,6 +15,7 @@ import type {
   EditRendererParams,
   HeaderRendererParams,
   GridCore,
+  GridIcon,
   GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
@@ -74,6 +76,8 @@ export interface GridProps<TData = unknown> {
   headerHeight?: number;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
+  /** CSS px of center columns kept mounted past each clip edge. Default: 240 */
+  columnOverscan?: number;
   /** Row loading and cache behavior. Server data sources use paginated loading by default. */
   rowLoading?: RowLoadingOptions;
   /** Enable/disable sorting globally. Default: true */
@@ -98,6 +102,8 @@ export interface GridProps<TData = unknown> {
   editRenderer?: ReactEditRenderer;
   /** Global header renderer */
   headerRenderer?: ReactHeaderRenderer;
+  /** SVG used by the default header's pin toggle. */
+  pinIcon?: GridIcon;
 
   /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
   initialWidth?: number;
@@ -126,6 +132,8 @@ export interface GridProps<TData = unknown> {
   onColumnResized?: (event: ColumnResizedEvent) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
+  /** Called when a column is pinned or unpinned. */
+  onColumnPinned?: (event: ColumnPinnedEvent) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

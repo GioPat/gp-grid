@@ -11,6 +11,10 @@ import type {
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
+  readContainerBounds,
+  readIsRtl,
+  normalizeHorizontalKey,
+  toPhysicalX,
   PendingCellTapController,
   TAP_SLOP_PX,
   ROW_DRAG_HOLD_MS,
@@ -106,32 +110,26 @@ export function useInputHandler<TData>(
     rowDrag: null,
   });
 
-  // Get container bounds
+  // Get container bounds (client box, inline-relative scroll)
   const getContainerBounds = useCallback((): ContainerBounds | null => {
     const container = containerRef.current;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: container.scrollTop,
-      scrollLeft: container.scrollLeft,
-    };
+    if (container === null) return null;
+    return readContainerBounds(container);
   }, [containerRef]);
 
-  // Auto-scroll helpers
+  // Auto-scroll helpers. Horizontal deltas are inline-relative, so the
+  // direction is sampled once when the loop starts.
   const startAutoScroll = useCallback((dx: number, dy: number) => {
     if (autoScrollRef.current) {
       clearInterval(autoScrollRef.current);
     }
+    const rtl = readIsRtl(containerRef.current);
     autoScrollRef.current = setInterval(() => {
       const container = containerRef.current;
       const core = coreRef.current;
       if (container) {
         container.scrollTop += dy;
-        container.scrollLeft += dx;
+        container.scrollLeft += toPhysicalX(dx, rtl);
 
         // Re-process drag move with last known mouse position so the
         // drop target stays in sync as the grid scrolls
@@ -426,9 +424,11 @@ export function useInputHandler<TData>(
       const container = containerRef.current;
       if (!core?.input) return;
 
+      // Arrows are normalized here, not in core: selection is direction-agnostic
+      // and the editor must still see the physical key.
       const result = core.input.handleKeyDown(
         {
-          key: e.key,
+          key: normalizeHorizontalKey(e.key, readIsRtl(container)),
           shiftKey: e.shiftKey,
           ctrlKey: e.ctrlKey,
           metaKey: e.metaKey,

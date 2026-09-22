@@ -9,7 +9,7 @@ import type {
   ColumnDefinition,
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
-  DisplayedColumn,
+  ColumnWindowSnapshot,
   DragState,
   FillHandlePosition,
   FilterPopupState,
@@ -25,8 +25,6 @@ export interface GpGridViewModelDeps {
   /** Bound core, used for geometry queries (fill handle, peek anchoring). */
   getCore: () => GridCore<unknown> | null;
 }
-
-const EMPTY_LAYOUT_COLUMNS: readonly DisplayedColumn[] = [];
 
 const INITIAL_DRAG_STATE: DragState = {
   isDragging: false,
@@ -51,6 +49,9 @@ const INITIAL_DRAG_STATE: DragState = {
 export class GpGridViewModel {
   readonly headerState = signal<Map<string, HeaderData>>(new Map());
   readonly viewportWidth = signal<number>(0);
+  /** Physical direction used by header actions. */
+  readonly rtl = signal<boolean>(false);
+  /** DOM scroll offset (physical: negative in RTL); the header negates it. */
   readonly scrollLeft = signal<number>(0);
   readonly isLoading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
@@ -71,6 +72,10 @@ export class GpGridViewModel {
   readonly totalRows = signal<number>(0);
   /** Core-resolved displayed-column layout; null until the core publishes. */
   readonly layout = signal<ColumnLayoutSnapshot | null>(null);
+  /** Center columns to mount at the committed geometry revision. */
+  readonly columnWindow = signal<ColumnWindowSnapshot | null>(null);
+  /** Displayed column count, for `aria-colcount`. */
+  readonly displayedColumnCount = computed(() => this.layout()?.columns.length ?? 0);
   /** Selected displayed-width policy, mirrored from the core. */
   readonly columnLayout = signal<ColumnLayoutMode>('fit');
   /** Last committed geometry revision, for change detection. */
@@ -78,8 +83,8 @@ export class GpGridViewModel {
   readonly pendingScrollLeft = signal<number | null>(null);
 
   readonly effectiveColumns: Signal<ColumnDefinition[]>;
-  /** Displayed columns, resolved by the core; empty until it publishes. */
-  readonly layoutColumns: Signal<readonly DisplayedColumn[]>;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  readonly displayedIndexOf: Signal<(columnId: string) => number>;
   readonly totalWidth: Signal<number>;
   readonly fillHandlePosition: Signal<FillHandlePosition | null>;
   readonly slotsArray: Signal<SlotData[]>;
@@ -89,7 +94,12 @@ export class GpGridViewModel {
 
   constructor(deps: GpGridViewModelDeps) {
     this.effectiveColumns = computed(() => this.columns());
-    this.layoutColumns = computed(() => this.layout()?.columns ?? EMPTY_LAYOUT_COLUMNS);
+    // Keyed on the layout, so scrolling the window never rebuilds the index.
+    this.displayedIndexOf = computed(() => {
+      const index = new Map<string, number>();
+      (this.layout()?.columns ?? []).forEach((column, at) => index.set(column.columnId, at));
+      return (columnId: string): number => index.get(columnId) ?? 0;
+    });
     this.totalWidth = computed(() => this.contentWidth());
     this.fillHandlePosition = computed(() => {
       // Slots are replaced on every batch (row recycling, scrolling); the
@@ -122,6 +132,7 @@ export class GpGridViewModel {
       setPeekCell: (v) => this.peekCell.set(v),
       setColumns: (v) => this.columns.set(v),
       setLayout: (v) => this.layout.set(v),
+      setColumnWindow: (v) => this.columnWindow.set(v),
       setColumnLayout: (v) => this.columnLayout.set(v),
       setGeometryRevision: (v) => this.geometryRevision.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),

@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
 import { h, Fragment, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
+import type { GridCore, GridIcon, ColumnDefinition, ColumnPin, SortDirection, HeaderRendererParams, GridLabels } from "@gp-grid/core";
 import type { VueHeaderRenderer } from "../types";
 import { invokeRenderer } from "./utils";
 
@@ -22,11 +22,33 @@ export interface RenderHeaderOptions {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  rtl: boolean;
+  labels: GridLabels;
+  pinIcon: GridIcon;
   core: GridCore | null;
   container: HTMLDivElement | null;
   headerRenderers: Record<string, VueHeaderRenderer>;
   globalHeaderRenderer?: VueHeaderRenderer;
 }
+
+const nextPin = (pinned: ColumnPin | null, rtl: boolean): ColumnPin | null => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  const right: ColumnPin = rtl ? "start" : "end";
+  if (pinned === null) return left;
+  if (pinned === left) return right;
+  return null;
+};
+
+const nextPinLabel = (
+  pinned: ColumnPin | null,
+  rtl: boolean,
+  labels: GridLabels,
+): string => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  if (pinned === null) return labels.pinLeftColumn;
+  if (pinned === left) return labels.pinRightColumn;
+  return labels.unpinColumn;
+};
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -42,6 +64,9 @@ export function renderHeader(
     sortable,
     filterable,
     hasFilter,
+    rtl,
+    labels,
+    pinIcon,
     core,
     container,
     headerRenderers,
@@ -56,10 +81,14 @@ export function renderHeader(
     sortable,
     filterable,
     hasFilter,
+    pinned: column.pinned ?? null,
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
         core.setSort(column.colId ?? column.field, direction, addToExisting);
       }
+    },
+    onPinChange: (pinned) => {
+      core?.setColumnPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {
@@ -100,8 +129,36 @@ export function renderHeader(
     return invokeRenderer(globalHeaderRenderer, params);
   }
 
-  // Default header with stacked sort arrows and filter icon
+  // Default header controls
+  const isPinned = params.pinned !== null;
+  const pinLabel = nextPinLabel(params.pinned, rtl, labels);
+  const pinButton = h(
+    "button",
+    {
+      type: "button",
+      class: `gp-grid-pin-button${isPinned ? " active" : ""}`,
+      "aria-label": pinLabel,
+      "aria-pressed": isPinned,
+      title: pinLabel,
+      onPointerdown: (e: PointerEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+      },
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation();
+        params.onPinChange(nextPin(params.pinned, rtl));
+      },
+    },
+    [
+      h(
+        "svg",
+        { "aria-hidden": "true", width: "16", height: "16", viewBox: pinIcon.viewBox ?? "0 0 24 24" },
+        [h("path", { d: pinIcon.path, fill: "currentColor" })],
+      ),
+    ],
+  );
   const children: VNode[] = [
+    pinButton,
     h("span", { class: "gp-grid-header-text" }, column.headerName ?? column.field),
   ];
 

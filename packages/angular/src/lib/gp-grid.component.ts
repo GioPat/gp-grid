@@ -24,17 +24,20 @@ import type {
   ColumnFilterModel,
   ColumnMovedEvent,
   ColumnLayoutMode,
+  ColumnPin,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateUpdate,
   DataSource,
   GridCore,
+  GridIcon,
   GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
   RowLoadingOptions,
   RowId,
 } from '@gp-grid/core';
-import { resolveGridLabels } from '@gp-grid/core';
+import { defaultPinIcon, resolveGridLabels, toInlineX } from '@gp-grid/core';
 import {
   GridHeaderComponent,
   GridBodyComponent,
@@ -83,10 +86,14 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   editRenderers = input<Record<string, EditRendererTemplate>>({});
   cellRenderer = input<CellRendererTemplate | null>(null);
   headerRenderer = input<HeaderRendererTemplate | null>(null);
+  /** SVG used by the default header's pin toggle. */
+  pinIcon = input<GridIcon>(defaultPinIcon);
   editRenderer = input<EditRendererTemplate | null>(null);
   highlighting = input<HighlightingOptions | null>(null);
   rowDragEntireRow = input<boolean>(false);
   overscan = input<number>(3);
+  /** Column overscan in CSS px per side for the mounted center window. */
+  columnOverscan = input<number | undefined>(undefined);
   /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
   columnLayout = input<ColumnLayoutMode>('fit');
   /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. */
@@ -99,6 +106,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onWriteRejected = output<CellWriteRejectedEvent>();
   onColumnResized = output<ColumnResizedEvent>();
   onColumnMoved = output<ColumnMovedEvent>();
+  onColumnPinned = output<ColumnPinnedEvent>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
@@ -139,6 +147,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
         overscan: this.overscan(),
+        columnOverscan: this.columnOverscan(),
         columnLayout: this.columnLayout(),
         maxFlingVelocity: this.maxFlingVelocity(),
         rowLoading: this.rowLoading() ?? undefined,
@@ -153,6 +162,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onWriteRejected: (event) => this.onWriteRejected.emit(event),
         onColumnResized: (event) => this.onColumnResized.emit(event),
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
+        onColumnPinned: (event) => this.onColumnPinned.emit(event),
       },
     );
     this.boundCore.current = core;
@@ -192,9 +202,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onBodyScroll(scrollLeft: number): void {
-    this.vm.scrollLeft.set(scrollLeft);
     const el = this.body.scrollContainer.nativeElement;
-    this.bindings.coreRef?.setViewport(el.scrollTop, scrollLeft, el.clientWidth, el.clientHeight);
+    const logicalScrollLeft = toInlineX(scrollLeft, this.bindings.isRtl);
+    // The header strip undoes the native scroll, so it takes the DOM value.
+    this.vm.scrollLeft.set(scrollLeft);
+    this.bindings.coreRef?.setViewport(
+      el.scrollTop,
+      logicalScrollLeft,
+      el.clientWidth,
+      el.clientHeight,
+    );
   }
 
   protected onHeaderPointerDown(evt: HeaderPointerDownEvent): void {
@@ -302,6 +319,10 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     this.bindings.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
   }
 
+  protected onHeaderPin(evt: { columnId: string; pinned: ColumnPin | null }): void {
+    this.bindings.coreRef?.setColumnPinned(evt.columnId, evt.pinned);
+  }
+
   protected onWheel(event: WheelEvent): void {
     const bodyEl = this.body?.scrollContainer?.nativeElement;
     if (!bodyEl) return;
@@ -309,6 +330,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     if (dampened) {
       event.preventDefault();
       bodyEl.scrollTop += dampened.dy;
+      // Wheel deltaX is physical, unlike the inline-relative deltas core emits.
       bodyEl.scrollLeft += dampened.dx;
     }
   }

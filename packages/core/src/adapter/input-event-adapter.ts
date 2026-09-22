@@ -6,6 +6,7 @@ import type {
   KeyboardResult,
 } from "../types/input";
 import { toPointerEventData } from "./pointer-event";
+import { normalizeHorizontalKey, readContainerBounds, readIsRtl } from "./inline-axis";
 import type { AutoScrollDriver } from "./auto-scroll";
 import type { PendingRowDragController } from "./pending-row-drag";
 import type { PendingCellTapController } from "./pending-cell-tap";
@@ -131,15 +132,7 @@ export class InputEventAdapter<TData = unknown> {
     const core = this.deps.getCore();
     const bodyEl = this.deps.getBodyEl();
     if (core === null || bodyEl === null) return;
-    const rect = bodyEl.getBoundingClientRect();
-    const result = core.input.handleDragMove(toPointerEventData(event), {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: bodyEl.scrollTop,
-      scrollLeft: bodyEl.scrollLeft,
-    });
+    const result = core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl));
     this.deps.onDragStateChange(core.input.getDragState());
     if (result?.autoScroll) {
       this.deps.autoScroll.start(result.autoScroll.dx, result.autoScroll.dy);
@@ -182,9 +175,12 @@ export class InputEventAdapter<TData = unknown> {
   ): KeyboardResult {
     const core = this.deps.getCore();
     if (core === null) return { preventDefault: false };
+    // Arrows are normalized here, not in core: selection is direction-agnostic
+    // and the editor must still see the physical key.
+    const rtl = readIsRtl(this.deps.getBodyEl());
     return core.input.handleKeyDown(
       {
-        key: event.key,
+        key: normalizeHorizontalKey(event.key, rtl),
         shiftKey: event.shiftKey,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,

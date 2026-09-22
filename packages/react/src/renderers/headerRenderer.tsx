@@ -1,7 +1,15 @@
 // packages/react/src/renderers/headerRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
+import type {
+  GridCore,
+  GridIcon,
+  ColumnDefinition,
+  ColumnPin,
+  GridLabels,
+  SortDirection,
+  HeaderRendererParams,
+} from "@gp-grid/core";
 import type { ReactHeaderRenderer } from "../types";
 
 const needsDistinctValues = (column: ColumnDefinition): boolean => {
@@ -21,11 +29,39 @@ export interface RenderHeaderOptions<TData> {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  rtl: boolean;
+  /** Resolved labels used by the default header controls. */
+  labels: GridLabels;
+  pinIcon: GridIcon;
   coreRef: React.RefObject<GridCore<TData> | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
   globalHeaderRenderer?: ReactHeaderRenderer;
 }
+
+/** Requested pin of the header's column; `null` while unpinned. */
+const pinOf = (column: ColumnDefinition): ColumnPin | null => column.pinned ?? null;
+
+/** Return the next physical pin position in the default control's cycle. */
+const nextPin = (pinned: ColumnPin | null, rtl: boolean): ColumnPin | null => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  const right: ColumnPin = rtl ? "start" : "end";
+  if (pinned === null) return left;
+  if (pinned === left) return right;
+  return null;
+};
+
+/** Describe the action performed by the next click. */
+const nextPinLabel = (
+  pinned: ColumnPin | null,
+  rtl: boolean,
+  labels: GridLabels,
+): string => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  if (pinned === null) return labels.pinLeftColumn;
+  if (pinned === left) return labels.pinRightColumn;
+  return labels.unpinColumn;
+};
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -41,6 +77,9 @@ export function renderHeader<TData>(
     sortable,
     filterable,
     hasFilter,
+    rtl,
+    labels,
+    pinIcon,
     coreRef,
     containerRef,
     headerRenderers,
@@ -57,10 +96,14 @@ export function renderHeader<TData>(
     sortable,
     filterable,
     hasFilter,
+    pinned: pinOf(column),
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
         core.setSort(column.colId ?? column.field, direction, addToExisting);
       }
+    },
+    onPinChange: (pinned) => {
+      core?.setColumnPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {
@@ -100,9 +143,29 @@ export function renderHeader<TData>(
     return globalHeaderRenderer(params);
   }
 
-  // Default header with stacked sort arrows and filter icon
+  // Default header controls
+  const pinLabel = nextPinLabel(params.pinned, rtl, labels);
   return (
     <>
+      <button
+        type="button"
+        className={`gp-grid-pin-button${params.pinned !== null ? " active" : ""}`}
+        aria-label={pinLabel}
+        aria-pressed={params.pinned !== null}
+        title={pinLabel}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          params.onPinChange(nextPin(params.pinned, rtl));
+        }}
+      >
+        <svg aria-hidden="true" width="16" height="16" viewBox={pinIcon.viewBox ?? "0 0 24 24"}>
+          <path d={pinIcon.path} fill="currentColor" />
+        </svg>
+      </button>
       <span className="gp-grid-header-text">
         {column.headerName ?? column.field}
       </span>

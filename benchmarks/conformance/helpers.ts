@@ -2,7 +2,69 @@
 // Shared helpers for the conformance suites. Extracted from the flat-grid spec
 // so both suites use one fixture/probe vocabulary.
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
+
+/** Tolerance for every cross-surface comparison in the conformance suites. */
+export const TOLERANCE = 1;
+
+export const bodyScroller = (page: Page): Locator =>
+  page.locator(".gp-grid-rows-wrapper").locator("xpath=../..");
+
+export const headerCell = (page: Page, layoutIndex: number): Locator =>
+  page.locator(`.gp-grid-header-cell[data-col-index="${layoutIndex}"]`);
+
+export const cell = (page: Page, row: number, layoutIndex: number): Locator =>
+  page.locator(`[data-cell-row="${row}"][data-cell-col="${layoutIndex}"]`);
+
+export interface LayoutColumnSnapshot {
+  columnId: string;
+  layoutIndex: number;
+  offset: number;
+  width: number;
+}
+
+export const layoutColumns = (page: Page): Promise<LayoutColumnSnapshot[]> =>
+  readHook<LayoutColumnSnapshot[]>(page, "layoutColumns");
+
+/** Box of a mounted element, or `null` when the wrapper did not mount it. */
+export const mountedBox = async (
+  locator: Locator,
+): Promise<{ x: number; width: number } | null> => {
+  // `boundingBox()` waits for the element, so an unmounted column must be
+  // detected by count first.
+  if ((await locator.count()) === 0) return null;
+  const box = await locator.boundingBox();
+  return box === null ? null : { x: box.x, width: box.width };
+};
+
+/**
+ * Header and first-row cell agree on x and width, and match the snapshot.
+ * A wrapper mounts only its column window, so unmounted columns are skipped.
+ */
+export const expectAligned = async (page: Page, expectedCount: number): Promise<void> => {
+  // The layout trails a mutation by a frame or two, so the count is polled too.
+  await expect.poll(async () => (await layoutColumns(page)).length).toBe(expectedCount);
+  const columns = await layoutColumns(page);
+
+  await expect
+    .poll(async () => {
+      let mounted = 0;
+      for (const column of columns) {
+        const headerBox = await mountedBox(headerCell(page, column.layoutIndex));
+        const cellBox = await mountedBox(cell(page, 0, column.layoutIndex));
+        if (headerBox === null || cellBox === null) continue;
+        mounted += 1;
+        if (Math.abs(headerBox.x - cellBox.x) > TOLERANCE) {
+          return `column ${column.layoutIndex}: header x ${headerBox.x} vs cell x ${cellBox.x}`;
+        }
+        if (Math.abs(headerBox.width - column.width) > TOLERANCE) {
+          return `column ${column.layoutIndex}: header width ${headerBox.width} vs ${column.width}`;
+        }
+      }
+      return mounted > 0 ? "aligned" : "no mounted column";
+    })
+    .toBe("aligned");
+};
 
 export const openFixture = async (page: Page, framework: string): Promise<Error[]> => {
   const pageErrors: Error[] = [];
@@ -77,6 +139,10 @@ export interface ColumnStateSnapshot {
   resolvedWidth: number;
   hidden: boolean;
   order: number;
+  /** Requested pin, or `null` while unpinned. */
+  pinned: "start" | "end" | null;
+  /** Effective region, or `null` while hidden. */
+  region: "start" | "center" | "end" | null;
 }
 
 export const coreToken = (page: Page): Promise<number> => readHook<number>(page, "coreToken");
@@ -85,8 +151,8 @@ export const filterCount = (page: Page): Promise<number> => readHook<number>(pag
 export const columnState = (page: Page): Promise<ColumnStateSnapshot[]> =>
   readHook<ColumnStateSnapshot[]>(page, "columnState");
 export const columnIds = (page: Page): Promise<string[]> => readHook<string[]>(page, "columnIds");
-export const eventCounts = (page: Page): Promise<{ resized: number; moved: number; dragged: number }> =>
-  readHook<{ resized: number; moved: number; dragged: number }>(page, "eventCounts");
+export const eventCounts = (page: Page): Promise<{ resized: number; moved: number; dragged: number; pinned: number }> =>
+  readHook<{ resized: number; moved: number; dragged: number; pinned: number }>(page, "eventCounts");
 export const resetEventCounts = (page: Page): Promise<void> =>
   page.evaluate(() => {
     const hooks = (globalThis as unknown as {

@@ -4,7 +4,6 @@ import type {
   GridCoreOptions,
   BatchInstructionListener,
   ColumnDefinition,
-  ColumnId,
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ViewRow,
@@ -19,7 +18,7 @@ import type {
 } from "./types";
 import type { SelectionManager } from "./selection";
 import { createGridGeometry, toReadonlyGeometry, type GridGeometryService } from "./geometry";
-import type { GeometrySpace, CellBounds, ColumnLayoutMode, GridGeometry } from "./types/geometry";
+import type { GeometrySpace, CellBounds, ColumnLayoutMode, ColumnPin, GridGeometry } from "./types/geometry";
 import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
@@ -37,6 +36,7 @@ import { buildGridManagers } from "./grid-core-managers";
 import { ColumnModel } from "./column-model";
 import {
   type ColumnCoreDeps,
+  applyColumnPin,
   applyColumnStateReset,
   applyColumnStateUpdates,
   applySetColumns,
@@ -101,6 +101,7 @@ export class GridCore<TData = unknown> {
       config: this.config,
       getColumns: () => this.columnModel.getLayout(),
       getGeometry: () => this.geometryService,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
     });
     this.rowData = managers.rowData;
     this.selection = managers.selection;
@@ -118,6 +119,7 @@ export class GridCore<TData = unknown> {
         getRowCount: () => this.rowData.getTotalRows(),
         getRowHeight: () => this.config.rowHeight,
         getOverscan: () => this.config.overscan,
+        getColumnOverscan: () => this.config.columnOverscan,
         getColumns: () => this.columnModel.getLayout(),
         isWidthOverridden: (layoutIndex) => this.columnModel.isWidthOverriddenAt(layoutIndex),
         getViewport: () => ({
@@ -190,19 +192,31 @@ export class GridCore<TData = unknown> {
     );
     if (!changed) return;
 
+    // A raw horizontal scroll cannot change which rows are visible: it only
+    // moves the mounted center window, and an unchanged range emits nothing.
+    // A vertical move still has to publish the column window when both axes
+    // moved in one sample.
+    const verticalWork =
+      viewportSizeChanged || previousHeight !== height || previousTop !== this.viewport.getScrollTop();
+    if (verticalWork === false) {
+      this.view.syncColumnWindowOnly(
+        () => this.emitScrollCorrection(),
+        () => this.hasScrollCorrection(),
+      );
+      return;
+    }
+
     // One batch: adapters reset the pending scroll per batch, so a correction
     // delivered ahead of the row sync would be dropped before it is applied.
+    // Geometry was committed once by `refreshGeometry`, so every instruction
+    // in this batch reports the same revision; the window is published here
+    // because a vertical-only slot sync does not re-emit content size.
     this.batcher.start();
     try {
       this.refreshGeometry();
-      const verticalWork =
-        viewportSizeChanged ||
-        previousHeight !== height ||
-        previousTop !== this.viewport.getScrollTop();
-      if (verticalWork) {
-        this.rowData.requestVisibleRows();
-      }
+      this.rowData.requestVisibleRows();
       this.view.syncVisibleRows(viewportSizeChanged);
+      this.view.publishColumnWindow();
     } finally {
       this.batcher.flush();
     }
@@ -210,25 +224,35 @@ export class GridCore<TData = unknown> {
 
   /**
    * Refresh the committed geometry dependencies before a batch captures its
-   * revision. Also corrects native scroll that a data/layout change left
-   * outside the reachable range.
+   * revision. The column window is committed here too, so a viewport or
+   * layout change publishes one geometry revision, not one per emitter. Also
+   * corrects native scroll that a data/layout change left outside the
+   * reachable range.
    */
   private refreshGeometry(): void {
     this.geometryService.refresh();
+    this.geometryService.syncColumnWindow();
     this.emitScrollCorrection();
   }
 
   /** Geometry already answers from the clamped sample; this moves the DOM to it. */
   private emitScrollCorrection(): void {
+    if (this.hasScrollCorrection() === false) return;
     const sampleTop = this.scrollTopOverride ?? this.viewport.getScrollTop();
     const sampleLeft = this.viewport.getScrollLeft();
     const { scrollTop, scrollLeft } = this.geometryService.getEffectiveScroll();
-    if (scrollTop === sampleTop && scrollLeft === sampleLeft) return;
     this.batcher.emit({
       type: "SCROLL_TO",
       scrollTop: scrollTop === sampleTop ? undefined : scrollTop,
       scrollLeft: scrollLeft === sampleLeft ? undefined : scrollLeft,
     });
+  }
+
+  private hasScrollCorrection(): boolean {
+    const sampleTop = this.scrollTopOverride ?? this.viewport.getScrollTop();
+    const sampleLeft = this.viewport.getScrollLeft();
+    const { scrollTop, scrollLeft } = this.geometryService.getEffectiveScroll();
+    return scrollTop !== sampleTop || scrollLeft !== sampleLeft;
   }
 
   /**
@@ -250,7 +274,7 @@ export class GridCore<TData = unknown> {
   /** Resolve a cell to viewport/content geometry by identity. */
   getCellBounds(
     rowId: RowId,
-    columnId: ColumnId,
+    columnId: string,
     space: GeometrySpace = "viewport",
   ): CellBounds | undefined {
     const viewIndex = this.resolveViewIndex(rowId);
@@ -333,8 +357,19 @@ export class GridCore<TData = unknown> {
 
   startEdit(row: number, col: number): boolean {
     // The edit manager owns the read-only check so a refused, editable cell
-    // reports through the shared write-rejection diagnostic.
-    return this.editManager.startEdit(row, col);
+    // reports through the shared write-rejection diagnostic. Retention is
+    // registered only for an edit that will open, inside the same batch that
+    // publishes START_EDIT and the window mounting its editor (B7): a refused
+    // edit neither drops the current editor's keep-alive nor emits anything.
+    if (this.editManager.canEdit(col) === false) return this.editManager.startEdit(row, col);
+    const columnId = this.columnModel.idAt(col);
+    this.batcher.start();
+    try {
+      if (columnId !== undefined) this.retainEditColumn(columnId);
+      return this.editManager.startEdit(row, col);
+    } finally {
+      this.batcher.flush();
+    }
   }
 
   /**
@@ -439,6 +474,12 @@ export class GridCore<TData = unknown> {
       getLayout: () => this.columnModel.getLayout(),
       setColumnWidth: (columnId, width) => this.columnModel.setWidth(columnId, width),
       moveColumn: (fromIndex, toIndex) => this.columnModel.move(fromIndex, toIndex),
+      columnModel: this.columnModel,
+      selection: this.selection,
+      editManager: this.editManager,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      refreshGeometry: () => this.refreshGeometry(),
+      batcher: this.batcher,
       view: this.view,
     };
   }
@@ -472,13 +513,28 @@ export class GridCore<TData = unknown> {
    */
   moveColumn(fromIndex: number, toIndex: number): void {
     const applied = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
-    if (applied) {
-      this.config.onColumnMoved?.({
+    if (applied === null) return;
+    if (applied.pinChanged) {
+      this.config.onColumnPinned?.({
         columnId: applied.columnId,
-        fromViewIndex: applied.fromViewIndex,
-        toViewIndex: applied.toViewIndex,
+        pinned: applied.pinned ?? null,
       });
     }
+    this.config.onColumnMoved?.({
+      columnId: applied.columnId,
+      fromViewIndex: applied.fromViewIndex,
+      toViewIndex: applied.toViewIndex,
+    });
+  }
+
+  /**
+   * Pin a column against the inline start or end edge, or unpin it with
+   * `null`. Only a pin change moves a column between regions; the base order
+   * is untouched, so unpinning returns it to its base-order slot.
+   */
+  setColumnPinned(columnId: string, pinned: ColumnPin | null): void {
+    if (applyColumnPin(this.columnDeps(), columnId, pinned) === false) return;
+    this.config.onColumnPinned?.({ columnId, pinned });
   }
 
   /**
@@ -691,7 +747,7 @@ export class GridCore<TData = unknown> {
   }
 
   /**
-   * Update columns and reconcile by `ColumnId` in one instruction batch.
+   * Update columns and reconcile by column id in one instruction batch.
    * Retained IDs keep user state, sort and filter; removed IDs drop headers,
    * state and caches; new IDs take definition defaults.
    */
@@ -711,7 +767,7 @@ export class GridCore<TData = unknown> {
    * Drop user column state. With no IDs, every column returns to its
    * definition defaults; with IDs, only those columns reset.
    */
-  resetColumnState(columnIds?: ColumnId[]): void {
+  resetColumnState(columnIds?: string[]): void {
     applyColumnStateReset(this.columnDeps(), columnIds);
   }
 
@@ -731,8 +787,18 @@ export class GridCore<TData = unknown> {
       view: this.view,
       getColumnLayout: () => this.geometry.getColumnLayout(),
       refreshGeometry: () => this.refreshGeometry(),
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       reloadAfterSchemaChange: () => this.refresh(),
     };
+  }
+
+  /** Bounded keep-alive for the edited column (B7), published as a batch. */
+  private retainEditColumn(columnId: string | null): void {
+    this.geometryService.retainColumns(
+      "edit",
+      columnId === null ? [] : [columnId],
+    );
+    this.view.syncEditRetention();
   }
 
   /**

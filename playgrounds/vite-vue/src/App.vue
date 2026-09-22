@@ -362,7 +362,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
 
 <style>
 /* Highlight classes (global, not scoped) */
-.row-highlight {
+.gp-grid-row.row-highlight .gp-grid-cell {
     background-color: rgba(59, 130, 246, 0.3) !important;
 }
 

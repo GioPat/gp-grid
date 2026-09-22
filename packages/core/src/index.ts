@@ -10,6 +10,8 @@ export { GridCore } from "./grid-core";
 /** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";
 export { TransactionManager } from "./managers";
+export { defaultPinIcon } from "./icons";
+export type { GridIcon } from "./icons";
 
 /** Data sources */
 export {
@@ -101,7 +103,6 @@ export type {
 
   /** Column definition */
   ColumnDefinition,
-  ColumnId,
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,
@@ -112,6 +113,7 @@ export type {
   /** Interaction events */
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
 
   /** Cell Position coordinates: row and column, zero-based indices */
@@ -191,7 +193,12 @@ export type { Direction } from "./selection";
 export type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
+  ColumnPin,
+  ColumnRegion,
+  ColumnRegionLayout,
+  ColumnWindowSnapshot,
   DisplayedColumn,
+  ResolvedColumn,
   GeometrySpace,
   AxisBounds,
   CellBounds,
@@ -295,6 +302,13 @@ export type {
  */
 export {
   toPointerEventData,
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
+  inlineOffset,
+  readContainerBounds,
+  fixedLeftForInline,
+  normalizeHorizontalKey,
   AutoScrollDriver,
   PendingRowDragController,
   PendingCellTapController,

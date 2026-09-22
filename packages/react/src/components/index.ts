@@ -18,5 +18,14 @@ export type { GridHeaderProps } from "./GridHeader";
 export { GridBody } from "./GridBody";
 export type { GridBodyProps } from "./GridBody";
 
+export { GridRow } from "./GridRow";
+export type { GridRowProps, GridRowCellContext } from "./GridRow";
+
+export { GridCell } from "./GridCell";
+export type { GridCellProps } from "./GridCell";
+
+export { GridHeaderCell } from "./GridHeaderCell";
+export type { GridHeaderCellProps } from "./GridHeaderCell";
+
 export { CellPeek } from "./CellPeek";
 export type { CellPeekProps } from "./CellPeek";

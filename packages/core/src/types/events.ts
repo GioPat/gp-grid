@@ -2,11 +2,11 @@
 // Object-shaped column/row interaction events shared by every wrapper.
 
 import type { RowId } from "./basic";
-import type { ColumnId } from "./columns";
+import type { ColumnPin } from "./geometry";
 
 /** Emitted after a column width command. `viewIndex` is the resolved-layout index. */
 export interface ColumnResizedEvent {
-  columnId: ColumnId;
+  columnId: string;
   /** Displayed width after redistribution, in pixels. */
   width: number;
   viewIndex: number;
@@ -14,9 +14,15 @@ export interface ColumnResizedEvent {
 
 /** Emitted after a column move command. Indices are resolved-layout positions. */
 export interface ColumnMovedEvent {
-  columnId: ColumnId;
+  columnId: string;
   fromViewIndex: number;
   toViewIndex: number;
+}
+
+/** Emitted after a column's requested pin changed; `null` means unpinned. */
+export interface ColumnPinnedEvent {
+  columnId: string;
+  pinned: ColumnPin | null;
 }
 
 /**

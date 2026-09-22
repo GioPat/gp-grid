@@ -21,10 +21,13 @@ export { createInitialState } from "@gp-grid/core";
  */
 export function useGridState(args?: InitialStateArgs): {
   state: ShallowRef<GridState>;
+  /** Bumped once per batch; cells read it so core-backed content re-renders. */
+  renderToken: ShallowRef<number>;
   applyInstructions: (instructions: GridInstruction[]) => void;
   reset: () => void;
 } {
   const state = shallowRef<GridState>(createInitialState(args));
+  const renderToken = shallowRef(0);
 
   /**
    * Apply a batch of instructions atomically to the state.
@@ -37,8 +40,10 @@ export function useGridState(args?: InitialStateArgs): {
    */
   const applyInstructions = (instructions: GridInstruction[]): void => {
     const current = state.value;
-    const workingSlots = new Map(current.slots);
-    const workingHeaders = new Map(current.headers);
+    // Copy-on-write: a window-only batch mutates no map, so both keep their
+    // identity and dependent computeds skip re-evaluating.
+    let workingSlots = current.slots;
+    let workingHeaders = current.headers;
 
     // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
     let mergedChanges: Partial<GridState> = {
@@ -47,6 +52,20 @@ export function useGridState(args?: InitialStateArgs): {
     };
 
     for (const instruction of instructions) {
+      switch (instruction.type) {
+        case "CREATE_SLOT":
+        case "DESTROY_SLOT":
+        case "ASSIGN_SLOT":
+        case "MOVE_SLOT":
+          if (workingSlots === current.slots) workingSlots = new Map(current.slots);
+          break;
+        case "UPDATE_HEADER":
+        case "REMOVE_HEADERS":
+          if (workingHeaders === current.headers) workingHeaders = new Map(current.headers);
+          break;
+        default:
+          break;
+      }
       const changes = applyInstruction(instruction, workingSlots, workingHeaders);
       if (changes) {
         Object.assign(mergedChanges, changes);
@@ -58,6 +77,7 @@ export function useGridState(args?: InitialStateArgs): {
 
     // Atomic replacement — exactly one reactive notification
     state.value = { ...current, ...mergedChanges };
+    renderToken.value += 1;
   };
 
   /**
@@ -65,10 +85,12 @@ export function useGridState(args?: InitialStateArgs): {
    */
   const reset = (): void => {
     state.value = createInitialState();
+    renderToken.value += 1;
   };
 
   return {
     state,
+    renderToken,
     applyInstructions,
     reset,
   };

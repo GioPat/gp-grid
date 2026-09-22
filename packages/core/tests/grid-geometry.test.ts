@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createGridGeometry, type GridGeometryDeps } from "../src/geometry/grid-geometry";
 import { createRowGeometry } from "../src/geometry/row-geometry";
 import type { ColumnDefinition } from "../src/types/columns";
-import type { ColumnLayoutMode } from "../src/types/geometry";
+import type { ColumnLayoutMode, ColumnPin } from "../src/types/geometry";
 
 interface HarnessOptions {
   rowCount?: number;
@@ -13,8 +13,10 @@ interface HarnessOptions {
   scrollTop?: number;
   scrollLeft?: number;
   overscan?: number;
+  columnOverscan?: number;
   mode?: ColumnLayoutMode;
   overridden?: number[];
+  pins?: Record<string, ColumnPin>;
   mapping?: { ratio?: number; override?: number | null };
 }
 
@@ -50,6 +52,7 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
     getRowCount: () => rowCount,
     getRowHeight: () => rowHeight,
     getOverscan: () => options.overscan ?? 3,
+    getColumnOverscan: () => options.columnOverscan ?? 240,
     getColumns: () => columns,
     isWidthOverridden: (layoutIndex) => overridden.includes(layoutIndex),
     getViewport: () => ({
@@ -207,6 +210,7 @@ describe("GridGeometry — hit testing", () => {
       displayIndex: 0,
       col: 0,
       columnId: "a",
+      region: "center",
     });
     expect(harness.geometry.hitTest({ x: 250, y: 100 })).toMatchObject({
       row: 5,
@@ -215,13 +219,14 @@ describe("GridGeometry — hit testing", () => {
     });
   });
 
-  it("reports the layout index of a column displayed after a hidden one", () => {
+  it("keeps layout indices when a column on the left is hidden", () => {
     const harness = createHarness({
       viewportWidth: 400,
       mode: "fixed",
       columns: [column("a", 100, true), column("b", 100), column("c", 100)],
     });
     harness.geometry.refresh();
+    // A hidden column keeps its layout index: display and model index differ.
     expect(harness.geometry.hitTest({ x: 10, y: 10 })).toMatchObject({
       displayIndex: 0,
       col: 1,
@@ -240,6 +245,8 @@ describe("GridGeometry — hit testing", () => {
     expect(harness.geometry.hitTest({ x: 10, y: 0, scrollTop: 320 })).toMatchObject({ row: 10 });
     expect(harness.geometry.hitTest({ x: -50, y: 10 })).toMatchObject({ displayIndex: -1, col: -1 });
     const pastEnd = harness.geometry.hitTest({ x: 10000, y: 10 });
+    // A point past the last displayed column reports the displayed count and
+    // no column; consumers that want the nearest cell clamp it themselves.
     expect(pastEnd).toMatchObject({ displayIndex: 2, col: -1 });
     expect(pastEnd.columnId).toBeUndefined();
     expect(harness.geometry.hitTest({ x: 10, y: -10 }).row).toBe(-1);
@@ -254,6 +261,7 @@ describe("GridGeometry — hit testing", () => {
       displayIndex: 0,
       col: 0,
       columnId: "a",
+      region: "center",
     });
     harness.setColumns([]);
     expect(harness.geometry.hitTest({ x: 10, y: 10 })).toEqual({
@@ -261,6 +269,7 @@ describe("GridGeometry — hit testing", () => {
       displayIndex: -1,
       col: -1,
       columnId: undefined,
+      region: null,
     });
   });
 });

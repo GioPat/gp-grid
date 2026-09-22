@@ -1,4 +1,5 @@
 import type { GridCore } from "../grid-core";
+import { readIsRtl, toInlineX } from "./inline-axis";
 import { updateRenderIntervalEma } from "../utils/touch-scroll-physics";
 
 /**
@@ -19,6 +20,9 @@ export class SyntheticScroll<TData = unknown> {
   private pipelineIntervalEmaMs: number | null = null;
   private readonly getCore: () => GridCore<TData> | null;
   private readonly getEl: () => HTMLElement | null;
+  /** Cached per element; dropped by `resetDirection()`. */
+  private rtlEl: HTMLElement | null = null;
+  private rtl = false;
 
   constructor(
     getCore: () => GridCore<TData> | null,
@@ -26,6 +30,19 @@ export class SyntheticScroll<TData = unknown> {
   ) {
     this.getCore = getCore;
     this.getEl = getEl;
+  }
+
+  /** Drop the cached inline direction (the element or its `dir` changed). */
+  resetDirection(): void {
+    this.rtlEl = null;
+  }
+
+  private isRtl(el: HTMLElement): boolean {
+    if (el !== this.rtlEl) {
+      this.rtlEl = el;
+      this.rtl = readIsRtl(el);
+    }
+    return this.rtl;
   }
 
   /** Smoothed pipeline-run interval (ms); null until two runs were timed. */
@@ -55,7 +72,12 @@ export class SyntheticScroll<TData = unknown> {
     this.overrideActive = true;
     core.setScrollTopOverride(domScrollTop);
     el.scrollTop = domScrollTop;
-    core.setViewport(domScrollTop, el.scrollLeft, el.clientWidth, el.clientHeight);
+    core.setViewport(
+      domScrollTop,
+      toInlineX(el.scrollLeft, this.isRtl(el)),
+      el.clientWidth,
+      el.clientHeight,
+    );
   }
 
   /** Hand scroll-position ownership back to native scroll events. */
@@ -67,7 +89,12 @@ export class SyntheticScroll<TData = unknown> {
     core.setScrollTopOverride(null);
     const el = this.getEl();
     if (el !== null) {
-      core.setViewport(el.scrollTop, el.scrollLeft, el.clientWidth, el.clientHeight);
+      core.setViewport(
+        el.scrollTop,
+        toInlineX(el.scrollLeft, this.isRtl(el)),
+        el.clientWidth,
+        el.clientHeight,
+      );
     }
   }
 }

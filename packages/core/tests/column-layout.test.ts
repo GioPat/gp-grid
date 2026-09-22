@@ -42,7 +42,7 @@ describe("resolveColumnLayout", () => {
     ]);
   });
 
-  it("excludes hidden columns while keeping their layout indices", () => {
+  it("excludes hidden columns but keeps their layout index", () => {
     const columns = [column("a", 100), column("b", 50, { hidden: true }), column("c", 30)];
     const snapshot = resolveColumnLayout(input(columns, 0), null, 1);
     expect(snapshot.columns.map((c) => [c.columnId, c.layoutIndex, c.offset])).toEqual([
@@ -72,6 +72,7 @@ describe("resolveColumnLayout", () => {
     const columns = [column("hidden", 10, { hidden: true }), column("a", 100)];
     const next = resolveColumnLayout(input(columns, 0), first, 2);
     expect(next).not.toBe(first);
+    // The hidden column holds layout index 0; "a" keeps index 1.
     expect(next.columns[0]!.layoutIndex).toBe(1);
   });
 
@@ -121,7 +122,20 @@ describe("createSeedColumnLayout", () => {
 describe("createColumnLayoutResolver", () => {
   it("answers an empty layout before any input arrives", () => {
     const resolver = createColumnLayoutResolver("fixed", () => 1);
-    expect(resolver.get()).toEqual({ revision: 1, mode: "fixed", columns: [], totalWidth: 0 });
+    expect(resolver.get()).toEqual({
+      revision: 1,
+      mode: "fixed",
+      columns: [],
+      totalWidth: 0,
+      regions: {
+        centerStart: 0,
+        centerEnd: 0,
+        startWidth: 0,
+        endWidth: 0,
+        endOffset: 0,
+        centerViewportWidth: 0,
+      },
+    });
   });
 
   it("lazily resolves with the caller's revision", () => {

@@ -1,9 +1,7 @@
-// Provisional target vocabulary used to check examples in the PRD 001 API
-// review. These declarations are intentionally local until their owning PRDs
-// implement and export the contracts. PRD 002 promoted ColumnId, ViewRow,
-// getViewRow, getRecordById, setColumnState and resetColumnState, and PRD 003
-// promoted getCellBounds, CellBounds and columnLayout to real core exports
-// (see current-api.ts); row-sizing remains provisional.
+// Provisional target vocabulary used to check planned API examples. These
+// declarations stay local until their owning features export the contracts.
+// Column identity, view-row, column-state and geometry contracts now come from
+// the public package; row-sizing remains provisional.
 type RowId = string | number;
 
 interface TargetOptions {

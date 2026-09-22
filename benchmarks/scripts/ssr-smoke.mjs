@@ -146,7 +146,83 @@ await check("React fixed keeps the declared 160px column", async () => {
   return expectWidth(html, 160, "React fixed");
 });
 
+const pinnedColumns = [
+  { colId: "pin-start", field: "id", headerName: "ID", width: 120, cellDataType: "number", pinned: "start" },
+  { colId: "name", field: "name", headerName: "Name", width: 160, cellDataType: "text" },
+  { colId: "pin-end", field: "label", headerName: "Label", width: 90, cellDataType: "text", pinned: "end" },
+];
+
+/** Markup of one pin region's header container. */
+const pinSegment = (html, region) => {
+  const marker = `data-pin-region="${region}"`;
+  const at = html.indexOf(marker);
+  if (at === -1) throw new Error(`No ${region} pin container in the SSR markup.`);
+  const next = html.indexOf('data-pin-region="', at + marker.length);
+  return html.slice(at, next === -1 ? undefined : next);
+};
+
+/** Assert the server markup carries both pin containers and their cells. */
+const expectPinnedShell = (html, label) => {
+  if (html.includes('role="grid"') === false || html.includes('aria-colcount="3"') === false) {
+    throw new Error("The grid shell is missing its grid role or column count.");
+  }
+  const pinContainers = html.match(/gp-grid-pin-header/g) ?? [];
+  if (pinContainers.length !== 2) {
+    throw new Error(`Expected a start and an end pin container, found ${pinContainers.length}.`);
+  }
+  if (pinSegment(html, "start").includes('aria-colindex="1"') === false) {
+    throw new Error("The start pin container does not hold displayed column 1.");
+  }
+  if (pinSegment(html, "end").includes('aria-colindex="3"') === false) {
+    throw new Error("The end pin container does not hold displayed column 3.");
+  }
+  return `${label}: ${pinContainers.length} pin containers with their header cells`;
+};
+
+/**
+ * The deterministic first render seeds regions from the declared pins, so a
+ * pin header cell is server-rendered with and without a measured width: an
+ * unmeasured viewport admits every pin.
+ */
+const checkPinnedHeader = async (label, initialWidth) => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const props = {
+    columns: pinnedColumns,
+    rowData: rows,
+    rowHeight: 32,
+    getRowId: (row) => row.id,
+  };
+  if (initialWidth !== undefined) props.initialWidth = initialWidth;
+  return expectPinnedShell(renderToString(React.createElement(Grid, props)), label);
+};
+
+await check("React pinned header cells with initialWidth", () =>
+  checkPinnedHeader("initialWidth=500", 500));
+
+await check("React pinned header cells without initialWidth", () =>
+  checkPinnedHeader("unmeasured", undefined));
+
 const vuePackage = path.join(REPOSITORY_ROOT, "playgrounds/vite-vue/package.json");
+
+/** Vue pins are declared on the columns, so the same shell rules apply. */
+const checkVuePinnedHeader = async (label, initialWidth) => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const props = { columns: pinnedColumns, rowData: rows, rowHeight: 32 };
+  if (initialWidth !== undefined) props.initialWidth = initialWidth;
+  const app = createSSRApp({ render: () => h(GpGrid, props) });
+  return expectPinnedShell(await renderToString(app), label);
+};
+
+await check("Vue pinned header cells with initialWidth", () =>
+  checkVuePinnedHeader("initialWidth=500", 500));
+
+await check("Vue pinned header cells without initialWidth", () =>
+  checkVuePinnedHeader("unmeasured", undefined));
 await check("Vue native server render", async () => {
   const { createSSRApp, h } = await importFrom("vue", vuePackage);
   const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
@@ -249,6 +325,30 @@ await check("Angular columnar server render (shell only)", async () => {
   );
   if (html.includes("gp-grid-container") === false) throw new Error("Angular columnar grid shell was not rendered.");
   return `${html.length} characters (shell; async rows are not assumed)`;
+});
+
+await check("Angular pinned header cells", async () => {
+  await importFrom("@angular/compiler", angularPackage);
+  const { Component } = await importFrom("@angular/core", angularPackage);
+  const { bootstrapApplication } = await importFrom("@angular/platform-browser", angularPackage);
+  const { provideServerRendering, renderApplication } = await importFrom("@angular/platform-server", angularPackage);
+  const angularArtifact = path.join(REPOSITORY_ROOT, "packages/angular/dist/angular/fesm2022/gp-grid-angular.mjs");
+  const { GpGridComponent } = await import(pathToFileURL(angularArtifact).href);
+  class SsrPinnedComponent {}
+  Component({
+    selector: "app-root",
+    standalone: true,
+    imports: [GpGridComponent],
+    template: '<gp-grid [columns]="columns" [rows]="rows" [rowHeight]="32" />',
+  })(SsrPinnedComponent);
+  SsrPinnedComponent.prototype.columns = pinnedColumns;
+  SsrPinnedComponent.prototype.rows = rows;
+  const html = await renderApplication(
+    (context) => bootstrapApplication(SsrPinnedComponent, { providers: [provideServerRendering()] }, context),
+    { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
+  );
+  // No initialWidth input: the first render is unmeasured, so every pin is admitted.
+  return expectPinnedShell(html, "unmeasured");
 });
 
 const report = {

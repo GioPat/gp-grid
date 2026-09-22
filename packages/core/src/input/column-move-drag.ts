@@ -8,6 +8,7 @@ import type {
 } from "../types/input";
 import type { SortDirection } from "../types";
 import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
+import { inlineOffset } from "../adapter/inline-axis";
 import { DragGesture } from "./drag-gesture";
 
 export class ColumnMoveDrag<TData = unknown> {
@@ -60,10 +61,15 @@ export class ColumnMoveDrag<TData = unknown> {
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult | null {
     if (this.gesture.track(event) === false) return null;
 
-    const { left, width, scrollLeft } = bounds;
+    const { width, scrollLeft } = bounds;
     const layout = this.core.geometry.getColumnLayout();
+    const viewportX = inlineOffset(bounds, event.clientX);
+    // Keep hit-testing inside the client box. A pointer captured beyond an
+    // edge may overlap mounted overscan columns, but those are not drop targets
+    // until auto-scroll brings them into view.
+    const targetX = Math.max(0, Math.min(viewportX, Math.max(0, width - 1)));
     const hit = this.core.geometry.hitTest({
-      x: event.clientX - left,
+      x: targetX,
       y: event.clientY - bounds.top,
       scrollLeft,
     });
@@ -71,16 +77,28 @@ export class ColumnMoveDrag<TData = unknown> {
     const dropTargetIndex = Math.max(0, Math.min(hit.displayIndex, layout.columns.length));
     this.gesture.dropTargetIndex = dropTargetIndex;
 
-    const mouseXInContainer = event.clientX - left;
-    let scrollDx = 0;
-    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
-      scrollDx = -AUTO_SCROLL_SPEED;
-    } else if (mouseXInContainer > width - AUTO_SCROLL_THRESHOLD) {
-      scrollDx = AUTO_SCROLL_SPEED;
-    }
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
+    const autoScroll = this.moveAutoScroll(viewportX, width);
 
     return { targetRow: 0, targetCol: dropTargetIndex, autoScroll };
+  }
+
+  /** Horizontal auto-scroll applies only inside the scrolling center clip. */
+  private moveAutoScroll(
+    mouseXInContainer: number,
+    containerWidth: number,
+  ): { dx: number; dy: number } | null {
+    const layout = this.core.geometry.getColumnLayout();
+    const source = layout.columns.find(
+      (column) => column.layoutIndex === this.sourceColIndex,
+    );
+    if (source?.region !== "center" || layout.regions.centerViewportWidth <= 0) return null;
+    if (mouseXInContainer < AUTO_SCROLL_THRESHOLD) {
+      return { dx: -AUTO_SCROLL_SPEED, dy: 0 };
+    }
+    if (mouseXInContainer > containerWidth - AUTO_SCROLL_THRESHOLD) {
+      return { dx: AUTO_SCROLL_SPEED, dy: 0 };
+    }
+    return null;
   }
 
   end(cycleSortDirection: (current: SortDirection | null | undefined) => SortDirection | null): void {
@@ -138,11 +156,20 @@ export class ColumnMoveDrag<TData = unknown> {
     };
   }
 
-  /** Content-space x of the drop indicator, or the end edge of the layout. */
+  /** Viewport-space x of the drop indicator, clamped to its region's clip. */
   private dropIndicatorX(dropTargetIndex: number | null): number {
     if (dropTargetIndex === null) return 0;
     const layout = this.core.geometry.getColumnLayout();
     const column = layout.columns[dropTargetIndex];
-    return column?.offset ?? layout.totalWidth;
+    const target = column ?? layout.columns.at(-1);
+    if (target === undefined) return 0;
+
+    const bounds = this.core.geometry.getColumnBounds(target.layoutIndex, "viewport");
+    const edge = column === undefined ? bounds?.end : bounds?.start;
+    const fallback = column === undefined ? layout.totalWidth : target.offset;
+    const position = edge ?? fallback;
+    const clip = this.core.geometry.getColumnClip(target.layoutIndex);
+    if (clip === undefined) return position;
+    return Math.max(clip.start, Math.min(position, clip.end));
   }
 }

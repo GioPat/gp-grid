@@ -350,8 +350,8 @@ const highlighting = computed<HighlightingOptions>(() => ({
 </template>
 
 <style>
-/* MUST be unscoped — gp-grid renders outside Vue's scoped style boundary */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* MUST be unscoped. Tint cells so pinned containers remain opaque. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 </style>
 ```
@@ -362,7 +362,7 @@ Both callbacks together = Excel-style crosshair. The `<style>` tag with the high
 
 The wrapper watches both props. If either changes, it calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just keep references stable (or change them intentionally).
 
-Replacing `columns` never recreates the core either: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing `columns` never recreates the core either: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
 
 ```vue
 <GpGrid
@@ -373,12 +373,30 @@ Replacing `columns` never recreates the core either: it reconciles by `ColumnId`
 />
 ```
 
+## Pinning columns
+
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `:column-state` form is `{ columnId, pinned: 'start' | 'end' | null }`.
+At runtime use the exposed core: `gridRef.value?.core?.setColumnPinned(id, pin)`
+(the exposed `core` is a `ShallowRef`). `:on-column-pinned="({ columnId, pinned }) => ..."`
+fires for that call, the header toggle and a cross-region header drag.
+
+A pin that does not fit the viewport renders in the scrolling center until it
+is admitted, so persist the request but read the effective `region` from
+`core.getColumnState()`. `:column-overscan` (default `240` px) is how far past
+each clip edge center columns stay mounted; an open editor keeps its column
+mounted regardless. The default header action uses `:pin-icon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `:labels` for its accessible names. See
+[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |
 |---|---|---|
 | `:columns` | `ColumnDefinition[]` | required |
 | `:column-state` | `ColumnStateUpdate[]` | — |
+| `:column-overscan` | `number` | `240` |
 | `:data-source` | `DataSource<TData>` | — |
 | `:row-data` | `TData[]` | — |
 | `:row-height` | `number` | required |
@@ -394,6 +412,7 @@ Replacing `columns` never recreates the core either: it reconciles by `ColumnId`
 | `:cell-renderer` | `VueCellRenderer` | — |
 | `:edit-renderer` | `VueEditRenderer` | — |
 | `:header-renderer` | `VueHeaderRenderer` | — |
+| `:pin-icon` | `GridIcon` | push-pin SVG |
 | `:initial-width` / `:initial-height` | `number` | — |
 | `:highlighting` | `HighlightingOptions<TData>` | — |
 | `:labels` | `GridLabelOverrides` | English defaults |
@@ -405,6 +424,7 @@ Replacing `columns` never recreates the core either: it reconciles by `ColumnId`
 | `:on-row-drag-end` | `(e: RowDragEndEvent) => void` | — |
 | `:on-column-resized` | `(e: ColumnResizedEvent) => void` | — |
 | `:on-column-moved` | `(e: ColumnMovedEvent) => void` | — |
+| `:on-column-pinned` | `(e: ColumnPinnedEvent) => void` | — |
 
 ## Vue-specific gotchas
 
@@ -413,6 +433,7 @@ Replacing `columns` never recreates the core either: it reconciles by `ColumnId`
 - **`ref="gridRef"` typing**: the exposed `core` is a `ShallowRef<GridCore | null>` — unwrap with `.value`. Use `ShallowRef` to avoid deep reactivity over the core (which would be expensive).
 - **SSR / Nuxt**: pass `:initial-width` / `:initial-height` so the server render isn't 0×0. `ResizeObserver` is gated by a `typeof` check.
 - **Renderer-as-component prop typing**: `ColumnDefinition` from `@gp-grid/vue` widens the renderer fields to accept Components directly. If you import `ColumnDefinition` from `@gp-grid/core`, you'll lose this — use the one from `@gp-grid/vue`.
+- **`renderToken` from `useGpGrid` / `useGridState`**: a number that increments once per applied core batch. Cells are child components, so a non-reactive core read (or a columnar row's `rowData`) would otherwise never re-render; the cell reads `renderToken` to stay in sync. It is library-internal — do not use it as a change signal in application code.
 
 ## Working playground
 

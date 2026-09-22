@@ -61,6 +61,11 @@ override exists) plus `resolvedWidth`, the displayed CSS px (`0` while hidden).
 A mode change republishes the layout without recreating the core. Setting the
 mode it already has emits nothing.
 
+## Pinning
+
+Start/end pins, viewport admission, the mounted column window and the header
+pin toggle are documented in [Column pinning](./column-pinning.md).
+
 ## Geometry queries
 
 `core.geometry` is a read-only view of the committed layout:

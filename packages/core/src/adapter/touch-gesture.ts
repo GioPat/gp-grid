@@ -3,6 +3,7 @@
 
 import { TAP_SLOP_PX } from "../input/interaction-constants";
 import type { VelocitySample } from "../utils/touch-scroll-physics";
+import { readIsRtl } from "./inline-axis";
 import { clamp } from "./touch-scroll-helpers";
 
 /** Structural touch shapes so tests can dispatch plain Events. */
@@ -28,6 +29,8 @@ export interface GestureState {
   startClientY: number;
   baseScrollTop: number;
   baseScrollLeft: number;
+  /** Inline direction sampled once per gesture (a `dir` flip needs a remount). */
+  rtl: boolean;
   engaged: boolean;
   slopOffsetX: number;
   slopOffsetY: number;
@@ -62,6 +65,7 @@ export const createGestureState = (
   startClientY: touch.clientY,
   baseScrollTop: el.scrollTop,
   baseScrollLeft: el.scrollLeft,
+  rtl: readIsRtl(el),
   engaged: false,
   slopOffsetX: 0,
   slopOffsetY: 0,
@@ -122,15 +126,18 @@ export const computeDragTarget = (
   scrollRatio: number,
   logicalDx: number,
   logicalDy: number,
-): DragTarget => ({
-  top: clamp(
-    gesture.baseScrollTop + (logicalDy - gesture.slopOffsetY) * scrollRatio,
-    0,
-    el.scrollHeight - el.clientHeight,
-  ),
-  left: clamp(
-    gesture.baseScrollLeft + (logicalDx - gesture.slopOffsetX),
-    0,
-    el.scrollWidth - el.clientWidth,
-  ),
-});
+): DragTarget => {
+  const maxLeft = el.scrollWidth - el.clientWidth;
+  const left = gesture.baseScrollLeft + (logicalDx - gesture.slopOffsetX);
+  return {
+    top: clamp(
+      gesture.baseScrollTop + (logicalDy - gesture.slopOffsetY) * scrollRatio,
+      0,
+      el.scrollHeight - el.clientHeight,
+    ),
+    // A leftward finger displacement maps to the same DOM delta in both
+    // directions; only the range flips (RTL DOM scroll positions run from
+    // 0 at the inline start down to -maxLeft).
+    left: gesture.rtl ? clamp(left, -maxLeft, 0) : clamp(left, 0, maxLeft),
+  };
+};

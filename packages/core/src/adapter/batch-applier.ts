@@ -1,6 +1,10 @@
 import type { CellValue, CellPosition, CellRange } from "../types/basic";
 import type { ColumnDefinition } from "../types/columns";
-import type { ColumnLayoutMode, ColumnLayoutSnapshot } from "../types/geometry";
+import type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+} from "../types/geometry";
 import type { GridInstruction } from "../types/instructions";
 import type { FilterPopupState, HeaderData, SlotData } from "../types/ui-state";
 import { applyInstruction } from "../state-reducer";
@@ -29,6 +33,8 @@ export interface BatchChangeSetters {
   setColumns: (v: ColumnDefinition[]) => void;
   /** Resolved displayed-column layout at the committed geometry revision. */
   setLayout?: (v: ColumnLayoutSnapshot) => void;
+  /** Center columns to mount at the committed geometry revision. */
+  setColumnWindow?: (v: ColumnWindowSnapshot) => void;
   /** Selected column layout mode, mirrored from the core. */
   setColumnLayout?: (v: ColumnLayoutMode) => void;
   /** Committed geometry revision, for wrapper-side change detection. */
@@ -53,17 +59,35 @@ export const applyBatchInstructions = (
   currentHeaders: Map<string, HeaderData>,
   setters: BatchChangeSetters,
 ): MutableMaps => {
-  const maps: MutableMaps = {
-    slots: new Map(currentSlots),
-    headers: new Map(currentHeaders),
-  };
+  // Copy-on-write: a window-only batch leaves both maps untouched, so the
+  // wrapper's reactive containers keep their identity and skip re-rendering.
+  let slots: Map<string, SlotData> | null = null;
+  let headers: Map<string, HeaderData> | null = null;
+  const mapsOf = (): MutableMaps => ({
+    slots: slots ?? currentSlots,
+    headers: headers ?? currentHeaders,
+  });
   for (const instruction of instructions) {
+    switch (instruction.type) {
+      case "CREATE_SLOT":
+      case "DESTROY_SLOT":
+      case "ASSIGN_SLOT":
+      case "MOVE_SLOT":
+        slots ??= new Map(currentSlots);
+        break;
+      case "UPDATE_HEADER":
+      case "REMOVE_HEADERS":
+        headers ??= new Map(currentHeaders);
+        break;
+      default:
+        break;
+    }
     // Slot and header instructions mutate the maps in place and answer null.
-    const changes = applyInstruction(instruction, maps.slots, maps.headers);
+    const changes = applyInstruction(instruction, mapsOf().slots, mapsOf().headers);
     if (changes === null) continue;
     applyPartialState(changes, setters);
   }
-  return maps;
+  return mapsOf();
 };
 
 const applyPartialState = (
@@ -76,6 +100,9 @@ const applyPartialState = (
   }
   if (changes.layout !== undefined && changes.layout !== null) {
     setters.setLayout?.(changes.layout);
+  }
+  if (changes.columnWindow !== undefined && changes.columnWindow !== null) {
+    setters.setColumnWindow?.(changes.columnWindow);
   }
   if (changes.filterPopup !== undefined) {
     setters.onFilterPopupChange(changes.filterPopup);

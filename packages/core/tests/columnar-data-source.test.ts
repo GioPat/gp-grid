@@ -159,7 +159,7 @@ describe("createColumnarDataSource", () => {
     expect(response.totalRows).toBe(3);
   });
 
-  it("resolves a ColumnId through the request fieldMap", async () => {
+  it("resolves a column id through the request fieldMap", async () => {
     const { source } = makeSource();
     const response = await source.query({
       range: { startRow: 0, endRow: Number.MAX_SAFE_INTEGER },

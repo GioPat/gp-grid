@@ -11,11 +11,15 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
   TouchScrollController,
+  defaultPinIcon,
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -35,6 +39,8 @@ const props = withDefaults(
     rowHeight: number;
     headerHeight?: number;
     overscan?: number;
+    /** Column overscan in CSS px per side for the mounted center window. */
+    columnOverscan?: number;
     /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
     columnLayout?: ColumnLayoutMode;
     rowLoading?: RowLoadingOptions;
@@ -49,6 +55,8 @@ const props = withDefaults(
     cellRenderer?: VueCellRenderer;
     editRenderer?: VueEditRenderer;
     headerRenderer?: VueHeaderRenderer;
+    /** SVG used by the default header's pin toggle. */
+    pinIcon?: GridIcon;
     /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
     initialWidth?: number;
     /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
@@ -71,6 +79,8 @@ const props = withDefaults(
     onColumnResized?: (event: ColumnResizedEvent) => void;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (event: ColumnMovedEvent) => void;
+    /** Called when a column is pinned or unpinned. */
+    onColumnPinned?: (event: ColumnPinnedEvent) => void;
     /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
     labels?: GridLabelOverrides;
   }>(),
@@ -82,6 +92,7 @@ const props = withDefaults(
     cellRenderers: () => ({}),
     editRenderers: () => ({}),
     headerRenderers: () => ({}),
+    pinIcon: () => defaultPinIcon,
   },
 );
 
@@ -105,8 +116,11 @@ const touchScroll = new TouchScrollController<Row>({
 // Header scroll sync
 const scrollLeft = ref(0);
 
+// Inline direction, resampled on mount and on every container resize.
+const rtl = ref(false);
+
 // State
-const { state, applyInstructions, reset: resetState } = useGridState({
+const { state, renderToken, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
   initialColumns: props.columns as unknown as CoreColumnDefinition[],
@@ -124,9 +138,18 @@ const effectiveColumns = computed<CoreColumnDefinition[]>(
 );
 
 // Displayed geometry: the core resolves offsets/widths and publishes them.
-const layoutColumns = computed(() => state.value.layout?.columns ?? []);
+const columnWindow = computed(() => state.value.columnWindow);
+const displayedColumnCount = computed(() => state.value.layout?.columns.length ?? 0);
 const totalWidth = computed(() => state.value.contentWidth);
 const slotsArray = computed(() => Array.from(state.value.slots.values()));
+
+// Displayed index per column id, for `aria-colindex`. Keyed on the layout, so
+// scrolling the window never rebuilds it.
+const displayedIndexOf = computed(() => {
+  const index = new Map<string, number>();
+  state.value.layout?.columns.forEach((column, at) => index.set(column.columnId, at));
+  return (columnId: string): number => index.get(columnId) ?? 0;
+});
 
 // Input handling
 const {
@@ -165,7 +188,7 @@ function handleScroll(): void {
 
   core.setViewport(
     container.scrollTop,
-    container.scrollLeft,
+    toInlineX(container.scrollLeft, rtl.value),
     container.clientWidth,
     container.clientHeight,
   );
@@ -175,6 +198,7 @@ function handleScroll(): void {
 function handleScrollWithHeaderSync(): void {
   const container = bodyContainerRef.value;
   if (container) {
+    // The header strip undoes the native scroll, so it takes the DOM value.
     scrollLeft.value = container.scrollLeft;
   }
   handleScroll();
@@ -253,6 +277,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowHeight: props.rowHeight,
     headerHeight: totalHeaderHeight.value,
     overscan: props.overscan,
+    columnOverscan: props.columnOverscan,
     columnLayout: props.columnLayout ?? "fit",
     maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
@@ -267,6 +292,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onRowDragEnd: (event) => props.onRowDragEnd?.(event),
     onColumnResized: (event) => props.onColumnResized?.(event),
     onColumnMoved: (event) => props.onColumnMoved?.(event),
+    onColumnPinned: (event) => props.onColumnPinned?.(event),
   });
 
   // The columnState watcher only fires on change; apply the current value here.
@@ -284,9 +310,10 @@ function initializeCore(dataSource: DataSource<Row>): void {
 
   const container = bodyContainerRef.value;
   if (container) {
+    rtl.value = readIsRtl(container);
     core.setViewport(
       container.scrollTop,
-      container.scrollLeft,
+      toInlineX(container.scrollLeft, rtl.value),
       container.clientWidth,
       container.clientHeight,
     );
@@ -307,9 +334,11 @@ onMounted(() => {
   if (container && typeof ResizeObserver !== "undefined") {
     const resizeObserver = new ResizeObserver(() => {
       // Use current core ref (may change during lifecycle)
+      rtl.value = readIsRtl(container);
+      touchScroll.resetDirection();
       coreRef.value?.setViewport(
         container.scrollTop,
-        container.scrollLeft,
+        toInlineX(container.scrollLeft, rtl.value),
         container.clientWidth,
         container.clientHeight,
       );
@@ -397,7 +426,7 @@ watch(
     // A programmatic scroll wins over any in-flight synthetic fling.
     touchScroll.stop();
     if (scrollTop !== null) container.scrollTop = scrollTop;
-    if (scrollLeft !== null) container.scrollLeft = scrollLeft;
+    if (scrollLeft !== null) container.scrollLeft = toPhysicalX(scrollLeft, rtl.value);
   },
   { flush: "post" },
 );
@@ -447,6 +476,9 @@ defineExpose({
     ref="outerContainerRef"
     :class="['gp-grid-container', { 'gp-grid-container--dark': darkMode }]"
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
+    role="grid"
+    :aria-colcount="displayedColumnCount"
+    :aria-rowcount="state.totalRows"
     tabindex="0"
     @keydown="handleKeyDown"
     @paste="handlePaste"
@@ -456,16 +488,21 @@ defineExpose({
       :scroll-left="scrollLeft"
       :content-width="state.contentWidth"
       :total-width="totalWidth"
+      :viewport-width="state.viewportWidth"
       :is-loading="state.isLoading"
-      :layout-columns="layoutColumns"
+      :column-window="columnWindow"
+      :displayed-index-of="displayedIndexOf"
       :headers="state.headers"
       :sorting-enabled="sortingEnabled"
+      :rtl="rtl"
+      :labels="resolvedLabels"
       :on-header-mouse-down="handleHeaderMouseDown"
       :on-header-resize-mouse-down="handleHeaderResizeMouseDown"
       :core-ref="coreRef"
       :outer-container-ref="outerContainerRef"
       :header-renderers="headerRenderers ?? {}"
       :global-header-renderer="headerRenderer"
+      :pin-icon="pinIcon"
     />
 
     <GridBody
@@ -485,7 +522,9 @@ defineExpose({
       :total-rows="state.totalRows"
       :labels="resolvedLabels"
       :slots-array="slotsArray"
-      :layout-columns="layoutColumns"
+      :column-window="columnWindow"
+      :displayed-index-of="displayedIndexOf"
+      :render-token="renderToken"
       :fill-handle-position="fillHandlePosition"
       :drag-state="dragState"
       :on-scroll="handleScrollWithHeaderSync"
@@ -561,7 +600,7 @@ defineExpose({
       v-if="dragState.dragType === 'column-resize' && dragState.columnResize"
       class="gp-grid-column-resize-line"
       :style="{
-        left: `${dragState.columnResize!.lineX - scrollLeft}px`,
+        insetInlineStart: `${dragState.columnResize!.lineX}px`,
       }"
     />
 
@@ -582,7 +621,7 @@ defineExpose({
         v-if="dragState.columnMove!.dropTargetIndex !== null"
         class="gp-grid-column-drop-indicator"
         :style="{
-          left: `${dragState.columnMove.dropIndicatorX - scrollLeft}px`,
+          insetInlineStart: `${dragState.columnMove.dropIndicatorX}px`,
           height: `${totalHeaderHeight}px`,
         }"
       />

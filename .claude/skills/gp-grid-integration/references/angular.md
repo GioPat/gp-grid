@@ -350,7 +350,7 @@ Important details:
 - **Templates are resolved at `AfterViewInit`** with `{ static: true }`. Build the columns array there, then call `cdr.detectChanges()` to push the new columns into the grid input. Building columns in the constructor or class fields gives `undefined` template refs.
 - **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, `params.columnId`, etc.); `params.columnId` is the normalized `colId ?? field` and `params.rowId` is present when the row has a stable id.
 - **For edit renderers**, call `event.stopPropagation()` in `keydown` so the grid's keyboard handler doesn't intercept arrow keys / Enter while the user types in the editor.
-- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by `ColumnId` (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.setColumnState` whenever it changes.
+- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by column id (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.setColumnState` whenever it changes.
 
 `AngularColumnDefinition` accepts three forms for each renderer:
 
@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)`, `(onColumnPinned)` outputs:
 
 ```html
 <gp-grid
@@ -388,11 +388,13 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejecte
   [dataSource]="grid.dataSource"
   [rowHeight]="36"
   [getRowId]="getRowId"
+  [columnOverscan]="240"
   (onCellValueChanged)="onCellValueChanged($event)"
   (onWriteRejected)="onWriteRejected($event)"
   (onRowDragEnd)="onRowDragEnd($event)"
   (onColumnResized)="onColumnResized($event)"
   (onColumnMoved)="onColumnMoved($event)"
+  (onColumnPinned)="onColumnPinned($event)"
 />
 ```
 
@@ -403,6 +405,18 @@ Output payloads:
 - `onRowDragEnd: { rowId: RowId; fromViewIndex: number; toViewIndex: number }`
 - `onColumnResized: { columnId: string; width: number; viewIndex: number }`
 - `onColumnMoved: { columnId: string; fromViewIndex: number; toViewIndex: number }`
+- `onColumnPinned: { columnId: string; pinned: "start" | "end" | null }` — fired by `setColumnPinned`, the header toggle or a cross-region drag
+
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `[columnState]` form is `{ columnId, pinned }`. At runtime call
+`this.grid.core?.setColumnPinned(id, pin)`. A pin that does not fit the
+viewport renders in the scrolling center until it is admitted, so persist the
+request but read the effective `region` from `getColumnState()`.
+`[columnOverscan]` (default `240` px) is how far past each clip edge center
+columns stay mounted; an open editor keeps its column mounted regardless. The
+default pin action cycles through physical left, physical right and unpinned;
+its labels are `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. See
+[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
@@ -470,7 +484,7 @@ protected readonly highlighting: HighlightingOptions = {
 
 ```css
 /* Global stylesheet (NOT a component-scoped stylesheet) — gp-grid renders cells outside Angular's view encapsulation by default for these classes. Use ViewEncapsulation.None on the component, or move the styles to a global file. */
-.pg-row--hover { background: rgba(59, 130, 246, 0.2) !important; }
+.gp-grid-row.pg-row--hover .gp-grid-cell { background: rgba(59, 130, 246, 0.2) !important; }
 .pg-col--hover { background: rgba(16, 185, 129, 0.2) !important; }
 ```
 
@@ -482,6 +496,7 @@ Inputs:
 |---|---|---|
 | `[columns]` | `AngularColumnDefinition[]` | required |
 | `[columnState]` | `ColumnStateUpdate[]` | `null` |
+| `[columnOverscan]` | `number` | `240` |
 | `[rows]` | `unknown[]` | `[]` |
 | `[dataSource]` | `DataSource<unknown> \| null` | `null` |
 | `[getRowId]` | `((row: unknown) => RowId) \| null` | `null` |
@@ -493,6 +508,7 @@ Inputs:
 | `[editRenderers]` | `Record<string, EditRendererTemplate>` | `{}` |
 | `[cellRenderer]` | `CellRendererTemplate \| null` | `null` |
 | `[headerRenderer]` | `HeaderRendererTemplate \| null` | `null` |
+| `[pinIcon]` | `GridIcon` | push-pin SVG |
 | `[editRenderer]` | `EditRendererTemplate \| null` | `null` |
 | `[highlighting]` | `HighlightingOptions \| null` | `null` |
 | `[rowDragEntireRow]` | `boolean` | `false` |
@@ -511,6 +527,7 @@ Outputs:
 | `(onWriteRejected)` | `CellWriteRejectedEvent` |
 | `(onColumnResized)` | `{ columnId: string; width: number; viewIndex: number }` |
 | `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
+| `(onColumnPinned)` | `{ columnId: string; pinned: "start" \| "end" \| null }` |
 
 ## Angular-specific gotchas
 

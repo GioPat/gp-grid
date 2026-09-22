@@ -6,6 +6,7 @@ import type {
   RowDragState,
 } from "../types/input";
 import { calculateAutoScroll } from "./auto-scroll-util";
+import { inlineOffset } from "../adapter/inline-axis";
 import { DragGesture } from "./drag-gesture";
 
 export class RowDrag<TData = unknown> {
@@ -33,7 +34,7 @@ export class RowDrag<TData = unknown> {
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult | null {
     if (this.gesture.track(event) === false) return null;
 
-    const { top, left, height, width, scrollTop } = bounds;
+    const { top, height, width, scrollTop } = bounds;
     const headerHeight = this.core.getHeaderHeight();
     // `bounds` is the body scroll container, which starts below the header.
     const viewportY = event.clientY - top;
@@ -45,8 +46,8 @@ export class RowDrag<TData = unknown> {
     this.gesture.dropTargetIndex = targetRow;
 
     const autoScroll = calculateAutoScroll(
-      event.clientY - top,
-      event.clientX - left,
+      viewportY,
+      inlineOffset(bounds, event.clientX),
       height,
       width,
       headerHeight,

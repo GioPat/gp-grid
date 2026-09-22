@@ -9,7 +9,14 @@ import type {
   ColumnFilterModel,
 } from "./index";
 import { createSeedColumnLayout } from "../geometry/column-layout";
-import type { ColumnLayoutMode, ColumnLayoutSnapshot } from "./geometry";
+import { buildCenterOffsets, resolveCenterRange } from "../geometry/column-range";
+import { resolveColumnWindow } from "../geometry/column-window";
+import { DEFAULT_COLUMN_OVERSCAN } from "../grid-core-config";
+import type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+} from "./geometry";
 
 // =============================================================================
 // Slot & Header Data Types
@@ -82,6 +89,38 @@ const seedLayout = (
   );
 };
 
+/**
+ * The seed window runs the live center-window derivation so the pre-mount
+ * frame mounts the same bounded range the first measurement will. The region
+ * layout clamps `centerViewportWidth` at zero, so the measurement has to come
+ * in beside it: only a real width can tell an empty pinned-out center from an
+ * unmeasured one, which falls back to the fixed pixel extent.
+ */
+const seedColumnWindow = (
+  layout: ColumnLayoutSnapshot | null,
+  viewportWidth: number,
+): ColumnWindowSnapshot | null => {
+  if (layout?.regions === undefined) return null;
+  const { centerStart, centerEnd, centerViewportWidth } = layout.regions;
+  const offsets = buildCenterOffsets(layout.columns, centerStart, centerEnd);
+  const range = resolveCenterRange({
+    offsets,
+    centerTotal: offsets.at(-1) ?? 0,
+    scrollLeft: 0,
+    centerViewportWidth: viewportWidth > 0 ? centerViewportWidth : -1,
+    overscan: DEFAULT_COLUMN_OVERSCAN,
+  });
+  const displayIndex = new Map(
+    layout.columns.map((column, index) => [column.columnId, index]),
+  );
+  return resolveColumnWindow(
+    layout,
+    { start: range.start + centerStart, end: range.end + centerStart },
+    [],
+    (columnId) => displayIndex.get(columnId),
+  );
+};
+
 export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => {
   const layout = seedLayout(args);
   return {
@@ -104,6 +143,7 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
     hoverPosition: null,
     columns: args?.initialColumns ?? [],
     layout,
+    columnWindow: seedColumnWindow(layout, args?.initialWidth ?? 0),
     columnLayout: args?.initialColumnLayout ?? "fit",
     geometryRevision: 0,
     pendingScrollTop: null,
@@ -130,7 +170,7 @@ export interface GridState<TData = unknown> {
   viewportHeight: number;
   /** Y offset for rows wrapper when virtualization is active (keeps row translateY values small) */
   rowsWrapperOffset: number;
-  /** Header state keyed by `ColumnId`. */
+  /** Header state keyed by column id. */
   headers: Map<string, HeaderData>;
   filterPopup: FilterPopupState | null;
   isLoading: boolean;
@@ -147,6 +187,8 @@ export interface GridState<TData = unknown> {
    * its first snapshot; wrappers that render before mount seed it.
    */
   layout: ColumnLayoutSnapshot | null;
+  /** Center columns to mount at the last committed scroll sample. */
+  columnWindow: ColumnWindowSnapshot | null;
   /** Selected column layout mode, mirrored from the core. */
   columnLayout: ColumnLayoutMode;
   /** Last committed geometry revision, for change detection. */

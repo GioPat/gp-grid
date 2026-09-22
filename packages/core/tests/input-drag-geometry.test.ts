@@ -133,11 +133,58 @@ describe("pointer drags resolve through geometry", () => {
     expect(columnIds(grid)).toEqual(["a", "c", "b"]);
   });
 
+  it("keeps a column move target on visible columns outside the viewport", async () => {
+    const grid = await createGrid();
+    const narrowBounds: ContainerBounds = {
+      ...bounds,
+      width: 100,
+      scrollLeft: 100,
+    };
+    grid.setViewport(0, narrowBounds.scrollLeft, narrowBounds.width, narrowBounds.height);
+
+    // Only "b" is visible. The pointer is captured outside either edge while
+    // the adjacent columns remain mounted as overscan.
+    grid.input.handleHeaderMouseDown(1, 100, HEADER_HEIGHT, pointerAt(50, -10));
+    grid.input.handleDragMove(pointerAt(-40, -10), narrowBounds);
+    expect(grid.input.getDragState().columnMove).toMatchObject({
+      dropTargetIndex: 1,
+      dropIndicatorX: 0,
+    });
+
+    grid.input.handleDragMove(pointerAt(140, -10), narrowBounds);
+    expect(grid.input.getDragState().columnMove).toMatchObject({
+      dropTargetIndex: 1,
+      dropIndicatorX: 0,
+    });
+    grid.destroy();
+  });
+
   it("targets the row drop edge under the pointer", async () => {
     const grid = await createGrid();
     grid.input.handleCellMouseDown(0, 2, pointerAt(250, 4));
     const result = grid.input.handleDragMove(pointerAt(250, 3 * ROW_HEIGHT + 4), bounds);
     expect(result).toMatchObject({ targetRow: 3 });
+  });
+
+  it("drops before the indicated end pin when base and displayed orders differ", async () => {
+    const grid = await createGrid();
+    try {
+      grid.setColumnPinned("b", "end");
+      expect(columnIds(grid)).toEqual(["a", "c", "b"]);
+
+      grid.input.handleHeaderMouseDown(0, 100, HEADER_HEIGHT, pointerAt(50, -10));
+      grid.input.handleDragMove(pointerAt(250, -10), bounds);
+      expect(grid.input.getDragState().columnMove).toMatchObject({
+        dropTargetIndex: 2,
+        dropIndicatorX: 200,
+      });
+      grid.input.handleDragEnd();
+
+      expect(columnIds(grid)).toEqual(["c", "a", "b"]);
+      expect(grid.getColumnState().find((column) => column.columnId === "a")?.pinned).toBe("end");
+    } finally {
+      grid.destroy();
+    }
   });
 });
 

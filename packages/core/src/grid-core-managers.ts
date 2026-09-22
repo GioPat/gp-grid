@@ -27,6 +27,8 @@ export interface GridManagersDeps<TData> {
   getColumns: () => ColumnDefinition[];
   /** Built after the managers; only read once construction has finished. */
   getGeometry: () => GridGeometryService;
+  /** Bounded keep-alive for the edited column (B7). */
+  retainEditColumn: (columnId: string | null) => void;
 }
 
 export interface GridManagers<TData> {
@@ -77,6 +79,7 @@ export const buildGridManagers = <TData>(
   const selection = new SelectionManager({
     getRowCount: getTotalRows,
     getColumnCount: () => getColumns().length,
+    isColumnDisplayed: (col) => getColumns()[col]?.hidden !== true,
     getCellValue,
     getRowData: (row) => getCachedRows().get(row),
     getColumn: (col) => getColumns()[col],
@@ -130,6 +133,10 @@ export const buildGridManagers = <TData>(
     onCommit: (row) => slotPool.updateSlot(row),
     getSlotGeneration: (row) => slotPool.getSlotGeneration(row),
     getRowId: (row) => rowData.getRowId(row),
+    // The edited column stays mounted while the editor is open, so a window
+    // move cannot unmount it mid-edit.
+    onEditStart: (columnId) => deps.retainEditColumn(columnId),
+    onEditEnd: () => deps.retainEditColumn(null),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));
 

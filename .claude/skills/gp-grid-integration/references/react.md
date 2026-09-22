@@ -418,8 +418,8 @@ function PeopleGrid() {
 ```
 
 ```css
-/* Global stylesheet — !important needed to override grid defaults */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* Keep the pinned container opaque by tinting its cells, not the row. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 ```
 
@@ -431,7 +431,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 
 ## Reactive `columns` and column state
 
-Replacing the `columns` array never recreates the core: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing the `columns` array never recreates the core: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
 
 ```tsx
 <Grid
@@ -442,12 +442,30 @@ Replacing the `columns` array never recreates the core: it reconciles by `Column
 />
 ```
 
+## Pinning columns
+
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `columnState` form is `{ columnId, pinned: "start" | "end" | null }`.
+At runtime use `gridRef.current?.core.setColumnPinned(columnId, pin)`.
+`onColumnPinned={({ columnId, pinned }) => ...}` fires for that call, the header
+toggle and a cross-region header drag.
+
+A pin that does not fit the viewport renders in the scrolling center until it
+is admitted, so persist the request but read the effective `region` from
+`core.getColumnState()`. `columnOverscan` (default `240` px) is how far past
+each clip edge center columns stay mounted; an open editor keeps its column
+mounted regardless. The default header action uses `pinIcon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `labels` for its accessible names. See
+[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `columns` | `ColumnDefinition[]` | required | |
-| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order; applied via `setColumnState` |
+| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order/pinned; applied via `setColumnState` |
+| `columnOverscan` | `number` | `240` | CSS px of center columns mounted past each clip edge |
 | `dataSource` | `DataSource<TData>` | — | mutually exclusive with `rowData`; takes precedence |
 | `rowData` | `TData[]` | — | wrapped in a client data source by the wrapper |
 | `rowHeight` | `number` | required | px |
@@ -463,10 +481,11 @@ Replacing the `columns` array never recreates the core: it reconciles by `Column
 | `cellRenderer` | `ReactCellRenderer` | — | global fallback |
 | `editRenderer` | `ReactEditRenderer` | — | global fallback |
 | `headerRenderer` | `ReactHeaderRenderer` | — | global fallback |
+| `pinIcon` | `GridIcon` | push-pin SVG | custom path and optional viewBox for the default header toggle |
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `GridLabelOverrides` | English defaults | override filter/grid text (localization) |
+| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn` and `unpinColumn` action labels |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
@@ -475,6 +494,7 @@ Replacing the `columns` array never recreates the core: it reconciles by `Column
 | `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |
 | `onColumnResized` | `(e: ColumnResizedEvent) => void` | — | persist user state |
 | `onColumnMoved` | `(e: ColumnMovedEvent) => void` | — | persist user state |
+| `onColumnPinned` | `(e: ColumnPinnedEvent) => void` | — | `{ columnId, pinned }`; fired by the pin command, header toggle or cross-region drag |
 
 ## React-specific gotchas
 

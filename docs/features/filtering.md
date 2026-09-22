@@ -244,6 +244,7 @@ Angular: `[labels]="{ emptyState: 'No rows to show' }"`.
 | `blanks` | `(Blanks)` | |
 | `tooManyValues` | `Too many unique values ({count}). Use conditions to filter.` | `{count}` → entry count |
 | `emptyState` | `No data to display` | |
+| `pinLeftColumn` / `pinRightColumn` / `unpinColumn` | `Pin left` / `Pin right` / `Unpin` | Next pin action |
 | `errorPrefix` | `Error: {message}` | `{message}` → error text |
 
 `labels.operators` keys: `contains`, `notContains`, `startsWith`, `endsWith`,

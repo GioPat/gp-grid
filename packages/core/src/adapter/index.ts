@@ -1,4 +1,13 @@
 export { toPointerEventData } from "./pointer-event";
+export {
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
+  inlineOffset,
+  readContainerBounds,
+  fixedLeftForInline,
+  normalizeHorizontalKey,
+} from "./inline-axis";
 export { AutoScrollDriver } from "./auto-scroll";
 export { PendingRowDragController } from "./pending-row-drag";
 export type { PendingRowDragDeps } from "./pending-row-drag";

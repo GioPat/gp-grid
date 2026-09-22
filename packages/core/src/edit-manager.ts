@@ -34,6 +34,10 @@ export interface EditManagerOptions {
   getSlotGeneration?: (row: number) => number;
   /** Identity of the record at a view row, when the source exposes one. */
   getRowId?: (row: number) => RowId | undefined;
+  /** The editor opened on this column id; a bounded keep-alive mounts it. */
+  onEditStart?: (columnId: string) => void;
+  /** The editor closed; its keep-alive can be released. */
+  onEditEnd?: () => void;
 }
 
 // =============================================================================
@@ -94,6 +98,17 @@ export class EditManager {
   // ===========================================================================
 
   /**
+   * Whether `startEdit` would open: the column is editable and the bound
+   * source accepts writes. Lets a caller that must register state first (a
+   * keep-alive, a batch) skip it when the edit will be refused.
+   */
+  canEdit(col: number): boolean {
+    const column = this.options.getColumn(col);
+    if (!column?.editable) return false;
+    return this.options.isWritable?.() !== false;
+  }
+
+  /**
    * Start editing a cell.
    * Returns true if edit was started, false if cell is not editable or the
    * source is read-only. A refused write on an editable column is reported.
@@ -135,6 +150,7 @@ export class EditManager {
       initialValue,
       editId,
     });
+    this.options.onEditStart?.(column.colId ?? column.field);
 
     return true;
   }
@@ -242,6 +258,7 @@ export class EditManager {
 
     // Notify that edit was committed (for slot update)
     this.options.onCommit?.(row, col, currentValue);
+    this.options.onEditEnd?.();
   }
 
   /**
@@ -266,6 +283,7 @@ export class EditManager {
     this.editGeneration = -1;
     this.editRowId = undefined;
     this.emit({ type: "STOP_EDIT" });
+    this.options.onEditEnd?.();
   }
 
   // ===========================================================================

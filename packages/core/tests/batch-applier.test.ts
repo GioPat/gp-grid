@@ -22,7 +22,12 @@ const REQUIRED_SETTERS = [
   "onFilterPopupChange",
 ] as const;
 
-const OPTIONAL_SETTERS = ["setLayout", "setColumnLayout", "setGeometryRevision"] as const;
+const OPTIONAL_SETTERS = [
+  "setLayout",
+  "setColumnWindow",
+  "setColumnLayout",
+  "setGeometryRevision",
+] as const;
 
 type SetterName = (typeof REQUIRED_SETTERS)[number] | (typeof OPTIONAL_SETTERS)[number];
 type MockedSetters = BatchChangeSetters & Record<SetterName, ReturnType<typeof vi.fn>>;
@@ -50,11 +55,23 @@ const apply = (
 
 const column: ColumnDefinition = { field: "name", cellDataType: "text", width: 120 };
 
+const regions = {
+  centerStart: 0,
+  centerEnd: 1,
+  startWidth: 0,
+  endWidth: 0,
+  endOffset: 120,
+  centerViewportWidth: 400,
+};
+
 const layout: ColumnLayoutSnapshot = {
   revision: 4,
   mode: "fit",
   totalWidth: 120,
-  columns: [{ columnId: "name", layoutIndex: 0, column, offset: 0, width: 120 }],
+  regions,
+  columns: [
+    { columnId: "name", layoutIndex: 0, column, offset: 0, width: 120, region: "center", regionOffset: 0 },
+  ],
 };
 
 describe("applyBatchInstructions — slot and header maps", () => {
@@ -136,6 +153,37 @@ describe("applyBatchInstructions — slot and header maps", () => {
     const { maps, setters } = apply([{ type: "NOT_AN_INSTRUCTION" } as unknown as GridInstruction]);
     expect(maps.slots.size).toBe(0);
     expect(calledSetters(setters)).toEqual([]);
+  });
+
+  it("keeps both maps by identity for a window-only batch", () => {
+    const slots = new Map<string, SlotData>();
+    const headers = new Map<string, HeaderData>();
+    const window = { layout, range: { start: 0, end: 0 }, start: [], center: [], end: [] };
+
+    const { maps } = apply(
+      [{ type: "SET_COLUMN_WINDOW", window, revision: 6 }],
+      makeSetters(),
+      slots,
+      headers,
+    );
+
+    expect(maps.slots).toBe(slots);
+    expect(maps.headers).toBe(headers);
+  });
+
+  it("copies only the map an instruction mutates", () => {
+    const slots = new Map<string, SlotData>();
+    const headers = new Map<string, HeaderData>();
+
+    const { maps } = apply(
+      [{ type: "CREATE_SLOT", slotId: "slot-0", generation: 1 }],
+      makeSetters(),
+      slots,
+      headers,
+    );
+
+    expect(maps.slots).not.toBe(slots);
+    expect(maps.headers).toBe(headers);
   });
 });
 
@@ -248,6 +296,19 @@ describe("applyBatchInstructions — columns, layout and filter popup", () => {
     expect(setters.setGeometryRevision).toHaveBeenCalledWith(4);
   });
 
+  it("publishes the mounted column window with its revision", () => {
+    const window = {
+      layout,
+      range: { start: 0, end: 0 },
+      start: [],
+      center: [],
+      end: [],
+    };
+    const { setters } = apply([{ type: "SET_COLUMN_WINDOW", window, revision: 6 }]);
+    expect(setters.setColumnWindow).toHaveBeenCalledWith(window);
+    expect(setters.setGeometryRevision).toHaveBeenCalledWith(6);
+  });
+
   it("never hands a missing layout to the wrapper", () => {
     const malformed = {
       type: "COLUMNS_CHANGED",
@@ -262,8 +323,16 @@ describe("applyBatchInstructions — columns, layout and filter popup", () => {
 
   it("tolerates a wrapper without the optional layout setters", () => {
     const setters = makeSetters(false);
+    const window = {
+      layout,
+      range: { start: 0, end: 0 },
+      start: [],
+      center: [],
+      end: [],
+    };
     const batch: GridInstruction[] = [
       { type: "COLUMNS_CHANGED", columns: [column], layout, revision: 4 },
+      { type: "SET_COLUMN_WINDOW", window, revision: 4 },
       {
         type: "SET_CONTENT_SIZE",
         width: 120,

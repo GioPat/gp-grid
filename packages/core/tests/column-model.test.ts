@@ -103,6 +103,18 @@ describe("ColumnModel", () => {
     expect(idsOf(model)).toEqual(["city", "score", "replacement"]);
   });
 
+  it.each([
+    { drop: "before an end pin", from: 0, to: 2, order: ["c", "a", "b"], landed: 1 },
+    { drop: "past the last column", from: 0, to: 3, order: ["c", "b", "a"], landed: 2 },
+    { drop: "onto an adjacent end pin", from: 1, to: 2, order: ["a", "c", "b"], landed: 1 },
+  ])("anchors a move $drop to the target's identity", ({ from, to, order, landed }) => {
+    const model = new ColumnModel([def("a"), def("b", { pinned: "end" }), def("c")]);
+    expect(idsOf(model)).toEqual(["a", "c", "b"]);
+
+    expect(model.move(from, to)).toEqual({ toIndex: landed, pinned: "end", pinChanged: true });
+    expect(idsOf(model)).toEqual(order);
+  });
+
   it("drops the state of removed ids and reports the diff", () => {
     const model = new ColumnModel([def("a"), def("b")]);
     model.setWidth("a", 250);
@@ -113,8 +125,8 @@ describe("ColumnModel", () => {
     expect(model.ids()).toEqual(["b", "c"]);
     // An override is the only source of `width`; definitions supply defaults.
     expect(model.getState()).toEqual([
-      { columnId: "b", hidden: false, order: 0 },
-      { columnId: "c", hidden: false, order: 1 },
+      { columnId: "b", hidden: false, order: 0, pinned: null },
+      { columnId: "c", hidden: false, order: 1, pinned: null },
     ]);
   });
 
@@ -125,11 +137,13 @@ describe("ColumnModel", () => {
       orderChanged: false,
       widthChanged: true,
       hiddenChanged: false,
+      pinChanged: false,
     });
     expect(model.setState([{ columnId: "a", order: 1 }])).toEqual({
       orderChanged: true,
       widthChanged: false,
       hiddenChanged: false,
+      pinChanged: false,
     });
     expect(model.setState([{ columnId: "a", width: 180 }]).widthChanged).toBe(false);
   });
@@ -150,21 +164,38 @@ describe("ColumnModel", () => {
 
   it("reports a width change when an override equal to the definition width is set or reset", () => {
     const model = new ColumnModel([def("a", { width: 100 }), def("b", { width: 100 })]);
+    const initialLayout = model.getLayout();
 
     expect(model.setState([{ columnId: "a", width: 100 }])).toEqual({
       orderChanged: false,
       widthChanged: true,
       hiddenChanged: false,
+      pinChanged: false,
     });
+    expect(model.getLayout()).not.toBe(initialLayout);
     // The value is unchanged, so a second identical command is a no-op.
+    const overriddenLayout = model.getLayout();
     expect(model.setState([{ columnId: "a", width: 100 }]).widthChanged).toBe(false);
+    expect(model.getLayout()).toBe(overriddenLayout);
 
     // Removing the override restores the same number but changes the contract.
     expect(model.resetState(["a"])).toEqual({
       orderChanged: false,
       widthChanged: true,
       hiddenChanged: false,
+      pinChanged: false,
     });
+  });
+
+  it("publishes replacement definitions while retaining user state", () => {
+    const model = new ColumnModel([def("a", { headerName: "Before" }), def("b")]);
+    model.setState([{ columnId: "a", width: 180 }]);
+    const before = model.getLayout();
+
+    model.setDefinitions([def("a", { headerName: "After" }), def("b")]);
+
+    expect(model.getLayout()).not.toBe(before);
+    expect(model.getLayout()[0]).toMatchObject({ headerName: "After", width: 180 });
   });
 
   it("diagnoses an invalid width once per column id until it is valid again", () => {

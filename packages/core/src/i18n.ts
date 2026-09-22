@@ -86,6 +86,12 @@ export interface GridLabels {
   tooManyValues: string;
   /** Empty grid message */
   emptyState: string;
+  /** Pin-left action accessible name */
+  pinLeftColumn: string;
+  /** Pin-right action accessible name */
+  pinRightColumn: string;
+  /** Unpin action accessible name */
+  unpinColumn: string;
   /** Error message prefix template. Token: `{message}`. */
   errorPrefix: string;
   /** Filter operator labels */
@@ -122,6 +128,9 @@ export const defaultGridLabels: GridLabels = {
   tooManyValues:
     "Too many unique values ({count}). Use conditions to filter.",
   emptyState: "No data to display",
+  pinLeftColumn: "Pin left",
+  pinRightColumn: "Pin right",
+  unpinColumn: "Unpin",
   errorPrefix: "Error: {message}",
   operators: {
     contains: "Contains",

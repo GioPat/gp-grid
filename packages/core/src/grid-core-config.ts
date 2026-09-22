@@ -10,13 +10,17 @@ import type { ColumnLayoutMode } from "./types/geometry";
 // rows per second and converted to logical px/ms via the row height.
 const DEFAULT_FLING_ROWS_PER_SECOND = 20_000;
 
+/** CSS px of center window kept mounted past each clip edge by default. */
+export const DEFAULT_COLUMN_OVERSCAN = 240;
+
 type DefaultedOption =
   | "headerHeight"
   | "overscan"
   | "maxFlingVelocity"
   | "sortingEnabled"
   | "rowDragEntireRow"
-  | "columnLayout";
+  | "columnLayout"
+  | "columnOverscan";
 
 /**
  * GridCoreOptions with defaults applied. `columns` is excluded: it is the
@@ -30,6 +34,7 @@ export interface GridCoreConfig<TData>
   readonly sortingEnabled: boolean;
   readonly rowDragEntireRow: boolean;
   readonly columnLayout: ColumnLayoutMode;
+  readonly columnOverscan: number;
 }
 
 export const resolveGridCoreConfig = <TData>(
@@ -45,6 +50,10 @@ export const resolveGridCoreConfig = <TData>(
   if (!Number.isSafeInteger(overscan) || overscan < 0) {
     throw new RangeError(`Invalid overscan: ${overscan}`);
   }
+  const columnOverscan = options.columnOverscan ?? DEFAULT_COLUMN_OVERSCAN;
+  if (!Number.isFinite(columnOverscan) || columnOverscan < 0) {
+    throw new RangeError(`Invalid columnOverscan: ${columnOverscan}`);
+  }
   return {
     dataSource: options.dataSource,
     rowHeight: options.rowHeight,
@@ -56,8 +65,10 @@ export const resolveGridCoreConfig = <TData>(
     onRowDragEnd: options.onRowDragEnd,
     onColumnResized: options.onColumnResized,
     onColumnMoved: options.onColumnMoved,
+    onColumnPinned: options.onColumnPinned,
     headerHeight: options.headerHeight ?? options.rowHeight,
     overscan,
+    columnOverscan,
     maxFlingVelocity: options.maxFlingVelocity ??
       (DEFAULT_FLING_ROWS_PER_SECOND * options.rowHeight) / 1000,
     sortingEnabled: options.sortingEnabled ?? true,

@@ -6,6 +6,7 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
@@ -19,6 +20,8 @@ import {
   createLargeColumnarColumns,
   createLargeColumnarSource,
   createNarrowColumns,
+  createWideColumns,
+  createWideSource,
 } from './conformance-geometry';
 
 interface ConformanceRow {
@@ -152,12 +155,16 @@ const createColumnarFixture = () => {
         <button data-testid="bump-revision" (click)="bumpRevision()">Bump revision</button>
         <button data-testid="use-narrow-columns" (click)="useNarrowColumns()">Narrow columns</button>
         <button data-testid="use-large-columnar" (click)="useLargeColumnar()">Large columnar</button>
+        <button data-testid="use-wide-columns" (click)="useWideColumns(1000)">Wide columns</button>
+        <button data-testid="pin-columns" (click)="pinColumns()">Pin columns</button>
+        <button data-testid="unpin-all" (click)="unpinAll()">Unpin all</button>
         <button data-testid="toggle-column-layout" (click)="toggleColumnLayout()">Toggle layout</button>
         <button data-testid="resize-host" (click)="resizeHost()">Resize host</button>
         <button data-testid="hide-column" (click)="hideColumn()">Hide column</button>
+        <button data-testid="toggle-rtl" (click)="toggleRtl()">Toggle RTL</button>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
-      <div data-testid="grid-host" [style.width.px]="hostWidth()" style="height: 360px">
+      <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" style="height: 360px">
         @if (mounted()) {
           @if (mode() === 'columnar') {
             <gp-grid
@@ -173,7 +180,8 @@ const createColumnarFixture = () => {
               (onWriteRejected)="onWriteRejected($event)"
               (onColumnResized)="onColumnResized($event)"
               (onColumnMoved)="onColumnMoved($event)"
-              (onRowDragEnd)="onRowDragEnd($event)" />
+              (onRowDragEnd)="onRowDragEnd($event)"
+              (onColumnPinned)="onColumnPinned($event)" />
           } @else {
             <gp-grid
               [columns]="columns()"
@@ -187,7 +195,8 @@ const createColumnarFixture = () => {
               (onWriteRejected)="onWriteRejected($event)"
               (onColumnResized)="onColumnResized($event)"
               (onColumnMoved)="onColumnMoved($event)"
-              (onRowDragEnd)="onRowDragEnd($event)" />
+              (onRowDragEnd)="onRowDragEnd($event)"
+              (onColumnPinned)="onColumnPinned($event)" />
           }
         }
       </div>
@@ -213,7 +222,8 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   protected readonly columnState = signal<ColumnStateUpdate[]>([]);
   protected readonly columnLayout = signal<ColumnLayoutMode>('fit');
   protected readonly hostWidth = signal(600);
-  private readonly eventCounts = { resized: 0, moved: 0, dragged: 0 };
+  protected readonly rtl = signal(false);
+  private readonly eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
   private readonly coreTokens = new WeakMap<object, number>();
   private nextCoreToken = 1;
   protected readonly metrics = () => JSON.stringify({
@@ -261,7 +271,9 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
         this.eventCounts.resized = 0;
         this.eventCounts.moved = 0;
         this.eventCounts.dragged = 0;
+        this.eventCounts.pinned = 0;
       },
+      useWideColumns: (count: number): void => this.useWideColumns(count),
       ...createGeometryHooks(() => (this.coreOf() ?? null) as never),
     };
   }
@@ -281,6 +293,30 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     this.largeColumnarSource.set(createLargeColumnarSource());
     this.generation.update((value) => value + 1);
     this.revision.set(this.fixture.source.revision);
+  }
+
+  /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
+  protected useWideColumns(count: number): void {
+    this.mode.set('columnar');
+    this.columnarColumns.set(createWideColumns(count));
+    this.largeColumnarSource.set(createWideSource(count));
+    this.generation.update((value) => value + 1);
+  }
+
+  protected pinColumns(): void {
+    this.columnState.set([
+      { columnId: 'id', pinned: 'start' },
+      { columnId: 'name', pinned: 'start' },
+      { columnId: 'code', pinned: 'end' },
+    ]);
+  }
+
+  protected unpinAll(): void {
+    this.columnState.set([]);
+    const core = this.coreOf();
+    for (const column of core?.getColumns() ?? []) {
+      core?.setColumnPinned(column.colId ?? column.field, null);
+    }
   }
 
   protected toggleColumnLayout(): void {
@@ -310,11 +346,13 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     this.columnarColumns.set(createColumnarColumns());
     this.columnState.set([]);
     this.mode.set('object');
+    this.rtl.set(false);
     this.editEvents.set(0);
     this.writeRejected.set(0);
     this.eventCounts.resized = 0;
     this.eventCounts.moved = 0;
     this.eventCounts.dragged = 0;
+    this.eventCounts.pinned = 0;
     window.setTimeout(() => {
       this.generation.update((value) => value + 1);
       this.mounted.set(true);
@@ -327,6 +365,12 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
       this.generation.update((value) => value + 1);
       this.mounted.set(true);
     }, 0);
+  }
+
+  /** A `dir` flip needs a remount: direction is sampled at mount/resize. */
+  protected toggleRtl(): void {
+    this.rtl.update((current) => !current);
+    this.remount();
   }
 
   protected useColumnar(): void {
@@ -367,6 +411,10 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
 
   protected onRowDragEnd(_event: RowDragEndEvent): void {
     this.eventCounts.dragged += 1;
+  }
+
+  protected onColumnPinned(_event: ColumnPinnedEvent): void {
+    this.eventCounts.pinned += 1;
   }
 
   protected applyColumnState(): void {

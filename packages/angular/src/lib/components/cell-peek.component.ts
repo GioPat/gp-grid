@@ -16,6 +16,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import {
   bindPeekSelectAll,
+  fixedLeftForInline,
   formatCellValue,
   getFieldValue,
   type CellPosition,
@@ -35,6 +36,7 @@ const TEMPLATE = `
     [style.top.px]="top()"
     [style.left.px]="left()"
     [style.width.px]="width()"
+    [style.clip-path]="clipPath()"
     [style.visibility]="positioned() ? 'visible' : 'hidden'">
     @if (template(); as tpl) {
       <ng-container
@@ -74,6 +76,7 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   protected top = signal(0);
   protected left = signal(0);
   protected width = signal(0);
+  protected clipPath = signal('inset(0)');
   protected positioned = signal(false);
 
   protected template = computed<CellRendererTemplate | null>(() => {
@@ -176,12 +179,30 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Keep the cell's layout width so its content does not reflow, then clip
+    // the portion covered by either pin region.
+    const clip = this.core()?.geometry.getColumnClip(peek.col);
+    if (clip !== undefined && (bounds.left >= clip.end || bounds.left + bounds.width <= clip.start)) {
+      this.close.emit();
+      return;
+    }
+    const inlineStart = clip === undefined ? bounds.left : Math.max(bounds.left, clip.start);
+    const inlineEnd = clip === undefined
+      ? bounds.left + bounds.width
+      : Math.min(bounds.left + bounds.width, clip.end);
+    const clippedWidth = inlineEnd - inlineStart;
+    const left = fixedLeftForInline(container, bounds.left, bounds.width);
+    const clippedLeft = fixedLeftForInline(container, inlineStart, clippedWidth);
+    const leftInset = Math.max(0, clippedLeft - left);
+    const rightInset = Math.max(0, left + bounds.width - clippedLeft - clippedWidth);
+
     // The overlay is position:fixed, so the cell's viewport-space bounds are
     // offset by the body client area's screen origin.
     const origin = container.getBoundingClientRect();
     this.top.set(origin.top + bounds.top);
-    this.left.set(origin.left + bounds.left);
+    this.left.set(left);
     this.width.set(bounds.width);
+    this.clipPath.set(`inset(0 ${rightInset}px 0 ${leftInset}px)`);
     this.positioned.set(true);
   }
 

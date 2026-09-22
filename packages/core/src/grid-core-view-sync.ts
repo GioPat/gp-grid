@@ -19,13 +19,20 @@ import type {
   SortFilterManager,
   ViewportState,
 } from "./managers";
-import type { ColumnDefinition } from "./types";
+import type { ColumnDefinition, SortDirection } from "./types";
 import type { GridGeometryService } from "./geometry/grid-geometry";
-import type { ColumnLayoutSnapshot } from "./types/geometry";
+import type { ColumnLayoutSnapshot, ColumnWindowSnapshot } from "./types/geometry";
 
 // With scroll virtualization active a fast fling traverses several rows per
 // frame; overscan below this leaves blank rows behind the fling.
 const RECOMMENDED_SCALED_OVERSCAN = 10;
+
+interface EmittedHeader {
+  column: ColumnDefinition;
+  sortDirection?: SortDirection;
+  sortIndex?: number;
+  hasFilter: boolean;
+}
 
 export interface ViewSyncDeps<TData> {
   batcher: InstructionBatcher;
@@ -44,9 +51,13 @@ export interface ViewSyncDeps<TData> {
 export class ViewSync<TData> {
   private readonly deps: ViewSyncDeps<TData>;
   private hasWarnedAboutScaledOverscan = false;
-  private emittedHeaderIds = new Set<string>();
+  /** Baseline a header must differ from to be re-emitted. */
+  private readonly emittedHeaders = new Map<string, EmittedHeader>();
+  private emittedHeaderIds: string[] = [];
   private emittedLayout: ColumnLayoutSnapshot | null = null;
   private emittedDefinitions: readonly ColumnDefinition[] | null = null;
+  private emittedWindow: ColumnWindowSnapshot | null = null;
+  private emittedWindowRevision = -1;
 
   constructor(deps: ViewSyncDeps<TData>) {
     this.deps = deps;
@@ -124,6 +135,48 @@ export class ViewSync<TData> {
     }
   }
 
+  /**
+   * A raw horizontal scroll: only the mounted column window can change, so no
+   * row work, slot sync or visible-range instruction is produced, and no
+   * batch is created when the range did not move. A correction is still
+   * delivered because the sample may sit outside the reachable range.
+   */
+  syncColumnWindowOnly(emitScrollCorrection: () => void, hasScrollCorrection: () => boolean): void {
+    const geometry = this.deps.getGeometry();
+    geometry.refresh();
+    const moved = geometry.syncColumnWindow();
+    if (moved === false && hasScrollCorrection() === false) return;
+    this.deps.batcher.start();
+    try {
+      emitScrollCorrection();
+      if (moved) this.emitColumnWindow();
+    } finally {
+      this.deps.batcher.flush();
+    }
+  }
+
+  /**
+   * Publish the mounted column window. Every path that moves the window —
+   * scroll, edit retention, layout change — funnels through here, so the
+   * revision is committed and the instruction order inside the batch stays
+   * uniform.
+   */
+  publishColumnWindow(): void {
+    const geometry = this.deps.getGeometry();
+    geometry.syncColumnWindow();
+    this.emitColumnWindow();
+  }
+
+  /** Refresh the column window for a retention change and publish it. */
+  syncEditRetention(): void {
+    this.deps.batcher.start();
+    try {
+      this.publishColumnWindow();
+    } finally {
+      this.deps.batcher.flush();
+    }
+  }
+
   emitContentSize(): void {
     const { batcher, scrollVirtualization, viewport } = this.deps;
     const geometry = this.deps.getGeometry();
@@ -140,7 +193,23 @@ export class ViewSync<TData> {
       revision,
     });
     this.emitColumnLayout(layout, revision);
+    this.emitColumnWindow();
     this.warnIfOverscanTooLowForScaling();
+  }
+
+  /**
+   * Publish the mounted center window when it or its retained set changed.
+   * Object identity is the change contract: the geometry service reuses the
+   * same window while layout, range and retention are unchanged.
+   */
+  private emitColumnWindow(): void {
+    const geometry = this.deps.getGeometry();
+    const window = geometry.getColumnWindow();
+    const revision = geometry.revision;
+    if (window === this.emittedWindow && revision === this.emittedWindowRevision) return;
+    this.emittedWindow = window;
+    this.emittedWindowRevision = revision;
+    this.deps.batcher.emit({ type: "SET_COLUMN_WINDOW", window, revision });
   }
 
   /**
@@ -173,26 +242,53 @@ export class ViewSync<TData> {
     const columns = this.deps.getColumns();
     const sortInfoMap = sortFilter.getSortInfoMap();
 
-    const currentIds = new Set<string>();
+    const currentIds: string[] = [];
+    const currentIdSet = new Set<string>();
     for (const column of columns) {
       const columnId = column.colId ?? column.field;
-      currentIds.add(columnId);
+      currentIds.push(columnId);
+      currentIdSet.add(columnId);
       const sortInfo = sortInfoMap.get(columnId);
+      const hasFilter = sortFilter.hasActiveFilter(columnId);
+      if (this.headerIsUnchanged(columnId, column, sortInfo, hasFilter)) continue;
+      this.emittedHeaders.set(columnId, {
+        column,
+        sortDirection: sortInfo?.direction,
+        sortIndex: sortInfo?.index,
+        hasFilter,
+      });
       batcher.emit({
         type: "UPDATE_HEADER",
         columnId,
         column,
         sortDirection: sortInfo?.direction,
         sortIndex: sortInfo?.index,
-        hasFilter: sortFilter.hasActiveFilter(columnId),
+        hasFilter,
       });
     }
 
-    const removedIds = [...this.emittedHeaderIds].filter((id) => !currentIds.has(id));
+    const removedIds = this.emittedHeaderIds.filter((id) => currentIdSet.has(id) === false);
     if (removedIds.length > 0) {
       batcher.emit({ type: "REMOVE_HEADERS", columnIds: removedIds });
+      for (const id of removedIds) this.emittedHeaders.delete(id);
     }
     this.emittedHeaderIds = currentIds;
+  }
+
+  private headerIsUnchanged(
+    columnId: string,
+    column: ColumnDefinition,
+    sortInfo: { direction?: SortDirection | null; index?: number } | undefined,
+    hasFilter: boolean,
+  ): boolean {
+    const previous = this.emittedHeaders.get(columnId);
+    if (previous === undefined) return false;
+    return (
+      previous.column === column &&
+      previous.sortDirection === sortInfo?.direction &&
+      previous.sortIndex === sortInfo?.index &&
+      previous.hasFilter === hasFilter
+    );
   }
 
   emitVisibleRange(): void {

@@ -27,6 +27,8 @@ export type Direction = "up" | "down" | "left" | "right";
 export interface SelectionManagerOptions {
   getRowCount: () => number;
   getColumnCount: () => number;
+  /** Whether a layout column is displayed; omitted means every column is. */
+  isColumnDisplayed?: (col: number) => boolean;
   getCellValue: (row: number, col: number) => CellValue;
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
@@ -160,10 +162,10 @@ export class SelectionManager {
         newRow = Math.min(this.options.getRowCount() - 1, row + 1);
         break;
       case "left":
-        newCol = Math.max(0, col - 1);
+        newCol = this.nextDisplayedColumn(col, -1) ?? col;
         break;
       case "right":
-        newCol = Math.min(this.options.getColumnCount() - 1, col + 1);
+        newCol = this.nextDisplayedColumn(col, 1) ?? col;
         break;
     }
 
@@ -190,6 +192,19 @@ export class SelectionManager {
       this.emit({ type: "SET_ACTIVE_CELL", position: this.state.activeCell });
       this.emit({ type: "SET_SELECTION_RANGE", range: null });
     }
+  }
+
+  /**
+   * Next displayed column in a direction, or `null` when the edge is reached.
+   * Hidden columns have no rendered cell, so arrow navigation skips them.
+   */
+  private nextDisplayedColumn(from: number, step: number): number | null {
+    const isDisplayed = this.options.isColumnDisplayed;
+    const columnCount = this.options.getColumnCount();
+    for (let col = from + step; col >= 0 && col < columnCount; col += step) {
+      if (isDisplayed === undefined || isDisplayed(col)) return col;
+    }
+    return null;
   }
 
   /**

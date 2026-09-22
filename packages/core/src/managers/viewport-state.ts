@@ -5,6 +5,7 @@
 
 export interface ViewportUpdateResult {
   changed: boolean;
+  /** Width/height differ from the previous sample. */
   viewportSizeChanged: boolean;
 }
 

@@ -3,27 +3,18 @@
 import React from "react";
 import type {
   GridCore,
-  ColumnDefinition,
   CellPosition,
   CellRange,
   CellValue,
+  ColumnWindowSnapshot,
   DragState,
-  SlotData,
   FillHandlePosition,
   GridLabels,
-  DisplayedColumn,
+  SlotData,
 } from "@gp-grid/core";
-import {
-  isCellSelected,
-  isCellActive,
-  isCellEditing,
-  isCellInFillPreview,
-  buildCellClasses,
-  formatCellValue,
-  formatLabel,
-} from "@gp-grid/core";
-import { renderCell } from "../renderers/cellRenderer";
-import { renderEditCell } from "../renderers/editRenderer";
+import { formatLabel } from "@gp-grid/core";
+import { GridRow } from "./GridRow";
+import type { GridRowCellContext } from "./GridRow";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
@@ -41,7 +32,9 @@ export interface GridBodyProps<TData = unknown> {
   totalRows: number;
   labels: GridLabels;
   slotsArray: SlotData<TData>[];
-  layoutColumns: readonly DisplayedColumn[];
+  columnWindow: ColumnWindowSnapshot | null;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
   fillHandlePosition: FillHandlePosition | null;
   dragState: DragState;
   onScroll: () => void;
@@ -76,7 +69,8 @@ const GridBodyInner = <TData = unknown>(
     totalRows,
     labels,
     slotsArray,
-    layoutColumns,
+    columnWindow,
+    displayedIndexOf,
     fillHandlePosition,
     dragState,
     onScroll,
@@ -92,9 +86,54 @@ const GridBodyInner = <TData = unknown>(
     globalEditRenderer,
   } = props;
 
+  const contentWidthPx = Math.max(contentWidth, totalWidth);
+  const regions = columnWindow?.layout.regions;
+
+  const cellContext: GridRowCellContext<TData> = {
+    rowHeight,
+    activeCell,
+    selectionRange,
+    editingCell,
+    dragState,
+    coreRef,
+    cellRenderers,
+    editRenderers,
+    globalCellRenderer,
+    globalEditRenderer,
+    onCellMouseDown,
+    onCellDoubleClick,
+    onCellMouseEnter,
+    onCellMouseLeave,
+  };
+
+  const fillHandle = fillHandlePosition && !editingCell ? (
+    <div
+      className="gp-grid-fill-handle"
+      style={{
+        top: fillHandlePosition.top,
+        insetInlineStart: fillHandlePosition.left,
+      }}
+      onPointerDown={onFillHandleMouseDown}
+    />
+  ) : null;
+
+  /** Pin regions host the handle in a zero-height sticky overlay so it follows them. */
+  const pinOverlay = (region: "start" | "end"): React.ReactNode =>
+    fillHandle !== null && fillHandlePosition?.region === region && regions !== undefined ? (
+      <div
+        className={`gp-grid-pin-overlay gp-grid-pin-overlay--${region}`}
+        role="presentation"
+        style={{ width: `${region === "start" ? regions.startWidth : regions.endWidth}px` }}
+      >
+        {fillHandle}
+      </div>
+    ) : null;
+
   return (
     <div
       ref={ref}
+      className="gp-grid-body-scroll"
+      role="presentation"
       style={{
         flex: 1,
         overflow: "auto",
@@ -104,8 +143,9 @@ const GridBodyInner = <TData = unknown>(
     >
       {/* Content sizer - provides scroll range */}
       <div
+        role="presentation"
         style={{
-          width: Math.max(contentWidth, totalWidth),
+          width: contentWidthPx,
           height: Math.max(contentHeight - totalHeaderHeight, 0),
           position: "relative",
           minWidth: "100%",
@@ -115,181 +155,32 @@ const GridBodyInner = <TData = unknown>(
         {/* This prevents browser rendering issues at extreme pixel positions (millions of px) */}
         <div
           className="gp-grid-rows-wrapper"
+          role="presentation"
           style={{
-            width: `${Math.max(contentWidth, totalWidth)}px`,
+            width: `${contentWidthPx}px`,
             transform: `translateY(${rowsWrapperOffset}px)`,
           }}
         >
-          {/* Row slots */}
-          {slotsArray.map((slot) => {
-            if (slot.rowIndex < 0) return null;
+          {columnWindow !== null &&
+            slotsArray.map((slot) =>
+              slot.rowIndex < 0 ? null : (
+                <GridRow
+                  key={slot.slotId}
+                  slot={slot}
+                  columnWindow={columnWindow}
+                  displayedIndexOf={displayedIndexOf}
+                  width={contentWidthPx}
+                  rowHeight={rowHeight}
+                  cellContext={cellContext}
+                />
+              ),
+            )}
 
-            const core = coreRef.current;
+          {/* Fill handle (drag to fill) - inside the wrapper so it moves with rows */}
+          {fillHandlePosition?.region === "center" && fillHandle}
 
-            // Compute row highlight classes (pass rowData for content-based rules)
-            const highlightRowClasses =
-              coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-            const rowClassName = ["gp-grid-row", ...highlightRowClasses]
-              .filter(Boolean)
-              .join(" ");
-
-            return (
-              <div
-                key={slot.slotId}
-                className={rowClassName}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  transform: `translateY(${slot.translateY}px)`,
-                  width: `${Math.max(contentWidth, totalWidth)}px`,
-                  height: `${rowHeight}px`,
-                }}
-              >
-                {layoutColumns.map(({ column, layoutIndex, offset, width }) => {
-                  const isEditing = isCellEditing(
-                    slot.rowIndex,
-                    layoutIndex,
-                    editingCell,
-                  );
-                  const active = isCellActive(
-                    slot.rowIndex,
-                    layoutIndex,
-                    activeCell,
-                  );
-                  const selected = isCellSelected(
-                    slot.rowIndex,
-                    layoutIndex,
-                    selectionRange,
-                  );
-                  const inFillPreview = isCellInFillPreview(
-                    slot.rowIndex,
-                    layoutIndex,
-                    dragState.dragType === "fill",
-                    dragState.fillSourceRange,
-                    dragState.fillTarget,
-                  );
-
-                  // Build base cell classes
-                  const baseCellClasses = buildCellClasses(
-                    active,
-                    selected,
-                    isEditing,
-                    inFillPreview,
-                  );
-
-                  // Compute highlight cell classes
-                  const highlightCellClasses =
-                    coreRef.current?.highlight?.computeCombinedCellClasses(
-                      slot.rowIndex,
-                      layoutIndex,
-                      column,
-                      slot.rowData,
-                    ) ?? [];
-
-                  // Read the raw value through the core read path so a
-                  // record-less (columnar) row renders like an object row.
-                  const rawValue =
-                    core?.getCellValue(slot.rowIndex, layoutIndex) ?? null;
-                  const rowId = core?.getRowId(slot.rowIndex);
-                  const getValue = (field: string): CellValue =>
-                    core?.getFieldValue(slot.rowIndex, field) ?? null;
-
-                  const isRowDragHandle = column.rowDrag === true;
-                  // Wrap only affects the default text content, so it is
-                  // irrelevant (and would clash with the edit input) in edit mode.
-                  const wrapText = column.wrapText === true && !isEditing;
-
-                  const cellClasses = [
-                    baseCellClasses,
-                    ...highlightCellClasses,
-                    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
-                    wrapText ? "gp-grid-cell--wrap" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-
-                  // Native tooltip: show the formatted value on hover so users
-                  // can read content that's clipped by the cell width. Opt out
-                  // per column with `tooltip: false`. Suppressed while editing
-                  // (the input is focused and has its own value).
-                  const titleText =
-                    column.tooltip === false || isEditing
-                      ? ""
-                      : formatCellValue(rawValue, column.valueFormatter);
-
-                  return (
-                    <div
-                      key={`${slot.slotId}-${layoutIndex}`}
-                      className={cellClasses}
-                      data-cell-row={slot.rowIndex}
-                      data-cell-col={layoutIndex}
-                      title={titleText || undefined}
-                      style={{
-                        position: "absolute",
-                        left: `${offset}px`,
-                        top: 0,
-                        width: `${width}px`,
-                        height: `${rowHeight}px`,
-                      }}
-                      onPointerDown={(e) =>
-                        onCellMouseDown(slot.rowIndex, layoutIndex, e)
-                      }
-                      onDoubleClick={() =>
-                        onCellDoubleClick(slot.rowIndex, layoutIndex)
-                      }
-                      onMouseEnter={() =>
-                        onCellMouseEnter(slot.rowIndex, layoutIndex)
-                      }
-                      onMouseLeave={onCellMouseLeave}
-                    >
-                      {isEditing && editingCell
-                        ? renderEditCell({
-                          column,
-                          rowData: slot.rowData,
-                          rawValue,
-                          rowId,
-                          getValue,
-                          rowIndex: slot.rowIndex,
-                          colIndex: layoutIndex,
-                          initialValue: editingCell.initialValue,
-                          editId: editingCell.editId,
-                          coreRef,
-                          editRenderers,
-                          globalEditRenderer,
-                        })
-                        : renderCell({
-                          column,
-                          rowData: slot.rowData,
-                          rawValue,
-                          rowId,
-                          getValue,
-                          rowIndex: slot.rowIndex,
-                          colIndex: layoutIndex,
-                          isActive: active,
-                          isSelected: selected,
-                          isEditing,
-                          cellRenderers,
-                          globalCellRenderer,
-                        })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-
-          {/* Fill handle (drag to fill) - inside wrapper so it moves with rows */}
-          {fillHandlePosition && !editingCell && (
-            <div
-              className="gp-grid-fill-handle"
-              style={{
-                top: fillHandlePosition.top,
-                left: fillHandlePosition.left,
-              }}
-              onPointerDown={onFillHandleMouseDown}
-            />
-          )}
+          {pinOverlay("start")}
+          {pinOverlay("end")}
 
           {/* Row drop indicator - inside wrapper so it scrolls with rows */}
           {dragState.dragType === "row-drag" && dragState.rowDrag?.dropTargetIndex !== null && (
@@ -297,12 +188,11 @@ const GridBodyInner = <TData = unknown>(
               className="gp-grid-row-drop-indicator"
               style={{
                 transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
-                width: `${Math.max(contentWidth, totalWidth)}px`,
+                width: `${contentWidthPx}px`,
               }}
             />
           )}
         </div>
-
       </div>
 
       {/* Error message */}

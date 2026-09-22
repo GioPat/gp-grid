@@ -1,27 +1,45 @@
 // packages/react/src/components/GridHeader.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderData, DisplayedColumn } from "@gp-grid/core";
-import { renderHeader } from "../renderers/headerRenderer";
+import type {
+  ColumnWindowSnapshot,
+  GridCore,
+  GridIcon,
+  GridLabels,
+  HeaderData,
+  ResolvedColumn,
+} from "@gp-grid/core";
+import { GridHeaderCell } from "./GridHeaderCell";
 import type { ReactHeaderRenderer } from "../types";
 
 export interface GridHeaderProps<TData = unknown> {
   headerHeight: number;
+  /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
   scrollLeft: number;
   contentWidth: number;
   totalWidth: number;
+  viewportWidth: number;
   isLoading: boolean;
-  layoutColumns: readonly DisplayedColumn[];
+  columnWindow: ColumnWindowSnapshot | null;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
+  labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
   globalHeaderRenderer?: ReactHeaderRenderer;
+  pinIcon: GridIcon;
 }
 
+/**
+ * Header: the center strip translates with the body scroll, while the two pin
+ * containers stay absolute at their viewport edges above it.
+ */
 export const GridHeader = <TData = unknown>(
   props: GridHeaderProps<TData>,
 ): React.ReactNode => {
@@ -30,75 +48,103 @@ export const GridHeader = <TData = unknown>(
     scrollLeft,
     contentWidth,
     totalWidth,
+    viewportWidth,
     isLoading,
-    layoutColumns,
+    columnWindow,
+    displayedIndexOf,
     headers,
     sortingEnabled,
+    rtl,
+    labels,
     onHeaderMouseDown,
     onHeaderResizeMouseDown,
     coreRef,
     outerContainerRef,
     headerRenderers,
     globalHeaderRenderer,
+    pinIcon,
   } = props;
+
+  const renderColumn = (column: ResolvedColumn): React.ReactNode => (
+    <GridHeaderCell
+      key={column.columnId}
+      column={column}
+      displayedIndex={displayedIndexOf(column.columnId)}
+      headerHeight={headerHeight}
+      headers={headers}
+      sortingEnabled={sortingEnabled}
+      rtl={rtl}
+      labels={labels}
+      onHeaderMouseDown={onHeaderMouseDown}
+      onHeaderResizeMouseDown={onHeaderResizeMouseDown}
+      coreRef={coreRef}
+      outerContainerRef={outerContainerRef}
+      headerRenderers={headerRenderers}
+      globalHeaderRenderer={globalHeaderRenderer}
+      pinIcon={pinIcon}
+    />
+  );
+
+  const { start, center, end } = columnWindow ?? { start: [], center: [], end: [] };
+  const { regions } = columnWindow?.layout ?? {};
 
   return (
     <div
       className={`gp-grid-header${isLoading ? " gp-grid-header--loading" : ""}`}
+      role="row"
       style={{ height: headerHeight }}
     >
       <div
+        role="presentation"
         style={{
           position: "absolute",
           top: 0,
-          left: 0,
+          insetInlineStart: 0,
           transform: `translateX(${-scrollLeft}px)`,
           width: Math.max(contentWidth, totalWidth),
           height: headerHeight,
         }}
       >
-        {layoutColumns.map(({ column, layoutIndex, offset, width }) => {
-          const headerInfo = headers.get(column.colId ?? column.field);
-          return (
-            <div
-              key={column.colId ?? column.field}
-              className="gp-grid-header-cell"
-              data-col-index={layoutIndex}
-              style={{
-                left: `${offset}px`,
-                width: `${width}px`,
-                height: `${headerHeight}px`,
-              }}
-              onPointerDown={(e) =>
-                onHeaderMouseDown(layoutIndex, width, headerHeight, e)
-              }
-            >
-              {renderHeader({
-                column,
-                colIndex: layoutIndex,
-                sortDirection: headerInfo?.sortDirection,
-                sortIndex: headerInfo?.sortIndex,
-                sortable: (column.sortable !== false) && sortingEnabled,
-                filterable: column.filterable !== false,
-                hasFilter: headerInfo?.hasFilter ?? false,
-                coreRef,
-                containerRef: outerContainerRef,
-                headerRenderers,
-                globalHeaderRenderer,
-              })}
-              {column.resizable !== false && (
-                <div
-                  className="gp-grid-header-resize-handle"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    onHeaderResizeMouseDown(layoutIndex, width, e);
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
+        {center.map(renderColumn)}
       </div>
+
+      {regions !== undefined && start.length > 0 && (
+        <div
+          className="gp-grid-pin-header"
+          role="presentation"
+          data-pin-region="start"
+          style={{
+            insetInlineStart: 0,
+            width: `${regions.startWidth}px`,
+            height: headerHeight,
+          }}
+        >
+          {start.map(renderColumn)}
+        </div>
+      )}
+
+      {regions !== undefined && end.length > 0 && (
+        <div
+          className="gp-grid-pin-header"
+          role="presentation"
+          data-pin-region="end"
+          style={{
+            insetInlineStart: `${regions.endOffset}px`,
+            width: `${regions.endWidth}px`,
+            height: headerHeight,
+          }}
+        >
+          {end.map(renderColumn)}
+        </div>
+      )}
+
+      {viewportWidth > 0 && (
+        <div
+          className="gp-grid-header-gutter"
+          role="presentation"
+          style={{ insetInlineStart: viewportWidth, height: headerHeight }}
+        />
+      )}
     </div>
   );
 };
