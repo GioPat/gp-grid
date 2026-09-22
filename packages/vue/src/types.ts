@@ -8,11 +8,15 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateUpdate,
+  ColumnLayoutMode,
   EditRendererParams,
   GridLabelOverrides,
+  GridIcon,
   HeaderRendererParams,
+  HighlightingOptions,
   DataSource,
   RowDragEndEvent,
   RowLoadingOptions,
@@ -82,6 +86,10 @@ export interface GpGridProps<TData = unknown> {
   rowHeight: number;
   headerHeight?: number;
   overscan?: number;
+  /** Column overscan in CSS px per side for the mounted center window. */
+  columnOverscan?: number;
+  /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
+  columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
   sortingEnabled?: boolean;
   darkMode?: boolean;
@@ -94,6 +102,14 @@ export interface GpGridProps<TData = unknown> {
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
+  /** SVG used by the default header's pin toggle. */
+  pinIcon?: GridIcon;
+  /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
+  initialWidth?: number;
+  /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
+  initialHeight?: number;
+  /** Row/column/cell highlighting configuration. */
+  highlighting?: HighlightingOptions<TData>;
   /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
@@ -110,6 +126,8 @@ export interface GpGridProps<TData = unknown> {
   onColumnResized?: (event: ColumnResizedEvent) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
+  /** Called when a column is pinned or unpinned. */
+  onColumnPinned?: (event: ColumnPinnedEvent) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

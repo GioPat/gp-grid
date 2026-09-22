@@ -96,6 +96,7 @@ export function renderEditCell(
   // Default input
   return h("input", {
     class: "gp-grid-edit-input",
+    "data-edit-id": editId,
     type: "text",
     value: initialValue == null ? "" : String(initialValue),
     autofocus: true,
@@ -113,6 +114,19 @@ export function renderEditCell(
         core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
       }
     },
-    onBlur: () => core.commitEdit(editId),
+    onBlur: (event: FocusEvent) => {
+      const blurred = event.currentTarget as HTMLInputElement;
+      const grid = blurred.closest(".gp-grid-container");
+      requestAnimationFrame(() => {
+        const replacement = grid?.querySelector<HTMLInputElement>(
+          `.gp-grid-edit-input[data-edit-id="${editId}"]`,
+        );
+        if (replacement && replacement !== blurred) {
+          replacement.focus();
+          return;
+        }
+        core.commitEdit(editId);
+      });
+    },
   });
 }

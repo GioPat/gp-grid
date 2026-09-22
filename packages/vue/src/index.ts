@@ -113,6 +113,7 @@ export type {
   WriteRejectionOperation,
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
   // Column identity and state
   ColumnId,
@@ -160,15 +161,22 @@ export type {
   GridLabels,
   GridLabelOverrides,
   GridFilterOperatorLabels,
+  GridIcon,
   // UI State (shared with React)
   SlotData,
   HeaderData,
   FilterPopupState,
   GridState,
-  // PRD 003 geometry
+  // Geometry
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   DisplayedColumn,
+  // Column virtualization and pinning
+  ColumnPin,
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
+  FillHandlePosition,
   GeometrySpace,
   AxisBounds,
   CellBounds,

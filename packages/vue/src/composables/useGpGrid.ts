@@ -10,6 +10,9 @@ import {
   isCellEditing,
   isCellInFillPreview,
   buildCellClasses,
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
   TouchScrollController,
 } from "@gp-grid/core";
 import type {
@@ -18,9 +21,11 @@ import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnFilterModel,
+  ColumnPinnedEvent,
   CellValueChangedEvent,
   DataSource,
   DragState,
+  FillHandlePosition,
   GridState,
   SlotData,
   HighlightingOptions,
@@ -42,6 +47,8 @@ export interface UseGpGridOptions<TData = unknown> {
   rowHeight: number;
   headerHeight?: number;
   overscan?: number;
+  /** Column overscan in CSS px per side for the mounted center window. */
+  columnOverscan?: number;
   /** Displayed-width policy. Default: "fit". */
   columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
@@ -55,6 +62,8 @@ export interface UseGpGridOptions<TData = unknown> {
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /** Called when a column is pinned or unpinned. */
+  onColumnPinned?: (event: ColumnPinnedEvent) => void;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   headerRenderers?: Record<string, VueHeaderRenderer>;
@@ -70,6 +79,8 @@ export interface UseGpGridResult<TData = unknown> {
 
   // State
   state: ShallowRef<GridState>;
+  /** Bumped once per core batch; cells read it so core-backed content updates. */
+  renderToken: ShallowRef<number>;
   slotsArray: ComputedRef<SlotData[]>;
 
   // Computed
@@ -77,7 +88,7 @@ export interface UseGpGridResult<TData = unknown> {
   /** Resolved displayed-column layout published by the core. */
   layout: ComputedRef<ColumnLayoutSnapshot | null>;
   totalWidth: ComputedRef<number>;
-  fillHandlePosition: ComputedRef<{ top: number; left: number } | null>;
+  fillHandlePosition: ComputedRef<FillHandlePosition | null>;
 
   // Event handlers
   handleScroll: () => void;
@@ -118,6 +129,8 @@ export function useGpGrid<TData = unknown>(
   // Refs
   const containerRef = ref<HTMLDivElement | null>(null);
   const coreRef = shallowRef<GridCore<TData> | null>(null);
+  /** Inline direction, resampled on mount and on every container resize. */
+  const rtlRef = ref(false);
 
   // Synthetic touch scrolling for scaled grids (attached in onMounted)
   const touchScroll = new TouchScrollController<TData>({
@@ -128,7 +141,7 @@ export function useGpGrid<TData = unknown>(
 
   // Seeded so the pre-mount/SSR render shows the definition layout before the
   // core publishes its first resolved snapshot.
-  const { state, applyInstructions } = useGridState({
+  const { state, renderToken, applyInstructions } = useGridState({
     initialColumns: options.columns,
     initialColumnLayout: options.columnLayout ?? "fit",
   });
@@ -171,7 +184,7 @@ export function useGpGrid<TData = unknown>(
 
     core.setViewport(
       container.scrollTop,
-      container.scrollLeft,
+      toInlineX(container.scrollLeft, rtlRef.value),
       container.clientWidth,
       container.clientHeight,
     );
@@ -216,6 +229,7 @@ export function useGpGrid<TData = unknown>(
       rowHeight: options.rowHeight,
       headerHeight: totalHeaderHeight.value,
       overscan: options.overscan ?? 3,
+      columnOverscan: options.columnOverscan,
       columnLayout: options.columnLayout ?? "fit",
       maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
@@ -225,6 +239,7 @@ export function useGpGrid<TData = unknown>(
       onCellValueChanged: options.onCellValueChanged
         ? (event) => options.onCellValueChanged?.(event)
         : undefined,
+      onColumnPinned: (event) => options.onColumnPinned?.(event),
     });
 
     coreRef.value = core;
@@ -247,18 +262,20 @@ export function useGpGrid<TData = unknown>(
     // Initial measurement
     const container = containerRef.value;
     if (container) {
+      rtlRef.value = readIsRtl(container);
       core.setViewport(
         container.scrollTop,
-        container.scrollLeft,
+        toInlineX(container.scrollLeft, rtlRef.value),
         container.clientWidth,
         container.clientHeight,
       );
 
       // Resize observer
       const resizeObserver = new ResizeObserver(() => {
+        rtlRef.value = readIsRtl(container);
         core.setViewport(
           container.scrollTop,
-          container.scrollLeft,
+          toInlineX(container.scrollLeft, rtlRef.value),
           container.clientWidth,
           container.clientHeight,
         );
@@ -283,7 +300,7 @@ export function useGpGrid<TData = unknown>(
       if (scrollTop === null && scrollLeft === null) return;
       touchScroll.stop();
       if (scrollTop !== null) container.scrollTop = scrollTop;
-      if (scrollLeft !== null) container.scrollLeft = scrollLeft;
+      if (scrollLeft !== null) container.scrollLeft = toPhysicalX(scrollLeft, rtlRef.value);
     },
     { flush: "post" },
   );
@@ -341,6 +358,7 @@ export function useGpGrid<TData = unknown>(
 
     // State
     state,
+    renderToken,
     slotsArray,
 
     // Computed

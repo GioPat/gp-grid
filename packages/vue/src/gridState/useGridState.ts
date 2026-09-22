@@ -21,10 +21,13 @@ export { createInitialState } from "@gp-grid/core";
  */
 export function useGridState(args?: InitialStateArgs): {
   state: ShallowRef<GridState>;
+  /** Bumped once per batch; cells read it so core-backed content re-renders. */
+  renderToken: ShallowRef<number>;
   applyInstructions: (instructions: GridInstruction[]) => void;
   reset: () => void;
 } {
   const state = shallowRef<GridState>(createInitialState(args));
+  const renderToken = shallowRef(0);
 
   /**
    * Apply a batch of instructions atomically to the state.
@@ -74,6 +77,7 @@ export function useGridState(args?: InitialStateArgs): {
 
     // Atomic replacement — exactly one reactive notification
     state.value = { ...current, ...mergedChanges };
+    renderToken.value += 1;
   };
 
   /**
@@ -81,10 +85,12 @@ export function useGridState(args?: InitialStateArgs): {
    */
   const reset = (): void => {
     state.value = createInitialState();
+    renderToken.value += 1;
   };
 
   return {
     state,
+    renderToken,
     applyInstructions,
     reset,
   };

@@ -1,28 +1,19 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type {
-  GridCore,
-  ColumnDefinition,
   CellPosition,
   CellRange,
   CellValue,
+  ColumnWindowSnapshot,
   DragState,
-  SlotData,
   FillHandlePosition,
+  GridCore,
   GridLabels,
-  RowId,
-  DisplayedColumn,
+  SlotData,
 } from "@gp-grid/core";
-import {
-  isCellSelected,
-  isCellActive,
-  isCellEditing,
-  isCellInFillPreview,
-  buildCellClasses,
-  formatLabel,
-} from "@gp-grid/core";
-import { renderCell } from "../renderers/cellRenderer";
-import { renderEditCell } from "../renderers/editRenderer";
+import { formatLabel } from "@gp-grid/core";
+import GridRow from "./GridRow.vue";
+import type { GridRowCellContext } from "./cell-props";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
@@ -34,14 +25,18 @@ const props = defineProps<{
   rowsWrapperOffset: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
-  editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   hoverPosition: CellPosition | null;
+  editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   error: string | null;
   isLoading: boolean;
   totalRows: number;
   labels: GridLabels;
   slotsArray: SlotData[];
-  layoutColumns: readonly DisplayedColumn[];
+  columnWindow: ColumnWindowSnapshot | null;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
+  /** Bumped once per core batch, so cells re-read their core-backed content. */
+  renderToken: number;
   fillHandlePosition: FillHandlePosition | null;
   dragState: DragState;
   onScroll: () => void;
@@ -61,59 +56,47 @@ const props = defineProps<{
 
 const bodyRef = ref<HTMLDivElement | null>(null);
 
-// Get row classes including highlight classes
-const getRowClasses = (slot: { rowIndex: number; rowData: Row | undefined }): string => {
-  const highlightRowClasses =
-    props.coreRef?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
-};
+const contentWidthPx = computed(() => Math.max(props.contentWidth, props.totalWidth));
 
-// Get cell classes
-const getCellClasses = (
-  rowIndex: number,
-  colIndex: number,
-  column: ColumnDefinition,
-  rowData: Row | undefined,
-  _hoverPosition: CellPosition | null,
-): string => {
-  const isEditing = isCellEditing(rowIndex, colIndex, props.editingCell);
-  const active = isCellActive(rowIndex, colIndex, props.activeCell);
-  const selected = isCellSelected(rowIndex, colIndex, props.selectionRange);
-  const inFillPreview = isCellInFillPreview(
-    rowIndex,
-    colIndex,
-    props.dragState.dragType === "fill",
-    props.dragState.fillSourceRange,
-    props.dragState.fillTarget,
-  );
-  const baseCellClasses = buildCellClasses(active, selected, isEditing, inFillPreview);
+const cellContext = computed<GridRowCellContext>(() => ({
+  rowHeight: props.rowHeight,
+  activeCell: props.activeCell,
+  selectionRange: props.selectionRange,
+  hoverPosition: props.hoverPosition,
+  renderToken: props.renderToken,
+  editingCell: props.editingCell,
+  dragState: props.dragState,
+  coreRef: props.coreRef,
+  cellRenderers: props.cellRenderers,
+  editRenderers: props.editRenderers,
+  globalCellRenderer: props.globalCellRenderer,
+  globalEditRenderer: props.globalEditRenderer,
+  onCellMouseDown: props.onCellMouseDown,
+  onCellDoubleClick: props.onCellDoubleClick,
+  onCellMouseEnter: props.onCellMouseEnter,
+  onCellMouseLeave: props.onCellMouseLeave,
+}));
 
-  const highlightCellClasses =
-    props.coreRef?.highlight?.computeCombinedCellClasses(rowIndex, colIndex, column, rowData) ?? [];
+const visibleSlots = computed(() =>
+  props.slotsArray.filter((slot) => slot.rowIndex >= 0));
 
-  const isRowDragHandle = column.rowDrag === true;
-  // Wrap only affects the default text content, so it is irrelevant (and would
-  // clash with the edit input) in edit mode.
-  const wrapText = column.wrapText === true && !isEditing;
+/** Region hosting the fill handle, or `null` when it is not rendered. */
+const handleRegion = computed(() =>
+  props.fillHandlePosition === null || props.editingCell !== null
+    ? null
+    : props.fillHandlePosition.region);
 
-  return [
-    baseCellClasses,
-    ...highlightCellClasses,
-    isRowDragHandle ? "gp-grid-cell--row-drag-handle" : "",
-    wrapText ? "gp-grid-cell--wrap" : "",
-  ].filter(Boolean).join(" ");
-};
+/** Pin regions host the handle in a zero-height sticky overlay so it follows them. */
+const pinOverlayWidth = computed(() => {
+  const regions = props.columnWindow?.layout.regions;
+  if (regions === undefined) return 0;
+  return handleRegion.value === "end" ? regions.endWidth : regions.startWidth;
+});
 
-// Read raw values through the core so a record-less (columnar) row renders
-// exactly like an object row.
-const getRawValue = (rowIndex: number, colIndex: number): CellValue =>
-  props.coreRef?.getCellValue(rowIndex, colIndex) ?? null;
-
-const getRowIdAt = (rowIndex: number): RowId | undefined =>
-  props.coreRef?.getRowId(rowIndex);
-
-const getFieldValueAt = (rowIndex: number, field: string): CellValue =>
-  props.coreRef?.getFieldValue(rowIndex, field) ?? null;
+const fillHandleStyle = computed(() => ({
+  top: `${props.fillHandlePosition?.top ?? 0}px`,
+  insetInlineStart: `${props.fillHandlePosition?.left ?? 0}px`,
+}));
 
 defineExpose({ bodyRef });
 </script>
@@ -121,14 +104,17 @@ defineExpose({ bodyRef });
 <template>
   <div
     ref="bodyRef"
+    class="gp-grid-body-scroll"
+    role="presentation"
     style="flex: 1; overflow: auto; position: relative"
     @scroll="props.onScroll"
     @wheel="(e) => props.onWheel(e, props.wheelDampening)"
   >
     <!-- Content sizer - provides scroll range -->
     <div
+      role="presentation"
       :style="{
-        width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+        width: `${contentWidthPx}px`,
         height: `${Math.max(props.contentHeight - props.totalHeaderHeight, 0)}px`,
         position: 'relative',
         minWidth: '100%',
@@ -137,94 +123,47 @@ defineExpose({ bodyRef });
       <!-- Rows wrapper -->
       <div
         class="gp-grid-rows-wrapper"
+        role="presentation"
         :style="{
-          width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+          width: `${contentWidthPx}px`,
           transform: `translateY(${props.rowsWrapperOffset}px)`,
         }"
       >
-        <!-- Row slots -->
-        <div
-          v-for="slot in props.slotsArray.filter((s) => s.rowIndex >= 0)"
-          :key="slot.slotId"
-          :class="getRowClasses(slot)"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            transform: `translateY(${slot.translateY}px)`,
-            width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
-            height: `${props.rowHeight}px`,
-          }"
-        >
-          <div
-            v-for="{ column, layoutIndex, offset, width } in props.layoutColumns"
-            :key="`${slot.slotId}-${column.colId ?? column.field}`"
-            :class="getCellClasses(slot.rowIndex, layoutIndex, column, slot.rowData, props.hoverPosition)"
-            :data-cell-row="slot.rowIndex"
-            :data-cell-col="layoutIndex"
-            :style="{
-              position: 'absolute',
-              left: `${offset}px`,
-              top: 0,
-              width: `${width}px`,
-              height: `${props.rowHeight}px`,
-            }"
-            @pointerdown="(e) => props.onCellMouseDown(slot.rowIndex, layoutIndex, e)"
-            @dblclick="() => props.onCellDoubleClick(slot.rowIndex, layoutIndex)"
-            @mouseenter="() => props.onCellMouseEnter(slot.rowIndex, layoutIndex)"
-            @mouseleave="props.onCellMouseLeave"
-          >
-            <!-- Edit mode -->
-            <template v-if="isCellEditing(slot.rowIndex, layoutIndex, props.editingCell) && props.editingCell">
-              <component
-                :is="renderEditCell({
-                  column,
-                  rowData: slot.rowData,
-                  rawValue: getRawValue(slot.rowIndex, layoutIndex),
-                  rowId: getRowIdAt(slot.rowIndex),
-                  getValue: (field) => getFieldValueAt(slot.rowIndex, field),
-                  rowIndex: slot.rowIndex,
-                  colIndex: layoutIndex,
-                  initialValue: props.editingCell.initialValue,
-                  editId: props.editingCell.editId,
-                  core: props.coreRef,
-                  editRenderers: props.editRenderers,
-                  globalEditRenderer: props.globalEditRenderer,
-                })"
-              />
-            </template>
-            <!-- View mode -->
-            <template v-else>
-              <component
-                :is="renderCell({
-                  column,
-                  rowData: slot.rowData,
-                  rawValue: getRawValue(slot.rowIndex, layoutIndex),
-                  rowId: getRowIdAt(slot.rowIndex),
-                  getValue: (field) => getFieldValueAt(slot.rowIndex, field),
-                  rowIndex: slot.rowIndex,
-                  colIndex: layoutIndex,
-                  isActive: isCellActive(slot.rowIndex, layoutIndex, props.activeCell),
-                  isSelected: isCellSelected(slot.rowIndex, layoutIndex, props.selectionRange),
-                  isEditing: false,
-                  cellRenderers: props.cellRenderers,
-                  globalCellRenderer: props.globalCellRenderer,
-                })"
-              />
-            </template>
-          </div>
-        </div>
+        <template v-if="props.columnWindow">
+          <GridRow
+            v-for="slot in visibleSlots"
+            :key="slot.slotId"
+            :slot="slot"
+            :column-window="props.columnWindow"
+            :displayed-index-of="props.displayedIndexOf"
+            :width="contentWidthPx"
+            :row-height="props.rowHeight"
+            :cell-context="cellContext"
+          />
+        </template>
 
-        <!-- Fill handle -->
-        <div
-          v-if="props.fillHandlePosition && !props.editingCell"
-          class="gp-grid-fill-handle"
-          :style="{
-            top: `${props.fillHandlePosition.top}px`,
-            left: `${props.fillHandlePosition.left}px`,
-          }"
-          @pointerdown="props.onFillHandleMouseDown"
-        />
+        <!-- Fill handle (drag to fill) - inside the wrapper so it moves with rows -->
+        <template v-if="handleRegion !== null">
+          <div
+            v-if="handleRegion === 'center'"
+            class="gp-grid-fill-handle"
+            :style="fillHandleStyle"
+            @pointerdown="props.onFillHandleMouseDown"
+          />
+          <div
+            v-else
+            class="gp-grid-pin-overlay"
+            :class="`gp-grid-pin-overlay--${handleRegion}`"
+            role="presentation"
+            :style="{ width: `${pinOverlayWidth}px` }"
+          >
+            <div
+              class="gp-grid-fill-handle"
+              :style="fillHandleStyle"
+              @pointerdown="props.onFillHandleMouseDown"
+            />
+          </div>
+        </template>
 
         <!-- Row drop indicator -->
         <div
@@ -232,7 +171,7 @@ defineExpose({ bodyRef });
           class="gp-grid-row-drop-indicator"
           :style="{
             transform: `translateY(${props.dragState.rowDrag!.dropIndicatorY}px)`,
-            width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
+            width: `${contentWidthPx}px`,
           }"
         />
       </div>
