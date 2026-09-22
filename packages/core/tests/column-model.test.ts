@@ -164,6 +164,7 @@ describe("ColumnModel", () => {
 
   it("reports a width change when an override equal to the definition width is set or reset", () => {
     const model = new ColumnModel([def("a", { width: 100 }), def("b", { width: 100 })]);
+    const initialLayout = model.getLayout();
 
     expect(model.setState([{ columnId: "a", width: 100 }])).toEqual({
       orderChanged: false,
@@ -171,8 +172,11 @@ describe("ColumnModel", () => {
       hiddenChanged: false,
       pinChanged: false,
     });
+    expect(model.getLayout()).not.toBe(initialLayout);
     // The value is unchanged, so a second identical command is a no-op.
+    const overriddenLayout = model.getLayout();
     expect(model.setState([{ columnId: "a", width: 100 }]).widthChanged).toBe(false);
+    expect(model.getLayout()).toBe(overriddenLayout);
 
     // Removing the override restores the same number but changes the contract.
     expect(model.resetState(["a"])).toEqual({
@@ -181,6 +185,17 @@ describe("ColumnModel", () => {
       hiddenChanged: false,
       pinChanged: false,
     });
+  });
+
+  it("publishes replacement definitions while retaining user state", () => {
+    const model = new ColumnModel([def("a", { headerName: "Before" }), def("b")]);
+    model.setState([{ columnId: "a", width: 180 }]);
+    const before = model.getLayout();
+
+    model.setDefinitions([def("a", { headerName: "After" }), def("b")]);
+
+    expect(model.getLayout()).not.toBe(before);
+    expect(model.getLayout()[0]).toMatchObject({ headerName: "After", width: 180 });
   });
 
   it("diagnoses an invalid width once per column id until it is valid again", () => {

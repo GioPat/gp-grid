@@ -114,7 +114,7 @@ export interface ColumnResizeDragState {
   colIndex: number;
   initialWidth: number;
   currentWidth: number;
-  /** Content-space x of the preview edge; adapters subtract `scrollLeft`. */
+  /** Viewport-space x of the preview edge. */
   lineX: number;
 }
 
@@ -126,7 +126,7 @@ export interface ColumnMoveDragState {
   dropTargetIndex: number | null;
   ghostWidth: number;
   ghostHeight: number;
-  /** Content-space x of the drop indicator; adapters subtract `scrollLeft`. */
+  /** Viewport-space x of the drop indicator. */
   dropIndicatorX: number;
 }
 

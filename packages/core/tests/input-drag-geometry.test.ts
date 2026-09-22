@@ -133,6 +133,32 @@ describe("pointer drags resolve through geometry", () => {
     expect(columnIds(grid)).toEqual(["a", "c", "b"]);
   });
 
+  it("keeps a column move target on visible columns outside the viewport", async () => {
+    const grid = await createGrid();
+    const narrowBounds: ContainerBounds = {
+      ...bounds,
+      width: 100,
+      scrollLeft: 100,
+    };
+    grid.setViewport(0, narrowBounds.scrollLeft, narrowBounds.width, narrowBounds.height);
+
+    // Only "b" is visible. The pointer is captured outside either edge while
+    // the adjacent columns remain mounted as overscan.
+    grid.input.handleHeaderMouseDown(1, 100, HEADER_HEIGHT, pointerAt(50, -10));
+    grid.input.handleDragMove(pointerAt(-40, -10), narrowBounds);
+    expect(grid.input.getDragState().columnMove).toMatchObject({
+      dropTargetIndex: 1,
+      dropIndicatorX: 0,
+    });
+
+    grid.input.handleDragMove(pointerAt(140, -10), narrowBounds);
+    expect(grid.input.getDragState().columnMove).toMatchObject({
+      dropTargetIndex: 1,
+      dropIndicatorX: 0,
+    });
+    grid.destroy();
+  });
+
   it("targets the row drop edge under the pointer", async () => {
     const grid = await createGrid();
     grid.input.handleCellMouseDown(0, 2, pointerAt(250, 4));

@@ -34,6 +34,39 @@ export const flattenPartition = (partition: ColumnPartition): string[] => [
   ...partition.end,
 ];
 
+/**
+ * Insert selected definition ids around a retained user order. Each inserted
+ * id is placed before the next retained id in definition order, or at the end.
+ */
+export const insertByDefinitionOrder = (
+  retainedOrder: readonly string[],
+  definitionOrder: readonly string[],
+  inserted: ReadonlySet<string>,
+): string[] => {
+  const retained = new Set(retainedOrder);
+  const beforeAnchor = new Map<string, string[]>();
+  let pending: string[] = [];
+
+  for (const columnId of definitionOrder) {
+    if (inserted.has(columnId)) {
+      pending.push(columnId);
+      continue;
+    }
+    if (retained.has(columnId) === false || pending.length === 0) continue;
+    beforeAnchor.set(columnId, pending);
+    pending = [];
+  }
+
+  const next: string[] = [];
+  for (const columnId of retainedOrder) {
+    const additions = beforeAnchor.get(columnId);
+    if (additions !== undefined) next.push(...additions);
+    next.push(columnId);
+  }
+  next.push(...pending);
+  return next;
+};
+
 /** First index of a region in the partitioned order, and its exclusive end. */
 export const regionBounds = (
   partition: ColumnPartition,

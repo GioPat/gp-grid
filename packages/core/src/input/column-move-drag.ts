@@ -64,8 +64,12 @@ export class ColumnMoveDrag<TData = unknown> {
     const { width, scrollLeft } = bounds;
     const layout = this.core.geometry.getColumnLayout();
     const viewportX = inlineOffset(bounds, event.clientX);
+    // Keep hit-testing inside the client box. A pointer captured beyond an
+    // edge may overlap mounted overscan columns, but those are not drop targets
+    // until auto-scroll brings them into view.
+    const targetX = Math.max(0, Math.min(viewportX, Math.max(0, width - 1)));
     const hit = this.core.geometry.hitTest({
-      x: viewportX,
+      x: targetX,
       y: event.clientY - bounds.top,
       scrollLeft,
     });
@@ -152,18 +156,20 @@ export class ColumnMoveDrag<TData = unknown> {
     };
   }
 
-  /** Viewport-space x of the drop indicator, or the end edge of the layout. */
+  /** Viewport-space x of the drop indicator, clamped to its region's clip. */
   private dropIndicatorX(dropTargetIndex: number | null): number {
     if (dropTargetIndex === null) return 0;
     const layout = this.core.geometry.getColumnLayout();
     const column = layout.columns[dropTargetIndex];
-    if (column === undefined) {
-      return this.core.geometry.getColumnBounds(
-        layout.columns.at(-1)?.layoutIndex ?? -1,
-        "viewport",
-      )?.end ?? layout.totalWidth;
-    }
-    return this.core.geometry.getColumnBounds(column.layoutIndex, "viewport")?.start
-      ?? column.offset;
+    const target = column ?? layout.columns.at(-1);
+    if (target === undefined) return 0;
+
+    const bounds = this.core.geometry.getColumnBounds(target.layoutIndex, "viewport");
+    const edge = column === undefined ? bounds?.end : bounds?.start;
+    const fallback = column === undefined ? layout.totalWidth : target.offset;
+    const position = edge ?? fallback;
+    const clip = this.core.geometry.getColumnClip(target.layoutIndex);
+    if (clip === undefined) return position;
+    return Math.max(clip.start, Math.min(position, clip.end));
   }
 }

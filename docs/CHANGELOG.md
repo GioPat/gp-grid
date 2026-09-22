@@ -40,6 +40,7 @@ All notable changes to gp-grid will be documented in this file.
 - A `scrollLeft`-only viewport update performs no row work: no source queries, no slot sync and no batch unless the mounted range moved.
 - The column of an open editor stays mounted outside the window until the edit commits or cancels; hiding that column commits the edit first.
 - Focus and keyboard navigation step to the next displayed column instead of a hidden one.
+- Column-move targets and their drop indicator stay inside the visible viewport; mounted overscan columns become targets only after auto-scroll reveals them.
 - Core CSS and wrapper inline styles use logical properties (`inset-inline-start`, `border-inline-end`), and the wrappers read `dir` at mount and on resize — a `dir` flip without a resize needs a remount.
 - Headers and cells expose `aria-colindex`, and the grid exposes `role="grid"` with `aria-colcount`/`aria-rowcount`.
 

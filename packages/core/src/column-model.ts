@@ -7,6 +7,7 @@ import {
   baseIndexOfLayout,
   clampIndexToRegion,
   flattenPartition,
+  insertByDefinitionOrder,
   partitionByPin,
   type ColumnPartition,
 } from "./geometry/column-order";
@@ -40,6 +41,12 @@ export interface ColumnMoveResult {
   pinChanged: boolean;
 }
 
+interface ColumnModelSnapshot {
+  order: readonly ColumnId[];
+  layout: readonly ColumnDefinition[];
+  widthOverrides: ReadonlySet<ColumnId>;
+}
+
 const NO_CHANGE: ColumnModelChange = {
   orderChanged: false,
   widthChanged: false,
@@ -51,8 +58,8 @@ const NO_CHANGE: ColumnModelChange = {
 export const getColumnId = (definition: ColumnDefinition): ColumnId =>
   definition.colId ?? definition.field;
 
-/** Whether two resolved layouts render the same columns with the same state. */
-const isSameColumnList = (
+/** Whether two resolved layouts carry the same model-controlled state. */
+const hasSameResolvedState = (
   a: readonly ColumnDefinition[],
   b: readonly ColumnDefinition[],
 ): boolean => {
@@ -61,12 +68,40 @@ const isSameColumnList = (
     const before = a[index]!;
     const after = b[index]!;
     if (getColumnId(before) !== getColumnId(after)) return false;
-    if (before !== after) return false;
     if (before.width !== after.width) return false;
     if ((before.hidden ?? false) !== (after.hidden ?? false)) return false;
     if ((before.pinned ?? null) !== (after.pinned ?? null)) return false;
   }
   return true;
+};
+
+const hasSameIds = (before: ReadonlySet<ColumnId>, after: ReadonlySet<ColumnId>): boolean => {
+  if (before.size !== after.size) return false;
+  for (const columnId of before) {
+    if (after.has(columnId) === false) return false;
+  }
+  return true;
+};
+
+const applyColumnState = (
+  definition: ColumnDefinition,
+  state: ColumnState | undefined,
+  pin: ColumnPin | null,
+  normalizeWidth: (width: number) => number,
+): ColumnDefinition => {
+  const pinChanged = pin !== (definition.pinned ?? null);
+  if (state?.width === undefined && state?.hidden === undefined && pinChanged === false) {
+    return definition;
+  }
+
+  const resolved = { ...definition };
+  if (state?.width !== undefined) resolved.width = normalizeWidth(state.width);
+  if (state?.hidden !== undefined) resolved.hidden = state.hidden;
+  if (pinChanged) {
+    if (pin === null) delete resolved.pinned;
+    else resolved.pinned = pin;
+  }
+  return resolved;
 };
 
 const isValidIndex = (index: number, length: number): boolean =>
@@ -123,8 +158,6 @@ export class ColumnModel {
   private readonly warnedDuplicateIds = new Set<ColumnId>();
   /** Column ids currently carrying an invalid width that was diagnosed. */
   private readonly warnedInvalidWidths = new Set<ColumnId>();
-  /** Width-override membership captured before the current state command. */
-  private overriddenBefore: ReadonlySet<ColumnId> = new Set();
 
   constructor(definitions: readonly ColumnDefinition[] = []) {
     this.setDefinitions(definitions);
@@ -137,6 +170,11 @@ export class ColumnModel {
    */
   setDefinitions(definitions: readonly ColumnDefinition[]): ColumnModelDiff {
     const unique = normalizeDefinitions(definitions, this.warnedDuplicateIds);
+    const definitionSourcesChanged =
+      unique.length !== this.definitions.length ||
+      unique.some(
+        (definition) => this.definitionsById.get(getColumnId(definition)) !== definition,
+      );
     const previousIds = this.orderIds;
     const previousSet = new Set(previousIds);
     const nextIds = unique.map(getColumnId);
@@ -161,23 +199,15 @@ export class ColumnModel {
     if (this.orderOverridden.size === 0) {
       this.orderIds = nextIds;
     } else {
-      for (const id of added) {
-        const position = nextIds.indexOf(id);
-        const anchor = this.nextRetainedAfter(nextIds, position, previousSet);
-        const insertAt = anchor === undefined ? retained.length : retained.indexOf(anchor);
-        retained.splice(insertAt, 0, id);
-      }
-      this.orderIds = retained;
+      this.orderIds = insertByDefinitionOrder(retained, nextIds, new Set(added));
     }
-    this.resolve();
+    this.resolve(definitionSourcesChanged);
     return { added, removed };
   }
 
   /** Apply explicit state commands; they win over retained state. */
   setState(updates: readonly ColumnStateUpdate[]): ColumnModelChange {
-    const beforeOrder = [...this.orderIds];
-    const beforeLayout = this.layout;
-    this.overriddenBefore = this.currentOverrides();
+    const before = this.captureSnapshot();
     for (const update of updates) {
       if (this.has(update.columnId) === false) continue;
       // A pin is not an order override: the base order stays authoritative so
@@ -199,8 +229,7 @@ export class ColumnModel {
       this.repartition();
       this.moveToIndex(update.columnId, update.order);
     }
-    this.resolve();
-    return this.diffSince(beforeOrder, beforeLayout);
+    return this.publishStateChange(before);
   }
 
   /**
@@ -209,16 +238,13 @@ export class ColumnModel {
    * position relative to the retained order.
    */
   resetState(columnIds?: readonly ColumnId[]): ColumnModelChange {
-    const beforeOrder = [...this.orderIds];
-    const beforeLayout = this.layout;
-    this.overriddenBefore = this.currentOverrides();
+    const before = this.captureSnapshot();
     if (columnIds === undefined) {
       this.overrides.clear();
       this.orderOverridden.clear();
       this.pins.clear();
       this.orderIds = this.definitionIds();
-      this.resolve();
-      return this.diffSince(beforeOrder, beforeLayout);
+      return this.publishStateChange(before);
     }
 
     const resetSet = new Set(columnIds);
@@ -230,16 +256,8 @@ export class ColumnModel {
 
     const retained = this.orderIds.filter((id) => resetSet.has(id) === false);
     const definitionIds = this.definitionIds();
-    const added = definitionIds.filter((id) => resetSet.has(id));
-    for (const id of added) {
-      const position = definitionIds.indexOf(id);
-      const anchor = this.nextRetainedAfter(definitionIds, position, new Set(retained));
-      const insertAt = anchor === undefined ? retained.length : retained.indexOf(anchor);
-      retained.splice(insertAt, 0, id);
-    }
-    this.orderIds = retained;
-    this.resolve();
-    return this.diffSince(beforeOrder, beforeLayout);
+    this.orderIds = insertByDefinitionOrder(retained, definitionIds, resetSet);
+    return this.publishStateChange(before);
   }
 
   /** Resolved layout: ordered caller definitions with effective width/hidden. */
@@ -295,10 +313,11 @@ export class ColumnModel {
 
   setWidth(columnId: ColumnId, width: number): void {
     if (this.has(columnId) === false) return;
+    const wasOverridden = this.isWidthOverridden(columnId);
     const state = this.overrides.get(columnId) ?? {};
     state.width = this.diagnoseWidth(columnId, width);
     this.overrides.set(columnId, state);
-    this.resolve();
+    this.resolve(wasOverridden === false);
   }
 
   /**
@@ -322,6 +341,20 @@ export class ColumnModel {
       if (state.width !== undefined) ids.add(columnId);
     }
     return ids;
+  }
+
+  private captureSnapshot(): ColumnModelSnapshot {
+    return {
+      order: [...this.orderIds],
+      layout: this.layout,
+      widthOverrides: this.currentOverrides(),
+    };
+  }
+
+  private publishStateChange(before: ColumnModelSnapshot): ColumnModelChange {
+    const widthOverrides = this.currentOverrides();
+    this.resolve(hasSameIds(before.widthOverrides, widthOverrides) === false);
+    return this.diffSince(before, widthOverrides);
   }
 
   /** Whether the column carries an explicit pixel width override. */
@@ -399,18 +432,6 @@ export class ColumnModel {
     return this.definitions.map(getColumnId);
   }
 
-  private nextRetainedAfter(
-    ids: readonly ColumnId[],
-    position: number,
-    retained: Set<ColumnId>,
-  ): ColumnId | undefined {
-    for (let i = position + 1; i < ids.length; i++) {
-      const candidate = ids[i]!;
-      if (retained.has(candidate)) return candidate;
-    }
-    return undefined;
-  }
-
   /**
    * Normalize a stored width and diagnose an invalid one once per column id
    * until it becomes valid again. The pure resolvers only normalize.
@@ -433,7 +454,7 @@ export class ColumnModel {
     this.layoutIds = flattenPartition(this.partition);
   }
 
-  private resolve(): void {
+  private resolve(forcePublish = false): void {
     this.repartition();
     // Diagnostics happen here, once per id, but the caller's definition object
     // is never mutated: an invalid declared width is normalized in a copy.
@@ -446,39 +467,30 @@ export class ColumnModel {
         width === definition.width ? definition : { ...definition, width },
       );
     }
-    const next = this.layoutIds.map((columnId) => {
-      const definition = byId.get(columnId)!;
-      const state = this.overrides.get(columnId);
-      const pinChanged = this.getPin(columnId) !== (definition.pinned ?? null);
-      if (state?.width === undefined && state?.hidden === undefined && pinChanged === false) {
-        return definition;
-      }
-      const resolved = { ...definition };
-      if (state?.width !== undefined) resolved.width = this.diagnoseWidth(columnId, state.width);
-      if (state?.hidden !== undefined) resolved.hidden = state.hidden;
-      if (pinChanged) {
-        const pin = this.getPin(columnId);
-        if (pin === null) delete resolved.pinned;
-        else resolved.pinned = pin;
-      }
-      return resolved;
-    });
+    const next = this.layoutIds.map((columnId) =>
+      applyColumnState(
+        byId.get(columnId)!,
+        this.overrides.get(columnId),
+        this.getPin(columnId),
+        (width) => this.diagnoseWidth(columnId, width),
+      ),
+    );
     // Only a real change replaces the snapshot: the array's identity is the
     // change signal the geometry resolver caches on, so a no-op command must
     // not manufacture a new layout.
-    if (isSameColumnList(this.layout, next)) return;
+    if (forcePublish === false && hasSameResolvedState(this.layout, next)) return;
     this.layout = next;
   }
 
   private diffSince(
-    beforeOrder: readonly ColumnId[],
-    beforeLayout: readonly ColumnDefinition[],
+    snapshot: ColumnModelSnapshot,
+    widthOverrides: ReadonlySet<ColumnId>,
   ): ColumnModelChange {
     const orderChanged =
-      beforeOrder.length !== this.orderIds.length ||
-      beforeOrder.some((id, index) => id !== this.orderIds[index]);
+      snapshot.order.length !== this.orderIds.length ||
+      snapshot.order.some((id, index) => id !== this.orderIds[index]);
     const beforeById = new Map(
-      beforeLayout.map((column) => [getColumnId(column), column]),
+      snapshot.layout.map((column) => [getColumnId(column), column]),
     );
     let widthChanged = false;
     let hiddenChanged = false;
@@ -495,7 +507,10 @@ export class ColumnModel {
       }
       // Override presence is part of the render contract: an override equal to
       // the definition width still changes how `fit` distributes slack.
-      if (before.width !== after.width || this.overridePresenceChanged(columnId)) {
+      if (
+        before.width !== after.width ||
+        snapshot.widthOverrides.has(columnId) !== widthOverrides.has(columnId)
+      ) {
         widthChanged = true;
       }
       if ((before.hidden ?? false) !== (after.hidden ?? false)) hiddenChanged = true;
@@ -503,15 +518,5 @@ export class ColumnModel {
     }
     const changed = orderChanged || widthChanged || hiddenChanged || pinChanged;
     return changed ? { orderChanged, widthChanged, hiddenChanged, pinChanged } : NO_CHANGE;
-  }
-
-  /**
-   * Whether the override membership of `columnId` differs from the layout
-   * snapshot taken before the command. The snapshot carries the effective
-   * width, so an override equal to the definition width is indistinguishable
-   * by number alone.
-   */
-  private overridePresenceChanged(columnId: ColumnId): boolean {
-    return this.isWidthOverridden(columnId) !== this.overriddenBefore.has(columnId);
   }
 }

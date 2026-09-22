@@ -99,3 +99,36 @@ test("a header drag drops on the indicated column past a hidden column", async (
   ]);
   expect(pageErrors).toEqual([]);
 });
+
+test("a header drag outside the viewport targets visible columns", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await bodyScroller(page).evaluate((element) => {
+    element.scrollLeft = 200;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect.poll(async () => (await scrollPosition(page)).left).toBeGreaterThan(0);
+
+  const client = await bodyScroller(page).evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const left = rect.left + element.clientLeft;
+    return { left, right: left + element.clientWidth };
+  });
+  const source = await centerOf(page.locator('.gp-grid-header-cell[data-col-index="3"]'));
+  await page.mouse.move(source.x, source.y);
+  await page.mouse.down();
+  await page.mouse.move(source.x, source.y + 10, { steps: 2 });
+
+  const indicatorInsideClient = async (): Promise<boolean> => {
+    const indicator = await page.locator(".gp-grid-column-drop-indicator").boundingBox();
+    if (indicator === null) return false;
+    return indicator.x >= client.left - 1 && indicator.x <= client.right + 1;
+  };
+
+  await page.mouse.move(client.left - 40, source.y + 10, { steps: 3 });
+  await expect.poll(indicatorInsideClient).toBe(true);
+  await page.mouse.move(client.right + 40, source.y + 10, { steps: 3 });
+  await expect.poll(indicatorInsideClient).toBe(true);
+  await page.mouse.up();
+
+  expect(pageErrors).toEqual([]);
+});
