@@ -65,7 +65,7 @@ const isHiddenAfterReset = <TData>(
   columnId: string,
   columnIds: readonly string[] | undefined,
 ): boolean => {
-  if (columnIds !== undefined && columnIds.includes(columnId) === false) return false;
+  if (columnIds?.includes(columnId) === false) return false;
   return deps.columnModel.getDefinition(columnId)?.hidden === true;
 };
 

@@ -100,7 +100,7 @@ const seedColumnWindow = (
   layout: ColumnLayoutSnapshot | null,
   viewportWidth: number,
 ): ColumnWindowSnapshot | null => {
-  if (layout === null || layout.regions === undefined) return null;
+  if (layout?.regions === undefined) return null;
   const { centerStart, centerEnd, centerViewportWidth } = layout.regions;
   const offsets = buildCenterOffsets(layout.columns, centerStart, centerEnd);
   const range = resolveCenterRange({
