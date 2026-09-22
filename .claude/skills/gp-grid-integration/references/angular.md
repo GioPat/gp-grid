@@ -413,7 +413,9 @@ controlled `[columnState]` form is `{ columnId, pinned }`. At runtime call
 viewport renders in the scrolling center until it is admitted, so persist the
 request but read the effective `region` from `getColumnState()`.
 `[columnOverscan]` (default `240` px) is how far past each clip edge center
-columns stay mounted; an open editor keeps its column mounted regardless. See
+columns stay mounted; an open editor keeps its column mounted regardless. The
+default pin action cycles through physical left, physical right and unpinned;
+its labels are `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.

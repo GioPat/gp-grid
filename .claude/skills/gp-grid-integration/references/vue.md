@@ -385,8 +385,9 @@ A pin that does not fit the viewport renders in the scrolling center until it
 is admitted, so persist the request but read the effective `region` from
 `core.getColumnState()`. `:column-overscan` (default `240` px) is how far past
 each clip edge center columns stay mounted; an open editor keeps its column
-mounted regardless. The default header toggle uses `:pin-icon`; override
-`pinColumn` / `unpinColumn` in `:labels` for its accessible names. See
+mounted regardless. The default header action uses `:pin-icon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `:labels` for its accessible names. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
 ## All `<GpGrid>` props (cheatsheet)

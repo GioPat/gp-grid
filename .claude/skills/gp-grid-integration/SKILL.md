@@ -125,9 +125,11 @@ Pinning is inline-start based, so it mirrors in RTL. Core never reads
 `toInlineX` / `toPhysicalX` / `inlineOffset`. A `dir` flip that changes no size
 needs a remount.
 
-The default header renders a pin toggle; replace its glyph with the wrapper's
+The default header cycles through physical left, physical right and unpinned;
+replace its glyph with the wrapper's
 `pinIcon` value (`{ path, viewBox? }`, or `defaultPinIcon` from core) and its
-accessible names with `labels.pinColumn` / `labels.unpinColumn`. A custom
+accessible names with `labels.pinLeftColumn`, `labels.pinRightColumn` and
+`labels.unpinColumn`. A custom
 header renderer receives `pinned` and `onPinChange(pinned)`.
 See [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
@@ -322,7 +324,7 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste). All wired automatically.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinColumn`, `unpinColumn`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.

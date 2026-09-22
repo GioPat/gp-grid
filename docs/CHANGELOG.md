@@ -26,7 +26,7 @@ All notable changes to gp-grid will be documented in this file.
 - `core.geometry.getColumnClip(layoutIndex)` and the resolved `region` on `hitTest` results
 - Inline-axis adapter kit: `readIsRtl`, `toInlineX`, `toPhysicalX`, `inlineOffset`, `readContainerBounds`, `fixedLeftForInline` and `normalizeHorizontalKey`, plus `ContainerBounds.rtl`
 - `GridIcon`/`defaultPinIcon` and the wrapper `pinIcon` values; `HeaderRendererParams.pinned`/`onPinChange` for custom pin UI
-- `GridLabels.pinColumn`/`unpinColumn`; the default header renders a pin toggle
+- `GridLabels.pinLeftColumn`/`pinRightColumn`/`unpinColumn`; the default header cycles through pin left, pin right and unpin
 - `FillHandlePosition.region` (its `left` is now region-local)
 - See [Column pinning](./features/column-pinning.md)
 
@@ -35,7 +35,7 @@ All notable changes to gp-grid will be documented in this file.
 #### Column virtualization and pinning (PRD 004)
 - **Breaking (0.x → 1.0):** `lineX` and `dropIndicatorX` on drag state are viewport x; a wrapper no longer subtracts its own `scrollLeft`. Custom adapters render them directly and remain direction-agnostic.
 - **Breaking (0.x → 1.0):** `ContainerBounds` now describes the client box (`rect.left + clientLeft`, `clientWidth`, so the scrollbar is excluded on either side) with an inline-start-relative `scrollLeft` (the DOM value negated in RTL) and an optional `rtl`. Build it with `readContainerBounds` instead of hand-assembling the fields.
-- **Breaking (0.x → 1.0):** `GridLabels` gained the required fields `pinColumn` and `unpinColumn`; a full `GridLabels` object literal must include them. `GridLabelOverrides` stays fully optional.
+- **Breaking (0.x → 1.0):** `GridLabels` gained the required fields `pinLeftColumn`, `pinRightColumn` and `unpinColumn`; a full `GridLabels` object literal must include them. `GridLabelOverrides` stays fully optional.
 - Wrappers render `state.columnWindow` instead of every `state.layout.columns` entry, and key cells and headers by `columnId`, so a column keeps its DOM node when it changes region.
 - A `scrollLeft`-only viewport update performs no row work: no source queries, no slot sync and no batch unless the mounted range moved.
 - The column of an open editor stays mounted outside the window until the edit commits or cancels; hiding that column commits the edit first.

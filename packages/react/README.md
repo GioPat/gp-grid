@@ -533,8 +533,9 @@ it the column renders in the scrolling center and is admitted again once there
 is room, so read the effective `region` from `core.getColumnState()` rather
 than assuming the request took effect.
 
-The default header renders a pin toggle — override its glyph with `pinIcon` and
-its accessible names with `labels.pinColumn`/`labels.unpinColumn`. A custom
+The default header cycles through physical left, physical right and unpinned.
+Override its glyph with `pinIcon` and its accessible names with
+`labels.pinLeftColumn`/`labels.pinRightColumn`/`labels.unpinColumn`. A custom
 header renderer receives `pinned` and `onPinChange(pinned)` and can supply its
 own control.
 

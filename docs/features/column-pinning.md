@@ -159,7 +159,9 @@ remount. Horizontal `lineX`/`dropIndicatorX` are viewport x, a fill handle's
 `onPinChange(pinned)`, so a custom header can build its own pin control.
 `ColumnDefinition.pinned` remains the declarative form for configured pins.
 
-The default header renders a pin toggle before the column label. The wrappers
+The default header renders a pin action before the column label. Each click
+cycles through physical left, physical right and unpinned. In RTL, the wrappers
+map those physical sides to the core's logical `end` and `start` values. The wrappers
 accept a framework-neutral `pinIcon` value when the default SVG should be
 replaced:
 
@@ -172,8 +174,9 @@ const pinIcon = {
 
 Pass it as `pinIcon={pinIcon}` in React, `:pin-icon="pinIcon"` in Vue, or
 `[pinIcon]="pinIcon"` in Angular. The path is rendered with `currentColor`, so
-the standard inactive, hover and active states still apply. Accessible names
-come from `labels.pinColumn` and `labels.unpinColumn`.
+the standard inactive, hover and active states still apply. The accessible name
+describes the next action and comes from `labels.pinLeftColumn`,
+`labels.pinRightColumn` or `labels.unpinColumn`.
 
 ## Wrapper surface
 

@@ -454,8 +454,9 @@ A pin that does not fit the viewport renders in the scrolling center until it
 is admitted, so persist the request but read the effective `region` from
 `core.getColumnState()`. `columnOverscan` (default `240` px) is how far past
 each clip edge center columns stay mounted; an open editor keeps its column
-mounted regardless. The default header toggle uses `pinIcon`; override
-`pinColumn` / `unpinColumn` in `labels` for its accessible names. See
+mounted regardless. The default header action uses `pinIcon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `labels` for its accessible names. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
 ## All `<Grid>` props (cheatsheet)
@@ -484,7 +485,7 @@ mounted regardless. The default header toggle uses `pinIcon`; override
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `GridLabelOverrides` | English defaults | includes `pinColumn` and `unpinColumn` toggle labels |
+| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn` and `unpinColumn` action labels |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |

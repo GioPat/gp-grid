@@ -140,7 +140,9 @@ recreating the core. `getColumnState()` reports `width` only while an explicit
 override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
 
 `columnOverscan` (default `240` CSS px) is how far past each clip edge center
-columns stay mounted. `pinIcon` replaces the default header pin-toggle SVG.
+columns stay mounted. The default header cycles through physical left, physical
+right and unpinned. `pinIcon` replaces its SVG; `labels.pinLeftColumn`,
+`labels.pinRightColumn` and `labels.unpinColumn` replace its accessible names.
 
 Pinning: set `pinned: "start"` or `"end"` on a definition, or call
 `core.setColumnPinned(columnId, "start" | "end" | null)` on the exposed core
