@@ -3,7 +3,6 @@ import type {
   CellBounds,
   CellRendererParams,
   ColumnDefinition,
-  ColumnId,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnPin,
@@ -58,7 +57,7 @@ const byId: Row | undefined = core.getRecordById(1);
 const slotGeneration: number = core.getSlotGeneration(0);
 const generationIsCurrent: boolean = core.isSlotGenerationCurrent(0, slotGeneration);
 
-const columnId: ColumnId = "name";
+const columnId: string = "name";
 const columnState: ColumnStateUpdate[] = [{ columnId, width: 240, hidden: false, order: 0, pinned: "end" }];
 core.setColumnState(columnState);
 core.setColumnState([{ columnId, pinned: null }]);

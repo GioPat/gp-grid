@@ -436,10 +436,10 @@ interface HeaderRendererParams {
 ### The three layers
 
 1. **Caller definitions** — the `columns` array you pass in. Immutable input: the grid never writes to it.
-2. **Live column state** — per-column `width`, `hidden` and order, owned by the core and keyed by `ColumnId`.
+2. **Live column state** — per-column `width`, `hidden` and order, owned by the core and keyed by column id.
 3. **Resolved layout** — ordered definitions with the live state applied, plus positions, hit-testing and rendering.
 
-`ColumnId` is `colId ?? field`, a plain string.
+A column id is `colId ?? field`, a plain string.
 
 ### Precedence
 
@@ -480,7 +480,7 @@ Only a pin change moves a column between regions; `order` clamps into the column
 
 ### Duplicate ids
 
-Definitions with the same `ColumnId` warn once with `[gp-grid] Duplicate column id "x"` and the first definition wins.
+Definitions with the same column id warn once with `[gp-grid] Duplicate column id "x"` and the first definition wins.
 
 ### Frozen definitions
 
@@ -688,7 +688,7 @@ class MyGridAdapter {
 | --------------------------------------------------- | ------------------------------------------ |
 | `initialize()`                                      | Initialize grid and load initial data      |
 | `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
-| `setColumns(columns)`                               | Reconcile definitions by `ColumnId`        |
+| `setColumns(columns)`                               | Reconcile definitions by column id         |
 | `setColumnState(updates)`                           | Apply explicit width/hidden/order/pin commands |
 | `resetColumnState(columnIds?)`                      | Drop user column state                     |
 | `getColumnState()`                                  | Effective width/hidden/order/pin per column |

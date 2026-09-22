@@ -10,10 +10,7 @@ import type {
   HeaderRendererParams,
 } from "./renderers";
 
-/** Normalized column identity: `colId ?? field`. */
-export type ColumnId = string;
-
-/** Live per-column state, keyed by {@link ColumnId}. */
+/** Live per-column state, keyed by column id. */
 export interface ColumnState {
   width?: number;
   hidden?: boolean;
@@ -24,7 +21,7 @@ export interface ColumnState {
 
 /** A single explicit column-state command. Unset properties are untouched. */
 export interface ColumnStateUpdate {
-  columnId: ColumnId;
+  columnId: string;
   width?: number;
   hidden?: boolean;
   /** Target index in the resolved layout (0-based). */
@@ -39,7 +36,7 @@ export interface ColumnStateUpdate {
  * displayed width is always available as `resolvedWidth`.
  */
 export interface ColumnStateSnapshot {
-  columnId: ColumnId;
+  columnId: string;
   width?: number;
   /** Displayed width in CSS px, `0` while the column is hidden. Output-only. */
   resolvedWidth: number;
@@ -53,7 +50,7 @@ export interface ColumnStateSnapshot {
 
 /** Column state as stored by `ColumnModel`, before geometry resolves widths. */
 export interface ColumnModelState {
-  columnId: ColumnId;
+  columnId: string;
   width?: number;
   hidden: boolean;
   order: number;

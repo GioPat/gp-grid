@@ -6,7 +6,6 @@
 import type {
   DataSource,
   ColumnDefinition,
-  ColumnId,
   ColumnPin,
   FilterModel,
   SortModel,
@@ -31,7 +30,7 @@ export interface ColumnOperationDeps<TData> extends ColumnTargetDeps, EditRetent
   /** Current resolved layout. Never mutated by these operations. */
   getLayout: () => ColumnDefinition[];
   /** Write the pixel width override for a column ID and re-resolve the layout. */
-  setColumnWidth: (columnId: ColumnId, width: number) => void;
+  setColumnWidth: (columnId: string, width: number) => void;
   /** Move a column and re-resolve; returns the applied target or null. */
   moveColumn: (fromIndex: number, toIndex: number) => ColumnMoveResult | null;
   /** Commit column/row geometry before a batch captures its revision. */
@@ -42,7 +41,7 @@ export interface ColumnOperationDeps<TData> extends ColumnTargetDeps, EditRetent
 
 /** Result of a resize/move for the caller to emit as an identity event. */
 export interface ColumnOperationResult {
-  columnId: ColumnId;
+  columnId: string;
   fromViewIndex: number;
   toViewIndex: number;
   /** Requested pin the move adopted, when the move changed it. */
@@ -58,7 +57,7 @@ export const applyColumnResize = <TData>(
   colIndex: number,
   displayedWidth: number,
   deps: ColumnOperationDeps<TData>,
-): { columnId: ColumnId; width: number } | null => {
+): { columnId: string; width: number } | null => {
   const column = deps.getLayout()[colIndex];
   if (column === undefined) return null;
   // The stored width and the reported width agree with the applied one.

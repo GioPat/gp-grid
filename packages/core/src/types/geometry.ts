@@ -2,7 +2,7 @@
 // Geometry contracts shared by the pure resolvers, the `GridGeometry`
 // service and the framework adapters. Nothing here exposes DOM types.
 
-import type { ColumnDefinition, ColumnId } from "./columns";
+import type { ColumnDefinition } from "./columns";
 
 /** Resolved display width policy for the grid's columns. */
 export type ColumnLayoutMode = "fit" | "fixed";
@@ -32,7 +32,7 @@ export type GeometrySpace = "content" | "viewport" | "rows";
 
 /** One displayed (non-hidden) column in the resolved layout. */
 export interface DisplayedColumn {
-  readonly columnId: ColumnId;
+  readonly columnId: string;
   /**
    * Index into `GridCore.getColumns()`; the index space of `CellPosition.col`.
    * Differs from the display index — the column's position in the snapshot's
@@ -124,7 +124,7 @@ export interface CellBounds {
   readonly coordinateSpace: GeometrySpace;
   readonly rowIndex: number;
   readonly layoutIndex: number;
-  readonly columnId: ColumnId;
+  readonly columnId: string;
   /**
    * Screen origin of the body client area's top-left for `viewport` bounds.
    * Containers that portal overlays compensate for their own body border.
@@ -155,7 +155,7 @@ export interface GridHit {
   readonly displayIndex: number;
   /** Layout index (the space of `CellPosition.col`), or `-1` outside a column. */
   readonly col: number;
-  readonly columnId?: ColumnId;
+  readonly columnId?: string;
   /** Region the hit column renders in, or `null` outside every column. */
   readonly region: ColumnRegion | null;
 }

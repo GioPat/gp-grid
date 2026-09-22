@@ -223,7 +223,7 @@ interface DataSourceRequest {
   sort?: { colId: string; direction: "asc" | "desc" }[];
   filter?: FilterModel;
   valueFormatters?: Record<string, (v: CellValue) => string>;
-  fieldMap?: Record<string, string>; // ColumnId -> source-field key (columnar)
+  fieldMap?: Record<string, string>; // column id -> source-field key (columnar)
 }
 ```
 
@@ -331,8 +331,8 @@ Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 
 
 ### Column state and schema lifecycle
 
-- Column identity is `ColumnId = colId ?? field`. Duplicate ids warn once (`[gp-grid] Duplicate column id "x"`); the first definition wins and duplicates are dropped from the resolved layout.
-- Definitions are immutable caller input. Definition `width` / `hidden` / `pinned` / order are only initial defaults; live state lives in the core keyed by `ColumnId`.
+- Column identity is `colId ?? field`, a plain string. Duplicate ids warn once (`[gp-grid] Duplicate column id "x"`); the first definition wins and duplicates are dropped from the resolved layout.
+- Definitions are immutable caller input. Definition `width` / `hidden` / `pinned` / order are only initial defaults; live state lives in the core keyed by column id.
 - Replacing the `columns` array reconciles by id and is never a reset: surviving columns keep user width, order, visibility and pin. Definition order is authoritative until a column is moved.
 - `setColumnState(updates)` applies `{ columnId, width?, hidden?, order?, pinned? }[]` (`pinned: null` unpins even against a definition default); `resetColumnState(columnIds?)` resets the given ids (no arg resets all); `getColumnState()` returns `{ columnId, width?, resolvedWidth, hidden, order, pinned, region }[]`.
 - `setColumnPinned(columnId, pinned)` is the pin-only command and the one that raises `onColumnPinned`; `setColumnState` is silent like the other state commands.

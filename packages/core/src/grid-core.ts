@@ -4,7 +4,6 @@ import type {
   GridCoreOptions,
   BatchInstructionListener,
   ColumnDefinition,
-  ColumnId,
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ViewRow,
@@ -275,7 +274,7 @@ export class GridCore<TData = unknown> {
   /** Resolve a cell to viewport/content geometry by identity. */
   getCellBounds(
     rowId: RowId,
-    columnId: ColumnId,
+    columnId: string,
     space: GeometrySpace = "viewport",
   ): CellBounds | undefined {
     const viewIndex = this.resolveViewIndex(rowId);
@@ -533,7 +532,7 @@ export class GridCore<TData = unknown> {
    * `null`. Only a pin change moves a column between regions; the base order
    * is untouched, so unpinning returns it to its base-order slot.
    */
-  setColumnPinned(columnId: ColumnId, pinned: ColumnPin | null): void {
+  setColumnPinned(columnId: string, pinned: ColumnPin | null): void {
     if (applyColumnPin(this.columnDeps(), columnId, pinned) === false) return;
     this.config.onColumnPinned?.({ columnId, pinned });
   }
@@ -748,7 +747,7 @@ export class GridCore<TData = unknown> {
   }
 
   /**
-   * Update columns and reconcile by `ColumnId` in one instruction batch.
+   * Update columns and reconcile by column id in one instruction batch.
    * Retained IDs keep user state, sort and filter; removed IDs drop headers,
    * state and caches; new IDs take definition defaults.
    */
@@ -768,7 +767,7 @@ export class GridCore<TData = unknown> {
    * Drop user column state. With no IDs, every column returns to its
    * definition defaults; with IDs, only those columns reset.
    */
-  resetColumnState(columnIds?: ColumnId[]): void {
+  resetColumnState(columnIds?: string[]): void {
     applyColumnStateReset(this.columnDeps(), columnIds);
   }
 
@@ -794,7 +793,7 @@ export class GridCore<TData = unknown> {
   }
 
   /** Bounded keep-alive for the edited column (B7), published as a batch. */
-  private retainEditColumn(columnId: ColumnId | null): void {
+  private retainEditColumn(columnId: string | null): void {
     this.geometryService.retainColumns(
       "edit",
       columnId === null ? [] : [columnId],

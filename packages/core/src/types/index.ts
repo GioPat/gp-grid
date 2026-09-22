@@ -38,7 +38,6 @@ export type {
 // Column types
 export type {
   ColumnDefinition,
-  ColumnId,
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,

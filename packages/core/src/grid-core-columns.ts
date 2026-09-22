@@ -12,7 +12,6 @@ import type { EditManager } from "./edit-manager";
 import type { ViewSync } from "./grid-core-view-sync";
 import type {
   ColumnDefinition,
-  ColumnId,
   ColumnPin,
   RowId,
   ColumnStateSnapshot,
@@ -33,7 +32,7 @@ export interface ColumnCoreDeps<TData> {
   /** Commit column/row geometry before a batch captures its revision. */
   refreshGeometry: () => void;
   /** Keep the edited column mounted while an edit is open. */
-  retainEditColumn: (columnId: ColumnId | null) => void;
+  retainEditColumn: (columnId: string | null) => void;
   reloadAfterSchemaChange: () => Promise<void>;
 }
 
@@ -51,7 +50,7 @@ export const applyColumnStateUpdates = <TData>(
 /** Drop user column state for the given ids, or for every column. */
 export const applyColumnStateReset = <TData>(
   deps: ColumnCoreDeps<TData>,
-  columnIds?: ColumnId[],
+  columnIds?: string[],
 ): void => {
   const targets = captureColumnTargets(deps);
   // Only an edit on a column that is about to become hidden is committed: a
@@ -63,11 +62,11 @@ export const applyColumnStateReset = <TData>(
 /** Whether dropping a column's state restores a hidden definition default. */
 const isHiddenAfterReset = <TData>(
   deps: ColumnCoreDeps<TData>,
-  columnId: ColumnId,
-  columnIds: readonly ColumnId[] | undefined,
+  columnId: string,
+  columnIds: readonly string[] | undefined,
 ): boolean => {
   if (columnIds !== undefined && columnIds.includes(columnId) === false) return false;
-  return deps.columnModel.getDefinitions().get(columnId)?.hidden === true;
+  return deps.columnModel.getDefinition(columnId)?.hidden === true;
 };
 
 /**
@@ -76,7 +75,7 @@ const isHiddenAfterReset = <TData>(
  */
 export const applyColumnPin = <TData>(
   deps: ColumnCoreDeps<TData>,
-  columnId: ColumnId,
+  columnId: string,
   pinned: ColumnPin | null,
 ): boolean => {
   const before = deps.columnModel.getPin(columnId);
@@ -160,14 +159,14 @@ const restoreActiveRow = <TData>(
   deps.selection.setActiveCell(nextRow, activeCell.col);
 };
 
-const hasSameOrder = (before: readonly ColumnId[], after: readonly ColumnId[]): boolean =>
+const hasSameOrder = (before: readonly string[], after: readonly string[]): boolean =>
   before.length === after.length && before.every((id, index) => id === after[index]);
 
 /** Column identities of everything addressed by a column index. */
 export interface ColumnTargets {
-  edit: ColumnId | undefined;
-  peek: ColumnId | undefined;
-  active: ColumnId | undefined;
+  edit: string | undefined;
+  peek: string | undefined;
+  active: string | undefined;
 }
 
 /** Managers an identity reconciliation reads and writes. */
@@ -223,7 +222,7 @@ const applyColumnStateChange = <TData>(
  */
 const commitHiddenEdit = <TData>(
   deps: ColumnCoreDeps<TData>,
-  willHide: (columnId: ColumnId) => boolean,
+  willHide: (columnId: string) => boolean,
 ): void => {
   const edit = deps.editManager.getState();
   if (edit === null) return;
@@ -236,7 +235,7 @@ const commitHiddenEdit = <TData>(
 export interface EditRetentionDeps {
   columnModel: ColumnModel;
   editManager: EditManager;
-  retainEditColumn: (columnId: ColumnId | null) => void;
+  retainEditColumn: (columnId: string | null) => void;
 }
 
 export const syncEditRetention = (deps: EditRetentionDeps): void => {
@@ -247,7 +246,7 @@ export const syncEditRetention = (deps: EditRetentionDeps): void => {
 /** Cancel an edit whose column was removed, or follow it to its new index. */
 const reconcileEditState = (
   deps: ColumnTargetDeps,
-  previousColumnId: ColumnId | undefined,
+  previousColumnId: string | undefined,
 ): void => {
   const edit = deps.editManager.getState();
   if (edit === null) return;
@@ -262,7 +261,7 @@ const reconcileEditState = (
 
 const reconcilePeekState = (
   deps: ColumnTargetDeps,
-  previousColumnId: ColumnId | undefined,
+  previousColumnId: string | undefined,
 ): void => {
   if (deps.editManager.getPeekState() === null) return;
   const nextIndex =
@@ -277,7 +276,7 @@ const reconcilePeekState = (
 /** Follow the active cell's column identity to its new index, or clear it. */
 const reconcileActiveCell = (
   deps: ColumnTargetDeps,
-  previousColumnId: ColumnId | undefined,
+  previousColumnId: string | undefined,
 ): void => {
   const activeCell = deps.selection.getActiveCell();
   if (activeCell === null) return;

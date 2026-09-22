@@ -431,7 +431,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 
 ## Reactive `columns` and column state
 
-Replacing the `columns` array never recreates the core: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing the `columns` array never recreates the core: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
 
 ```tsx
 <Grid

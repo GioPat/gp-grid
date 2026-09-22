@@ -4,7 +4,7 @@
 // size/offset/window/hit-test/scroll query in named coordinate spaces. All
 // inputs are injected callbacks.
 
-import type { ColumnDefinition, ColumnId } from "../types/columns";
+import type { ColumnDefinition } from "../types/columns";
 import type {
   AxisBounds,
   CellBounds,
@@ -62,7 +62,7 @@ export interface GridGeometryService extends GridGeometry {
   getColumnLayoutMode(): ColumnLayoutMode;
   getRowGeometry(): RowGeometry;
   /** Columns kept mounted outside the window, keyed and bounded. */
-  retainColumns(key: string, columnIds: readonly ColumnId[]): void;
+  retainColumns(key: string, columnIds: readonly string[]): void;
   releaseColumns(key: string): void;
   /** Scroll offsets every query answers from; differs from the DOM sample when it is out of range. */
   getEffectiveScroll(): { scrollTop: number; scrollLeft: number };

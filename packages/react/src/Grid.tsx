@@ -344,7 +344,7 @@ export function Grid<TData = unknown>(
   ]);
 
   // Push a new `columns` prop into the core without recreating it. The core
-  // reconciles by ColumnId and keeps retained user state, sort, filter and scroll.
+  // reconciles by column id and keeps retained user state, sort, filter and scroll.
   useEffect(() => {
     if (appliedColumnsRef.current === columns) return;
     appliedColumnsRef.current = columns;

@@ -362,7 +362,7 @@ Both callbacks together = Excel-style crosshair. The `<style>` tag with the high
 
 The wrapper watches both props. If either changes, it calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just keep references stable (or change them intentionally).
 
-Replacing `columns` never recreates the core either: it reconciles by `ColumnId` (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing `columns` never recreates the core either: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
 
 ```vue
 <GpGrid

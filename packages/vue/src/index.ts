@@ -116,7 +116,6 @@ export type {
   ColumnPinnedEvent,
   RowDragEndEvent,
   // Column identity and state
-  ColumnId,
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,

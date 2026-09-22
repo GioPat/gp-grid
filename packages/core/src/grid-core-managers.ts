@@ -18,7 +18,7 @@ import { RowDataManager } from "./managers/row-data-manager";
 import { ViewSync } from "./grid-core-view-sync";
 import type { GridGeometryService } from "./geometry/grid-geometry";
 import type { GridCoreConfig } from "./grid-core-config";
-import type { CellValue, ColumnDefinition, ColumnId } from "./types";
+import type { CellValue, ColumnDefinition } from "./types";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
@@ -28,7 +28,7 @@ export interface GridManagersDeps<TData> {
   /** Built after the managers; only read once construction has finished. */
   getGeometry: () => GridGeometryService;
   /** Bounded keep-alive for the edited column (B7). */
-  retainEditColumn: (columnId: ColumnId | null) => void;
+  retainEditColumn: (columnId: string | null) => void;
 }
 
 export interface GridManagers<TData> {

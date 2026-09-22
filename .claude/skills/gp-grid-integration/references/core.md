@@ -278,7 +278,7 @@ These are the most useful source files for a deep understanding of the core, in 
 | `packages/core/src/grid-core.ts` | The `GridCore` class — top-level orchestration. |
 | `packages/core/src/types/options.ts` | `GridCoreOptions`, `RowLoadingOptions`. |
 | `packages/core/src/types/columns.ts` | `ColumnDefinition` — every option in the column. |
-| `packages/core/src/column-model.ts` | `ColumnId` resolution, duplicate-id diagnostic, live column state and resolved layout. |
+| `packages/core/src/column-model.ts` | Column id resolution, duplicate-id diagnostic, live column state and resolved layout. |
 | `packages/core/src/grid-core-view-sync.ts` | One instruction batch per schema/layout change; `REMOVE_HEADERS` on column removal. |
 | `packages/core/src/data-source/index.ts` | All four data source factories. |
 | `packages/core/src/index.ts` | Full public surface (~250 lines, well organized). |

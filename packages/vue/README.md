@@ -482,7 +482,7 @@ const dataSource = createClientDataSource(tasks);
 
 ## Column state and schema lifecycle
 
-Passing a new `columns` array reconciles the schema by `ColumnId` (`colId ?? field`) in one batch. The core instance is reused: unrelated sort, filter and scroll state survive, surviving columns keep their user width/order/visibility, and removed columns drop their headers and state.
+Passing a new `columns` array reconciles the schema by column id (`colId ?? field`) in one batch. The core instance is reused: unrelated sort, filter and scroll state survive, surviving columns keep their user width/order/visibility, and removed columns drop their headers and state.
 
 Definition `width`/`hidden` are initial defaults. A definition change only applies when the column has no user override for that property; otherwise call `core.resetColumnState(["id"])` first.
 

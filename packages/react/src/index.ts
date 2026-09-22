@@ -30,7 +30,6 @@ export type {
 
   // Column definition
   ColumnDefinition,
-  ColumnId,
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,

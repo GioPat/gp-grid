@@ -23,7 +23,7 @@ import { buildOffsets, searchOffsets } from "./offsets";
  */
 const positionAt = (offsets: readonly number[], count: number, x: number): number => {
   if (count <= 0 || Number.isNaN(x) || x < offsets[0]!) return -1;
-  if (x >= offsets[offsets.length - 1]!) return count;
+  if (x >= offsets.at(-1)!) return count;
   return Math.min(Math.max(searchOffsets(offsets, x), 0), count - 1);
 };
 

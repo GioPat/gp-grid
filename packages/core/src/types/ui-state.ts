@@ -170,7 +170,7 @@ export interface GridState<TData = unknown> {
   viewportHeight: number;
   /** Y offset for rows wrapper when virtualization is active (keeps row translateY values small) */
   rowsWrapperOffset: number;
-  /** Header state keyed by `ColumnId`. */
+  /** Header state keyed by column id. */
   headers: Map<string, HeaderData>;
   filterPopup: FilterPopupState | null;
   isLoading: boolean;

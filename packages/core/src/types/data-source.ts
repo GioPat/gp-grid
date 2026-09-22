@@ -32,7 +32,7 @@ export interface DataSourceRequest {
    */
   valueFormatters?: Record<string, (v: CellValue) => string>;
   /**
-   * Optional ColumnId -> source-field map. Keeps a displayed/stable column ID
+   * Optional column id -> source-field map. Keeps a displayed/stable column ID
    * distinct from the source-field key a columnar source indexes by. Object
    * sources may ignore it.
    */

@@ -204,7 +204,7 @@ core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl)
 ### Changed
 - **Breaking (0.x → 1.0):** `onColumnResized`/`onColumnMoved`/`onRowDragEnd` now take object payloads with `columnId`/`rowId` and named view indices in all wrappers; positional callbacks are no longer supported
 - **Breaking (0.x → 1.0):** `CellValueChangedEvent` gained `columnId`, and `getRowData` returns the currently resident source record only
-- Column definitions are immutable caller input; live width/order/visibility state is keyed by `ColumnId` in the core, so resize/move never mutate the caller's objects or array
+- Column definitions are immutable caller input; live width/order/visibility state is keyed by column id in the core, so resize/move never mutate the caller's objects or array
 - Replacing `columns` reconciles by id in one instruction batch: retained columns keep user state, sort and filter; removed columns drop their state, headers and caches; the core instance survives
 - `ColumnFilterModel` now exposes `groups`; canonical conditions no longer expose `nextOperator`
 - Filter popups in React, Vue, and Angular use group cards with separate condition/group operators
