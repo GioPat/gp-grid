@@ -10,6 +10,8 @@ export { GridCore } from "./grid-core";
 /** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";
 export { TransactionManager } from "./managers";
+export { defaultPinIcon } from "./icons";
+export type { GridIcon } from "./icons";
 
 /** Data sources */
 export {

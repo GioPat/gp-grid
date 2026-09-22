@@ -100,7 +100,7 @@ export interface GridCoreOptions<TData = unknown> {
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /**
-   * Called after an explicit pin command, the header unpin control or a
+   * Called after an explicit pin command, the header pin toggle or a
    * cross-region column drag changed a column's requested pin.
    */
   onColumnPinned?: (event: ColumnPinnedEvent) => void;

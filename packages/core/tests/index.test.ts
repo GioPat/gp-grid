@@ -51,6 +51,13 @@ const expectedExports = [
   "calculateFilterPopupPosition",
   // Adapter kit
   "toPointerEventData",
+  "readIsRtl",
+  "toInlineX",
+  "toPhysicalX",
+  "inlineOffset",
+  "readContainerBounds",
+  "fixedLeftForInline",
+  "normalizeHorizontalKey",
   "AutoScrollDriver",
   "PendingRowDragController",
   "applyBatchInstructions",
