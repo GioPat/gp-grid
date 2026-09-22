@@ -484,7 +484,7 @@ protected readonly highlighting: HighlightingOptions = {
 
 ```css
 /* Global stylesheet (NOT a component-scoped stylesheet) — gp-grid renders cells outside Angular's view encapsulation by default for these classes. Use ViewEncapsulation.None on the component, or move the styles to a global file. */
-.pg-row--hover { background: rgba(59, 130, 246, 0.2) !important; }
+.gp-grid-row.pg-row--hover .gp-grid-cell { background: rgba(59, 130, 246, 0.2) !important; }
 .pg-col--hover { background: rgba(16, 185, 129, 0.2) !important; }
 ```
 

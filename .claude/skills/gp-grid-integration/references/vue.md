@@ -350,8 +350,8 @@ const highlighting = computed<HighlightingOptions>(() => ({
 </template>
 
 <style>
-/* MUST be unscoped — gp-grid renders outside Vue's scoped style boundary */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* MUST be unscoped. Tint cells so pinned containers remain opaque. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 </style>
 ```

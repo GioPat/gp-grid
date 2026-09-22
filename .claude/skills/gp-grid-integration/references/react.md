@@ -418,8 +418,8 @@ function PeopleGrid() {
 ```
 
 ```css
-/* Global stylesheet — !important needed to override grid defaults */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* Keep the pinned container opaque by tinting its cells, not the row. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 ```
 
