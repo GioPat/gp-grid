@@ -112,6 +112,7 @@ export type {
   /** Interaction events */
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
 
   /** Cell Position coordinates: row and column, zero-based indices */
@@ -196,6 +197,7 @@ export type {
   ColumnRegionLayout,
   ColumnWindowSnapshot,
   DisplayedColumn,
+  ResolvedColumn,
   GeometrySpace,
   AxisBounds,
   CellBounds,

@@ -133,6 +133,7 @@ export type {
   ColumnRegionLayout,
   ColumnWindowSnapshot,
   DisplayedColumn,
+  ResolvedColumn,
   GeometrySpace,
   AxisBounds,
   CellBounds,
