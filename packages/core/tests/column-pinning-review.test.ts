@@ -1,5 +1,5 @@
 // packages/core/tests/column-pinning-review.test.ts
-// Regression coverage for the PRD 004 slice 1 review. Each case is the
+// Regression coverage for column pinning. Each case uses the
 // published GridCore/state boundary, not the internal resolver: the review's
 // findings were mostly invisible through the pure functions.
 
@@ -47,7 +47,7 @@ afterEach(() => {
 const ids = (columns: readonly { columnId: string }[]): string[] =>
   columns.map((c) => c.columnId);
 
-describe("PRD 004 review — window and geometry", () => {
+describe("column pinning — window and geometry", () => {
   it("[1] maps the center-local range to displayed indices without duplicate pins", async () => {
     const { grid } = await fixture([
       column("a", { pinned: "start" }),
@@ -147,7 +147,7 @@ describe("PRD 004 review — window and geometry", () => {
   });
 });
 
-describe("PRD 004 review — publication", () => {
+describe("column pinning — publication", () => {
   it("[4] publishes the column window when both axes scroll", async () => {
     const { grid, instructions } = await fixture();
     grid.setViewport(32, 2000, 200, 320);
@@ -212,7 +212,7 @@ describe("PRD 004 review — publication", () => {
   });
 });
 
-describe("PRD 004 review — seed and state", () => {
+describe("column pinning — seed and state", () => {
   it("[8] partitions definition pins in the seed layout", () => {
     const state = createInitialState({
       initialColumns: [column("a"), column("b", { pinned: "start" }), column("c")],
@@ -287,7 +287,7 @@ describe("PRD 004 review — seed and state", () => {
   });
 });
 
-describe("PRD 004 review — fill anchors", () => {
+describe("column pinning — fill anchors", () => {
   it("[7] uses region-local coordinates for an end-pin fill handle", async () => {
     const { grid } = await fixture([column("a"), column("b"), column("c", { pinned: "end" })], 300);
     expect(calculateFillHandlePosition({

@@ -1,5 +1,5 @@
 // packages/core/tests/column-pinning-third-review.test.ts
-// Regressions from the third Slice 1 review: layout-index space, seed window,
+// Regressions for layout-index space, seed window,
 // end-pin drag sentinel, cross-region edit identity and window commit.
 
 import { afterEach, describe, expect, it } from "vitest";

@@ -1,5 +1,5 @@
 // packages/core/tests/column-pinning-followup.test.ts
-// Regression coverage for the column-pinning slice 1 follow-up review, all
+// Follow-up regression coverage for column pinning, all
 // through the published GridCore/state boundary. Each case is one finding.
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,7 +30,7 @@ const fixture = async (columns = wideColumns(), width = 200) => {
 afterEach(() => { for (const grid of grids.splice(0)) grid.destroy(); });
 const ids = (columns: readonly { columnId: string }[]) => columns.map((c) => c.columnId);
 
-describe("PRD 004 follow-up review", () => {
+describe("column pinning follow-up review", () => {
   it("hit-tests the third start pin", async () => {
     const { grid } = await fixture([
       column("a", { pinned: "start" }), column("b", { pinned: "start" }),

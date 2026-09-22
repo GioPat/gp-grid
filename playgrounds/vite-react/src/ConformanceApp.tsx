@@ -7,6 +7,7 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
@@ -20,7 +21,10 @@ import {
   createLargeColumnarColumns,
   createLargeColumnarSource,
   createNarrowColumns,
+  createWideColumns,
+  createWideSource,
   type CellBoundsSnapshot,
+  type ColumnWindowView,
   type LayoutColumnSnapshot,
 } from "./conformance-geometry";
 
@@ -162,8 +166,10 @@ interface ConformanceHooks {
   columnState: () => ColumnStateSnapshot[];
   sortColumn: () => string | null;
   filterCount: () => number;
-  eventCounts: () => { resized: number; moved: number; dragged: number };
+  eventCounts: () => { resized: number; moved: number; dragged: number; pinned: number };
   resetEventCounts: () => void;
+  useWideColumns: (count: number) => void;
+  columnWindow: () => ColumnWindowView | null;
   layoutColumns: () => LayoutColumnSnapshot[];
   cellBounds: (row: number, layoutIndex: number) => CellBoundsSnapshot | null;
   identityBounds: (rowId: RowId, columnId: string) => CellBoundsSnapshot | null;
@@ -174,6 +180,7 @@ interface EventCounts {
   resized: number;
   moved: number;
   dragged: number;
+  pinned: number;
 }
 
 export const ConformanceApp = (): React.ReactNode => {
@@ -191,8 +198,9 @@ export const ConformanceApp = (): React.ReactNode => {
   const [columnState, setColumnState] = useState<ColumnStateUpdate[] | undefined>(undefined);
   const [columnLayout, setColumnLayout] = useState<ColumnLayoutMode>("fit");
   const [hostWidth, setHostWidth] = useState(600);
+  const [rtl, setRtl] = useState(false);
   const gridRef = useRef<GridRef<ConformanceRow> | null>(null);
-  const eventCounts = useRef<EventCounts>({ resized: 0, moved: 0, dragged: 0 });
+  const eventCounts = useRef<EventCounts>({ resized: 0, moved: 0, dragged: 0, pinned: 0 });
   const coreTokens = useRef(new WeakMap<object, number>());
   const nextCoreToken = useRef(1);
 
@@ -218,6 +226,30 @@ export const ConformanceApp = (): React.ReactNode => {
     setRevision(fixture.source.revision);
   }, [fixture]);
 
+  /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
+  const useWideColumns = useCallback((count: number) => {
+    setMode("columnar");
+    setColumnarColumns(createWideColumns(count));
+    setLargeColumnarSource(createWideSource(count));
+    setGeneration((value) => value + 1);
+  }, []);
+
+  const pinColumns = useCallback(() => {
+    setColumnState([
+      { columnId: "id", pinned: "start" },
+      { columnId: "name", pinned: "start" },
+      { columnId: "code", pinned: "end" },
+    ]);
+  }, []);
+
+  const unpinAll = useCallback(() => {
+    setColumnState(undefined);
+    const core = gridRef.current?.core;
+    for (const column of core?.getColumns() ?? []) {
+      core?.setColumnPinned(column.colId ?? column.field, null);
+    }
+  }, []);
+
   const toggleColumnLayout = useCallback(() => {
     setColumnLayout((current) => (current === "fit" ? "fixed" : "fit"));
   }, []);
@@ -231,6 +263,7 @@ const hideColumn = useCallback(() => {
   }, []);
 
   const reset = useCallback(() => {
+    setRtl(false);
     setRows(createRows());
     setColumns(createColumns());
     setColumnarColumns(createColumnarColumns());
@@ -251,6 +284,12 @@ const hideColumn = useCallback(() => {
       setMounted(true);
     }, 0);
   }, []);
+
+  /** A `dir` flip needs a remount: direction is sampled at mount/resize. */
+  const toggleRtl = useCallback(() => {
+    setRtl((current) => !current);
+    remount();
+  }, [remount]);
 
   const useColumnar = useCallback(() => {
     setMode("columnar");
@@ -290,6 +329,9 @@ const hideColumn = useCallback(() => {
   }, []);
   const onRowDragEnd = useCallback((_event: RowDragEndEvent) => {
     eventCounts.current.dragged += 1;
+  }, []);
+  const onColumnPinned = useCallback((_event: ColumnPinnedEvent) => {
+    eventCounts.current.pinned += 1;
   }, []);
 
   const readCoreToken = useCallback((): number => {
@@ -347,8 +389,9 @@ const hideColumn = useCallback(() => {
       filterCount: () => Object.keys(gridRef.current?.core?.getFilterModel() ?? {}).length,
       eventCounts: () => ({ ...eventCounts.current }),
       resetEventCounts: () => {
-        eventCounts.current = { resized: 0, moved: 0, dragged: 0 };
+        eventCounts.current = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
       },
+      useWideColumns,
       ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never),
       debugState: () => ({
         coreWidth: gridRef.current?.core?.geometry.getColumnLayout().columns[0]?.width ?? -1,
@@ -359,7 +402,7 @@ const hideColumn = useCallback(() => {
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [fixture, readCoreToken]);
+  }, [fixture, readCoreToken, useWideColumns]);
 
   const metrics = useMemo(
     () => ({ generation, editEvents, writeRejected, mode, revision }),
@@ -383,12 +426,16 @@ const hideColumn = useCallback(() => {
         <button data-testid="bump-revision" onClick={bumpRevision}>Bump revision</button>
         <button data-testid="use-narrow-columns" onClick={useNarrowColumns}>Narrow columns</button>
         <button data-testid="use-large-columnar" onClick={useLargeColumnar}>Large columnar</button>
+        <button data-testid="use-wide-columns" onClick={() => useWideColumns(1000)}>Wide columns</button>
+        <button data-testid="pin-columns" onClick={pinColumns}>Pin columns</button>
+        <button data-testid="unpin-all" onClick={unpinAll}>Unpin all</button>
         <button data-testid="toggle-column-layout" onClick={toggleColumnLayout}>Toggle layout</button>
         <button data-testid="resize-host" onClick={resizeHost}>Resize host</button>
         <button data-testid="hide-column" onClick={hideColumn}>Hide column</button>
+        <button data-testid="toggle-rtl" onClick={toggleRtl}>Toggle RTL</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
-      <div data-testid="grid-host" style={{ width: hostWidth, height: 360 }}>
+      <div data-testid="grid-host" dir={rtl ? "rtl" : "ltr"} style={{ width: hostWidth, height: 360 }}>
         {mounted && (
           <Grid
             key={generation}
@@ -406,6 +453,7 @@ const hideColumn = useCallback(() => {
             onColumnResized={onColumnResized}
             onColumnMoved={onColumnMoved}
             onRowDragEnd={onRowDragEnd}
+            onColumnPinned={onColumnPinned}
           />
         )}
       </div>

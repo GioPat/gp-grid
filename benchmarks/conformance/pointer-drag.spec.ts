@@ -26,9 +26,18 @@ const cell = (page: Page, row: number, col: number): Locator =>
 const hideFirstColumn = async (page: Page): Promise<void> => {
   await page.getByTestId("hide-column").click();
   // The hidden "id" keeps layout index 0, so no header carries it and the
-  // surviving columns keep their own indices: no renumbering.
+  // surviving columns keep their own indices: no renumbering. A wrapper mounts
+  // only its column window, so the layout snapshot carries the index proof and
+  // the DOM only has to show the hidden column gone.
+  await expect
+    .poll(() =>
+      readHook<{ layoutIndex: number; columnId: string }[]>(page, "layoutColumns").then((all) =>
+        all.map((column) => `${column.layoutIndex}:${column.columnId}`),
+      ),
+    )
+    .toEqual(["1:name", "2:city", "3:score", "4:team", "5:status", "6:note", "7:code"]);
   await expect(page.locator('.gp-grid-header-cell[data-col-index="0"]')).toHaveCount(0);
-  await expect(page.locator('.gp-grid-header-cell[data-col-index="7"]')).toHaveCount(1);
+  expect(await page.locator(".gp-grid-header-cell").count()).toBeGreaterThan(0);
 };
 
 test("a horizontal scroll correction keeps the vertical position", async ({ page }, testInfo) => {

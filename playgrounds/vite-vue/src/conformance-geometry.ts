@@ -3,7 +3,7 @@
 // of the fixture component so the fixture file does not grow past its budget.
 
 import { createColumnarDataSource } from "@gp-grid/vue";
-import type { CellPosition, ColumnDefinition, GridCore, RowId } from "@gp-grid/core";
+import type { CellPosition, CellRange, ColumnDefinition, GridCore, RowId } from "@gp-grid/core";
 
 /** Narrow columns whose declared total is far below the host width. */
 export const createNarrowColumns = (): ColumnDefinition[] => [
@@ -13,6 +13,31 @@ export const createNarrowColumns = (): ColumnDefinition[] => [
 ];
 
 export const LARGE_COLUMNAR_ROW_COUNT = 1_000_000;
+
+/**
+ * Deterministic unequal widths (80/100/120/140/160 cycling) so a wide fixture
+ * exercises the prefix-axis window instead of a uniform grid.
+ */
+export const createWideColumns = (count: number): ColumnDefinition[] =>
+  Array.from({ length: count }, (_, index) => ({
+    colId: `w${index}`,
+    field: `w${index}`,
+    headerName: `W${index}`,
+    width: 80 + (index % 5) * 20,
+    cellDataType: "number" as const,
+    sortable: true,
+  }));
+
+/** Accessor-backed wide source: no per-row storage, so 10,000 columns bind fast. */
+export const createWideSource = (count: number) =>
+  createColumnarDataSource({
+    rowCount: 200,
+    getRowId: (row) => row,
+    fields: Array.from({ length: count }, (_, index) => ({
+      field: `w${index}`,
+      getValue: (row: number) => row * count + index,
+    })),
+  });
 
 /**
  * Eight 100 px columns overflow the 600 px fixture host, so keyboard
@@ -56,11 +81,32 @@ export interface CellBoundsSnapshot {
   height: number;
 }
 
+/** Compact projection of the published column window, for the pinning suite. */
+export interface ColumnWindowView {
+  range: { start: number; end: number };
+  start: string[];
+  center: string[];
+  end: string[];
+  regions: {
+    centerStart: number;
+    centerEnd: number;
+    startWidth: number;
+    endWidth: number;
+    endOffset: number;
+    centerViewportWidth: number;
+  };
+  displayedCount: number;
+}
+
 export interface GeometryHooks {
   layoutColumns: () => LayoutColumnSnapshot[];
   cellBounds: (row: number, layoutIndex: number) => CellBoundsSnapshot | null;
   identityBounds: (rowId: RowId, columnId: string) => CellBoundsSnapshot | null;
   activeCell: () => CellPosition | null;
+  selectionRange: () => CellRange | null;
+  columnWindow: () => ColumnWindowView | null;
+  /** Activate a cell and scroll it into view; LTR-only, like the pinning suite. */
+  activateCell: (row: number, layoutIndex: number) => void;
 }
 
 const boundsOf = (
@@ -89,4 +135,33 @@ export const createGeometryHooks = (
   identityBounds: (rowId, columnId) =>
     boundsOf(getCore()?.getCellBounds(rowId, columnId, "viewport")),
   activeCell: () => getCore()?.selection.getActiveCell() ?? null,
+  selectionRange: () => getCore()?.selection.getSelectionRange() ?? null,
+  activateCell: (row, layoutIndex) => {
+    const core = getCore();
+    const body = document.querySelector<HTMLElement>(".gp-grid-rows-wrapper")
+      ?.parentElement?.parentElement ?? null;
+    if (!core || body === null) return;
+    core.selection.setActiveCell(row, layoutIndex);
+    // LTR-only: physical and logical scrollLeft agree, so the sample passes through.
+    const target = core.geometry.getScrollTarget(row, layoutIndex, {
+      scrollTop: body.scrollTop,
+      scrollLeft: body.scrollLeft,
+    });
+    if (target.scrollTop !== undefined) body.scrollTop = target.scrollTop;
+    if (target.scrollLeft !== undefined) body.scrollLeft = target.scrollLeft;
+  },
+  columnWindow: () => {
+    const snapshot = getCore()?.geometry.getColumnWindow() ?? null;
+    if (snapshot === null) return null;
+    const ids = (columns: readonly { columnId: string }[]): string[] =>
+      columns.map((column) => column.columnId);
+    return {
+      range: { start: snapshot.range.start, end: snapshot.range.end },
+      start: ids(snapshot.start),
+      center: ids(snapshot.center),
+      end: ids(snapshot.end),
+      regions: { ...snapshot.layout.regions },
+      displayedCount: snapshot.layout.columns.length,
+    };
+  },
 });
