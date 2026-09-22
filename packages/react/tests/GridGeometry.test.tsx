@@ -1,5 +1,5 @@
 // packages/react/tests/GridGeometry.test.tsx
-// Wrapper contract for PRD 003: the React grid renders the core-resolved
+// Geometry wrapper contract: the React grid renders the core-resolved
 // displayed-column layout and never recomputes widths locally.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -54,9 +54,10 @@ interface HeaderBox {
   width: number;
 }
 
+// `left` is the inline-start offset: the wrappers position columns logically.
 const headerBoxes = (): HeaderBox[] =>
   Array.from(document.querySelectorAll<HTMLElement>(".gp-grid-header-cell")).map((cell) => ({
-    left: Number.parseFloat(cell.style.left),
+    left: Number.parseFloat(cell.style.insetInlineStart || cell.style.left),
     width: Number.parseFloat(cell.style.width),
   }));
 
@@ -68,7 +69,7 @@ const cellBoxes = (): HeaderBox[] => {
       Number(a.getAttribute("data-cell-col")) - Number(b.getAttribute("data-cell-col")),
   );
   return cells.map((cell) => ({
-    left: Number.parseFloat(cell.style.left),
+    left: Number.parseFloat(cell.style.insetInlineStart || cell.style.left),
     width: Number.parseFloat(cell.style.width),
   }));
 };

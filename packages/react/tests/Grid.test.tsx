@@ -1,10 +1,12 @@
 // packages/react/tests/Grid.test.tsx
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MutableRefObject } from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { Grid, type GridProps } from "../src/Grid";
 import { createClientDataSource } from "@gp-grid/core";
 import type { ColumnDefinition, CellRendererParams, HeaderRendererParams } from "@gp-grid/core";
+import type { GridRef } from "../src/types";
 
 // Test data
 interface TestRow {
@@ -50,6 +52,25 @@ class MockResizeObserver {
   disconnect() { }
 }
 
+// jsdom has no layout, so clientWidth/clientHeight read 0 and the core would
+// treat the body as unmeasured. Tests that need a real viewport stub them.
+const viewportRestores: Array<() => void> = [];
+
+function stubViewport(width: number, height: number): void {
+  const define = (property: "clientWidth" | "clientHeight", value: number): void => {
+    Object.defineProperty(HTMLElement.prototype, property, {
+      configurable: true,
+      get: () => value,
+    });
+  };
+  define("clientWidth", width);
+  define("clientHeight", height);
+  viewportRestores.push(() => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
+  });
+}
+
 describe("Grid", () => {
   beforeEach(() => {
     global.ResizeObserver = MockResizeObserver;
@@ -57,6 +78,7 @@ describe("Grid", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const restore of viewportRestores.splice(0)) restore();
   });
 
   describe("rendering", () => {
@@ -512,5 +534,241 @@ describe("Grid", () => {
       });
     });
   });
-});
 
+  describe("column window and pins", () => {
+    const pinnedColumns: ColumnDefinition[] = [
+      { colId: "a", field: "id", cellDataType: "number", width: 60, pinned: "start" },
+      { colId: "b", field: "name", cellDataType: "text", width: 150 },
+      { colId: "c", field: "age", cellDataType: "number", width: 80, pinned: "end" },
+    ];
+
+    it("should mount a bounded column window at 10,000 columns", async () => {
+      stubViewport(800, 400);
+      const wideColumns: ColumnDefinition[] = Array.from({ length: 10_000 }, (_, index) => ({
+        colId: `c${index}`,
+        field: `c${index}`,
+        cellDataType: "number" as const,
+        width: 50,
+      }));
+
+      render(<Grid columns={wideColumns} rowData={sampleData} rowHeight={32} />);
+
+      await waitFor(() => {
+        expect(document.querySelectorAll(".gp-grid-cell").length).toBeGreaterThan(0);
+      });
+
+      const mountedRows = document.querySelectorAll(".gp-grid-row").length;
+      const cells = Array.from(document.querySelectorAll(".gp-grid-cell"));
+      // 800px viewport + the default 240px overscan per side, over 50px columns.
+      const bound = Math.ceil((800 + 2 * 240) / 50) + 1;
+      expect(cells.length).toBeLessThanOrEqual(mountedRows * bound);
+
+      const displayed = new Set(cells.map((cell) => Number(cell.getAttribute("data-cell-col"))));
+      expect(displayed.size).toBeGreaterThan(1);
+      expect(Math.min(...displayed)).toBe(0);
+      expect(Math.max(...displayed)).toBeLessThan(bound);
+    });
+
+    it("should render start and end pins in their own containers", async () => {
+      stubViewport(400, 200);
+      render(<Grid {...createDefaultProps({ columns: pinnedColumns })} />);
+
+      await waitFor(() => {
+        expect(document.querySelector(".gp-grid-pin--start")).toBeTruthy();
+      });
+
+      const mountedRows = document.querySelectorAll(".gp-grid-row").length;
+      const startPins = document.querySelectorAll('.gp-grid-pin--start [data-cell-region="start"]');
+      const endPins = document.querySelectorAll('.gp-grid-pin--end [data-cell-region="end"]');
+      expect(startPins.length).toBe(mountedRows);
+      expect(endPins.length).toBe(mountedRows);
+      expect(startPins[0]?.getAttribute("data-cell-col")).toBe("0");
+      expect(endPins[0]?.getAttribute("data-cell-col")).toBe("2");
+
+      // Center cells stay direct children of the row, absolute and scrollable.
+      const centerCells = Array.from(
+        document.querySelectorAll(".gp-grid-rows-wrapper > .gp-grid-row > .gp-grid-cell"),
+      );
+      expect(new Set(centerCells.map((cell) => cell.getAttribute("data-cell-col")))).toEqual(new Set(["1"]));
+
+      // Header mirrors the body regions.
+      expect(document.querySelectorAll(".gp-grid-pin-header").length).toBe(2);
+      expect(document.querySelector('.gp-grid-pin-header [data-cell-region="start"]')).toBeTruthy();
+
+      const grid = document.querySelector('[role="grid"]')!;
+      expect(grid.getAttribute("aria-colcount")).toBe("3");
+      expect(document.querySelector('.gp-grid-row[role="row"]')?.getAttribute("aria-rowindex")).toBe("1");
+      expect(document.querySelector('[data-cell-col="0"]')?.getAttribute("aria-colindex")).toBe("1");
+      expect(document.querySelector('[data-cell-col="2"]')?.getAttribute("aria-colindex")).toBe("3");
+    });
+
+    it("should toggle the localized pin control and render a custom icon", async () => {
+      stubViewport(400, 200);
+      render(
+        <Grid
+          {...createDefaultProps({
+            columns: pinnedColumns,
+            labels: { pinColumn: "Épingler", unpinColumn: "Détacher" },
+          })}
+          pinIcon={{ path: "M1 1h2v2H1z", viewBox: "0 0 4 4" }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector(".gp-grid-pin--start")).toBeTruthy();
+      });
+
+      const buttons = screen.getAllByLabelText("Détacher");
+      expect(buttons.length).toBeGreaterThan(0);
+      const unpinButton = buttons[0]!;
+      expect(unpinButton.getAttribute("aria-pressed")).toBe("true");
+      expect(unpinButton.querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 4 4");
+      expect(unpinButton.querySelector("path")?.getAttribute("d")).toBe("M1 1h2v2H1z");
+
+      await act(async () => {
+        fireEvent.click(unpinButton);
+      });
+
+      await waitFor(() => {
+        expect(document.querySelector(".gp-grid-pin--start")).toBeNull();
+      });
+      expect(document.querySelector('[data-cell-col="0"]')?.getAttribute("data-cell-region")).toBe("center");
+
+      const pinButton = screen.getAllByLabelText("Épingler")[0]!;
+      expect(pinButton.getAttribute("aria-pressed")).toBe("false");
+      await act(async () => {
+        fireEvent.click(pinButton);
+      });
+      await waitFor(() => {
+        expect(document.querySelector(".gp-grid-pin--start")).toBeTruthy();
+      });
+    });
+
+    it("should keep an open editor mounted when its column leaves the window", async () => {
+      stubViewport(300, 200);
+      const columnsWithEditor: ColumnDefinition[] = Array.from({ length: 60 }, (_, index) => ({
+        colId: `c${index}`,
+        field: `c${index}`,
+        cellDataType: "text" as const,
+        width: 100,
+        editable: index === 0,
+      }));
+      const gridRef: MutableRefObject<GridRef<TestRow> | null> = { current: null };
+
+      render(
+        <Grid
+          columns={columnsWithEditor}
+          rowData={sampleData}
+          rowHeight={32}
+          columnOverscan={0}
+          initialWidth={300}
+          initialHeight={200}
+          gridRef={gridRef}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(document.querySelectorAll(".gp-grid-cell").length).toBeGreaterThan(0);
+      });
+
+      await act(async () => {
+        fireEvent.doubleClick(document.querySelector('.gp-grid-cell[data-cell-col="0"]')!);
+      });
+      await waitFor(() => {
+        expect(document.querySelector(".gp-grid-edit-input")).toBeTruthy();
+      });
+
+      const input = document.querySelector<HTMLInputElement>(".gp-grid-edit-input")!;
+      await act(async () => {
+        fireEvent.change(input, { target: { value: "draft" } });
+      });
+
+      // Move the window far past the edited column: retention keeps it mounted.
+      await act(async () => {
+        gridRef.current?.core?.setViewport(0, 3000, 300, 200);
+      });
+
+      await waitFor(() => {
+        const center = Array.from(
+          document.querySelectorAll('.gp-grid-cell[data-cell-region="center"]'),
+        ).map((cell) => Number(cell.getAttribute("data-cell-col")));
+        // The window moved far right and kept the edited column 0 mounted.
+        expect(Math.max(...center)).toBeGreaterThan(10);
+        expect(center).toContain(0);
+      });
+
+      const retained = document.querySelector<HTMLInputElement>(".gp-grid-edit-input");
+      expect(retained).toBe(input);
+      expect(retained?.value).toBe("draft");
+    });
+
+    it("should preserve the edit draft when pinning moves its cell", async () => {
+      stubViewport(400, 200);
+      const gridRef: MutableRefObject<GridRef<TestRow> | null> = { current: null };
+
+      render(
+        <Grid
+          columns={[
+            { colId: "name", field: "name", width: 150, editable: true },
+            { colId: "age", field: "age", width: 250 },
+          ]}
+          rowData={sampleData}
+          rowHeight={32}
+          initialWidth={400}
+          initialHeight={200}
+          gridRef={gridRef}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('.gp-grid-cell[data-cell-col="0"]')).toBeTruthy();
+      });
+      await act(async () => {
+        fireEvent.doubleClick(document.querySelector('.gp-grid-cell[data-cell-col="0"]')!);
+      });
+      const input = document.querySelector<HTMLInputElement>(".gp-grid-edit-input")!;
+      await act(async () => {
+        fireEvent.change(input, { target: { value: "draft" } });
+        gridRef.current?.core?.setColumnPinned("name", "start");
+      });
+
+      await waitFor(() => {
+        expect(document.querySelector('.gp-grid-cell[data-cell-region="start"]')).toBeTruthy();
+      });
+      expect(document.querySelector<HTMLInputElement>(".gp-grid-edit-input")?.value).toBe("draft");
+    });
+
+    it("should preserve a center-cell peek's layout width when clipped by a pin", async () => {
+      stubViewport(400, 200);
+      const gridRef: MutableRefObject<GridRef<TestRow> | null> = { current: null };
+
+      render(
+        <Grid
+          columns={[
+            { colId: "id", field: "id", width: 100, pinned: "start" },
+            { colId: "name", field: "name", width: 500 },
+            { colId: "age", field: "age", width: 100, pinned: "end" },
+          ]}
+          rowData={sampleData}
+          rowHeight={32}
+          columnLayout="fixed"
+          initialWidth={400}
+          initialHeight={200}
+          gridRef={gridRef}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('.gp-grid-cell[data-cell-region="end"]')).toBeTruthy();
+      });
+      await act(async () => {
+        gridRef.current?.core?.startPeek(0, 1);
+      });
+
+      await waitFor(() => {
+        const peek = document.querySelector<HTMLElement>(".gp-grid-cell-peek");
+        expect(peek?.style.width).toBe("500px");
+      });
+    });
+  });
+});

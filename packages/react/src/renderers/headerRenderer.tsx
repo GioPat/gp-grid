@@ -3,8 +3,10 @@
 import React from "react";
 import type {
   GridCore,
+  GridIcon,
   ColumnDefinition,
   ColumnPin,
+  GridLabels,
   SortDirection,
   HeaderRendererParams,
 } from "@gp-grid/core";
@@ -27,6 +29,9 @@ export interface RenderHeaderOptions<TData> {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  /** Resolved labels used by the default header controls. */
+  labels: GridLabels;
+  pinIcon: GridIcon;
   coreRef: React.RefObject<GridCore<TData> | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
@@ -50,6 +55,8 @@ export function renderHeader<TData>(
     sortable,
     filterable,
     hasFilter,
+    labels,
+    pinIcon,
     coreRef,
     containerRef,
     headerRenderers,
@@ -113,9 +120,28 @@ export function renderHeader<TData>(
     return globalHeaderRenderer(params);
   }
 
-  // Default header with stacked sort arrows and filter icon
+  // Default header controls
   return (
     <>
+      <button
+        type="button"
+        className={`gp-grid-pin-button${params.pinned !== null ? " active" : ""}`}
+        aria-label={params.pinned === null ? labels.pinColumn : labels.unpinColumn}
+        aria-pressed={params.pinned !== null}
+        title={params.pinned === null ? labels.pinColumn : labels.unpinColumn}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          params.onPinChange(params.pinned === null ? "start" : null);
+        }}
+      >
+        <svg aria-hidden="true" width="16" height="16" viewBox={pinIcon.viewBox ?? "0 0 24 24"}>
+          <path d={pinIcon.path} fill="currentColor" />
+        </svg>
+      </button>
       <span className="gp-grid-header-text">
         {column.headerName ?? column.field}
       </span>

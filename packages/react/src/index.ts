@@ -49,6 +49,7 @@ export type {
   WriteRejectionOperation,
   ColumnResizedEvent,
   ColumnMovedEvent,
+  ColumnPinnedEvent,
   RowDragEndEvent,
 
   // DataSource
@@ -78,13 +79,20 @@ export type {
   GridLabels,
   GridLabelOverrides,
   GridFilterOperatorLabels,
+  GridIcon,
 
   // Instructions (for advanced use cases)
   GridInstruction,
-  // PRD 003 geometry
+  // Geometry
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   DisplayedColumn,
+  // Column virtualization and pinning
+  ColumnPin,
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
+  FillHandlePosition,
   GeometrySpace,
   AxisBounds,
   CellBounds,
