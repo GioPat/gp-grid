@@ -1,4 +1,4 @@
-import { Component, signal, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, signal, computed, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { isPlatformBrowser } from '@angular/common';
 import { GpGridComponent, provideGridData, injectGridData } from '@gp-grid/angular';
@@ -7,6 +7,8 @@ import type {
   CellRendererTemplate,
   EditRendererParams,
   EditRendererTemplate,
+  FreezeRowsOptions,
+  FrozenRowsState,
   GridLabels,
   HeaderRendererTemplate,
   HighlightingOptions,
@@ -78,6 +80,22 @@ export class App implements AfterViewInit {
   protected readonly grid = injectGridData<Person>();
 
   protected rowIdToUpdate = signal(1);
+
+  protected readonly freezeCounts = [0, 1, 3, 5] as const;
+
+  protected readonly freezeCount = signal<0 | 1 | 3 | 5>(0);
+
+  protected readonly frozenStatus = signal('0 of 0 rows frozen');
+
+  protected readonly freezeRows = computed<FreezeRowsOptions>(() => ({
+    count: this.freezeCount(),
+  }));
+
+  protected onFrozenRowsChanged(state: FrozenRowsState): void {
+    this.frozenStatus.set(
+      `${state.effectiveCount} of ${state.requestedCount} rows frozen`,
+    );
+  }
 
   columns: AngularColumnDefinition[] = [];
 

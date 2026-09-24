@@ -60,9 +60,9 @@ const core = new GridCore({
 });
 
 const value: string | number | boolean | Date | object | null =
-  core.getCellValue(0, 1);
-const identity = core.getRowId(0);
-const writable: boolean = core.isWritable();
+  core.cells.getValue(0, 1);
+const identity = core.rows.getId(0);
+const writable: boolean = core.rows.isWritable();
 
 // Renderers receive formatted value, identity and cross-field raw access
 // without a materialized record.

@@ -13,6 +13,9 @@ const columns = [
   { colId: "name", field: "name", headerName: "Name", width: 160, cellDataType: "text" },
 ];
 const rows = [{ id: 1, name: "SSR row" }];
+/** Six object rows: a positive frozen count with a suffix, so `minSuffixHeight` 64 participates. */
+const frozenRows = Array.from({ length: 6 }, (_, index) => ({ id: index + 1, name: `Frozen row ${index}` }));
+const freezeRows = { count: 3 };
 const results = [];
 
 const check = async (name, operation) => {
@@ -43,6 +46,27 @@ const expectWidth = (html, expected, label) => {
     throw new Error(`${label}: expected ${expected}px, rendered ${actual}px`);
   }
   return `${actual}px`;
+};
+
+const expectFields = (actual, expected, label) => {
+  for (const [key, value] of Object.entries(expected)) {
+    if (actual?.[key] !== value) {
+      throw new Error(`${label}.${key}: expected ${String(value)}, got ${String(actual?.[key])}`);
+    }
+  }
+};
+
+/** React and Vue create their core after mount, so the shell carries no band. */
+const expectShellWithoutBand = (html, label) => {
+  if (html.includes("gp-grid-container") === false) {
+    throw new Error(`${label} grid shell was not rendered.`);
+  }
+  for (const marker of ["gp-grid-frozen-rows", "gp-grid-frozen-pins"]) {
+    if (html.includes(marker)) {
+      throw new Error(`${label} serialized ${marker}; its core is created after mount.`);
+    }
+  }
+  return `${label}: shell with freezeRows, no frozen markup`;
 };
 
 const provenance = collectArtifactProvenance("candidate");
@@ -84,6 +108,36 @@ await check("core columnar source without browser globals", async () => {
   return `rowCount=${columnarSource.access.rowCount}, field=${columnarSource.access.getValue(0, "label")}`;
 });
 
+await check("core frozen rows resolve zero on the server", async () => {
+  if (typeof window !== "undefined" || typeof document !== "undefined") {
+    throw new Error("The core check must run without browser globals.");
+  }
+  const core = new coreArtifact.GridCore({
+    columns,
+    dataSource: columnarSource,
+    rowHeight: 32,
+    freezeRows,
+  });
+  const zero = { requestedCount: freezeRows.count, effectiveCount: 0, limit: null };
+  // C9's baseline is the empty-axis resolution, so nothing freezes pre-data.
+  expectFields(core.frozenRows.get(), zero, "getFrozenRows()");
+  const regions = core.geometry.getRowRegions();
+  expectFields(regions.frozen, zero, "getRowRegions().frozen");
+  if (regions.frozenCount !== 0 || regions.frozenExtent !== 0) {
+    throw new Error(`Region layout is not zero: count ${regions.frozenCount}, extent ${regions.frozenExtent}`);
+  }
+  // 600 px is the core's unmeasured-viewport estimate; the suffix keeps it whole.
+  if (regions.suffixViewportHeight !== 600) {
+    throw new Error(`Unmeasured suffix height: ${regions.suffixViewportHeight}`);
+  }
+  const size = core.geometry.getContentSize();
+  if (Number.isFinite(size.width) === false || Number.isFinite(size.height) === false) {
+    throw new Error(`Non-finite content size: ${JSON.stringify(size)}`);
+  }
+  core.destroy();
+  return `effective 0, suffix ${regions.suffixViewportHeight}px, content ${size.width}x${size.height}`;
+});
+
 await check("React native server render", async () => {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
@@ -113,6 +167,22 @@ await check("React columnar server render (shell only)", async () => {
   }));
   if (html.includes("gp-grid-container") === false) throw new Error("React columnar grid shell was not rendered.");
   return `${html.length} characters (shell; async rows are not assumed)`;
+});
+
+await check("React frozen rows server render", async () => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const html = renderToString(React.createElement(Grid, {
+    columns,
+    rowData: frozenRows,
+    rowHeight: 32,
+    freezeRows,
+    initialWidth: 500,
+    initialHeight: 300,
+    getRowId: (row) => row.id,
+  }));
+  return expectShellWithoutBand(html, "React");
 });
 
 await check("React fit expands the single column to initialWidth", async () => {
@@ -278,6 +348,24 @@ await check("Vue columnar server render (shell only)", async () => {
   return `${html.length} characters (shell; async rows are not assumed)`;
 });
 
+await check("Vue frozen rows server render", async () => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const app = createSSRApp({
+    render: () => h(GpGrid, {
+      columns,
+      rowData: frozenRows,
+      rowHeight: 32,
+      freezeRows,
+      initialWidth: 500,
+      initialHeight: 300,
+    }),
+  });
+  return expectShellWithoutBand(await renderToString(app), "Vue");
+});
+
 const angularPackage = path.join(REPOSITORY_ROOT, "playgrounds/angular/package.json");
 await check("Angular native server render", async () => {
   await importFrom("@angular/compiler", angularPackage);
@@ -325,6 +413,56 @@ await check("Angular columnar server render (shell only)", async () => {
   );
   if (html.includes("gp-grid-container") === false) throw new Error("Angular columnar grid shell was not rendered.");
   return `${html.length} characters (shell; async rows are not assumed)`;
+});
+
+/**
+ * Angular creates its core in `ngOnInit`, so its first page can arrive before
+ * serialization: the band is optional, but serialized suffix rows without it
+ * would be wrong, and the band's rows keep their logical 1-based indices.
+ */
+const expectAngularFrozenBand = (html) => {
+  if (html.includes("gp-grid-container") === false) throw new Error("Angular grid shell was not rendered.");
+  const blockAt = html.indexOf("gp-grid-frozen-rows");
+  if (blockAt === -1) {
+    if (html.includes("gp-grid-rows-wrapper")) {
+      throw new Error("Angular serialized the suffix rows without the frozen band.");
+    }
+    return "shell only; the first page had not arrived at serialization";
+  }
+  // The band carries its own `.gp-grid-rows-wrapper`; the pin layer ends it and
+  // the suffix rows wrapper follows.
+  const pinsAt = html.indexOf("gp-grid-frozen-pins", blockAt);
+  const band = html.slice(blockAt, pinsAt === -1 ? html.length : pinsAt);
+  const indices = [...band.matchAll(/aria-rowindex="(\d+)"/g)].map((match) => Number(match[1]));
+  const expected = Array.from({ length: freezeRows.count }, (_value, index) => index + 1);
+  if (indices.join(",") !== expected.join(",")) {
+    throw new Error(`Angular frozen band rows: expected ${expected.join(",")}, got ${indices.join(",")}`);
+  }
+  return `frozen band rows ${indices.join(",")} before the suffix wrapper`;
+};
+
+await check("Angular frozen rows server render", async () => {
+  await importFrom("@angular/compiler", angularPackage);
+  const { Component } = await importFrom("@angular/core", angularPackage);
+  const { bootstrapApplication } = await importFrom("@angular/platform-browser", angularPackage);
+  const { provideServerRendering, renderApplication } = await importFrom("@angular/platform-server", angularPackage);
+  const angularArtifact = path.join(REPOSITORY_ROOT, "packages/angular/dist/angular/fesm2022/gp-grid-angular.mjs");
+  const { GpGridComponent } = await import(pathToFileURL(angularArtifact).href);
+  class SsrFrozenComponent {}
+  Component({
+    selector: "app-root",
+    standalone: true,
+    imports: [GpGridComponent],
+    template: '<gp-grid [columns]="columns" [rows]="rows" [rowHeight]="32" [freezeRows]="freezeRows" />',
+  })(SsrFrozenComponent);
+  SsrFrozenComponent.prototype.columns = columns;
+  SsrFrozenComponent.prototype.rows = frozenRows;
+  SsrFrozenComponent.prototype.freezeRows = freezeRows;
+  const html = await renderApplication(
+    (context) => bootstrapApplication(SsrFrozenComponent, { providers: [provideServerRendering()] }, context),
+    { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
+  );
+  return expectAngularFrozenBand(html);
 });
 
 await check("Angular pinned header cells", async () => {
