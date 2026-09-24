@@ -10,11 +10,13 @@ import type {
   DragState,
   FillHandlePosition,
   GridLabels,
+  RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
 import { formatLabel } from "@gp-grid/core";
 import { GridRow } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
+import { GridFrozenRows } from "./GridFrozenRows";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
@@ -24,6 +26,7 @@ export interface GridBodyProps<TData = unknown> {
   contentHeight: number;
   totalWidth: number;
   rowsWrapperOffset: number;
+  rowRegions: RowRegionLayout;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
@@ -61,6 +64,7 @@ const GridBodyInner = <TData = unknown>(
     contentHeight,
     totalWidth,
     rowsWrapperOffset,
+    rowRegions,
     activeCell,
     selectionRange,
     editingCell,
@@ -88,6 +92,9 @@ const GridBodyInner = <TData = unknown>(
 
   const contentWidthPx = Math.max(contentWidth, totalWidth);
   const regions = columnWindow?.layout.regions;
+
+  const frozenSlots = slotsArray.filter((slot) => slot.region === "frozen");
+  const suffixSlots = slotsArray.filter((slot) => slot.region === "suffix");
 
   const cellContext: GridRowCellContext<TData> = {
     rowHeight,
@@ -117,17 +124,34 @@ const GridBodyInner = <TData = unknown>(
     />
   ) : null;
 
+  const suffixFillHandle = fillHandlePosition?.rowRegion === "frozen" ? null : fillHandle;
+  const suffixCenterHandle = fillHandlePosition?.region === "center" ? suffixFillHandle : null;
+
   /** Pin regions host the handle in a zero-height sticky overlay so it follows them. */
   const pinOverlay = (region: "start" | "end"): React.ReactNode =>
-    fillHandle !== null && fillHandlePosition?.region === region && regions !== undefined ? (
+    suffixFillHandle !== null && fillHandlePosition?.region === region && regions !== undefined ? (
       <div
         className={`gp-grid-pin-overlay gp-grid-pin-overlay--${region}`}
         role="presentation"
         style={{ width: `${region === "start" ? regions.startWidth : regions.endWidth}px` }}
       >
-        {fillHandle}
+        {suffixFillHandle}
       </div>
     ) : null;
+
+  const rowDrag = dragState.dragType === "row-drag" ? dragState.rowDrag : null;
+  const dropIndicator =
+    rowDrag !== null && rowDrag.dropTargetIndex !== null ? (
+      <div
+        className="gp-grid-row-drop-indicator"
+        style={{
+          transform: `translateY(${rowDrag.dropIndicatorY}px)`,
+          width: `${contentWidthPx}px`,
+        }}
+      />
+    ) : null;
+  const frozenDropIndicator = rowDrag?.dropIndicatorRegion === "frozen" ? dropIndicator : null;
+  const suffixDropIndicator = frozenDropIndicator === null ? dropIndicator : null;
 
   return (
     <div
@@ -151,6 +175,19 @@ const GridBodyInner = <TData = unknown>(
           minWidth: "100%",
         }}
       >
+        <GridFrozenRows
+          rowRegions={rowRegions}
+          slots={frozenSlots}
+          columnWindow={columnWindow}
+          displayedIndexOf={displayedIndexOf}
+          contentWidthPx={contentWidthPx}
+          rowHeight={rowHeight}
+          cellContext={cellContext}
+          fillHandlePosition={fillHandlePosition}
+          fillHandle={fillHandle}
+          dropIndicator={frozenDropIndicator}
+        />
+
         {/* Rows wrapper - uses transform to position rows with small translateY values */}
         {/* This prevents browser rendering issues at extreme pixel positions (millions of px) */}
         <div
@@ -162,7 +199,7 @@ const GridBodyInner = <TData = unknown>(
           }}
         >
           {columnWindow !== null &&
-            slotsArray.map((slot) =>
+            suffixSlots.map((slot) =>
               slot.rowIndex < 0 ? null : (
                 <GridRow
                   key={slot.slotId}
@@ -177,21 +214,13 @@ const GridBodyInner = <TData = unknown>(
             )}
 
           {/* Fill handle (drag to fill) - inside the wrapper so it moves with rows */}
-          {fillHandlePosition?.region === "center" && fillHandle}
+          {suffixCenterHandle}
 
           {pinOverlay("start")}
           {pinOverlay("end")}
 
           {/* Row drop indicator - inside wrapper so it scrolls with rows */}
-          {dragState.dragType === "row-drag" && dragState.rowDrag?.dropTargetIndex !== null && (
-            <div
-              className="gp-grid-row-drop-indicator"
-              style={{
-                transform: `translateY(${dragState.rowDrag!.dropIndicatorY}px)`,
-                width: `${contentWidthPx}px`,
-              }}
-            />
-          )}
+          {suffixDropIndicator}
         </div>
       </div>
 

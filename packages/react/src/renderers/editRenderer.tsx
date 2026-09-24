@@ -71,9 +71,9 @@ export function renderEditCell<TData>(
     isSelected: true,
     isEditing: true,
     initialValue,
-    onValueChange: (newValue) => core.updateEditValue(newValue, editId),
-    onCommit: () => core.commitEdit(editId),
-    onCancel: () => core.cancelEdit(editId),
+    onValueChange: (newValue) => core.edit.updateValue(newValue, editId),
+    onCommit: () => core.edit.commit(editId),
+    onCancel: () => core.edit.cancel(editId),
   };
 
   // Check for column-specific renderer
@@ -100,20 +100,20 @@ export function renderEditCell<TData>(
       defaultValue={initialValue == null ? "" : String(initialValue)}
       autoFocus
       onFocus={(e) => e.target.select()}
-      onChange={(e) => core.updateEditValue(e.target.value, editId)}
+      onChange={(e) => core.edit.updateValue(e.target.value, editId)}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") {
-          core.commitEdit(editId);
+          core.edit.commit(editId);
         } else if (e.key === "Escape") {
-          core.cancelEdit(editId);
+          core.edit.cancel(editId);
         } else if (e.key === "Tab") {
           e.preventDefault();
-          core.commitEdit(editId);
+          core.edit.commit(editId);
           core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
         }
       }}
-      onBlur={() => core.commitEdit(editId)}
+      onBlur={() => core.edit.commit(editId)}
     />
   );
 }

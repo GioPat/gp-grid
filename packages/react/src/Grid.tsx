@@ -55,6 +55,7 @@ export function Grid<TData = unknown>(
     columnLayout = "fit",
     columnOverscan,
     rowLoading,
+    freezeRows,
     sortingEnabled = true,
     darkMode = false,
     wheelDampening = 0.1,
@@ -79,6 +80,7 @@ export function Grid<TData = unknown>(
     onColumnResized,
     onColumnMoved,
     onColumnPinned,
+    onFrozenRowsChanged,
     labels,
   } = props;
 
@@ -208,6 +210,8 @@ export function Grid<TData = unknown>(
   onColumnMovedRef.current = onColumnMoved;
   const onColumnPinnedRef = useRef(onColumnPinned);
   onColumnPinnedRef.current = onColumnPinned;
+  const onFrozenRowsChangedRef = useRef(onFrozenRowsChanged);
+  onFrozenRowsChangedRef.current = onFrozenRowsChanged;
   const highlightingRef = useRef(highlighting);
   highlightingRef.current = highlighting;
 
@@ -271,6 +275,7 @@ export function Grid<TData = unknown>(
       columnOverscan,
       maxFlingVelocity,
       rowLoading,
+      freezeRows,
       sortingEnabled,
       highlighting: highlightingRef.current,
       getRowId: getRowIdRef.current,
@@ -283,10 +288,12 @@ export function Grid<TData = unknown>(
       onColumnResized: (event) => onColumnResizedRef.current?.(event),
       onColumnMoved: (event) => onColumnMovedRef.current?.(event),
       onColumnPinned: (event) => onColumnPinnedRef.current?.(event),
+      onFrozenRowsChanged: (state) => onFrozenRowsChangedRef.current?.(state),
+      labels,
     });
 
     // A recreated core starts from definition defaults; re-apply controlled state.
-    if (columnStateRef.current) core.setColumnState(columnStateRef.current);
+    if (columnStateRef.current) core.columns.setState(columnStateRef.current);
     coreRef.current = core;
     touchScrollRef.current?.syncCore();
 
@@ -330,6 +337,8 @@ export function Grid<TData = unknown>(
         gridRef.current = null;
       }
     };
+    // `labels` is creation-only and `freezeRows` has its own runtime effect
+    // below, so neither may rebuild the core and reset scroll.
   }, [
     rowHeight,
     totalHeaderHeight,
@@ -348,20 +357,26 @@ export function Grid<TData = unknown>(
   useEffect(() => {
     if (appliedColumnsRef.current === columns) return;
     appliedColumnsRef.current = columns;
-    coreRef.current?.setColumns(columns);
+    coreRef.current?.columns.set(columns);
   }, [columns]);
 
   // Apply a controlled column-state input whenever it changes.
   useEffect(() => {
     if (columnState === undefined) return;
-    coreRef.current?.setColumnState(columnState);
+    coreRef.current?.columns.setState(columnState);
   }, [columnState]);
 
   // Switch layout mode without recreating the core; it republishes the
   // resolved layout and wrappers render the new widths.
   useEffect(() => {
-    coreRef.current?.setColumnLayout(columnLayout);
+    coreRef.current?.columns.setLayout(columnLayout);
   }, [columnLayout]);
+
+  // Apply a new freeze configuration without recreating the core; the setter
+  // is silent for an equal request, and creation already received the option.
+  useEffect(() => {
+    coreRef.current?.frozenRows.set(freezeRows);
+  }, [freezeRows]);
 
   // Handle reactive data source changes without re-creating core
   useEffect(() => {
@@ -481,7 +496,7 @@ export function Grid<TData = unknown>(
     (colId: string, filter: ColumnFilterModel | null) => {
       const core = coreRef.current;
       if (core) {
-        core.setFilter(colId, filter);
+        core.sortFilter.setFilter(colId, filter);
       }
     },
     [],
@@ -491,13 +506,13 @@ export function Grid<TData = unknown>(
   const handleFilterPopupClose = useCallback(() => {
     const core = coreRef.current;
     if (core) {
-      core.closeFilterPopup();
+      core.sortFilter.closeFilterPopup();
     }
   }, []);
 
   // Handle peek overlay close
   const handlePeekClose = useCallback(() => {
-    coreRef.current?.stopPeek();
+    coreRef.current?.edit.stopPeek();
   }, []);
 
   // Handle cell mouse enter (for highlighting)
@@ -599,6 +614,7 @@ export function Grid<TData = unknown>(
         contentHeight={state.contentHeight}
         totalWidth={totalWidth}
         rowsWrapperOffset={state.rowsWrapperOffset}
+        rowRegions={state.rowRegions}
         activeCell={state.activeCell}
         selectionRange={state.selectionRange}
         editingCell={state.editingCell}
@@ -623,6 +639,18 @@ export function Grid<TData = unknown>(
         globalCellRenderer={cellRenderer}
         globalEditRenderer={editRenderer}
       />
+
+      {/* C13 live region: the revision key remounts it so each message is read once. */}
+      {state.announcement !== null && (
+        <div
+          key={state.announcement.revision}
+          className="gp-grid-visually-hidden"
+          role="status"
+          aria-live="polite"
+        >
+          {state.announcement.message}
+        </div>
+      )}
 
       {/* Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues */}
       {state.isLoading && (
@@ -675,10 +703,10 @@ export function Grid<TData = unknown>(
             peekCell={peekCell}
             column={peekColumn}
             rowData={peekSlot.rowData}
-            rawValue={peekCore?.getCellValue(peekCell.row, peekCell.col) ?? null}
-            rowId={peekCore?.getRowId(peekCell.row)}
+            rawValue={peekCore?.cells.getValue(peekCell.row, peekCell.col) ?? null}
+            rowId={peekCore?.rows.getId(peekCell.row)}
             getValue={(field) =>
-              peekCore?.getFieldValue(peekCell.row, field) ?? null
+              peekCore?.cells.getFieldValue(peekCell.row, field) ?? null
             }
             containerRef={containerRef}
             core={peekCore}

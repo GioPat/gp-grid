@@ -465,7 +465,7 @@ export function useInputHandler<TData>(
       if (filterPopupOpen) return;
 
       const text = e.clipboardData.getData("text/plain");
-      if (core.pasteClipboardText(text)) {
+      if (core.edit.paste(text)) {
         e.preventDefault();
       }
     },

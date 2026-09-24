@@ -13,6 +13,8 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   EditRendererParams,
+  FreezeRowsOptions,
+  FrozenRowsState,
   HeaderRendererParams,
   GridCore,
   GridIcon,
@@ -80,6 +82,13 @@ export interface GridProps<TData = unknown> {
   columnOverscan?: number;
   /** Row loading and cache behavior. Server data sources use paginated loading by default. */
   rowLoading?: RowLoadingOptions;
+  /**
+   * Number of leading displayed rows kept visible below the header. Applied
+   * at runtime; a new identity never rebuilds the core.
+   */
+  freezeRows?: FreezeRowsOptions;
+  /** Called when the effective frozen count or its limiting reason changes. */
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
   /** Enable/disable sorting globally. Default: true */
   sortingEnabled?: boolean;
   /** Enable dark mode styling: Default to false */
