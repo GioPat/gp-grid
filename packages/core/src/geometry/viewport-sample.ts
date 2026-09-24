@@ -11,6 +11,11 @@ export interface GridViewportSample {
   readonly height: number;
   readonly scrollLeft: number;
   readonly scrollTop: number;
+  /**
+   * Whether `height` is a real measurement. Optional: a producer that reports
+   * no flag is measured, so the flat path keeps its geometry.
+   */
+  readonly measured?: boolean;
 }
 
 /** Non-finite or non-positive measurements normalize to 0 (A5, A9). */
@@ -24,6 +29,7 @@ export const normalizeSample = (sample: GridViewportSample): GridViewportSample 
   height: normalizeMeasurement(sample.height),
   scrollLeft: normalizeOffset(sample.scrollLeft),
   scrollTop: normalizeOffset(sample.scrollTop),
+  measured: sample.measured ?? true,
 });
 
 /** Clamp a scroll offset into `[0, max]`, preserving fractions. */

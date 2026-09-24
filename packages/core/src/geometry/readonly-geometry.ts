@@ -14,7 +14,13 @@ export const toReadonlyGeometry = (service: GridGeometry): GridGeometry =>
     getColumnLayout: () => service.getColumnLayout(),
     getRowWindow: () => service.getRowWindow(),
     getVisibleRowWindow: () => service.getVisibleRowWindow(),
+    getRowRegions: () => service.getRowRegions(),
     getRowBounds: (viewIndex, space) => service.getRowBounds(viewIndex, space),
+    getRowClip: (viewIndex) => service.getRowClip(viewIndex),
+    getRowScrollRange: () => service.getRowScrollRange(),
+    hasVerticalScrollRange: () => service.hasVerticalScrollRange(),
+    getRowScrollEdges: (scrollTop, containerHeight) =>
+      service.getRowScrollEdges(scrollTop, containerHeight),
     getColumnBounds: (layoutIndex, space) => service.getColumnBounds(layoutIndex, space),
     getColumn: (layoutIndex) => service.getColumn(layoutIndex),
     getColumnClip: (layoutIndex) => service.getColumnClip(layoutIndex),

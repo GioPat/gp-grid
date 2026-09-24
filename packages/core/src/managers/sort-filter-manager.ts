@@ -39,6 +39,8 @@ export interface SortFilterManagerOptions<TData> {
   onSortFilterChange: () => Promise<void>;
   /** Called after data refresh to update UI */
   onDataRefreshed: () => void;
+  /** Sort, filter and the filter popup are ignored while a load is in flight. */
+  isLoading?: () => boolean;
 }
 
 // =============================================================================
@@ -77,6 +79,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     direction: SortDirection | null,
     addToExisting: boolean = false,
   ): Promise<void> {
+    if (this.isLoading()) return;
     // Check if sorting is enabled globally
     if (!this.options.isSortingEnabled()) return;
 
@@ -103,6 +106,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     this.options.onDataRefreshed();
   }
 
+  private isLoading(): boolean {
+    return this.options.isLoading?.() === true;
+  }
+
   getSortModel(): SortModel[] {
     return [...this.sortModel];
   }
@@ -115,6 +122,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     colId: string,
     filter: ColumnFilterInput | string | null,
   ): Promise<void> {
+    if (this.isLoading()) return;
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (column?.filterable === false) return;
@@ -337,6 +345,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     anchorRect: { top: number; left: number; width: number; height: number },
     computeDistinctValues: boolean = true,
   ): void {
+    if (this.isLoading()) return;
     const columns = this.options.getColumns();
     const column = columns[colIndex];
     if (!column || !this.isColumnFilterable(colIndex)) return;

@@ -45,7 +45,7 @@ export interface GridFilterOperatorLabels {
 /**
  * All user-visible grid labels. Strings containing `{token}` placeholders are
  * templates interpolated by {@link formatLabel}; the documented tokens are
- * `{column}`, `{count}`, and `{message}`.
+ * `{column}`, `{count}`, `{message}`, `{effective}` and `{requested}`.
  */
 export interface GridLabels {
   /** Filter popup title template. Token: `{column}`. */
@@ -92,6 +92,11 @@ export interface GridLabels {
   pinRightColumn: string;
   /** Unpin action accessible name */
   unpinColumn: string;
+  /**
+   * Frozen-prefix limit announcement. Tokens: `{effective}`, `{requested}`.
+   * Announced when the effective count or its limit reason changes.
+   */
+  frozenRowsLimited: string;
   /** Error message prefix template. Token: `{message}`. */
   errorPrefix: string;
   /** Filter operator labels */
@@ -131,6 +136,7 @@ export const defaultGridLabels: GridLabels = {
   pinLeftColumn: "Pin left",
   pinRightColumn: "Pin right",
   unpinColumn: "Unpin",
+  frozenRowsLimited: "{effective} of {requested} rows frozen",
   errorPrefix: "Error: {message}",
   operators: {
     contains: "Contains",

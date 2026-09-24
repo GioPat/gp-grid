@@ -13,21 +13,12 @@ import type {
   WriteRejectionOperation,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
-import {
-  buildDataSourceRequest,
-  createWriteRejection,
-  getFieldValue as readRowFieldValue,
-  readCell,
-  writeCell,
-} from "../utils";
-import {
-  RowWindowLoader,
-  type RowWindowRange,
-} from "./row-window-loader";
+import { buildDataSourceRequest } from "../utils";
+import { PaginatedRowLoader } from "./paginated-row-loader";
+import { RowIdDiagnostics } from "./row-id-diagnostics";
+import { RowStore } from "./row-store";
+import type { RowLoadContext, RowPageBudgetInput } from "./row-window-loader";
 import { refreshTransactionData } from "../grid-core-operations";
-
-/** Cap on the resident rows inspected for the duplicate-RowId diagnostic. */
-const DUPLICATE_ID_SCAN_LIMIT = 10_000;
 
 export interface RowDataManagerOptions<TData> {
   dataSource: DataSource<TData>;
@@ -42,6 +33,10 @@ export interface RowDataManagerOptions<TData> {
   getVisibleRowWindow: () => { start: number; end: number };
   /** Finite row estimate for the first load, while the row axis is still empty. */
   getBootstrapRowCount: () => number;
+  /** Capacity inputs for C2's cache predicate; never reads the region layout. */
+  getPageBudgetInput: () => RowPageBudgetInput;
+  /** Windows and the published C9 layout for the load being computed. */
+  getLoadContext: () => RowLoadContext;
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   getRowId?: (row: TData) => RowId;
   /** Called when a write is refused because the source is read-only. */
@@ -53,202 +48,122 @@ export interface RowDataManagerOptions<TData> {
   onRowsLoaded: (totalRowsChanged: boolean) => void;
 }
 
-interface PaginatedFetchOptions {
-  range: RowWindowRange;
-  resetCache: boolean;
-  showLoading: boolean;
-  /** false when the caller awaits the load and reconciles the view itself. */
-  notifyRowsLoaded: boolean;
-}
-
 export class RowDataManager<TData = unknown> {
   private dataSource: DataSource<TData>;
   private readonly options: RowDataManagerOptions<TData>;
-  private readonly rowLoading: RowLoadingOptions;
-  private readonly rowWindowLoader: RowWindowLoader<TData>;
-  private cachedRows: Map<number, TData> = new Map();
-  /**
-   * Scalar access for a response that returns no materialized rows. When set,
-   * it is the authoritative read path: the row cache stays empty and cells are
-   * read on demand instead of being copied into row objects.
-   */
-  private rowAccess: RowAccess | null = null;
-  private totalRows = 0;
+  private readonly store: RowStore<TData>;
+  private readonly diagnostics: RowIdDiagnostics<TData>;
+  private readonly paginated: PaginatedRowLoader<TData>;
   private isDataLoading = false;
   /** Guards against an obsolete load applying after a newer one. */
   private loadGeneration = 0;
-  private hasWarnedDuplicateRowId = false;
-  /** Bounded id -> view index sightings from visited windows. */
-  private readonly seenRowIds = new Map<RowId, number>();
 
   constructor(options: RowDataManagerOptions<TData>) {
     this.options = options;
     this.dataSource = options.dataSource;
-    this.rowLoading = options.rowLoading ?? {};
-    this.rowWindowLoader = new RowWindowLoader<TData>(
-      {
-        getDataSource: () => this.dataSource,
-        getCachedRows: () => this.cachedRows,
-        getTotalRows: () => this.totalRows,
-        setTotalRows: (count) => {
-          this.totalRows = count;
-        },
-        getSortModel: options.getSortModel,
-        getFilterModel: options.getFilterModel,
-        getColumns: options.getColumns,
+    this.store = new RowStore<TData>({
+      getColumns: options.getColumns,
+      getDataSource: () => this.dataSource,
+      isWritable: () => this.isWritable(),
+      getRowId: options.getRowId,
+      onCellValueChanged: options.onCellValueChanged,
+      onWriteRejected: options.onWriteRejected,
+    });
+
+    // The window diagnostic sizes its scan from the paginated load range, so
+    // the two reference each other, lazily on the first load.
+    this.diagnostics = new RowIdDiagnostics<TData>({
+      getCachedRows: () => this.store.getCachedRows(),
+      getRowId: options.getRowId,
+      getLoadRange: () => this.paginated.getPaginatedLoadRange(true),
+    });
+    this.paginated = new PaginatedRowLoader<TData>({
+      getDataSource: () => this.dataSource,
+      rowLoading: options.rowLoading,
+      batcher: options.batcher,
+      getCachedRows: () => this.store.getCachedRows(),
+      getTotalRows: () => this.store.getTotalRows(),
+      setTotalRows: (count) => this.store.setTotalRows(count),
+      getSortModel: options.getSortModel,
+      getFilterModel: options.getFilterModel,
+      getColumns: options.getColumns,
+      getRowWindow: options.getRowWindow,
+      getVisibleRowWindow: options.getVisibleRowWindow,
+      getBootstrapRowCount: options.getBootstrapRowCount,
+      getPageBudgetInput: options.getPageBudgetInput,
+      getLoadContext: options.getLoadContext,
+      diagnostics: this.diagnostics,
+      emitDataError: (error) => this.emitDataError(error),
+      setDataLoading: (loading) => {
+        this.isDataLoading = loading;
       },
-      this.rowLoading.cache,
-    );
+      onRowsLoaded: options.onRowsLoaded,
+    });
   }
 
   getCachedRows(): Map<number, TData> {
-    return this.cachedRows;
+    return this.store.getCachedRows();
   }
-
   setCachedRows(rows: Map<number, TData>): void {
-    this.cachedRows = rows;
+    this.store.setCachedRows(rows);
   }
-
   getTotalRows(): number {
-    return this.totalRows;
+    return this.store.getTotalRows();
   }
-
   setTotalRows(count: number): void {
-    this.totalRows = count;
+    this.store.setTotalRows(count);
   }
-
   getDataSource(): DataSource<TData> {
     return this.dataSource;
   }
 
   getRowData(rowIndex: number): TData | undefined {
-    return this.cachedRows.get(rowIndex);
+    return this.store.getRowData(rowIndex);
   }
-
-  /**
-   * Whether a view row exists and can be rendered. Independent of whether a
-   * source record is available: a columnar row renders with no record.
-   */
   hasRow(rowIndex: number): boolean {
-    if (this.rowAccess) {
-      return rowIndex >= 0 && rowIndex < this.rowAccess.rowCount;
-    }
-    return this.cachedRows.get(rowIndex) !== undefined;
+    return this.store.hasRow(rowIndex);
   }
-
-  /** Scalar access for the current response, when the source provides one. */
   getRowAccess(): RowAccess | null {
-    return this.rowAccess;
+    return this.store.getRowAccess();
   }
-
-  /** Stable identity for a view row, when the source exposes one. */
   getRowId(viewRow: number): RowId | undefined {
-    if (this.rowAccess) {
-      if (viewRow < 0 || viewRow >= this.rowAccess.rowCount) return undefined;
-      return this.rowAccess.getRowId?.(viewRow);
-    }
-    const row = this.cachedRows.get(viewRow);
-    if (row === undefined) return undefined;
-    return this.options.getRowId?.(row);
+    return this.store.getRowId(viewRow);
   }
-
-  /**
-   * Record lookup by stable identity. Uses the source's direct lookup when
-   * present; otherwise scans the resident rows, which is O(resident).
-   */
   getRecordById(rowId: RowId): TData | undefined {
-    if (this.dataSource.getRecordById) return this.dataSource.getRecordById(rowId);
-    for (const [viewIndex, row] of this.cachedRows) {
-      if (this.getRowId(viewIndex) === rowId) return row;
-    }
-    return undefined;
+    return this.store.getRecordById(rowId);
   }
-
-  /** View index of a resident record by identity, or -1. O(resident). */
   findViewIndexById(rowId: RowId): number {
-    for (const viewIndex of this.cachedRows.keys()) {
-      if (this.getRowId(viewIndex) === rowId) return viewIndex;
-    }
-    return -1;
+    return this.store.findViewIndexById(rowId);
   }
 
   /** False when the bound source declares itself read-only. */
   isWritable(): boolean {
     return this.dataSource.writable !== false;
   }
-
   isLoading(): boolean {
     return this.isDataLoading;
   }
 
   getCellValue(row: number, col: number): CellValue {
-    if (this.rowAccess) {
-      const column = this.options.getColumns()[col];
-      if (column === undefined) return null;
-      if (row < 0 || row >= this.rowAccess.rowCount) return null;
-      return this.rowAccess.getValue(row, column.field);
-    }
-    return readCell(this.cachedRows, this.options.getColumns(), row, col);
+    return this.store.getCellValue(row, col);
   }
-
-  /**
-   * Read any source field at a view row, independent of the displayed
-   * columns. Columnar rows read scalar access; object rows read the record.
-   */
   getFieldValue(viewIndex: number, field: string): CellValue {
-    if (this.rowAccess) {
-      if (viewIndex < 0 || viewIndex >= this.rowAccess.rowCount) return null;
-      return this.rowAccess.getValue(viewIndex, field);
-    }
-    const row = this.cachedRows.get(viewIndex);
-    if (row === undefined) return null;
-    return readRowFieldValue(row, field);
+    return this.store.getFieldValue(viewIndex, field);
   }
-
   setCellValue(row: number, col: number, value: CellValue): void {
-    if (this.isWritable() === false) {
-      this.rejectWrite(row, col, "setCellValue");
-      return;
-    }
-    writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
-      onCellValueChanged: this.options.onCellValueChanged,
-      getRowId: this.options.getRowId,
-    });
+    this.store.setCellValue(row, col, value);
   }
-
-  /**
-   * Report a refused write through the single diagnostic contract. Every write
-   * entry point routes here so a read-only source is observable consistently.
-   */
   rejectWrite(
     row: number,
     col: number,
     operation: WriteRejectionOperation,
   ): void {
-    const column = this.options.getColumns()[col];
-    this.options.onWriteRejected?.(
-      createWriteRejection(row, col, column?.field ?? "", operation),
-    );
-  }
-
-  /**
-   * Bind a response's scalar access, releasing any projection owned by the
-   * previous one. The row cache is left empty: no record is materialized.
-   */
-  private setRowAccess(next: RowAccess | null): void {
-    if (this.rowAccess === next) return;
-    this.rowAccess?.release?.();
-    this.rowAccess = next;
+    this.store.rejectWrite(row, col, operation);
   }
 
   async loadInitial(): Promise<void> {
-    if (this.isPaginatedLoading()) {
-      await this.fetchPaginatedData({
-        range: this.getInitialPaginatedRange(),
-        resetCache: true,
-        showLoading: true,
-        notifyRowsLoaded: false,
-      });
+    if (this.paginated.isPaginatedLoading()) {
+      await this.paginated.loadInitial();
       return;
     }
 
@@ -256,20 +171,12 @@ export class RowDataManager<TData = unknown> {
   }
 
   requestVisibleRows(): void {
-    this.diagnoseWindowRowIds();
-    if (this.isPaginatedLoading() === false) return;
+    this.paginated.requestVisibleRows();
+  }
 
-    const range = this.getPaginatedLoadRange(true);
-    if (range.endRow <= range.startRow) return;
-
-    const visibleRange = this.getPaginatedLoadRange(false);
-    const showLoading = this.rowWindowLoader.hasMissingRows(visibleRange);
-    void this.fetchPaginatedData({
-      range,
-      resetCache: false,
-      showLoading,
-      notifyRowsLoaded: true,
-    });
+  /** C2's prefix budget for a paginated source; see C8's cache predicate. */
+  getPrefixAdmission(): ((count: number) => boolean) | undefined {
+    return this.paginated.getPrefixAdmission();
   }
 
   async refreshFromTransaction(): Promise<void> {
@@ -277,13 +184,8 @@ export class RowDataManager<TData = unknown> {
       await this.fetchAllData();
       return;
     }
-    if (this.isPaginatedLoading()) {
-      await this.fetchPaginatedData({
-        range: this.getPaginatedLoadRange(true),
-        resetCache: true,
-        showLoading: false,
-        notifyRowsLoaded: false,
-      });
+    if (this.paginated.isPaginatedLoading()) {
+      await this.paginated.refreshFromTransaction();
       return;
     }
 
@@ -291,9 +193,9 @@ export class RowDataManager<TData = unknown> {
       dataSource: this.dataSource,
       sortModel: this.options.getSortModel(),
       filterModel: this.options.getFilterModel(),
-      cachedRows: this.cachedRows,
+      cachedRows: this.store.getCachedRows(),
       setTotalRows: (count) => {
-        this.totalRows = count;
+        this.store.setTotalRows(count);
       },
       getColumns: this.options.getColumns,
     });
@@ -301,24 +203,23 @@ export class RowDataManager<TData = unknown> {
     // Keep wrapper row counts in sync without showing a loading indicator.
     this.options.batcher.emit({
       type: "DATA_LOADED",
-      totalRows: this.totalRows,
+      totalRows: this.store.getTotalRows(),
     });
   }
 
   setDataSource(dataSource: DataSource<TData>): void {
     this.dataSource = dataSource;
-    this.rowWindowLoader.reset();
-    this.setRowAccess(null);
+    this.paginated.reset();
+    this.store.setRowAccess(null);
     this.loadGeneration += 1;
-    this.totalRows = 0;
+    this.store.setTotalRows(0);
   }
 
   destroy(): void {
-    this.rowWindowLoader.reset();
-    this.setRowAccess(null);
+    this.paginated.reset();
+    this.store.setRowAccess(null);
     this.loadGeneration += 1;
-    this.cachedRows.clear();
-    this.totalRows = 0;
+    this.store.clear();
     this.isDataLoading = false;
   }
 
@@ -341,7 +242,7 @@ export class RowDataManager<TData = unknown> {
 
       this.options.batcher.emit({
         type: "DATA_LOADED",
-        totalRows: this.totalRows,
+        totalRows: this.store.getTotalRows(),
       });
     } catch (error) {
       if (generation !== this.loadGeneration) return;
@@ -359,113 +260,19 @@ export class RowDataManager<TData = unknown> {
    */
   private applyResponse(response: DataSourceResponse<TData>): void {
     if (response.access) {
-      this.cachedRows.clear();
-      this.setRowAccess(response.access);
-      this.totalRows = response.totalRows;
+      this.store.getCachedRows().clear();
+      this.store.setRowAccess(response.access);
+      this.store.setTotalRows(response.totalRows);
       return;
     }
-    this.setRowAccess(null);
-    this.cachedRows.clear();
+    this.store.setRowAccess(null);
+    const cachedRows = this.store.getCachedRows();
+    cachedRows.clear();
     response.rows.forEach((row, index) => {
-      this.cachedRows.set(index, row);
+      cachedRows.set(index, row);
     });
-    this.totalRows = response.totalRows;
-    this.diagnoseDuplicateRowIds();
-  }
-
-  /**
-   * Once-only diagnostic for duplicate IDs among the rows currently resident
-   * in the cache. Bounded by the resident set and by a scan cap, so a huge
-   * client dataset never turns binding into a full-dataset validation.
-   */
-  private diagnoseDuplicateRowIds(): void {
-    if (this.hasWarnedDuplicateRowId) return;
-    const getRowId = this.options.getRowId;
-    if (getRowId === undefined) return;
-    const seen = new Set<RowId>();
-    let scanned = 0;
-    for (const row of this.cachedRows.values()) {
-      if (scanned >= DUPLICATE_ID_SCAN_LIMIT) return;
-      scanned += 1;
-      const rowId = getRowId(row);
-      if (seen.has(rowId)) {
-        this.hasWarnedDuplicateRowId = true;
-        console.warn(`[gp-grid] Duplicate row id ${JSON.stringify(rowId)}`);
-        return;
-      }
-      seen.add(rowId);
-    }
-  }
-
-  /**
-   * Duplicate check for rows entering the window, beyond the load-time scan
-   * cap. A sighting only counts while its earlier row still holds that id.
-   */
-  private diagnoseWindowRowIds(): void {
-    const getRowId = this.options.getRowId;
-    if (this.hasWarnedDuplicateRowId || getRowId === undefined) return;
-    const { startRow, endRow } = this.getPaginatedLoadRange(true);
-    for (let viewIndex = startRow; viewIndex < endRow; viewIndex++) {
-      const row = this.cachedRows.get(viewIndex);
-      if (row === undefined) continue;
-      const rowId = getRowId(row);
-      if (this.isHeldByAnotherRow(rowId, viewIndex, getRowId)) {
-        this.hasWarnedDuplicateRowId = true;
-        console.warn(`[gp-grid] Duplicate row id ${JSON.stringify(rowId)}`);
-        return;
-      }
-      if (this.seenRowIds.size >= DUPLICATE_ID_SCAN_LIMIT) this.seenRowIds.clear();
-      this.seenRowIds.set(rowId, viewIndex);
-    }
-  }
-
-  private isHeldByAnotherRow(
-    rowId: RowId,
-    viewIndex: number,
-    getRowId: (row: TData) => RowId,
-  ): boolean {
-    const seenAt = this.seenRowIds.get(rowId);
-    if (seenAt === undefined || seenAt === viewIndex) return false;
-    const other = this.cachedRows.get(seenAt);
-    return other !== undefined && getRowId(other) === rowId;
-  }
-
-  private async fetchPaginatedData(
-    options: PaginatedFetchOptions,
-  ): Promise<void> {
-    if (options.showLoading) {
-      this.isDataLoading = true;
-      this.options.batcher.emit({ type: "DATA_LOADING" });
-    }
-
-    try {
-      const result = await this.rowWindowLoader.loadRange(
-        options.range,
-        options.resetCache,
-      );
-      if (result.applied === false) return;
-      if (result.loadedBlockCount > 0) {
-        this.diagnoseDuplicateRowIds();
-        this.diagnoseWindowRowIds();
-      }
-
-      if (options.showLoading || result.totalRowsChanged) {
-        this.options.batcher.emit({
-          type: "DATA_LOADED",
-          totalRows: this.totalRows,
-        });
-      }
-
-      if (options.notifyRowsLoaded) {
-        this.options.onRowsLoaded(result.totalRowsChanged);
-      }
-    } catch (error) {
-      this.emitDataError(error);
-    } finally {
-      if (options.showLoading) {
-        this.isDataLoading = false;
-      }
-    }
+    this.store.setTotalRows(response.totalRows);
+    this.diagnostics.diagnoseLoadedRows();
   }
 
   private emitDataError(error: unknown): void {
@@ -473,40 +280,5 @@ export class RowDataManager<TData = unknown> {
       type: "DATA_ERROR",
       error: error instanceof Error ? error.message : String(error),
     });
-  }
-
-  private isPaginatedLoading(): boolean {
-    const mode = this.rowLoading.mode ?? "auto";
-    if (mode === "paginated") return true;
-    if (mode === "all") return false;
-    return this.dataSource.loadMode === "paginated";
-  }
-
-  /**
-   * Bootstrap paging without inventing an infinite axis: the row axis is
-   * empty until the first response, so the viewport estimate sizes the load.
-   */
-  private getInitialPaginatedRange(): RowWindowRange {
-    return {
-      startRow: 0,
-      endRow: Math.max(
-        this.rowWindowLoader.getPageSize(),
-        this.getPaginatedLoadRange(true).endRow,
-        this.options.getBootstrapRowCount(),
-      ),
-    };
-  }
-
-  /** Load range adapted from the geometry windows, capped by a known total. */
-  private getPaginatedLoadRange(includeOverscan: boolean): RowWindowRange {
-    const window = includeOverscan
-      ? this.options.getRowWindow()
-      : this.options.getVisibleRowWindow();
-    const startRow = Math.max(0, window.start);
-    const estimatedEndRow = Math.max(startRow, window.end);
-    const endRow = this.totalRows > 0
-      ? Math.min(this.totalRows, estimatedEndRow)
-      : estimatedEndRow;
-    return { startRow, endRow };
   }
 }

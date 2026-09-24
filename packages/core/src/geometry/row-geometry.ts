@@ -1,22 +1,23 @@
 // packages/core/src/geometry/row-geometry.ts
-// Row-axis memo, rows-space offsets and the compressed-scroll mapping the
-// rest of core consumes. Every input is numeric and injected, so this module
-// and its tests stay independent of managers, GridCore and the DOM.
+// Row-axis memo, the C3 region layout and the C4–C6 region-aware row queries.
+// Every input is numeric and injected, so this module and its tests stay
+// independent of managers, GridCore and the DOM.
 
+import type { AxisBounds } from "../types/geometry";
 import type { VirtualAxis } from "./virtual-axis";
 import { createFixedAxis } from "./fixed-axis";
+import { createRowMapper, type RowMapper, type RowScrollMapping } from "./row-mapping";
+import type { FrozenRowsInput, RowRegionLayout } from "./row-regions";
+import { resolveRowRegionLayout } from "./row-regions";
+import type { RowRegion, RowRegionMappingInput } from "./row-regions-mapping";
+import {
+  getRowRegionPosition,
+  getSuffixRowViewportTop,
+  getSuffixWindow,
+  getSuffixWrapperOffset,
+} from "./row-regions-mapping";
 
-export interface RowScrollMapping {
-  /** Effective DOM scroll sample: the touch override when one is active. */
-  getDomScrollTop(): number;
-  /** DOM scrollTop for a logical (content) scrollTop. */
-  toDomScrollTop(logical: number): number;
-  /** Logical (content) scrollTop for a DOM scrollTop. */
-  toLogicalScrollTop(dom: number): number;
-  isScalingActive(): boolean;
-  /** End of the logical scroll range the DOM scroller can reach. */
-  getMaxLogicalScrollTop(): number;
-}
+export type { RowMapper, RowScrollMapping } from "./row-mapping";
 
 export interface RowGeometryDeps {
   /** Row count and height; `count` is the displayed view-row count. */
@@ -24,33 +25,22 @@ export interface RowGeometryDeps {
   getRowHeight(): number;
   /** Body content-area height: excludes the header. */
   getViewportHeight(): number;
+  /** Body height left below the frozen block; full height with no regions. */
+  getSuffixViewportHeight(): number;
   getOverscan(): number;
   mapping: RowScrollMapping;
-}
-
-export interface RowMapper {
-  toLogicalScrollTop(dom: number): number;
-  toDomScrollTop(logical: number): number;
-  /** Logical scroll top for the effective scroll sample. */
-  getLogicalScrollTop(): number;
-  hasVerticalCompression(): boolean;
-  getMaxLogicalScrollTop(): number;
-  /** DOM position for a logical scroll top, clamped to the reachable range. */
-  toDomScrollTopClamped(logical: number): number;
-  /** translateY inside the rows wrapper (rows space). */
-  rowPosition(viewIndex: number): number;
-  /** Y offset of the rows wrapper itself (rows space). */
-  wrapperOffset(): number;
+  /** C2 input; absent or `null` resolves the zero-count layout. */
+  resolveRegions?: () => FrozenRowsInput | null;
 }
 
 export interface RowGeometry {
   /** Current row axis; call `syncAxis` after a row-count change. */
   getAxis(): VirtualAxis;
   syncAxis(): VirtualAxis;
-  /** Overscanned window, half-open. */
-  getWindow(): { start: number; end: number };
-  /** Window without overscan, half-open. */
-  getVisibleWindow(): { start: number; end: number };
+  /** Overscanned suffix window, half-open. */
+  getWindow(): AxisBounds;
+  /** Suffix window without overscan, half-open. */
+  getVisibleWindow(): AxisBounds;
   /**
    * Finite viewport-plus-overscan row estimate for bootstrap paging, while
    * the count is unknown. Never an axis: windows and bounds stay empty.
@@ -60,70 +50,36 @@ export interface RowGeometry {
   getFirstVisibleIndex(): number;
   /** Row top in `content` coordinates. */
   getRowOffset(viewIndex: number): number;
-  /** Viewport-space row top for the effective scroll sample. */
-  getRowViewportTop(viewIndex: number): number;
+  /**
+   * Viewport-space row top for the effective scroll sample: a frozen row
+   * keeps its content offset, a suffix row its `offset − logicalTop` (C4).
+   */
+  getRowViewportTop(viewIndex: number, region: RowRegion): number;
   getRowEdgeOffset(
     boundaryIndex: number,
     space: "content" | "viewport" | "rows",
   ): number | undefined;
   getMapper(): RowMapper;
+  /** C3 layout resolved against the current axis and viewport. */
+  getRegionLayout(): RowRegionLayout;
+  /** Re-resolve the region layout; reuses the object while nothing changed. */
+  syncRegionLayout(): RowRegionLayout;
+  /** Rows-space position; a frozen row keeps its content offset (C4). */
+  getRowRegionPosition(rowIndex: number): number;
+  /** Y offset of the rows wrapper, anchored on the first visible suffix row. */
+  getRowsWrapperOffset(): number;
+  /** Reachable logical scroll range, from the mapper. */
+  getRowScrollRange(): AxisBounds;
+  hasVerticalScrollRange(): boolean;
+  /** C5/C6 frame at the live viewport height, for hits, clips and targets. */
+  getRegionInput(scrollTop?: number): RowRegionMappingInput;
 }
-
-/**
- * Rows-wrapper invariant, with logical top `L`, effective DOM top `D` and
- * first-visible-row offset `A`: `rowPosition = rowOffset − A` and
- * `wrapperOffset = D − (L − A)`, so `wrapperOffset + rowPosition − D`
- * always equals `rowOffset − L` — including fractional touch overrides.
- */
-const createMapper = (deps: RowGeometryDeps, getAxis: () => VirtualAxis): RowMapper => {
-  const { mapping } = deps;
-
-  const getLogicalScrollTop = (): number =>
-    mapping.toLogicalScrollTop(mapping.getDomScrollTop());
-
-  /** Content offset of the first visible row; the anchor of rows space. */
-  const getAnchorOffset = (): number => {
-    const axis = getAxis();
-    const index = clampFirstVisible(axis.indexAt(getLogicalScrollTop()), axis.count);
-    return axis.getOffset(index);
-  };
-
-  const getMaxLogicalScrollTop = (): number => mapping.getMaxLogicalScrollTop();
-
-  const toDomScrollTopClamped = (logical: number): number => {
-    const maxLogical = getMaxLogicalScrollTop();
-    const bounded = Math.min(Math.max(logical, 0), maxLogical);
-    if (mapping.isScalingActive() === false) return bounded;
-    if (maxLogical <= 0) return 0;
-    return mapping.toDomScrollTop(maxLogical) * (bounded / maxLogical);
-  };
-
-  return {
-    toLogicalScrollTop: (dom) => mapping.toLogicalScrollTop(dom),
-    toDomScrollTop: (logical) => mapping.toDomScrollTop(logical),
-    getLogicalScrollTop,
-    hasVerticalCompression: () => mapping.isScalingActive(),
-    getMaxLogicalScrollTop,
-    toDomScrollTopClamped,
-    rowPosition: (viewIndex) => {
-      const rowOffset = getAxis().getOffset(viewIndex);
-      if (mapping.isScalingActive() === false) return rowOffset;
-      return rowOffset - getAnchorOffset();
-    },
-    wrapperOffset: () => {
-      if (mapping.isScalingActive() === false) return 0;
-      return mapping.getDomScrollTop() - (getLogicalScrollTop() - getAnchorOffset());
-    },
-  };
-};
-
-const clampFirstVisible = (index: number, count: number): number =>
-  Math.min(Math.max(index, 0), count);
 
 export const createRowGeometry = (deps: RowGeometryDeps): RowGeometry => {
   let count = -1;
   let height = -1;
   let axis: VirtualAxis = createFixedAxis(0, deps.getRowHeight());
+  let regionLayout: RowRegionLayout | null = null;
 
   const syncAxis = (): VirtualAxis => {
     const nextCount = Math.max(0, Math.trunc(deps.getRowCount()));
@@ -135,14 +91,70 @@ export const createRowGeometry = (deps: RowGeometryDeps): RowGeometry => {
     return axis;
   };
 
-  const mapper = createMapper(deps, syncAxis);
+  const mapper = createRowMapper(deps);
   const logicalTop = (): number => mapper.getLogicalScrollTop();
+
+  /** No request keeps the flat path: zero count, the live body height. */
+  const zeroRegionInput = (): FrozenRowsInput => ({
+    axis: syncAxis(),
+    requestedCount: 0,
+    viewportHeight: deps.getViewportHeight(),
+    viewportMeasured: true,
+  });
+
+  const regionInput = (): FrozenRowsInput => {
+    const requested = deps.resolveRegions?.() ?? null;
+    if (requested === null) return zeroRegionInput();
+    // The live axis always wins: the request never owns row geometry.
+    return { ...requested, axis: syncAxis() };
+  };
+
+  const syncRegionLayout = (): RowRegionLayout => {
+    const next = resolveRowRegionLayout(regionInput(), regionLayout ?? undefined);
+    regionLayout = next;
+    return next;
+  };
+
+  const getRegionLayout = (): RowRegionLayout => regionLayout ?? syncRegionLayout();
+
+  const frameOf = (
+    layout: RowRegionLayout,
+    viewportHeight: number,
+    scrollTop: number,
+    overscan: number = deps.getOverscan(),
+  ): RowRegionMappingInput => ({
+    axis: syncAxis(),
+    mapper,
+    frozenCount: layout.frozenCount,
+    frozenExtent: layout.frozenExtent,
+    viewportHeight,
+    scrollTop,
+    overscan,
+  });
+
+  const getRegionInput = (scrollTop?: number): RowRegionMappingInput =>
+    frameOf(
+      getRegionLayout(),
+      deps.getViewportHeight(),
+      scrollTop ?? deps.mapping.getDomScrollTop(),
+    );
+
+  /** The suffix height plus the block is the frame's body height (C3). */
+  const windowFrame = (overscan: number = deps.getOverscan()): RowRegionMappingInput => {
+    const layout = getRegionLayout();
+    return frameOf(
+      layout,
+      layout.frozenExtent + deps.getSuffixViewportHeight(),
+      deps.mapping.getDomScrollTop(),
+      overscan,
+    );
+  };
 
   return {
     getAxis: () => axis,
     syncAxis,
-    getWindow: () => axis.getWindow(logicalTop(), deps.getViewportHeight(), deps.getOverscan()),
-    getVisibleWindow: () => axis.getWindow(logicalTop(), deps.getViewportHeight()),
+    getWindow: () => getSuffixWindow(windowFrame()),
+    getVisibleWindow: () => getSuffixWindow(windowFrame(0)),
     getBootstrapRowCount: () => {
       const viewportHeight = deps.getViewportHeight();
       if (Number.isFinite(viewportHeight) === false || viewportHeight <= 0) return 0;
@@ -153,15 +165,28 @@ export const createRowGeometry = (deps: RowGeometryDeps): RowGeometry => {
       return Math.max(axis.indexAt(logicalTop()), 0);
     },
     getRowOffset: (viewIndex) => axis.getOffset(viewIndex),
-    getRowViewportTop: (viewIndex) => axis.getOffset(viewIndex) - logicalTop(),
+    getRowViewportTop: (viewIndex, region) => {
+      if (region === "frozen") return axis.getOffset(viewIndex);
+      return getSuffixRowViewportTop(getRegionInput(), viewIndex);
+    },
     getRowEdgeOffset: (boundaryIndex, space) => {
       const valid =
         Number.isSafeInteger(boundaryIndex) && boundaryIndex >= 0 && boundaryIndex <= axis.count;
       if (valid === false) return undefined;
-      if (space === "rows") return mapper.rowPosition(boundaryIndex);
+      if (space === "rows") return getRowRegionPosition(getRegionInput(), boundaryIndex);
       const offset = axis.getOffset(boundaryIndex);
-      return space === "viewport" ? offset - logicalTop() : offset;
+      if (space === "content") return offset;
+      // Frozen edges do not scroll; the prefix boundary is the block's bottom.
+      if (boundaryIndex <= getRegionLayout().frozenCount) return offset;
+      return offset - logicalTop();
     },
     getMapper: () => mapper,
+    getRegionLayout,
+    syncRegionLayout,
+    getRowRegionPosition: (rowIndex) => getRowRegionPosition(getRegionInput(), rowIndex),
+    getRowsWrapperOffset: () => getSuffixWrapperOffset(getRegionInput()),
+    getRowScrollRange: () => ({ start: 0, end: mapper.getMaxLogicalScrollTop() }),
+    hasVerticalScrollRange: () => mapper.getMaxLogicalScrollTop() > 0,
+    getRegionInput,
   };
 };

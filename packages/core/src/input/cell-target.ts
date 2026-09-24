@@ -24,27 +24,22 @@ export const computeCellTarget = <TData>(
   bounds: ContainerBounds,
 ): CellTarget => {
   const { top, width, height, scrollTop, scrollLeft } = bounds;
-  const headerHeight = core.getHeaderHeight();
+  const viewportY = event.clientY - top;
   const viewportX = inlineOffset(bounds, event.clientX);
 
   // `bounds` is the body scroll container: the header sits outside it, so
   // `top` is already the first row's edge.
   const hit = core.geometry.hitTest({
     x: viewportX,
-    y: event.clientY - top,
+    y: viewportY,
     scrollTop,
     scrollLeft,
   });
   const displayed = core.geometry.getColumnLayout().columns;
-  const row = clampItemIndex(hit.row, core.getRowCount());
+  const row = clampItemIndex(hit.row, core.rows.getCount());
   const col = displayed[clampItemIndex(hit.displayIndex, displayed.length)]?.layoutIndex ?? -1;
 
-  const autoScroll = calculateAutoScroll(
-    event.clientY - top,
-    viewportX,
-    height,
-    width,
-    headerHeight,
-  );
+  const { region, limits } = core.geometry.getRowScrollEdges(scrollTop, height);
+  const autoScroll = calculateAutoScroll(viewportY, viewportX, height, width, region, limits);
   return { row, col, autoScroll };
 };

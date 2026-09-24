@@ -6,6 +6,13 @@
 
 /** Grid Core orchestrator */
 export { GridCore } from "./grid-core";
+export type { GridRowsApi } from "./grid-core-rows";
+export type { GridCellsApi } from "./grid-core-cells";
+export type { GridEditApi } from "./grid-core-edit";
+export type { GridColumnsApi } from "./grid-core-column-api";
+export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
+export type { GridRowDragApi } from "./grid-core-row-drag";
+export type { GridViewportApi } from "./grid-core-viewport";
 
 /** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";
@@ -163,9 +170,12 @@ export type {
   DataLoadedInstruction,
   DataErrorInstruction,
   ColumnsChangedInstruction,
+  SetRowRegionsInstruction,
+  SetAnnouncementInstruction,
 
   /** Options */
   GridCoreOptions,
+  FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
   RowCacheOptions,
@@ -205,8 +215,12 @@ export type {
   ViewportPoint,
   GridHit,
   ScrollTarget,
+  RowScrollEdges,
   ContentSize,
   GridGeometry,
+  RowRegion,
+  FrozenRowsState,
+  RowRegionLayout,
 } from "./types/geometry";
 
 /** Input handler types */
@@ -250,6 +264,7 @@ export type {
   HeaderData,
   FilterPopupState,
   GridState,
+  GridAnnouncement,
   InitialStateArgs,
 } from "./types/ui-state";
 

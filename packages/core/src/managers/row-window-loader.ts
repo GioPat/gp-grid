@@ -1,13 +1,28 @@
 import type {
   ColumnDefinition,
   DataSource,
-  DataSourceResponse,
   FilterModel,
-  RowCacheEviction,
   RowCacheOptions,
   SortModel,
 } from "../types";
-import { buildDataSourceRequest } from "../utils";
+import type { AxisBounds } from "../types/geometry";
+import type { RowRegionLayout } from "../geometry/row-regions";
+import type { VirtualAxis } from "../geometry/virtual-axis";
+import { PageCache } from "./page-cache";
+import {
+  admitOptionalPages,
+  evictionCandidates,
+  getRequiredPageBlocks,
+  getRequiredPageRanges,
+  getWindowPageBlocks,
+  resolvePrefixReservations,
+  type BlockRange,
+  type PageBudget,
+} from "./page-reservation";
+import {
+  normalizeRowCacheOptions,
+  type NormalizedRowCacheOptions,
+} from "./row-cache-options";
 
 export interface RowWindowRange {
   /** First row index in the requested window. */
@@ -22,6 +37,24 @@ export interface RowWindowLoadResult {
   totalRowsChanged: boolean;
 }
 
+/** Capacity inputs for C2's prefix predicate; never reads the region layout. */
+export interface RowPageBudgetInput {
+  axis: VirtualAxis;
+  /** Full body height: the page helper subtracts the frozen prefix itself. */
+  viewportHeight: number;
+  scrollTop: number;
+  maxScrollTop: number;
+}
+
+/** Sample the strict paging path resolves its blocks from. */
+export interface RowLoadContext extends RowPageBudgetInput {
+  /** Visible suffix window, half-open. */
+  visibleWindow: AxisBounds;
+  /** Overscanned suffix window, half-open. */
+  overscanWindow: AxisBounds;
+  regions: RowRegionLayout;
+}
+
 export interface RowWindowLoaderOptions<TData> {
   getDataSource: () => DataSource<TData>;
   getCachedRows: () => Map<number, TData>;
@@ -30,71 +63,39 @@ export interface RowWindowLoaderOptions<TData> {
   getSortModel: () => SortModel[];
   getFilterModel: () => FilterModel;
   getColumns: () => ColumnDefinition[];
+  /** Capacity inputs; must not read the region layout (C2 resolves inside it). */
+  getPageBudgetInput: () => RowPageBudgetInput;
+  /** Windows and the published C9 layout for the load being computed. */
+  getLoadContext: () => RowLoadContext;
 }
 
-interface NormalizedRowCacheOptions {
-  pageSize: number;
-  prefetchPages: number;
-  maxPages: number;
-}
+const notApplied = (): RowWindowLoadResult => ({ applied: false, loadedBlockCount: 0, totalRowsChanged: false });
 
-const DEFAULT_PAGE_SIZE = 100;
-const CACHE_PRESETS: Record<
-  RowCacheEviction,
-  Pick<NormalizedRowCacheOptions, "prefetchPages" | "maxPages">
-> = {
-  aggressive: { prefetchPages: 0, maxPages: 1 },
-  balanced: { prefetchPages: 1, maxPages: 5 },
-  conservative: { prefetchPages: 2, maxPages: 10 },
-};
+const appliedResult = (before: number, after: number, loaded: number): RowWindowLoadResult => ({
+  applied: true,
+  loadedBlockCount: loaded,
+  totalRowsChanged: before !== after,
+});
 
-const positiveIntegerOrDefault = (
-  value: number | undefined,
-  fallback: number,
-): number => {
-  if (value === undefined) return fallback;
-  if (Number.isFinite(value) && value > 0) return Math.floor(value);
-  return fallback;
-};
-
-const nonNegativeIntegerOrDefault = (
-  value: number | undefined,
-  fallback: number,
-): number => {
-  if (value === undefined) return fallback;
-  if (Number.isFinite(value) && value >= 0) return Math.floor(value);
-  return fallback;
-};
-
-const normalizeRowCacheOptions = (
-  options: RowCacheOptions | undefined,
-): NormalizedRowCacheOptions => {
-  const preset = CACHE_PRESETS[options?.eviction ?? "balanced"];
-  return {
-    pageSize: positiveIntegerOrDefault(options?.pageSize, DEFAULT_PAGE_SIZE),
-    prefetchPages: nonNegativeIntegerOrDefault(
-      options?.prefetchPages,
-      preset.prefetchPages,
-    ),
-    maxPages: positiveIntegerOrDefault(
-      options?.maxPages,
-      preset.maxPages,
-    ),
-  };
-};
+const blocksBetween = (first: number, last: number): number[] =>
+  Array.from({ length: last - first + 1 }, (_, index) => first + index);
 
 /**
  * Fetches aligned row blocks around the viewport and evicts rows outside the
- * configured cache budget. It is intentionally framework-agnostic and only
- * mutates GridCore's row cache through injected getters.
+ * cache budget, through the injected getters only. A positive frozen count
+ * switches it to C8's noncontiguous policy: prefix plus visible suffix blocks.
  */
 export class RowWindowLoader<TData = unknown> {
   private readonly options: RowWindowLoaderOptions<TData>;
+  private readonly cache: PageCache<TData>;
   private cacheOptions: NormalizedRowCacheOptions;
-  private generation = 0;
-  private hasKnownTotal = false;
-  private readonly loadedBlocks = new Set<number>();
-  private readonly pendingBlocks = new Map<number, Promise<void>>();
+  /** Prefix blocks the current frozen count reserves. */
+  private prefixReservations: readonly number[] = [];
+  /** Required set and center of the latest load, not of the resolving call. */
+  private latestProtected: ReadonlySet<number> = new Set();
+  private latestCenter = 0;
+  /** Blocks the latest strict load admitted; null while the flat path applies. */
+  private admittedBlocks: Set<number> | null = null;
 
   constructor(
     options: RowWindowLoaderOptions<TData>,
@@ -102,6 +103,11 @@ export class RowWindowLoader<TData = unknown> {
   ) {
     this.options = options;
     this.cacheOptions = normalizeRowCacheOptions(cacheOptions);
+    this.cache = new PageCache<TData>(
+      options,
+      () => this.cacheOptions.pageSize,
+      (blockIndex) => this.admittedBlocks === null || this.admittedBlocks.has(blockIndex),
+    );
   }
 
   configure(cacheOptions: RowCacheOptions | undefined): void {
@@ -112,23 +118,25 @@ export class RowWindowLoader<TData = unknown> {
     return this.cacheOptions.pageSize;
   }
 
+  /** C8 capacity inputs for C2's cache predicate. */
+  getPageBudget(): PageBudget {
+    return {
+      ...this.options.getPageBudgetInput(),
+      pageSize: this.cacheOptions.pageSize,
+      maxPages: this.cacheOptions.maxPages,
+    };
+  }
+
   reset(): void {
-    this.generation += 1;
-    this.hasKnownTotal = false;
-    this.loadedBlocks.clear();
-    this.pendingBlocks.clear();
-    this.options.getCachedRows().clear();
+    this.cache.reset();
+    this.prefixReservations = [];
   }
 
   hasMissingRows(range: RowWindowRange): boolean {
     if (range.endRow <= range.startRow) return false;
-    const totalRows = this.options.getTotalRows();
-    if (this.hasKnownTotal && totalRows === 0) return false;
-    if (this.hasKnownTotal && range.startRow >= totalRows) return false;
+    const endRow = this.getLoadableEndRow(range.startRow, range.endRow);
+    if (endRow === null) return false;
 
-    const endRow = this.hasKnownTotal
-      ? Math.min(range.endRow, totalRows)
-      : range.endRow;
     const cachedRows = this.options.getCachedRows();
     for (let row = range.startRow; row < endRow; row += 1) {
       if (cachedRows.has(row)) continue;
@@ -137,191 +145,155 @@ export class RowWindowLoader<TData = unknown> {
     return false;
   }
 
+  /** Rows a range may load, or null when a known total excludes it. */
+  private getLoadableEndRow(startRow: number, endRow: number): number | null {
+    const totalRows = this.options.getTotalRows();
+    if (this.cache.hasKnownTotal() === false) return endRow;
+    if (totalRows === 0 || startRow >= totalRows) return null;
+    return Math.min(endRow, totalRows);
+  }
+
   async loadRange(
     range: RowWindowRange,
     resetCache: boolean = false,
   ): Promise<RowWindowLoadResult> {
     if (resetCache) this.reset();
+    const context = this.options.getLoadContext();
+    if (context.regions.frozenCount === 0) return this.loadFlatRange(range);
+    return this.loadStrictRange(context);
+  }
 
-    const generation = this.generation;
+  /** Today's single-range policy: visible window plus prefetch, gap included. */
+  private async loadFlatRange(range: RowWindowRange): Promise<RowWindowLoadResult> {
+    const generation = this.cache.getGeneration();
     const totalRowsBefore = this.options.getTotalRows();
+    this.admittedBlocks = null;
+
     const blocks = this.getBlocksForRange(range);
-    const tasks = blocks
-      .map((blockIndex) => this.getOrCreateBlockRequest(blockIndex, generation))
-      .filter((task): task is Promise<void> => task !== null);
+    this.syncPrefixReservations(0, blocks);
+    this.recordLatest(blocks, Math.floor(range.startRow / this.cacheOptions.pageSize));
+    const tasks = this.cache.ensureBlocks(blocks, generation);
+    if (tasks.length > 0) await Promise.all(tasks);
+    if (generation !== this.cache.getGeneration()) return notApplied();
 
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
-    }
+    this.evictAround();
+    return appliedResult(totalRowsBefore, this.options.getTotalRows(), tasks.length);
+  }
 
-    if (generation !== this.generation) {
-      return { applied: false, loadedBlockCount: 0, totalRowsChanged: false };
-    }
-
-    this.evictAround(range);
-    return {
-      applied: true,
-      loadedBlockCount: tasks.length,
-      totalRowsChanged: totalRowsBefore !== this.options.getTotalRows(),
+  /** C8 rules 1–3: required union, eviction, then optional pages. */
+  private async loadStrictRange(context: RowLoadContext): Promise<RowWindowLoadResult> {
+    const generation = this.cache.getGeneration();
+    const totalRowsBefore = this.options.getTotalRows();
+    const position = {
+      ...this.options.getPageBudgetInput(),
+      pageSize: this.cacheOptions.pageSize,
+      frozenCount: context.regions.frozenCount,
     };
-  }
-
-  private getOrCreateBlockRequest(
-    blockIndex: number,
-    generation: number,
-  ): Promise<void> | null {
-    if (this.loadedBlocks.has(blockIndex)) {
-      return null;
-    }
-
-    const pending = this.pendingBlocks.get(blockIndex);
-    if (pending) {
-      return pending;
-    }
-
-    const promise = this.fetchBlock(blockIndex, generation);
-    this.pendingBlocks.set(blockIndex, promise);
-    void promise.then(
-      () => this.deletePendingBlock(blockIndex, promise),
-      () => this.deletePendingBlock(blockIndex, promise),
+    const ranges = getRequiredPageRanges(position);
+    const required = getRequiredPageBlocks(position);
+    const reserved = this.syncPrefixReservations(position.frozenCount, required);
+    this.recordLatest(
+      [...required, ...reserved],
+      Math.floor(context.visibleWindow.start / this.cacheOptions.pageSize),
     );
-    return promise;
-  }
+    this.evictToCapacity();
 
-  private deletePendingBlock(
-    blockIndex: number,
-    promise: Promise<void>,
-  ): void {
-    if (this.pendingBlocks.get(blockIndex) === promise) {
-      this.pendingBlocks.delete(blockIndex);
-    }
-  }
-
-  private async fetchBlock(blockIndex: number, generation: number): Promise<void> {
-    const startRow = blockIndex * this.cacheOptions.pageSize;
-    const endRow = this.getBlockEndRow(blockIndex);
-    let response: DataSourceResponse<TData>;
-    try {
-      response = await this.options.getDataSource().query(
-        buildDataSourceRequest({
-          range: { startRow, endRow },
-          sortModel: this.options.getSortModel(),
-          filterModel: this.options.getFilterModel(),
-          columns: this.options.getColumns(),
-        }),
-      );
-    } catch (error) {
-      if (generation === this.generation) throw error;
-      return;
-    }
-
-    if (generation === this.generation) {
-      this.applyBlockResponse(blockIndex, response.rows, response.totalRows);
-    }
-  }
-
-  private applyBlockResponse(
-    blockIndex: number,
-    rows: TData[],
-    totalRows: number,
-  ): void {
-    const cachedRows = this.options.getCachedRows();
-    const previousTotalRows = this.options.getTotalRows();
-    this.deleteRowsForBlock(blockIndex);
-
-    const startRow = blockIndex * this.cacheOptions.pageSize;
-    rows.forEach((row, index) => {
-      if (row !== undefined) {
-        cachedRows.set(startRow + index, row);
-      }
+    const admitted = admitOptionalPages({
+      required,
+      loaded: [...this.cache.loadedBlocks()],
+      reserved,
+      maxPages: this.cacheOptions.maxPages,
+      overscan: getWindowPageBlocks(context.overscanWindow, this.cacheOptions.pageSize),
+      prefetch: this.getPrefetchBlocks(ranges.suffix),
+      gap: ranges.gap,
     });
+    const blocks = [...required, ...admitted];
+    this.admittedBlocks = new Set(blocks);
 
-    this.options.setTotalRows(totalRows);
-    this.hasKnownTotal = true;
-    this.loadedBlocks.add(blockIndex);
+    const tasks = this.cache.ensureBlocks(blocks, generation);
+    if (tasks.length > 0) await Promise.all(tasks);
+    if (generation !== this.cache.getGeneration()) return notApplied();
 
-    if (totalRows < previousTotalRows) {
-      this.deleteRowsAfterTotal(totalRows);
-    }
+    return appliedResult(totalRowsBefore, this.options.getTotalRows(), tasks.length);
   }
 
+  /** Flat blocks: visible window widened by `prefetchPages` both ways. */
   private getBlocksForRange(range: RowWindowRange): number[] {
     if (range.endRow <= range.startRow) return [];
+    const endRow = this.getLoadableEndRow(range.startRow, range.endRow);
+    if (endRow === null) return [];
 
-    const totalRows = this.options.getTotalRows();
-    if (this.hasKnownTotal && totalRows === 0) return [];
-    if (this.hasKnownTotal && range.startRow >= totalRows) return [];
-
-    const endRow = this.hasKnownTotal
-      ? Math.min(range.endRow, totalRows)
-      : range.endRow;
     const pageSize = this.cacheOptions.pageSize;
-    const firstBlock = Math.floor(range.startRow / pageSize);
-    const lastBlock = Math.floor((endRow - 1) / pageSize);
-    const firstPrefetchBlock = Math.max(0, firstBlock - this.cacheOptions.prefetchPages);
-    const lastPrefetchBlock = this.getLastPrefetchBlock(lastBlock);
-
-    const blocks: number[] = [];
-    for (let block = firstPrefetchBlock; block <= lastPrefetchBlock; block += 1) {
-      blocks.push(block);
-    }
-    return blocks;
+    const firstBlock = Math.max(
+      0,
+      Math.floor(range.startRow / pageSize) - this.cacheOptions.prefetchPages,
+    );
+    const lastBlock = this.getLastPrefetchBlock(Math.floor((endRow - 1) / pageSize));
+    return blocksBetween(firstBlock, lastBlock);
   }
 
   private getLastPrefetchBlock(lastBlock: number): number {
-    const totalRows = this.options.getTotalRows();
     const candidate = lastBlock + this.cacheOptions.prefetchPages;
-    if (this.hasKnownTotal && totalRows > 0) {
-      const lastKnownBlock = Math.floor((totalRows - 1) / this.cacheOptions.pageSize);
-      return Math.min(candidate, lastKnownBlock);
-    }
-    return candidate;
-  }
-
-  private getBlockEndRow(blockIndex: number): number {
-    const startRow = blockIndex * this.cacheOptions.pageSize;
-    const candidate = startRow + this.cacheOptions.pageSize;
     const totalRows = this.options.getTotalRows();
-    if (this.hasKnownTotal && totalRows > 0) {
-      return Math.min(candidate, totalRows);
-    }
-    return candidate;
+    if (this.cache.hasKnownTotal() === false || totalRows === 0) return candidate;
+    const lastKnownBlock = Math.floor(
+      (totalRows - 1) / this.cacheOptions.pageSize,
+    );
+    return Math.min(candidate, lastKnownBlock);
   }
 
-  private evictAround(range: RowWindowRange): void {
-    if (this.loadedBlocks.size <= this.cacheOptions.maxPages) return;
-
-    const protectedBlocks = new Set(this.getBlocksForRange(range));
-    const centerBlock = Math.floor(range.startRow / this.cacheOptions.pageSize);
-    const candidates = [...this.loadedBlocks]
-      .filter((block) => protectedBlocks.has(block) === false)
-      .sort(
-        (a, b) =>
-          Math.abs(b - centerBlock) - Math.abs(a - centerBlock),
-      );
-
-    for (const blockIndex of candidates) {
-      if (this.loadedBlocks.size <= this.cacheOptions.maxPages) return;
-      this.loadedBlocks.delete(blockIndex);
-      this.deleteRowsForBlock(blockIndex);
-    }
+  /** `prefetchPages` beyond each end of the required suffix range (C8 rule 2). */
+  private getPrefetchBlocks(suffix: BlockRange | null): number[] {
+    if (suffix === null) return [];
+    const before = Math.max(0, suffix.start - this.cacheOptions.prefetchPages);
+    const after = this.getLastPrefetchBlock(suffix.end - 1);
+    return [...blocksBetween(before, suffix.start - 1), ...blocksBetween(suffix.end, after)];
   }
 
-  private deleteRowsForBlock(blockIndex: number): void {
-    const cachedRows = this.options.getCachedRows();
-    const startRow = blockIndex * this.cacheOptions.pageSize;
-    const endRow = startRow + this.cacheOptions.pageSize;
-    for (let row = startRow; row < endRow; row += 1) {
-      cachedRows.delete(row);
-    }
+  private recordLatest(blocks: readonly number[], center: number): void {
+    this.latestProtected = new Set(blocks);
+    this.latestCenter = center;
   }
 
-  private deleteRowsAfterTotal(totalRows: number): void {
-    const cachedRows = this.options.getCachedRows();
-    for (const rowIndex of cachedRows.keys()) {
-      if (rowIndex >= totalRows) {
-        cachedRows.delete(rowIndex);
-      }
-    }
+  // A released block the current load requires stays cached: dropping it would
+  // blank a visible row until its refetch lands, and required pages never go.
+  private syncPrefixReservations(
+    frozenCount: number,
+    required: readonly number[],
+  ): readonly number[] {
+    const pageSize = this.cacheOptions.pageSize;
+    const reservation = resolvePrefixReservations(
+      this.prefixReservations,
+      frozenCount,
+      pageSize,
+    );
+    this.prefixReservations = reservation.pages;
+    const kept = new Set(required);
+    const dropped = reservation.released.filter((block) => kept.has(block) === false);
+    if (dropped.length > 0) this.cache.deleteBlocks(dropped);
+    return reservation.pages;
+  }
+
+  /** Strict capacity: loaded plus protected never exceeds max(maxPages, |required|). */
+  private evictToCapacity(): void {
+    const capacity = Math.max(this.cacheOptions.maxPages, this.latestProtected.size);
+    const used = new Set([...this.cache.loadedBlocks(), ...this.latestProtected]);
+    this.evictExcess(used.size - capacity);
+  }
+
+  /** Flat policy: soft overflow that evicts only down to the cap. */
+  private evictAround(): void {
+    this.evictExcess(this.cache.loadedBlocks().size - this.cacheOptions.maxPages);
+  }
+
+  /** Unprotected pages leave farthest-from-center first, never a required one. */
+  private evictExcess(over: number): void {
+    if (over <= 0) return;
+    const candidates = evictionCandidates({
+      loaded: [...this.cache.loadedBlocks()],
+      protectedBlocks: [...this.latestProtected],
+      center: this.latestCenter,
+    });
+    this.cache.deleteBlocks(candidates.slice(0, over));
   }
 }

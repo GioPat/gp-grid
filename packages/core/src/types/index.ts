@@ -111,6 +111,8 @@ export type {
   DataErrorInstruction,
   ColumnsChangedInstruction,
   SetColumnWindowInstruction,
+  SetRowRegionsInstruction,
+  SetAnnouncementInstruction,
   GridInstruction,
   InstructionListener,
   BatchInstructionListener,
@@ -139,13 +141,18 @@ export type {
   ViewportPoint,
   GridHit,
   ScrollTarget,
+  RowScrollEdges,
   ContentSize,
   GridGeometry,
+  RowRegion,
+  FrozenRowsState,
+  RowRegionLayout,
 } from "./geometry";
 
 // Options types
 export type {
   GridCoreOptions,
+  FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
   RowCacheOptions,

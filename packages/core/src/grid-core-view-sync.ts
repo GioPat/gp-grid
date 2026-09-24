@@ -19,20 +19,16 @@ import type {
   SortFilterManager,
   ViewportState,
 } from "./managers";
-import type { ColumnDefinition, SortDirection } from "./types";
+import type { ColumnDefinition } from "./types";
 import type { GridGeometryService } from "./geometry/grid-geometry";
-import type { ColumnLayoutSnapshot, ColumnWindowSnapshot } from "./types/geometry";
+import type { ColumnLayoutSnapshot, ColumnWindowSnapshot, FrozenRowsState } from "./types/geometry";
+import type { GridLabels } from "./i18n";
+import { HeaderSync } from "./grid-core-header-sync";
+import { FrozenRowsSync } from "./grid-core-frozen-rows-sync";
 
 // With scroll virtualization active a fast fling traverses several rows per
 // frame; overscan below this leaves blank rows behind the fling.
 const RECOMMENDED_SCALED_OVERSCAN = 10;
-
-interface EmittedHeader {
-  column: ColumnDefinition;
-  sortDirection?: SortDirection;
-  sortIndex?: number;
-  hasFilter: boolean;
-}
 
 export interface ViewSyncDeps<TData> {
   batcher: InstructionBatcher;
@@ -46,14 +42,16 @@ export interface ViewSyncDeps<TData> {
   /** Built after the managers; only read once construction has finished. */
   getGeometry: () => GridGeometryService;
   getTotalRows: () => number;
+  labels: GridLabels;
+  getFrozenRowsBaseline: () => FrozenRowsState;
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
 }
 
 export class ViewSync<TData> {
   private readonly deps: ViewSyncDeps<TData>;
   private hasWarnedAboutScaledOverscan = false;
-  /** Baseline a header must differ from to be re-emitted. */
-  private readonly emittedHeaders = new Map<string, EmittedHeader>();
-  private emittedHeaderIds: string[] = [];
+  private readonly headers: HeaderSync<TData>;
+  private readonly frozenRows: FrozenRowsSync;
   private emittedLayout: ColumnLayoutSnapshot | null = null;
   private emittedDefinitions: readonly ColumnDefinition[] | null = null;
   private emittedWindow: ColumnWindowSnapshot | null = null;
@@ -61,14 +59,28 @@ export class ViewSync<TData> {
 
   constructor(deps: ViewSyncDeps<TData>) {
     this.deps = deps;
+    this.headers = new HeaderSync<TData>({
+      batcher: deps.batcher,
+      sortFilter: deps.sortFilter,
+      getColumns: deps.getColumns,
+    });
+    this.frozenRows = new FrozenRowsSync({
+      batcher: deps.batcher,
+      labels: deps.labels,
+      getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
+      onFrozenRowsChanged: deps.onFrozenRowsChanged,
+    });
   }
 
   /**
    * Commit the row axis to the current row count before any window is read.
-   * Data loads and row-count changes arrive here first.
+   * Data loads and row-count changes arrive here first, and the row count is
+   * a C2 input, so the frozen regions are re-resolved in the same batch.
    */
   private syncRowAxis(): void {
-    this.deps.getGeometry().syncWindows();
+    const geometry = this.deps.getGeometry();
+    geometry.syncWindows();
+    geometry.syncRowRegions();
   }
 
   /**
@@ -192,9 +204,18 @@ export class ViewSync<TData> {
       rowsWrapperOffset: this.rowsWrapperOffset(),
       revision,
     });
+    this.emitRowRegions(revision);
     this.emitColumnLayout(layout, revision);
     this.emitColumnWindow();
     this.warnIfOverscanTooLowForScaling();
+  }
+
+  /**
+   * Publish the frozen/suffix layout, its change event and the C13
+   * announcement. The batch is owned by the caller's `emitContentSize`.
+   */
+  private emitRowRegions(revision: number): void {
+    this.frozenRows.publish(this.deps.getGeometry().getRowRegions(), revision);
   }
 
   /**
@@ -234,61 +255,11 @@ export class ViewSync<TData> {
   }
 
   private rowsWrapperOffset(): number {
-    return this.deps.getGeometry().getRowGeometry().getMapper().wrapperOffset();
+    return this.deps.getGeometry().getRowGeometry().getRowsWrapperOffset();
   }
 
   emitHeaders(): void {
-    const { batcher, sortFilter } = this.deps;
-    const columns = this.deps.getColumns();
-    const sortInfoMap = sortFilter.getSortInfoMap();
-
-    const currentIds: string[] = [];
-    const currentIdSet = new Set<string>();
-    for (const column of columns) {
-      const columnId = column.colId ?? column.field;
-      currentIds.push(columnId);
-      currentIdSet.add(columnId);
-      const sortInfo = sortInfoMap.get(columnId);
-      const hasFilter = sortFilter.hasActiveFilter(columnId);
-      if (this.headerIsUnchanged(columnId, column, sortInfo, hasFilter)) continue;
-      this.emittedHeaders.set(columnId, {
-        column,
-        sortDirection: sortInfo?.direction,
-        sortIndex: sortInfo?.index,
-        hasFilter,
-      });
-      batcher.emit({
-        type: "UPDATE_HEADER",
-        columnId,
-        column,
-        sortDirection: sortInfo?.direction,
-        sortIndex: sortInfo?.index,
-        hasFilter,
-      });
-    }
-
-    const removedIds = this.emittedHeaderIds.filter((id) => currentIdSet.has(id) === false);
-    if (removedIds.length > 0) {
-      batcher.emit({ type: "REMOVE_HEADERS", columnIds: removedIds });
-      for (const id of removedIds) this.emittedHeaders.delete(id);
-    }
-    this.emittedHeaderIds = currentIds;
-  }
-
-  private headerIsUnchanged(
-    columnId: string,
-    column: ColumnDefinition,
-    sortInfo: { direction?: SortDirection | null; index?: number } | undefined,
-    hasFilter: boolean,
-  ): boolean {
-    const previous = this.emittedHeaders.get(columnId);
-    if (previous === undefined) return false;
-    return (
-      previous.column === column &&
-      previous.sortDirection === sortInfo?.direction &&
-      previous.sortIndex === sortInfo?.index &&
-      previous.hasFilter === hasFilter
-    );
+    this.headers.emitHeaders();
   }
 
   emitVisibleRange(): void {

@@ -9,7 +9,13 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
-import type { ColumnLayoutSnapshot, ColumnWindowSnapshot } from "./geometry";
+import type {
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+  RowRegion,
+  RowRegionLayout,
+} from "./geometry";
+import type { GridAnnouncement } from "./ui-state";
 
 // Re-use ColumnDefinition for column change instructions
 
@@ -17,8 +23,18 @@ import type { ColumnLayoutSnapshot, ColumnWindowSnapshot } from "./geometry";
 // Slot Lifecycle Instructions
 // =============================================================================
 
+/**
+ * Row region and placeholder flag carried by slot instructions. Both are
+ * optional: the flat path omits them and the reducer defaults `region` to
+ * `"suffix"` and `loading` to `false`.
+ */
+export interface SlotRegionFields {
+  region?: RowRegion;
+  loading?: boolean;
+}
+
 /** Create slot instruction */
-export interface CreateSlotInstruction {
+export interface CreateSlotInstruction extends SlotRegionFields {
   type: "CREATE_SLOT";
   slotId: string;
   /** Initial assignment generation; always 0 for a fresh slot. */
@@ -32,7 +48,7 @@ export interface DestroySlotInstruction {
 }
 
 /** Assign slot instruction */
-export interface AssignSlotInstruction {
+export interface AssignSlotInstruction extends SlotRegionFields {
   type: "ASSIGN_SLOT";
   slotId: string;
   rowIndex: number;
@@ -272,6 +288,25 @@ export interface SetColumnWindowInstruction {
   revision: number;
 }
 
+/**
+ * The frozen/suffix row layout changed (C9). Emitted in the same batch as
+ * `SET_CONTENT_SIZE` and the slot instructions, so the update is atomic.
+ */
+export interface SetRowRegionsInstruction {
+  type: "SET_ROW_REGIONS";
+  regions: RowRegionLayout;
+  /** Committed geometry revision the regions were resolved at. */
+  revision: number;
+}
+
+/** Live-region announcement (C13). Inert until the label ships in 2c. */
+export interface SetAnnouncementInstruction {
+  type: "SET_ANNOUNCEMENT";
+  announcement: GridAnnouncement | null;
+  /** Committed geometry revision the announcement belongs to. */
+  revision: number;
+}
+
 // =============================================================================
 // Union Type
 // =============================================================================
@@ -316,7 +351,10 @@ export type GridInstruction =
   | DataErrorInstruction
   /** Column changes */
   | ColumnsChangedInstruction
-  | SetColumnWindowInstruction;
+  | SetColumnWindowInstruction
+  /** Row regions */
+  | SetRowRegionsInstruction
+  | SetAnnouncementInstruction;
 
 // =============================================================================
 // Instruction Listeners

@@ -50,11 +50,42 @@ export {
   createRowGeometry,
   type RowGeometry,
   type RowGeometryDeps,
-  type RowMapper,
-  type RowScrollMapping,
 } from "./row-geometry";
 export {
+  clampFirstVisible,
+  createRowMapper,
+  type RowMapper,
+  type RowScrollMapping,
+} from "./row-mapping";
+export {
+  DEFAULT_MAX_FROZEN_ROWS,
+  DEFAULT_MIN_SUFFIX_HEIGHT,
+  UNMEASURED_VIEWPORT_HEIGHT,
+  resolveFrozenRows,
+  resolveRowRegionLayout,
+  type FrozenRowsInput,
+  type FrozenRowsLimit,
+  type FrozenRowsState,
+  type RowRegionLayout,
+} from "./row-regions";
+export {
+  getRowClip,
+  getRowRegionPosition,
+  getSuffixRowViewportTop,
+  getSuffixViewportHeight,
+  getSuffixWindow,
+  hitTestRowRegion,
+  resolveRegionScrollCorrection,
+  resolveRowRegionScrollTop,
+  type RowRegion,
+  type RowRegionHit,
+  type RowRegionMappingInput,
+  type RowRegionScrollCorrectionInput,
+  type RowRegionScrollInput,
+} from "./row-regions-mapping";
+export {
   createGridGeometry,
+  type FrozenRowsRequest,
   type GridGeometryDeps,
   type GridGeometryService,
   type GridViewportSample,

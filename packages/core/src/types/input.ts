@@ -2,6 +2,7 @@
 // Framework-agnostic input types for InputHandler
 
 import type { CellPosition, CellRange } from "./basic";
+import type { RowRegion } from "./geometry";
 
 // =============================================================================
 // Event Data Types (framework-agnostic)
@@ -136,6 +137,11 @@ export interface RowDragState {
   currentX: number;
   currentY: number;
   dropTargetIndex: number | null;
+  /**
+   * Region the drop indicator renders in. A drop at the frozen boundary is
+   * the last frozen row's bottom edge, inside the frozen container (C10).
+   */
+  dropIndicatorRegion: RowRegion;
   /** Pre-computed translateY for the drop indicator inside the rows wrapper */
   dropIndicatorY: number;
 }

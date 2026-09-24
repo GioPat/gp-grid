@@ -2,7 +2,7 @@
 
 import type { CellPosition, CellRange } from "../types/basic";
 import type { ColumnDefinition } from "../types/columns";
-import type { ColumnRegion } from "../types/geometry";
+import type { ColumnRegion, RowRegion } from "../types/geometry";
 import type { GridCore } from "../grid-core";
 
 export interface FillHandlePosition {
@@ -13,6 +13,8 @@ export interface FillHandlePosition {
    * container (the rows wrapper for `"center"`).
    */
   region: ColumnRegion;
+  /** Row region the anchored cell renders in; `top` is frozen-local for `"frozen"`. */
+  rowRegion: RowRegion;
 }
 
 export interface CalculateFillHandlePositionParams<TData = unknown> {
@@ -73,10 +75,10 @@ export const calculateFillHandlePosition = <TData>(
   const { core, activeCell, selectionRange } = params;
   const target = resolveTarget(activeCell, selectionRange);
   if (target === null) return null;
-  if (selectionIsEditable(core.getColumns(), target.minCol, target.maxCol) === false) {
+  if (selectionIsEditable(core.columns.get(), target.minCol, target.maxCol) === false) {
     return null;
   }
-  if (core.getSlotGeneration(target.row) === -1) return null;
+  if (core.rows.getSlotGeneration(target.row) === -1) return null;
 
   // A pin is mounted in its own region container, so its displayed column
   // carries a region-local left; `rows` bounds are content x for the center.
@@ -97,9 +99,13 @@ export const calculateFillHandlePosition = <TData>(
   }
 
   const containerLeft = region === "center" ? bounds.left : regionOffset;
+  const rowRegion = target.row < core.geometry.getRowRegions().frozenCount
+    ? "frozen"
+    : "suffix";
   return {
     top: bounds.top + bounds.height - 5,
     left: containerLeft + width - HANDLE_INSET,
     region,
+    rowRegion,
   };
 };

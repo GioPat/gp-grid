@@ -14,8 +14,9 @@ import type {
   RowDragEndEvent,
 } from "./events";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
-import type { ColumnLayoutMode } from "./geometry";
+import type { ColumnLayoutMode, FrozenRowsState } from "./geometry";
 import type { HighlightingOptions } from "./highlighting";
+import type { GridLabelOverrides } from "../i18n";
 
 /** Row loading mode used by GridCore. "auto" follows the data source preference. */
 export type RowLoadingMode = "auto" | DataSourceLoadMode;
@@ -33,6 +34,21 @@ export interface RowCacheOptions {
   maxPages?: number;
   /** Eviction preset. Default: "balanced". */
   eviction?: RowCacheEviction;
+}
+
+/**
+ * Frozen-row prefix configuration (C1). `count` is positional: the displayed
+ * rows `[0, count)` stay below the header, and the request persists across
+ * sort, filter and data changes. The effective count is derived from the row
+ * count, `maxCount` and the viewport/cache limits; see `getFrozenRows`.
+ */
+export interface FreezeRowsOptions {
+  /** Display indices `[0, count)`. Default: 0. */
+  count: number;
+  /** Upper bound applied before the viewport and cache limits. Default: 100. */
+  maxCount?: number;
+  /** CSS px of suffix viewport kept below the prefix. Default: 64. */
+  minSuffixHeight?: number;
 }
 
 /** Grid row loading options. */
@@ -78,6 +94,18 @@ export interface GridCoreOptions<TData = unknown> {
   maxFlingVelocity?: number;
   /** Row loading and cache behavior. Server data sources use paginated loading by default. */
   rowLoading?: RowLoadingOptions;
+  /**
+   * Frozen-row prefix. Creation-only: the request is resolved once, and
+   * without it (or with `count: 0`) the grid renders the flat path.
+   */
+  freezeRows?: FreezeRowsOptions;
+  /**
+   * Called when the effective frozen count or its limit reason changes.
+   * The first resolution is the baseline and never fires.
+   */
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
+  /** Overrides for the core's user-visible labels; defaults to English. */
+  labels?: GridLabelOverrides;
   /** Enable/disable sorting globally. Default: true */
   sortingEnabled?: boolean;
   /** Function to extract unique ID from row. Required for mutations. */

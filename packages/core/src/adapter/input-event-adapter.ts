@@ -200,7 +200,7 @@ export class InputEventAdapter<TData = unknown> {
     if (core === null) return false;
     if (editingCell !== null) return false;
     if (filterPopupOpen) return false;
-    return core.pasteClipboardText(text);
+    return core.edit.paste(text);
   }
 
   private dispatchCellDragStart(result: InputResult, event: PointerEvent): void {

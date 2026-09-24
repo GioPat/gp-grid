@@ -1,17 +1,21 @@
 // packages/core/src/slot-pool.ts
 
 import type { SlotState, GridInstruction } from "./types";
+import type { RowRegionLayout } from "./geometry";
 import { createBatchInstructionEmitter } from "./utils";
+import { planSlotRefresh, planSlotSync, planSlotUpdate, type SlotPlanInput } from "./slot-pool-plan";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface SlotPoolManagerOptions {
-  /** Overscanned half-open row window the pool should keep mounted. */
+  /** Overscanned half-open suffix row window the pool should keep mounted. */
   getRowWindow: () => { start: number; end: number };
   /** Displayed view-row count. */
   getRowCount: () => number;
+  /** C3 layout; the frozen prefix is required in every window (C7). */
+  getRowRegions: () => RowRegionLayout;
   /** `translateY` of a row inside the rows wrapper (rows space). */
   getRowOffset: (rowIndex: number) => number;
   /** Get row data by index */
@@ -95,112 +99,30 @@ export class SlotPoolManager {
   // ===========================================================================
 
   /**
-   * Synchronize slots with the current row window. The window is half-open
-   * and already overscanned, so no row arithmetic happens here.
+   * Synchronize slots with the frozen prefix and the current suffix window.
+   * The window is half-open and already overscanned, so no row arithmetic
+   * happens here beyond inserting the prefix (C7).
    */
   syncSlots(): void {
-    const window = this.options.getRowWindow();
-    if (window.end <= window.start) {
-      // No rows to display - destroy all slots
-      this.destroyAllSlots();
-      return;
-    }
-
-    const requiredRows = new Set<number>();
-    for (let row = window.start; row < window.end; row++) {
-      requiredRows.add(row);
-    }
-
-    const instructions: GridInstruction[] = [];
-
-    const slotsToRecycle = this.partitionSlots(requiredRows);
-
-    let recycleIdx = 0;
-    for (const rowIndex of requiredRows) {
-      if (this.options.isRowAvailable(rowIndex) === false) continue;
-      const rowData = this.options.getRowData(rowIndex);
-      const recycledSlotId = recycleIdx < slotsToRecycle.length
-        ? slotsToRecycle[recycleIdx++]
-        : undefined;
-      this.assignSlotToRow(rowIndex, rowData, recycledSlotId, instructions);
-    }
-
-    for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
-      const slotId = slotsToRecycle[i]!;
-      this.state.slots.delete(slotId);
-      instructions.push({ type: "DESTROY_SLOT", slotId });
-    }
-
-    this.updateSlotPositions(instructions);
-
-    this.emitBatch(instructions);
+    this.emitBatch(planSlotSync(this.planInput()));
   }
 
   /**
-   * Partition existing slots into recyclable and still-needed.
-   * Mutates requiredRows: rows that already have a slot are removed.
+   * Refresh all slot data without changing which rows are displayed.
+   * Used after filtering/sorting when data changes.
    */
-  private partitionSlots(requiredRows: Set<number>): string[] {
-    const slotsToRecycle: string[] = [];
-    for (const [slotId, slot] of this.state.slots) {
-      if (requiredRows.has(slot.rowIndex)) {
-        requiredRows.delete(slot.rowIndex);
-      } else {
-        slotsToRecycle.push(slotId);
-        this.state.rowToSlot.delete(slot.rowIndex);
-      }
-    }
-    return slotsToRecycle;
+  refreshAllSlots(): void {
+    this.emitBatch(planSlotRefresh(this.planInput()));
+    // Also sync slots to handle any rows that went out of bounds
+    this.syncSlots();
   }
 
   /**
-   * Assign a row to a recycled or newly created slot.
+   * Update a single slot's data.
    */
-  private assignSlotToRow(
-    rowIndex: number,
-    rowData: unknown,
-    recycledSlotId: string | undefined,
-    instructions: GridInstruction[],
-  ): void {
-    let slotId: string;
-    const generation = this.state.nextGeneration++;
-
-    if (recycledSlotId === undefined) {
-      slotId = `slot-${this.state.nextSlotId++}`;
-      this.state.slots.set(slotId, {
-        slotId,
-        rowIndex,
-        rowData,
-        generation,
-        translateY: this.options.getRowOffset(rowIndex),
-      });
-      instructions.push({ type: "CREATE_SLOT", slotId, generation });
-    } else {
-      slotId = recycledSlotId;
-      const slot = this.state.slots.get(slotId)!;
-      slot.rowIndex = rowIndex;
-      slot.rowData = rowData;
-      slot.generation = generation;
-      slot.translateY = this.options.getRowOffset(rowIndex);
-    }
-
-    this.state.rowToSlot.set(rowIndex, slotId);
-    instructions.push(
-      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData, generation },
-      { type: "MOVE_SLOT", slotId, translateY: this.options.getRowOffset(rowIndex) },
-    );
-  }
-
-  /**
-   * Push MOVE_SLOT instructions for slots whose position has drifted.
-   */
-  private updateSlotPositions(instructions: GridInstruction[]): void {
-    for (const [slotId, slot] of this.state.slots) {
-      const expectedY = this.options.getRowOffset(slot.rowIndex);
-      if (slot.translateY !== expectedY) {
-        slot.translateY = expectedY;
-        instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY });
-      }
+  updateSlot(rowIndex: number): void {
+    for (const instruction of planSlotUpdate(this.planInput(), rowIndex)) {
+      this.emit(instruction);
     }
   }
 
@@ -231,56 +153,20 @@ export class SlotPoolManager {
     this.emitter.clearListeners();
   }
 
-  /**
-   * Refresh all slot data without changing which rows are displayed.
-   * Used after filtering/sorting when data changes.
-   */
-  refreshAllSlots(): void {
-    const instructions: GridInstruction[] = [];
-    const rowCount = this.options.getRowCount();
-
-    for (const [slotId, slot] of this.state.slots) {
-      // Check if row index is still valid and data is available
-      if (slot.rowIndex >= 0 && slot.rowIndex < rowCount) {
-        if (this.options.isRowAvailable(slot.rowIndex) === false) continue;
-        const rowData = this.options.getRowData(slot.rowIndex);
-
-        const translateY = this.options.getRowOffset(slot.rowIndex);
-        const generation = this.state.nextGeneration++;
-
-        slot.rowData = rowData;
-        slot.generation = generation;
-        slot.translateY = translateY;
-
-        instructions.push(
-          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData, generation },
-          { type: "MOVE_SLOT", slotId, translateY },
-        );
-      }
-    }
-
-    this.emitBatch(instructions);
-
-    // Also sync slots to handle any rows that went out of bounds
-    this.syncSlots();
-  }
-
-  /**
-   * Update a single slot's data.
-   */
-  updateSlot(rowIndex: number): void {
-    const slotId = this.state.rowToSlot.get(rowIndex);
-    if (slotId && this.options.isRowAvailable(rowIndex)) {
-      const slot = this.state.slots.get(slotId);
-      const generation = this.state.nextGeneration++;
-      if (slot) slot.generation = generation;
-      this.emit({
-        type: "ASSIGN_SLOT",
-        slotId,
-        rowIndex,
-        rowData: this.options.getRowData(rowIndex),
-        generation,
-      });
-    }
+  /** Live view of the pool's maps and the injected accessors, for the planner. */
+  private planInput(): SlotPlanInput {
+    const { options, state } = this;
+    return {
+      slots: state.slots,
+      rowToSlot: state.rowToSlot,
+      nextSlotId: () => `slot-${state.nextSlotId++}`,
+      nextGeneration: () => state.nextGeneration++,
+      window: options.getRowWindow(),
+      rowCount: options.getRowCount(),
+      regions: options.getRowRegions(),
+      isRowAvailable: (rowIndex) => options.isRowAvailable(rowIndex),
+      getRowData: (rowIndex) => options.getRowData(rowIndex),
+      getRowOffset: (rowIndex) => options.getRowOffset(rowIndex),
+    };
   }
 }

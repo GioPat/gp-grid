@@ -30,9 +30,9 @@ export class KeyboardHandler<TData = unknown> {
     // Peek overlay is read-only; only intercept Escape (to close it) and let
     // every other key reach the browser so Ctrl+A, text selection, etc. work
     // inside the peek content.
-    if (this.core.getPeekState() !== null) {
+    if (this.core.edit.getPeekState() !== null) {
       if (event.key === "Escape") {
-        this.core.stopPeek();
+        this.core.edit.stopPeek();
         return { preventDefault: true };
       }
       return { preventDefault: false };
@@ -53,7 +53,7 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private moveFocus(direction: Direction, isShift: boolean): KeyboardResult {
-    this.core.stopPeek();
+    this.core.edit.stopPeek();
     const { selection } = this.core;
     selection.moveFocus(direction, isShift);
     const newActiveCell = selection.getActiveCell();
@@ -80,16 +80,16 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private handleEnter(activeCell: CellPosition | null, editingCell: EditingCell): KeyboardResult {
-    if (editingCell) this.core.commitEdit();
-    else if (activeCell) this.core.startEdit(activeCell.row, activeCell.col);
+    if (editingCell) this.core.edit.commit();
+    else if (activeCell) this.core.edit.start(activeCell.row, activeCell.col);
     return { preventDefault: true };
   }
 
   private handleEscape(editingCell: EditingCell): KeyboardResult {
     if (editingCell) {
-      this.core.cancelEdit();
-    } else if (this.core.getPeekState()) {
-      this.core.stopPeek();
+      this.core.edit.cancel();
+    } else if (this.core.edit.getPeekState()) {
+      this.core.edit.stopPeek();
     } else {
       this.core.selection.clearSelection();
     }
@@ -97,7 +97,7 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private handleTab(editingCell: EditingCell, isShift: boolean): KeyboardResult {
-    if (editingCell) this.core.commitEdit();
+    if (editingCell) this.core.edit.commit();
     this.core.selection.moveFocus(isShift ? "left" : "right", false);
     return { preventDefault: true };
   }
@@ -120,19 +120,19 @@ export class KeyboardHandler<TData = unknown> {
     }
     if (key === "F2") {
       if (activeCell && !editingCell) {
-        this.core.startEdit(activeCell.row, activeCell.col);
+        this.core.edit.start(activeCell.row, activeCell.col);
       }
       return { preventDefault: true };
     }
     if (key === "Delete" || key === "Backspace") {
       if (activeCell && !editingCell) {
-        this.core.startEdit(activeCell.row, activeCell.col);
+        this.core.edit.start(activeCell.row, activeCell.col);
         return { preventDefault: true };
       }
       return { preventDefault: false };
     }
     if (activeCell && !editingCell && !isCtrl && key.length === 1) {
-      this.core.startEdit(activeCell.row, activeCell.col);
+      this.core.edit.start(activeCell.row, activeCell.col);
     }
     return { preventDefault: false };
   }

@@ -45,12 +45,12 @@ export class FlingAnimator<TData = unknown> {
     const raf = globalThis.requestAnimationFrame;
     if (raf === undefined) return;
 
-    const maxFlingVelocity = core.getMaxFlingVelocity();
-    const throttleThreshold = renderThrottleThreshold(core.getRowHeight());
+    const maxFlingVelocity = core.viewport.getMaxFlingVelocity();
+    const throttleThreshold = renderThrottleThreshold(core.viewport.getRowHeight());
     // Fling physics integrates in logical px. `getScrollRatio` is the same
     // mapping geometry exposes; the physics step is a deliberate audit
     // exception, not a competing scroll conversion.
-    const ratio = core.getScrollRatio();
+    const ratio = core.viewport.getScrollRatio();
     const governedCap = (): number =>
       computeAdaptiveVelocityCap(this.scroll.pipelineIntervalMs, maxFlingVelocity);
     const startCap = governedCap();
