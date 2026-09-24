@@ -39,7 +39,10 @@ export const GP_GRID_TEMPLATE = `
         [contentHeight]="vm.contentHeight()"
         [totalWidth]="vm.totalWidth()"
         [rowsWrapperOffset]="vm.rowsWrapperOffset()"
-        [slotsArray]="vm.slotsArray()"
+        [rowRegions]="vm.rowRegions()"
+        [frozenHeight]="vm.frozenHeight()"
+        [frozenSlots]="vm.frozenSlots()"
+        [suffixSlots]="vm.suffixSlots()"
         [columnWindow]="vm.columnWindow()"
         [displayedIndexOf]="vm.displayedIndexOf()"
         [totalRows]="vm.totalRows()"
@@ -70,6 +73,13 @@ export const GP_GRID_TEMPLATE = `
         (editCancel)="onEditCancel()"
         (fillHandlePointerDown)="onFillHandlePointerDown($event)"
       />
+      <!-- C13 live region: the track key remounts it so each message is read once. -->
+      @for (announcement of vm.announcements(); track announcement.revision) {
+        <div
+          class="gp-grid-visually-hidden"
+          role="status"
+          aria-live="polite">{{ announcement.message }}</div>
+      }
       <gp-grid-overlays
         [filterPopup]="vm.filterPopup()"
         [labels]="resolvedLabels()"

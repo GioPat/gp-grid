@@ -8,6 +8,9 @@ import type {
   ColumnPinnedEvent,
   ColumnResizedEvent,
   DataSource,
+  FreezeRowsOptions,
+  FrozenRowsState,
+  GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
   RowLoadingOptions,
@@ -21,6 +24,7 @@ export interface BuildGridCoreInputs<TData> {
   headerHeight: number;
   overscan: number;
   columnOverscan: number | undefined;
+  freezeRows: FreezeRowsOptions | undefined;
   columnLayout: ColumnLayoutMode | undefined;
   maxFlingVelocity: number | undefined;
   rowLoading: RowLoadingOptions | undefined;
@@ -28,6 +32,7 @@ export interface BuildGridCoreInputs<TData> {
   highlighting: HighlightingOptions<TData> | undefined;
   getRowId: ((row: TData) => RowId) | undefined;
   rowDragEntireRow: boolean;
+  labels: GridLabelOverrides | undefined;
 }
 
 export interface BuildGridCoreEmitters<TData> {
@@ -37,6 +42,7 @@ export interface BuildGridCoreEmitters<TData> {
   onColumnResized: (event: ColumnResizedEvent) => void;
   onColumnMoved: (event: ColumnMovedEvent) => void;
   onColumnPinned: (event: ColumnPinnedEvent) => void;
+  onFrozenRowsChanged: (state: FrozenRowsState) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -54,6 +60,7 @@ export const buildGridCore = <TData>(
     headerHeight: inputs.headerHeight,
     overscan: inputs.overscan,
     columnOverscan: inputs.columnOverscan,
+    freezeRows: inputs.freezeRows,
     columnLayout: inputs.columnLayout,
     maxFlingVelocity: inputs.maxFlingVelocity,
     rowLoading: inputs.rowLoading,
@@ -61,11 +68,13 @@ export const buildGridCore = <TData>(
     highlighting: inputs.highlighting,
     getRowId: inputs.getRowId,
     rowDragEntireRow: inputs.rowDragEntireRow,
+    labels: inputs.labels,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
     onWriteRejected: emitters.onWriteRejected,
     onColumnResized: emitters.onColumnResized,
     onColumnMoved: emitters.onColumnMoved,
     onColumnPinned: emitters.onColumnPinned,
+    onFrozenRowsChanged: emitters.onFrozenRowsChanged,
   });
 };

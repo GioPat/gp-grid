@@ -13,8 +13,10 @@ import type {
   DragState,
   FillHandlePosition,
   FilterPopupState,
+  GridAnnouncement,
   HeaderData,
   GridCore,
+  RowRegionLayout,
   SlotData,
 } from '@gp-grid/core';
 import type { ActiveFilterPopup, EditingCellState } from './components';
@@ -25,6 +27,14 @@ export interface GpGridViewModelDeps {
   /** Bound core, used for geometry queries (fill handle, peek anchoring). */
   getCore: () => GridCore<unknown> | null;
 }
+
+/** Pre-batch seed; the core publishes its own zero layout on the first batch. */
+const EMPTY_ROW_REGIONS: RowRegionLayout = {
+  frozenCount: 0,
+  frozenExtent: 0,
+  suffixViewportHeight: 0,
+  frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+};
 
 const INITIAL_DRAG_STATE: DragState = {
   isDragging: false,
@@ -68,6 +78,10 @@ export class GpGridViewModel {
   readonly contentWidth = signal<number>(0);
   readonly contentHeight = signal<number>(0);
   readonly rowsWrapperOffset = signal<number>(0);
+  /** C3 frozen/suffix layout published by the core. */
+  readonly rowRegions = signal<RowRegionLayout>(EMPTY_ROW_REGIONS);
+  /** C13 live-region text, or `null` when there is nothing to announce. */
+  readonly announcement = signal<GridAnnouncement | null>(null);
   readonly slots = signal<Map<string, SlotData>>(new Map());
   readonly totalRows = signal<number>(0);
   /** Core-resolved displayed-column layout; null until the core publishes. */
@@ -88,6 +102,16 @@ export class GpGridViewModel {
   readonly totalWidth: Signal<number>;
   readonly fillHandlePosition: Signal<FillHandlePosition | null>;
   readonly slotsArray: Signal<SlotData[]>;
+  /** C7: the slot partition the body renders, split by `slot.region`. */
+  readonly frozenSlots: Signal<SlotData[]>;
+  readonly suffixSlots: Signal<SlotData[]>;
+  /** Height of the sticky frozen band. */
+  readonly frozenHeight: Signal<number>;
+  /**
+   * One-element list, so `@for`'s track key remounts the live region on a new
+   * revision and a repeated message is read again.
+   */
+  readonly announcements: Signal<GridAnnouncement[]>;
   readonly batchSetters: BatchChangeSetters;
 
   private filterAnchorEl: HTMLElement | null = null;
@@ -115,6 +139,15 @@ export class GpGridViewModel {
       });
     });
     this.slotsArray = computed(() => [...this.slots().values()]);
+    this.frozenSlots = computed(() =>
+      this.slotsArray().filter((slot) => slot.region === 'frozen'));
+    this.suffixSlots = computed(() =>
+      this.slotsArray().filter((slot) => slot.region === 'suffix'));
+    this.frozenHeight = computed(() => this.rowRegions().frozenExtent);
+    this.announcements = computed(() => {
+      const announcement = this.announcement();
+      return announcement === null ? [] : [announcement];
+    });
 
     this.batchSetters = {
       setContentWidth: (v) => this.contentWidth.set(v),
@@ -134,6 +167,8 @@ export class GpGridViewModel {
       setLayout: (v) => this.layout.set(v),
       setColumnWindow: (v) => this.columnWindow.set(v),
       setColumnLayout: (v) => this.columnLayout.set(v),
+      setRowRegions: (v) => this.rowRegions.set(v),
+      setAnnouncement: (v) => this.announcement.set(v),
       setGeometryRevision: (v) => this.geometryRevision.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };
