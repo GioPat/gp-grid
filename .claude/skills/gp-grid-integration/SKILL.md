@@ -84,12 +84,12 @@ core (`GridCoreOptions`) and every wrapper (`Grid` / `GpGrid` / `gp-grid`):
   space stays empty and the grid scrolls horizontally.
 
 Changing it at runtime republishes the layout without recreating the core
-(`coreRef.current.setColumnLayout("fixed")`). A manual resize stores the pixel
-override directly: `core.getColumnState()` reports `width` only while an
+(`coreRef.current.columns.setLayout("fixed")`). A manual resize stores the pixel
+override directly: `core.columns.getState()` reports `width` only while an
 override exists, plus `resolvedWidth` (the displayed CSS px, `0` while hidden).
 
 Advanced adapters read geometry from `core.geometry` rather than recomputing
-positions: `getColumnLayout()`, `getCellBounds(row, col, space)`,
+positions: `getColumnLayout()`, `cells.getBounds(row, col, space)`,
 `hitTest({ x, y })`, `getScrollTarget(row, col)` and `getContentSize()`. The
 three coordinate spaces are `"content"`, `"viewport"` (default) and `"rows"`.
 See [docs/features/column-layout.md](../../../docs/features/column-layout.md).
@@ -97,9 +97,9 @@ See [docs/features/column-layout.md](../../../docs/features/column-layout.md).
 ### Column pinning and wide grids
 
 Pin a column with `pinned: "start"` / `pinned: "end"` on its definition, or at
-runtime with `core.setColumnPinned(columnId, "start" | "end" | null)` (`null`
+runtime with `core.columns.setPinned(columnId, "start" | "end" | null)` (`null`
 unpins). `onColumnPinned({ columnId, pinned })` fires for that command, the
-header pin toggle and a cross-region header drag — `setColumnState` stays
+header pin toggle and a cross-region header drag — `columns.setState` stays
 silent. Wrappers take `columnOverscan` (default `240` CSS px).
 
 A pin is a **request**, not a guarantee:
@@ -109,7 +109,7 @@ A pin is a **request**, not a guarantee:
   over end.
 - A rejected pin keeps its request and renders as a scrolling center column
   until the host is wide enough to admit it. Read the effective region from
-  `core.getColumnState()` (`region`), not from the request.
+  `core.columns.getState()` (`region`), not from the request.
 - An unmeasured viewport (SSR without `initialWidth`) admits every pin.
 - `order` clamps into a column's own region; only a pin change moves a column
   between regions, and unpinning returns it to its base-order slot.
@@ -132,6 +132,40 @@ accessible names with `labels.pinLeftColumn`, `labels.pinRightColumn` and
 `labels.unpinColumn`. A custom
 header renderer receives `pinned` and `onPinChange(pinned)`.
 See [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+
+### Frozen rows (`freezeRows`)
+
+`freezeRows: { count, maxCount?, minSuffixHeight? }` keeps the displayed rows
+`[0, count)` below the header while the rest scroll. Defaults: `count 0`,
+`maxCount 100`, `minSuffixHeight 64` (CSS px of suffix kept below the prefix).
+`count` is positional — never a header band — and survives sort, filter and
+data changes. Invalid values throw a `RangeError` naming the field.
+
+```tsx
+<Grid freezeRows={{ count: 3 }} onFrozenRowsChanged={(s) => setStatus(s)} />
+```
+
+- `count` is a request. `core.frozenRows.get()` answers
+  `{ requestedCount, effectiveCount, limit }`; `limit` is
+  `"maxCount" | "viewport" | "cache" | null` — the last constraint that reduced
+  the count (page budget for paginated sources, `minSuffixHeight` for the
+  viewport). A zero request or empty data answers `null`.
+- `onFrozenRowsChanged(state)` fires on every later change of `effectiveCount`
+  or `limit` — not for the core's first resolution and not per scroll. Use it
+  for a visible "n rows frozen" status; the core also announces
+  `labels.frozenRowsLimited` (`"{effective} of {requested} rows frozen"`) in a
+  visually hidden live region whenever the limit changes.
+- **Change it at runtime** with `core.frozenRows.set({ count })` or
+  `core.frozenRows.freezeThrough(viewIndex)` (`-1` unfreezes). `frozenRows.set`
+  replaces the whole config (omitted fields take the defaults) and an
+  equal-valued call is silent. The wrappers apply a
+  changed prop/input that way, so no remount is needed; growing the prefix
+  corrects the scroll position so the visible suffix stays anchored, and an open
+  edit whose row crosses the boundary is committed first.
+- Frozen rows render in a sticky block above the scrolling rows with their
+  pinned cells in a sibling sticky layer; an unavailable frozen row (paginated
+  page not loaded yet) renders a cell-less placeholder.
+  See [docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
 ### Data sources — pick one
 
@@ -271,9 +305,9 @@ if (req.filter) {
 ```
 
 The popup creates explicit one-level groups, so `(A AND B) OR C` and
-`A AND (B OR C)` have different, unambiguous models. `GridCore.setFilter()`
+`A AND (B OR C)` have different, unambiguous models. `GridCore.sortFilter.setFilter()`
 accepts legacy flat models as migration input and normalizes them; server
-requests and `getFilterModel()` expose only the grouped shape.
+requests and `sortFilter.getFilterModel()` expose only the grouped shape.
 The popup displays one AND/OR selector per scope: the selector outside the
 cards joins groups, while the selector inside a card joins its conditions.
 
@@ -317,14 +351,15 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Copy / paste:** Ctrl+C copies the selected range to clipboard as TSV; Ctrl+V pastes clipboard values across the active selection. Works automatically.
 - **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })` — **the consumer must reorder the underlying data**, the grid does not mutate it.
 - **Column resize / move:** on by default. Drag the right edge of a header to resize, drag the header body to reorder. Listen with `onColumnResized({ columnId, width, viewIndex })` and `onColumnMoved({ columnId, fromViewIndex, toViewIndex })` to persist user state.
-- **Column hide:** set `hidden: true` as the column's initial default (keeps it in the definition array); after mount, toggle visibility through `setColumnState` or the wrapper's `columnState` input.
-- **Column pin:** `pinned: "start"` / `"end"` on the column, or `setColumnPinned`. Pinned columns stay visible while the rest scroll; the header toggle (`pinIcon`) does the same. Listen with `onColumnPinned({ columnId, pinned })` to persist. A pin that does not fit renders in the center — check `region` in `getColumnState()`.
+- **Column hide:** set `hidden: true` as the column's initial default (keeps it in the definition array); after mount, toggle visibility through `columns.setState` or the wrapper's `columnState` input.
+- **Column pin:** `pinned: "start"` / `"end"` on the column, or `columns.setPinned`. Pinned columns stay visible while the rest scroll; the header toggle (`pinIcon`) does the same. Listen with `onColumnPinned({ columnId, pinned })` to persist. A pin that does not fit renders in the center — check `region` in `columns.getState()`.
+- **Frozen rows:** `freezeRows={{ count: 3 }}` keeps the first displayed rows below the header; a changed prop applies in place through `frozenRows.set` (no remount). Read `core.frozenRows.get()` for the effective count and its `limit`, and listen with `onFrozenRowsChanged(state)`. See [Frozen rows](#frozen-rows-freezerows).
 - **Highlighting (row / column / cell, incl. crosshair):** pass `highlighting={{ computeRowClasses, computeColumnClasses, computeCellClasses }}`. Each callback gets a context with `isHovered`, `isActive`, `isSelected`, etc., and returns CSS class names. Combine `computeRowClasses` + `computeColumnClasses` for an Excel-style crosshair. Define the highlight CSS classes globally (not scoped) — gp-grid renders cells outside any per-component CSS scope. Apply translucent row backgrounds through `.gp-grid-row.<class> .gp-grid-cell`; a translucent background on the row itself lets horizontally scrolling content show through pinned regions.
 - **Dark mode:** `darkMode={true}` adds a `.gp-grid-container--dark` modifier; the grid's CSS handles the rest.
 - **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste). All wired automatically.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.
@@ -334,30 +369,32 @@ Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 
 - Column identity is `colId ?? field`, a plain string. Duplicate ids warn once (`[gp-grid] Duplicate column id "x"`); the first definition wins and duplicates are dropped from the resolved layout.
 - Definitions are immutable caller input. Definition `width` / `hidden` / `pinned` / order are only initial defaults; live state lives in the core keyed by column id.
 - Replacing the `columns` array reconciles by id and is never a reset: surviving columns keep user width, order, visibility and pin. Definition order is authoritative until a column is moved.
-- `setColumnState(updates)` applies `{ columnId, width?, hidden?, order?, pinned? }[]` (`pinned: null` unpins even against a definition default); `resetColumnState(columnIds?)` resets the given ids (no arg resets all); `getColumnState()` returns `{ columnId, width?, resolvedWidth, hidden, order, pinned, region }[]`.
-- `setColumnPinned(columnId, pinned)` is the pin-only command and the one that raises `onColumnPinned`; `setColumnState` is silent like the other state commands.
-- Wrappers accept a controlled `columnState` input (React prop `columnState`, Vue `column-state`, Angular input `columnState`, typed `ColumnStateUpdate[]`) applied through `setColumnState` on every change.
+- `columns.setState(updates)` applies `{ columnId, width?, hidden?, order?, pinned? }[]` (`pinned: null` unpins even against a definition default); `columns.resetState(columnIds?)` resets the given ids (no arg resets all); `columns.getState()` returns `{ columnId, width?, resolvedWidth, hidden, order, pinned, region }[]`.
+- `columns.setPinned(columnId, pinned)` is the pin-only command and the one that raises `onColumnPinned`; `columns.setState` is silent like the other state commands.
+- Wrappers accept a controlled `columnState` input (React prop `columnState`, Vue `column-state`, Angular input `columnState`, typed `ColumnStateUpdate[]`) applied through `columns.setState` on every change.
 
 ### Programmatic API (`GridCore`)
 
-Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Common methods:
+Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Features live on namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowDrag`, `sortFilter`, `viewport`); the root keeps lifecycle and data loading. Common members:
 
 | Method | Purpose |
 |---|---|
-| `setSort(colId, direction, addToExisting)` | Programmatic sort |
-| `setFilter(colId, filterModel \| null)` | Programmatic filter (null clears) |
-| `startEdit(row, col)` / `commitEdit(editId?)` / `cancelEdit(editId?)` | Drive editing imperatively; pass `getEditState().editId` to ignore callbacks from a closed editor |
+| `sortFilter.setSort(colId, direction, addToExisting)` | Programmatic sort |
+| `sortFilter.setFilter(colId, filterModel \| null)` | Programmatic filter (null clears) |
+| `edit.start(row, col)` / `edit.commit(editId?)` / `edit.cancel(editId?)` | Drive editing imperatively; pass `edit.getState().editId` to ignore callbacks from a closed editor |
 | `setDataSource(ds)` | Swap data source without losing scroll/sort/filter state |
 | `refresh()` | Refetch from the source; call after adopting a columnar revision |
 | `refreshFromTransaction()` | Apply queued mutations |
-| `getRowCount()` | Displayed view-row count |
-| `getRowData(viewIndex)` | Source record at a view index, or `undefined` when record-less/unloaded |
-| `hasRow(viewIndex)` | Whether the view row exists (a `null` cell is a value) |
-| `getViewRow(viewIndex)` | `{ kind: "record", id, viewIndex, record? }` or `undefined` |
-| `getRecordById(rowId)` | Source record for a stable id (resident rows / source lookup only) |
-| `setColumnState(updates)` / `resetColumnState(ids?)` / `getColumnState()` | Column width / hidden / order / pin state |
-| `setColumnPinned(columnId, pinned)` | Pin to `"start"`/`"end"` or unpin with `null`; raises `onColumnPinned` |
-| `getSlotGeneration(rowIndex)` / `isSlotGenerationCurrent(rowIndex, gen)` | Slot recycle guard for async renderers |
+| `rows.getCount()` | Displayed view-row count |
+| `rows.getData(viewIndex)` | Source record at a view index, or `undefined` when record-less/unloaded |
+| `rows.has(viewIndex)` | Whether the view row exists (a `null` cell is a value) |
+| `rows.getViewRow(viewIndex)` | `{ kind: "record", id, viewIndex, record? }` or `undefined` |
+| `rows.getRecordById(rowId)` | Source record for a stable id (resident rows / source lookup only) |
+| `columns.setState(updates)` / `columns.resetState(ids?)` / `columns.getState()` | Column width / hidden / order / pin state |
+| `columns.setPinned(columnId, pinned)` | Pin to `"start"`/`"end"` or unpin with `null`; raises `onColumnPinned` |
+| `frozenRows.get()` | `{ requestedCount, effectiveCount, limit }` for the frozen prefix |
+| `rows.getSlotGeneration(viewIndex)` / `rows.isSlotGenerationCurrent(viewIndex, gen)` | Slot recycle guard for async renderers |
+| `cells.getValue(row, col)` / `cells.setValue(row, col, value)` / `cells.getBounds(rowId, columnId, space?)` | Cell values by position, bounds by identity |
 | `selection` (manager) | `startSelection`, `extendTo`, etc. |
 | `fill` (manager) | Fill handle programmatic control |
 | `highlight.updateOptions(opts)` | Swap highlighting at runtime |
@@ -382,7 +419,7 @@ How to get the ref:
 - **Custom renderer key not in registry** → cell falls back to default. Pass it via `cellRenderers={{ key: fn }}` and reference by string from the column.
 - **Highlighting CSS in scoped Vue styles or component-scoped Angular styles** → won't apply. Define those rules in a global stylesheet.
 - **Column index drift after `hidden: true`** → don't worry: the grid maps visible↔original indices internally, and events carry `columnId` plus named view indices (`viewIndex`, `fromViewIndex`, `toViewIndex`).
-- **Expecting a pinned column to always render pinned** → a pin that does not fit the viewport renders in the scrolling center and is admitted again on widening. Read `region` from `getColumnState()` instead of assuming the request took effect.
+- **Expecting a pinned column to always render pinned** → a pin that does not fit the viewport renders in the scrolling center and is admitted again on widening. Read `region` from `columns.getState()` instead of assuming the request took effect.
 - **Flipping `dir` on an existing grid** → the wrappers read direction at mount and on resize, so a flip without a size change needs a remount (change the `key`).
 
 ## What this skill does NOT do

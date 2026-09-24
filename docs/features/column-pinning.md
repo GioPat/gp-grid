@@ -17,7 +17,7 @@ at its own DOM boundary; framework code never recomputes a region or a window.
 |---|---|
 | `ColumnDefinition.pinned` | Definition default. `undefined` leaves the column in the scrolling center. |
 | `ColumnStateUpdate.pinned` | A command. `"start"`/`"end"` set the request, `null` is an explicit unpin that beats a definition default, `undefined` leaves it untouched. |
-| `ColumnState.pinned` | The live request stored on the model, `null` while unpinned. `resetColumnState` drops it, restoring the definition default. |
+| `ColumnState.pinned` | The live request stored on the model, `null` while unpinned. `columns.resetState` drops it, restoring the definition default. |
 | `ColumnStateSnapshot.pinned` | The requested pin, `null` while unpinned. |
 | `ColumnStateSnapshot.region` | The effective region, output-only. `null` while the column is hidden. |
 
@@ -27,10 +27,10 @@ and still be displayed in the center when there is no room (see
 
 Commands and events:
 
-- `GridCore.setColumnPinned(columnId, "start" | "end" | null)`
+- `GridCore.columns.setPinned(columnId, "start" | "end" | null)`
 - `onColumnPinned({ columnId, pinned })` on `GridCoreOptions` and as a prop of
   every wrapper — fired by that command, by the header pin toggle and by a
-  cross-region header drag. `setColumnState` stays silent, like the other
+  cross-region header drag. `columns.setState` stays silent, like the other
   state commands.
 
 ## Regions and order
@@ -184,7 +184,7 @@ describes the next action and comes from `labels.pinLeftColumn`,
 |---|---|---|---|---|
 | Overscan | `columnOverscan` option | `columnOverscan` prop | `columnOverscan` prop | `columnOverscan` input |
 | Pin event | `onColumnPinned` option | `onColumnPinned` prop | `onColumnPinned` prop | `(onColumnPinned)` output |
-| Command | `setColumnPinned(id, pin)` | `gridRef.current.core` | template ref `.core` | component `.core` |
+| Command | `columns.setPinned(id, pin)` | `gridRef.current.core` | template ref `.core` | component `.core` |
 | Icon | `GridIcon`, `defaultPinIcon` | `pinIcon` prop | `pin-icon` prop | `pinIcon` input |
 
 A custom adapter renders `state.columnWindow` (`start`, `center`, `end`) and

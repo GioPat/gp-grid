@@ -33,7 +33,7 @@ to `50` px (`DEFAULT_MIN_COLUMN_WIDTH`) and is diagnosed once per column id.
 
 ### Overrides are exact
 
-Manual resize and `setColumnState([{ columnId, width }])` store a pixel
+Manual resize and `columns.setState([{ columnId, width }])` store a pixel
 override. In `fit` mode an override keeps that exact width and the slack is
 shared by the columns that have no override:
 
@@ -43,17 +43,17 @@ override the first to 100      ->  100 / 200
 reset the first                ->  150 / 150
 ```
 
-When every displayed column is overridden the slack stays empty. `resetColumnState`
+When every displayed column is overridden the slack stays empty. `columns.resetState`
 removes the override; a definition width is never back-solved from a displayed
 width.
 
-`GridCore.getColumnState()` reports an optional `width` (present only while an
+`GridCore.columns.getState()` reports an optional `width` (present only while an
 override exists) plus `resolvedWidth`, the displayed CSS px (`0` while hidden).
 `resolvedWidth` is output-only.
 
 ### Changing the mode at runtime
 
-- Core: `core.setColumnLayout("fixed")`
+- Core: `core.columns.setLayout("fixed")`
 - React: the `columnLayout` prop
 - Vue: the `column-layout` prop
 - Angular: the `columnLayout` input
@@ -77,12 +77,12 @@ pin toggle are documented in [Column pinning](./column-pinning.md).
 | `getRowWindow()` / `getVisibleRowWindow()` | Half-open `{ start, end }`, overscanned / exact. |
 | `getRowBounds(i, space?)` / `getColumnBounds(layoutIndex, space?)` | `{ start, end }` in the requested space. |
 | `getCellBounds(rowIndex, layoutIndex, space?)` | `{ top, left, width, height, columnId, coordinateSpace }`. |
-| `getRowEdgeOffset(boundaryIndex, space?)` | Row boundary offset, including the end insertion edge `rowCount`. |
+| `getRowEdgeOffset(boundaryIndex, space?)` | Row boundary offset, including the end insertion edge `rowCount`. Frozen edges, up to and including the frozen count, do not scroll in `viewport` space. |
 | `hitTest({ x, y, scrollTop?, scrollLeft? })` | `{ row, displayIndex, col, columnId? }`. `row` and `displayIndex` (index into the displayed columns) are raw axis sentinels: `-1` before, `count` past the end. `col` is the layout index, or `-1` outside a column. |
 | `getScrollTarget(rowIndex, layoutIndex, from?)` | DOM `{ scrollTop?, scrollLeft? }` for the axes that must move. |
 | `getContentSize()` | Logical body `{ width, height, coordinateSpace: "content" }`. |
 
-`GridCore.getCellBounds(rowId, columnId, space?)` resolves identities through
+`GridCore.cells.getBounds(rowId, columnId, space?)` resolves identities through
 the bounded current row window and the resident records. It never scans or
 materializes a remote or columnar dataset, so a columnar identity outside the
 current window answers `undefined`; callers that hold a view index can query

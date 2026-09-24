@@ -315,7 +315,7 @@ import { GpGrid, GridCore } from "@gp-grid/vue";
 const gridRef = ref<{ core: ShallowRef<GridCore | null> } | null>(null);
 
 const sortByName = () => {
-  gridRef.value?.core.value?.setSort("name", "asc", false);
+  gridRef.value?.core.value?.sortFilter.setSort("name", "asc", false);
 };
 </script>
 
@@ -362,7 +362,7 @@ Both callbacks together = Excel-style crosshair. The `<style>` tag with the high
 
 The wrapper watches both props. If either changes, it calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just keep references stable (or change them intentionally).
 
-Replacing `columns` never recreates the core either: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing `columns` never recreates the core either: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.columns.setState` whenever it changes:
 
 ```vue
 <GpGrid
@@ -377,18 +377,34 @@ Replacing `columns` never recreates the core either: it reconciles by column id 
 
 `pinned: "start"` / `"end"` on a definition pins it against that edge; the
 controlled `:column-state` form is `{ columnId, pinned: 'start' | 'end' | null }`.
-At runtime use the exposed core: `gridRef.value?.core?.setColumnPinned(id, pin)`
+At runtime use the exposed core: `gridRef.value?.core?.columns.setPinned(id, pin)`
 (the exposed `core` is a `ShallowRef`). `:on-column-pinned="({ columnId, pinned }) => ..."`
 fires for that call, the header toggle and a cross-region header drag.
 
 A pin that does not fit the viewport renders in the scrolling center until it
 is admitted, so persist the request but read the effective `region` from
-`core.getColumnState()`. `:column-overscan` (default `240` px) is how far past
+`core.columns.getState()`. `:column-overscan` (default `240` px) is how far past
 each clip edge center columns stay mounted; an open editor keeps its column
 mounted regardless. The default header action uses `:pin-icon` and cycles through
 physical left, physical right and unpinned; override `pinLeftColumn`,
 `pinRightColumn` and `unpinColumn` in `:labels` for its accessible names. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+
+## Frozen rows
+
+`:freeze-rows="{ count: 3 }"` keeps the first displayed rows below the header
+while the rest scroll (defaults `maxCount 100`, `minSuffixHeight 64`).
+`:on-frozen-rows-changed="(state) => ..."` receives
+`{ requestedCount, effectiveCount, limit }` whenever either reported field
+changes — the effective count can be reduced by `maxCount`, the viewport or, for
+a paginated source, the page budget, and `state.limit` names the constraint
+(`"maxCount" | "viewport" | "cache" | null`). The core announces a reduced
+prefix as `labels.frozenRowsLimited` in a hidden live region.
+
+A changed prop is applied at runtime through `core.frozenRows.set`: the core is
+not recreated, the scroll position is corrected so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
 ## All `<GpGrid>` props (cheatsheet)
 
@@ -397,6 +413,7 @@ physical left, physical right and unpinned; override `pinLeftColumn`,
 | `:columns` | `ColumnDefinition[]` | required |
 | `:column-state` | `ColumnStateUpdate[]` | — |
 | `:column-overscan` | `number` | `240` |
+| `:freeze-rows` | `FreezeRowsOptions` | `{ count: 0 }` |
 | `:data-source` | `DataSource<TData>` | — |
 | `:row-data` | `TData[]` | — |
 | `:row-height` | `number` | required |
@@ -425,6 +442,7 @@ physical left, physical right and unpinned; override `pinLeftColumn`,
 | `:on-column-resized` | `(e: ColumnResizedEvent) => void` | — |
 | `:on-column-moved` | `(e: ColumnMovedEvent) => void` | — |
 | `:on-column-pinned` | `(e: ColumnPinnedEvent) => void` | — |
+| `:on-frozen-rows-changed` | `(s: FrozenRowsState) => void` | — |
 
 ## Vue-specific gotchas
 
