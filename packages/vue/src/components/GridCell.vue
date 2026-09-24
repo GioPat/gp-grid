@@ -58,18 +58,18 @@ const isEditing = (): boolean =>
 // Read raw values through the core so a record-less (columnar) row renders
 // exactly like an object row.
 const getRawValue = (): CellValue =>
-  props.coreRef?.getCellValue(props.rowIndex, props.column.layoutIndex) ?? null;
+  props.coreRef?.cells.getValue(props.rowIndex, props.column.layoutIndex) ?? null;
 
-const getRowIdAt = () => props.coreRef?.getRowId(props.rowIndex);
+const getRowIdAt = () => props.coreRef?.rows.getId(props.rowIndex);
 
 const getFieldValueAt = (field: string): CellValue =>
-  props.coreRef?.getFieldValue(props.rowIndex, field) ?? null;
+  props.coreRef?.cells.getFieldValue(props.rowIndex, field) ?? null;
 
 /** The open editor is the source of truth for its draft value. */
 const initialEditValue = (): CellValue => {
   const editing = props.editingCell;
   if (editing === null) return null;
-  const live = props.coreRef?.getEditState() ?? null;
+  const live = props.coreRef?.edit.getState() ?? null;
   if (live !== null && live.editId === editing.editId) return live.currentValue;
   return editing.initialValue;
 };

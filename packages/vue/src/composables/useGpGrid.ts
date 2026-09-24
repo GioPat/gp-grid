@@ -26,7 +26,11 @@ import type {
   DataSource,
   DragState,
   FillHandlePosition,
+  FreezeRowsOptions,
+  FrozenRowsState,
+  GridAnnouncement,
   GridState,
+  RowRegionLayout,
   SlotData,
   HighlightingOptions,
   RowLoadingOptions,
@@ -52,6 +56,13 @@ export interface UseGpGridOptions<TData = unknown> {
   /** Displayed-width policy. Default: "fit". */
   columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
+  /**
+   * Number of leading displayed rows kept visible below the header. Applied
+   * at runtime; a new identity never rebuilds the core.
+   */
+  freezeRows?: FreezeRowsOptions;
+  /** Called when the effective frozen count or its limiting reason changes. */
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
@@ -89,6 +100,10 @@ export interface UseGpGridResult<TData = unknown> {
   layout: ComputedRef<ColumnLayoutSnapshot | null>;
   totalWidth: ComputedRef<number>;
   fillHandlePosition: ComputedRef<FillHandlePosition | null>;
+  /** C3 frozen/suffix layout published by the core. */
+  rowRegions: ComputedRef<RowRegionLayout>;
+  /** C13 live-region content, or `null` when there is nothing to announce. */
+  announcement: ComputedRef<GridAnnouncement | null>;
 
   // Event handlers
   handleScroll: () => void;
@@ -152,6 +167,8 @@ export function useGpGrid<TData = unknown>(
   const layout = computed(() => state.value.layout);
   const totalWidth = computed(() => state.value.contentWidth);
   const slotsArray = computed(() => Array.from(state.value.slots.values()));
+  const rowRegions = computed(() => state.value.rowRegions);
+  const announcement = computed(() => state.value.announcement);
 
   // Input handling
   const {
@@ -194,7 +211,7 @@ export function useGpGrid<TData = unknown>(
   const handleFilterApply = (colId: string, filter: ColumnFilterModel | null): void => {
     const core = coreRef.value;
     if (core) {
-      core.setFilter(colId, filter);
+      core.sortFilter.setFilter(colId, filter);
     }
   };
 
@@ -202,7 +219,7 @@ export function useGpGrid<TData = unknown>(
   const handleFilterPopupClose = (): void => {
     const core = coreRef.value;
     if (core) {
-      core.closeFilterPopup();
+      core.sortFilter.closeFilterPopup();
     }
   };
 
@@ -233,6 +250,7 @@ export function useGpGrid<TData = unknown>(
       columnLayout: options.columnLayout ?? "fit",
       maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
+      freezeRows: options.freezeRows,
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,
       getRowId: options.getRowId,
@@ -240,6 +258,7 @@ export function useGpGrid<TData = unknown>(
         ? (event) => options.onCellValueChanged?.(event)
         : undefined,
       onColumnPinned: (event) => options.onColumnPinned?.(event),
+      onFrozenRowsChanged: (state) => options.onFrozenRowsChanged?.(state),
     });
 
     coreRef.value = core;
@@ -328,7 +347,16 @@ export function useGpGrid<TData = unknown>(
   watch(
     () => options.columnLayout,
     (mode) => {
-      coreRef.value?.setColumnLayout(mode ?? "fit");
+      coreRef.value?.columns.setLayout(mode ?? "fit");
+    },
+  );
+
+  // Apply a new freeze configuration without recreating the core; the setter is
+  // silent for an equal request, and creation already received the option.
+  watch(
+    () => options.freezeRows,
+    (config) => {
+      coreRef.value?.frozenRows.set(config);
     },
   );
 
@@ -366,6 +394,8 @@ export function useGpGrid<TData = unknown>(
     layout,
     totalWidth,
     fillHandlePosition,
+    rowRegions,
+    announcement,
 
     // Event handlers
     handleScroll,

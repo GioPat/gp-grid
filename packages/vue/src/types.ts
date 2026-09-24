@@ -13,6 +13,8 @@ import type {
   ColumnStateUpdate,
   ColumnLayoutMode,
   EditRendererParams,
+  FreezeRowsOptions,
+  FrozenRowsState,
   GridLabelOverrides,
   GridIcon,
   HeaderRendererParams,
@@ -91,6 +93,13 @@ export interface GpGridProps<TData = unknown> {
   /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
   columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
+  /**
+   * Number of leading displayed rows kept visible below the header. Applied
+   * at runtime; a new identity never rebuilds the core.
+   */
+  freezeRows?: FreezeRowsOptions;
+  /** Called when the effective frozen count or its limiting reason changes. */
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;

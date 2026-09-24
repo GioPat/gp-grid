@@ -71,9 +71,9 @@ export function renderEditCell(
     isSelected: true,
     isEditing: true,
     initialValue,
-    onValueChange: (newValue) => core.updateEditValue(newValue, editId),
-    onCommit: () => core.commitEdit(editId),
-    onCancel: () => core.cancelEdit(editId),
+    onValueChange: (newValue) => core.edit.updateValue(newValue, editId),
+    onCommit: () => core.edit.commit(editId),
+    onCancel: () => core.edit.cancel(editId),
   };
 
   // Check for column-specific renderer
@@ -101,16 +101,16 @@ export function renderEditCell(
     value: initialValue == null ? "" : String(initialValue),
     autofocus: true,
     onFocus: (e: FocusEvent) => (e.target as HTMLInputElement).select(),
-    onInput: (e: Event) => core.updateEditValue((e.target as HTMLInputElement).value, editId),
+    onInput: (e: Event) => core.edit.updateValue((e.target as HTMLInputElement).value, editId),
     onKeydown: (e: KeyboardEvent) => {
       e.stopPropagation();
       if (e.key === "Enter") {
-        core.commitEdit(editId);
+        core.edit.commit(editId);
       } else if (e.key === "Escape") {
-        core.cancelEdit(editId);
+        core.edit.cancel(editId);
       } else if (e.key === "Tab") {
         e.preventDefault();
-        core.commitEdit(editId);
+        core.edit.commit(editId);
         core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
       }
     },
@@ -125,7 +125,7 @@ export function renderEditCell(
           replacement.focus();
           return;
         }
-        core.commitEdit(editId);
+        core.edit.commit(editId);
       });
     },
   });

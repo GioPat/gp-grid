@@ -7,12 +7,15 @@ import type {
   ColumnWindowSnapshot,
   DragState,
   FillHandlePosition,
+  GridAnnouncement,
   GridCore,
   GridLabels,
+  RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
 import { formatLabel } from "@gp-grid/core";
 import GridRow from "./GridRow.vue";
+import GridFrozenRows from "./GridFrozenRows.vue";
 import type { GridRowCellContext } from "./cell-props";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
@@ -23,6 +26,9 @@ const props = defineProps<{
   contentHeight: number;
   totalWidth: number;
   rowsWrapperOffset: number;
+  rowRegions: RowRegionLayout;
+  /** C13 live-region content, or `null` when there is nothing to announce. */
+  announcement: GridAnnouncement | null;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   hoverPosition: CellPosition | null;
@@ -77,8 +83,10 @@ const cellContext = computed<GridRowCellContext>(() => ({
   onCellMouseLeave: props.onCellMouseLeave,
 }));
 
-const visibleSlots = computed(() =>
-  props.slotsArray.filter((slot) => slot.rowIndex >= 0));
+/** C7: rows are split by the published slot region, never by an index guess. */
+const frozenSlots = computed(() => props.slotsArray.filter((slot) => slot.region === "frozen"));
+const suffixSlots = computed(() =>
+  props.slotsArray.filter((slot) => slot.region === "suffix" && slot.rowIndex >= 0));
 
 /** Region hosting the fill handle, or `null` when it is not rendered. */
 const handleRegion = computed(() =>
@@ -86,17 +94,38 @@ const handleRegion = computed(() =>
     ? null
     : props.fillHandlePosition.region);
 
+/** C10: a frozen anchor hosts the handle in the frozen band, not in the wrapper. */
+const frozenHandlePosition = computed<FillHandlePosition | null>(() => {
+  const position = props.fillHandlePosition;
+  if (position?.rowRegion !== "frozen" || handleRegion.value === null) return null;
+  return position;
+});
+
+const suffixHandleRegion = computed(() =>
+  frozenHandlePosition.value === null ? handleRegion.value : null);
+
 /** Pin regions host the handle in a zero-height sticky overlay so it follows them. */
 const pinOverlayWidth = computed(() => {
   const regions = props.columnWindow?.layout.regions;
   if (regions === undefined) return 0;
-  return handleRegion.value === "end" ? regions.endWidth : regions.startWidth;
+  return suffixHandleRegion.value === "end" ? regions.endWidth : regions.startWidth;
 });
 
 const fillHandleStyle = computed(() => ({
   top: `${props.fillHandlePosition?.top ?? 0}px`,
   insetInlineStart: `${props.fillHandlePosition?.left ?? 0}px`,
 }));
+
+const rowDrag = computed(() =>
+  props.dragState.dragType === "row-drag" ? props.dragState.rowDrag : null);
+const dropIndicatorVisible = computed(() =>
+  rowDrag.value !== null && rowDrag.value.dropTargetIndex !== null);
+/** The drop indicator follows the row it targets, like the fill handle does. */
+const frozenDropIndicator = computed(() =>
+  dropIndicatorVisible.value && rowDrag.value?.dropIndicatorRegion === "frozen");
+const suffixDropIndicator = computed(() =>
+  dropIndicatorVisible.value && frozenDropIndicator.value === false);
+const dropIndicatorY = computed(() => rowDrag.value?.dropIndicatorY ?? 0);
 
 defineExpose({ bodyRef });
 </script>
@@ -120,6 +149,35 @@ defineExpose({ bodyRef });
         minWidth: '100%',
       }"
     >
+      <GridFrozenRows
+        :row-regions="props.rowRegions"
+        :slots="frozenSlots"
+        :column-window="props.columnWindow"
+        :displayed-index-of="props.displayedIndexOf"
+        :content-width-px="contentWidthPx"
+        :row-height="props.rowHeight"
+        :cell-context="cellContext"
+        :fill-handle-position="frozenHandlePosition"
+        :show-drop-indicator="frozenDropIndicator"
+      >
+        <template #fill-handle>
+          <div
+            class="gp-grid-fill-handle"
+            :style="fillHandleStyle"
+            @pointerdown="props.onFillHandleMouseDown"
+          />
+        </template>
+        <template #drop-indicator>
+          <div
+            class="gp-grid-row-drop-indicator"
+            :style="{
+              transform: `translateY(${dropIndicatorY}px)`,
+              width: `${contentWidthPx}px`,
+            }"
+          />
+        </template>
+      </GridFrozenRows>
+
       <!-- Rows wrapper -->
       <div
         class="gp-grid-rows-wrapper"
@@ -131,7 +189,7 @@ defineExpose({ bodyRef });
       >
         <template v-if="props.columnWindow">
           <GridRow
-            v-for="slot in visibleSlots"
+            v-for="slot in suffixSlots"
             :key="slot.slotId"
             :slot="slot"
             :column-window="props.columnWindow"
@@ -143,9 +201,9 @@ defineExpose({ bodyRef });
         </template>
 
         <!-- Fill handle (drag to fill) - inside the wrapper so it moves with rows -->
-        <template v-if="handleRegion !== null">
+        <template v-if="suffixHandleRegion !== null">
           <div
-            v-if="handleRegion === 'center'"
+            v-if="suffixHandleRegion === 'center'"
             class="gp-grid-fill-handle"
             :style="fillHandleStyle"
             @pointerdown="props.onFillHandleMouseDown"
@@ -153,7 +211,7 @@ defineExpose({ bodyRef });
           <div
             v-else
             class="gp-grid-pin-overlay"
-            :class="`gp-grid-pin-overlay--${handleRegion}`"
+            :class="`gp-grid-pin-overlay--${suffixHandleRegion}`"
             role="presentation"
             :style="{ width: `${pinOverlayWidth}px` }"
           >
@@ -167,10 +225,10 @@ defineExpose({ bodyRef });
 
         <!-- Row drop indicator -->
         <div
-          v-if="props.dragState.dragType === 'row-drag' && props.dragState.rowDrag?.dropTargetIndex !== null"
+          v-if="suffixDropIndicator"
           class="gp-grid-row-drop-indicator"
           :style="{
-            transform: `translateY(${props.dragState.rowDrag!.dropIndicatorY}px)`,
+            transform: `translateY(${dropIndicatorY}px)`,
             width: `${contentWidthPx}px`,
           }"
         />
@@ -190,5 +248,16 @@ defineExpose({ bodyRef });
     >
       {{ props.labels.emptyState }}
     </div>
+  </div>
+
+  <!-- C13 live region: the revision key remounts it so each message is read once. -->
+  <div
+    v-if="props.announcement !== null"
+    :key="props.announcement.revision"
+    class="gp-grid-visually-hidden"
+    role="status"
+    aria-live="polite"
+  >
+    {{ props.announcement.message }}
   </div>
 </template>
