@@ -33,7 +33,7 @@ const createGrid = () => {
 };
 
 const columnAt = (core: GridCore<Row>, index: number): ColumnDefinition => {
-  const column = core.getColumns()[index];
+  const column = core.columns.get()[index];
   if (column === undefined) throw new Error(`no column at ${index}`);
   return column;
 };
@@ -48,7 +48,7 @@ describe("highlight caches across column moves", () => {
     expect(highlight.computeColumnClasses(0, columnAt(core, 0))).toEqual(["col-id"]);
 
     // id -> last; columns are now name, age, id
-    core.moveColumn(0, 3);
+    core.columns.move(0, 3);
 
     expect(highlight.computeColumnClasses(0, columnAt(core, 0))).toEqual(["col-name"]);
     expect(computeColumnClasses).toHaveBeenCalledTimes(2);
@@ -59,11 +59,11 @@ describe("highlight caches across column moves", () => {
     await core.initialize();
     const highlight = core.highlight;
     if (highlight === null) throw new Error("highlighting not configured");
-    const row = core.getRowData(0);
+    const row = core.rows.getData(0);
 
     expect(highlight.computeCellClasses(0, 0, columnAt(core, 0), row)).toEqual(["col-id"]);
 
-    core.moveColumn(0, 3);
+    core.columns.move(0, 3);
 
     expect(highlight.computeCellClasses(0, 0, columnAt(core, 0), row)).toEqual(["col-name"]);
     expect(computeCellClasses).toHaveBeenCalledTimes(2);
@@ -76,7 +76,7 @@ describe("highlight caches across column moves", () => {
     if (highlight === null) throw new Error("highlighting not configured");
 
     highlight.computeColumnClasses(0, columnAt(core, 0));
-    core.setColumnWidth(0, 120);
+    core.columns.setWidth(0, 120);
     highlight.computeColumnClasses(0, columnAt(core, 0));
 
     expect(computeColumnClasses).toHaveBeenCalledTimes(1);

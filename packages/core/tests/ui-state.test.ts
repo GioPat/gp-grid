@@ -22,10 +22,29 @@ describe("createInitialState — defaults", () => {
     expect(state.pendingScrollLeft).toBeNull();
   });
 
+  it("seeds the zero-count region layout and no announcement", () => {
+    const state = createInitialState();
+    expect(state.rowRegions).toEqual({
+      frozenCount: 0,
+      frozenExtent: 0,
+      suffixViewportHeight: 0,
+      frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+    });
+    expect(state.announcement).toBeNull();
+  });
+
   it("hands out independent maps per state", () => {
     const first = createInitialState();
     const second = createInitialState();
-    first.slots.set("slot-0", { slotId: "slot-0", rowIndex: 0, rowData: undefined, generation: 1, translateY: 0 });
+    first.slots.set("slot-0", {
+      slotId: "slot-0",
+      rowIndex: 0,
+      rowData: undefined,
+      generation: 1,
+      translateY: 0,
+      region: "suffix",
+      loading: false,
+    });
     expect(second.slots.size).toBe(0);
     expect(first.headers).not.toBe(second.headers);
   });
@@ -39,6 +58,32 @@ describe("createInitialState — defaults", () => {
 });
 
 describe("createInitialState — seeded first render", () => {
+  it("takes the published regions and announcement over the seed", () => {
+    const seeded = createInitialState();
+    const rowRegions = {
+      frozenCount: 2,
+      frozenExtent: 64,
+      suffixViewportHeight: 256,
+      frozen: { requestedCount: 2, effectiveCount: 2, limit: null },
+    };
+    const announcement = { message: "2 of 2 rows frozen", revision: 7 };
+    const state = {
+      ...seeded,
+      ...applyInstruction(
+        { type: "SET_ROW_REGIONS", regions: rowRegions, revision: 7 },
+        seeded.slots,
+        seeded.headers,
+      ),
+      ...applyInstruction(
+        { type: "SET_ANNOUNCEMENT", announcement, revision: 7 },
+        seeded.slots,
+        seeded.headers,
+      ),
+    };
+    expect(state.rowRegions).toBe(rowRegions);
+    expect(state.announcement).toBe(announcement);
+  });
+
   it("fits the seeded columns to the initial width", () => {
     const columns = twoColumns();
     const state = createInitialState({ initialColumns: columns, initialWidth: 400, initialHeight: 300 });

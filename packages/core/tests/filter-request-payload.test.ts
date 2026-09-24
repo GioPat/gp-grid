@@ -69,7 +69,7 @@ describe("filter request payload — valueFormatter never leaks to the server", 
     });
     await grid.initialize();
 
-    await grid.setFilter("status", buildPopupFilter([1, 0]));
+    await grid.sortFilter.setFilter("status", buildPopupFilter([1, 0]));
 
     const withFilter = requests.filter((r) => r.filter?.["status"] !== undefined);
     expect(withFilter.length).toBeGreaterThan(0);
@@ -107,7 +107,7 @@ describe("filter request payload — valueFormatter never leaks to the server", 
         }],
         combination: "and",
       };
-      await grid.setFilter("status", staleModel);
+      await grid.sortFilter.setFilter("status", staleModel);
 
       const mismatchWarnings = warnSpy.mock.calls.filter(
         (call) => typeof call[0] === "string" && call[0].includes("strict identity"),
@@ -115,7 +115,7 @@ describe("filter request payload — valueFormatter never leaks to the server", 
       expect(mismatchWarnings).toHaveLength(1);
 
       // Raw values on the same column must not warn.
-      await grid.setFilter("id", buildPopupFilter([1, 0]));
+      await grid.sortFilter.setFilter("id", buildPopupFilter([1, 0]));
       expect(
         warnSpy.mock.calls.filter(
           (call) => typeof call[0] === "string" && call[0].includes("strict identity"),

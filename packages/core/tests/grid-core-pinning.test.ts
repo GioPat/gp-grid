@@ -67,16 +67,16 @@ describe("GridCore pinning", () => {
     const { grid } = createGrid({ columnLayout: "fixed" });
     grid.setViewport(0, 0, 200, 320);
 
-    grid.setColumnPinned("c3", "start");
+    grid.columns.setPinned("c3", "start");
     expect(ids(grid)[0]).toBe("c3");
-    expect(grid.getColumnState().find((state) => state.columnId === "c3")).toMatchObject({
+    expect(grid.columns.getState().find((state) => state.columnId === "c3")).toMatchObject({
       pinned: "start",
       region: "start",
     });
 
-    grid.setColumnPinned("c3", null);
+    grid.columns.setPinned("c3", null);
     expect(ids(grid)[0]).toBe("c0");
-    expect(grid.getColumnState().find((state) => state.columnId === "c3")).toMatchObject({
+    expect(grid.columns.getState().find((state) => state.columnId === "c3")).toMatchObject({
       pinned: null,
       region: "center",
     });
@@ -84,12 +84,12 @@ describe("GridCore pinning", () => {
 
   it("returns an unpinned column to its base-order slot", () => {
     const { grid } = createGrid({ columns: [def("a"), def("b"), def("c")], columnLayout: "fixed" });
-    grid.moveColumn(2, 0);
+    grid.columns.move(2, 0);
     expect(ids(grid)).toEqual(["c", "a", "b"]);
 
-    grid.setColumnPinned("c", "end");
+    grid.columns.setPinned("c", "end");
     expect(ids(grid)).toEqual(["a", "b", "c"]);
-    grid.setColumnPinned("c", null);
+    grid.columns.setPinned("c", null);
     expect(ids(grid)).toEqual(["c", "a", "b"]);
   });
 
@@ -97,17 +97,17 @@ describe("GridCore pinning", () => {
     const onColumnPinned = vi.fn();
     const { grid } = createGrid({ onColumnPinned });
 
-    grid.setColumnPinned("c1", "start");
+    grid.columns.setPinned("c1", "start");
     expect(onColumnPinned).toHaveBeenCalledTimes(1);
     expect(onColumnPinned).toHaveBeenCalledWith({ columnId: "c1", pinned: "start" });
 
-    grid.setColumnPinned("c1", "start");
+    grid.columns.setPinned("c1", "start");
     expect(onColumnPinned).toHaveBeenCalledTimes(1);
 
-    grid.setColumnPinned("missing", "start");
+    grid.columns.setPinned("missing", "start");
     expect(onColumnPinned).toHaveBeenCalledTimes(1);
 
-    grid.setColumnPinned("c1", null);
+    grid.columns.setPinned("c1", null);
     expect(onColumnPinned).toHaveBeenLastCalledWith({ columnId: "c1", pinned: null });
   });
 
@@ -117,21 +117,21 @@ describe("GridCore pinning", () => {
       columnLayout: "fixed",
     });
     expect(ids(grid)).toEqual(["a", "b"]);
-    expect(grid.getColumnState()[0]).toMatchObject({ pinned: "start", region: "start" });
+    expect(grid.columns.getState()[0]).toMatchObject({ pinned: "start", region: "start" });
 
-    grid.setColumnState([{ columnId: "a", pinned: null }]);
-    expect(grid.getColumnState()[0]).toMatchObject({ pinned: null, region: "center" });
+    grid.columns.setState([{ columnId: "a", pinned: null }]);
+    expect(grid.columns.getState()[0]).toMatchObject({ pinned: null, region: "center" });
     expect(ids(grid)).toEqual(["a", "b"]);
 
-    grid.resetColumnState(["a"]);
-    expect(grid.getColumnState()[0]).toMatchObject({ pinned: "start", region: "start" });
+    grid.columns.resetState(["a"]);
+    expect(grid.columns.getState()[0]).toMatchObject({ pinned: "start", region: "start" });
   });
 
   it("clears the selection range when a pin reorders the visual layout", () => {
     const { grid } = createGrid({ columns: [def("a"), def("b"), def("c")], columnLayout: "fixed" });
     grid.selection.setSelectionRange({ startRow: 0, startCol: 0, endRow: 1, endCol: 2 });
 
-    grid.setColumnPinned("c", "start");
+    grid.columns.setPinned("c", "start");
     expect(grid.selection.getSelectionRange()).toBeNull();
   });
 
@@ -142,12 +142,12 @@ describe("GridCore pinning", () => {
       columnLayout: "fixed",
       onColumnPinned,
     });
-    grid.setColumnPinned("a", "start");
+    grid.columns.setPinned("a", "start");
     expect(ids(grid)).toEqual(["a", "b", "c"]);
 
     // Drop "c" before the start-pinned column "a": it adopts "start".
-    grid.moveColumn(2, 0);
-    expect(grid.getColumnState().find((state) => state.columnId === "c")).toMatchObject({
+    grid.columns.move(2, 0);
+    expect(grid.columns.getState().find((state) => state.columnId === "c")).toMatchObject({
       pinned: "start",
     });
     expect(onColumnPinned).toHaveBeenCalledWith({ columnId: "c", pinned: "start" });
@@ -160,11 +160,11 @@ describe("GridCore pinning", () => {
       columnLayout: "fixed",
       onColumnPinned,
     });
-    grid.setColumnPinned("a", "start");
-    grid.setColumnPinned("b", "start");
+    grid.columns.setPinned("a", "start");
+    grid.columns.setPinned("b", "start");
 
     // Both are start pins, so this move stays inside the region.
-    grid.moveColumn(1, 0);
+    grid.columns.move(1, 0);
     expect(ids(grid)).toEqual(["b", "a", "c", "d"]);
     expect(onColumnPinned).toHaveBeenCalledTimes(2);
   });
@@ -206,21 +206,21 @@ describe("GridCore pinning", () => {
     const { grid } = createGrid({ columns });
     grid.setViewport(0, 0, 200, 320);
 
-    expect(grid.startEdit(0, 600)).toBe(true);
+    expect(grid.edit.start(0, 600)).toBe(true);
     const window = grid.geometry.getColumnWindow();
     expect(window.range.end).toBeLessThan(600);
     expect(window.center.map((column) => column.columnId)).toContain("c600");
 
-    grid.commitEdit();
-    expect(grid.getEditState()).toBeNull();
+    grid.edit.commit();
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("commits an open edit before its column is hidden", () => {
     const { grid } = createGrid({ columns: [def("a", { editable: true }), def("b")], columnLayout: "fixed" });
-    grid.startEdit(0, 0);
-    grid.setColumnState([{ columnId: "a", hidden: true }]);
+    grid.edit.start(0, 0);
+    grid.columns.setState([{ columnId: "a", hidden: true }]);
 
-    expect(grid.getEditState()).toBeNull();
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("releases the edit retention after the edit closes", () => {
@@ -233,11 +233,11 @@ describe("GridCore pinning", () => {
     const before = grid.geometry.getColumnWindow();
     expect(before.center.map((column) => column.columnId)).not.toContain("c60");
 
-    grid.startEdit(0, 60);
+    grid.edit.start(0, 60);
     const during = grid.geometry.getColumnWindow();
     expect(during.center.map((column) => column.columnId)).toContain("c60");
 
-    grid.cancelEdit();
+    grid.edit.cancel();
     const after = grid.geometry.getColumnWindow();
     expect(after.center.map((column) => column.columnId)).not.toContain("c60");
   });
@@ -247,7 +247,7 @@ describe("GridCore pinning", () => {
       columns: [def("a"), def("b"), def("c"), def("d")],
       columnLayout: "fixed",
     });
-    grid.setColumnState([{ columnId: "b", hidden: true }]);
+    grid.columns.setState([{ columnId: "b", hidden: true }]);
     grid.selection.setActiveCell(0, 0);
 
     grid.selection.moveFocus("right", false);

@@ -49,7 +49,7 @@ describe("column pinning third review", () => {
     ]);
     const hit = grid.geometry.hitTest({ x: 50, y: 16 });
     expect(hit.columnId).toBe("b");
-    expect(grid.getCellValue(0, hit.col)).toBe("B");
+    expect(grid.cells.getValue(0, hit.col)).toBe("B");
   });
 
   it("commits an edit to the visible field after hiding a column", async () => {
@@ -59,9 +59,9 @@ describe("column pinning third review", () => {
       column("c"),
     ]);
     const hit = grid.geometry.hitTest({ x: 50, y: 16 });
-    grid.startEdit(0, hit.col);
-    grid.updateEditValue("edited B");
-    grid.commitEdit();
+    grid.edit.start(0, hit.col);
+    grid.edit.updateValue("edited B");
+    grid.edit.commit();
     expect(row).toMatchObject({ a: "A", b: "edited B", c: "C" });
   });
 
@@ -114,11 +114,11 @@ describe("column pinning third review", () => {
       column("b"),
       column("c"),
     ]);
-    grid.startEdit(0, 2);
-    grid.updateEditValue("edited C");
-    grid.moveColumn(2, 0);
-    expect(grid.getColumnState()[0]).toMatchObject({ columnId: "c", pinned: "start" });
-    grid.commitEdit();
+    grid.edit.start(0, 2);
+    grid.edit.updateValue("edited C");
+    grid.columns.move(2, 0);
+    expect(grid.columns.getState()[0]).toMatchObject({ columnId: "c", pinned: "start" });
+    grid.edit.commit();
     expect(row).toMatchObject({ a: "A", b: "B", c: "edited C" });
   });
 
@@ -129,7 +129,7 @@ describe("column pinning third review", () => {
       column("c"),
     ]);
     grid.selection.setActiveCell(0, 2);
-    grid.moveColumn(2, 0);
+    grid.columns.move(2, 0);
     expect(grid.selection.getActiveCell()).toEqual({ row: 0, col: 0 });
   });
 
@@ -139,9 +139,9 @@ describe("column pinning third review", () => {
       column("b"),
       column("c"),
     ]);
-    expect(grid.startPeek(0, 2)).toBe(true);
-    grid.moveColumn(2, 0);
-    expect(grid.getPeekState()).toEqual({ row: 0, col: 0 });
+    expect(grid.edit.startPeek(0, 2)).toBe(true);
+    grid.columns.move(2, 0);
+    expect(grid.edit.getPeekState()).toEqual({ row: 0, col: 0 });
   });
 
   it("keeps the committed window unchanged on a tiny scroll after resize", async () => {
@@ -149,7 +149,7 @@ describe("column pinning third review", () => {
       Array.from({ length: 100 }, (_, index) => column(`c${index}`)),
       180,
     );
-    grid.setColumnWidth(0, 110);
+    grid.columns.setWidth(0, 110);
     const before = grid.geometry.getColumnWindow();
     const revision = grid.geometry.revision;
     batches.length = 0;

@@ -33,7 +33,7 @@ const def = (
 });
 
 const ids = (grid: GridCore<TestRow>): string[] =>
-  grid.getColumns().map((column) => column.colId ?? column.field);
+  grid.columns.get().map((column) => column.colId ?? column.field);
 
 const createGrid = (
   columns: ColumnDefinition[],
@@ -69,22 +69,22 @@ describe("GridCore column state", () => {
     const instructions = collect(grid);
     await grid.initialize();
 
-    grid.setColumnWidth(1, 180);
-    const storedWidth = grid.getColumnState()[1]?.width;
+    grid.columns.setWidth(1, 180);
+    const storedWidth = grid.columns.getState()[1]?.width;
     expect(storedWidth).not.toBe(100);
-    expect(grid.getColumnState()[1]).toMatchObject({
+    expect(grid.columns.getState()[1]).toMatchObject({
       columnId: "b",
       hidden: false,
       order: 1,
     });
 
     instructions.length = 0;
-    grid.setColumns([def("b"), def("c")]);
+    grid.columns.set([def("b"), def("c")]);
 
     expect(ids(grid)).toEqual(["b", "c"]);
     // `b` keeps its exact override; `c` keeps its definition width because
     // the core has no measured viewport in this test.
-    expect(grid.getColumnState()).toEqual([
+    expect(grid.columns.getState()).toEqual([
       {
         columnId: "b",
         width: storedWidth,
@@ -119,8 +119,8 @@ describe("GridCore column state", () => {
     ]);
     const grid = createGrid(frozen as unknown as ColumnDefinition[]);
 
-    expect(() => grid.setColumnWidth(0, 200)).not.toThrow();
-    expect(() => grid.moveColumn(0, 2)).not.toThrow();
+    expect(() => grid.columns.setWidth(0, 200)).not.toThrow();
+    expect(() => grid.columns.move(0, 2)).not.toThrow();
     expect(frozen[0]?.width).toBe(120);
     expect(frozen[1]?.width).toBe(80);
     expect(ids(grid)).toEqual(["b", "a"]);
@@ -137,14 +137,14 @@ describe("GridCore column state", () => {
       onColumnMoved,
     });
 
-    grid.setColumnWidth(1, 150);
+    grid.columns.setWidth(1, 150);
     expect(onColumnResized).toHaveBeenCalledWith({
       columnId: "b",
       width: 150,
       viewIndex: 1,
     });
 
-    grid.moveColumn(0, 2);
+    grid.columns.move(0, 2);
     expect(onColumnMoved).toHaveBeenCalledWith({
       columnId: "a",
       fromViewIndex: 0,
@@ -154,15 +154,15 @@ describe("GridCore column state", () => {
 
   it("lets an explicit state command beat retained user state", () => {
     const grid = createGrid([def("a")]);
-    grid.setColumnWidth(0, 150);
+    grid.columns.setWidth(0, 150);
 
-    grid.setColumnState([{ columnId: "a", width: 250 }]);
-    expect(grid.getColumnState()[0]?.width).toBe(250);
+    grid.columns.setState([{ columnId: "a", width: 250 }]);
+    expect(grid.columns.getState()[0]?.width).toBe(250);
 
-    grid.resetColumnState(["a"]);
-    expect(grid.getColumnState()[0]?.width).toBeUndefined();
+    grid.columns.resetState(["a"]);
+    expect(grid.columns.getState()[0]?.width).toBeUndefined();
     // Without a measured viewport the definition width is used as-is.
-    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
+    expect(grid.columns.getState()[0]?.resolvedWidth).toBe(100);
   });
 
   it("diagnoses a duplicate column id once and keeps the first definition", () => {
@@ -170,7 +170,7 @@ describe("GridCore column state", () => {
     const grid = createGrid([def("a", { colId: "x" }), def("b", { colId: "x" })]);
 
     expect(ids(grid)).toEqual(["x"]);
-    expect(grid.getColumns()[0]?.field).toBe("a");
+    expect(grid.columns.get()[0]?.field).toBe("a");
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith('[gp-grid] Duplicate column id "x"');
   });
@@ -180,16 +180,16 @@ describe("GridCore column state", () => {
     const instructions = collect(grid);
     await grid.initialize();
 
-    await grid.setSort("b", "asc");
-    await grid.setFilter("b", "b1");
-    expect(grid.getSortModel()).toEqual([{ colId: "b", direction: "asc" }]);
-    expect(grid.hasActiveFilter("b")).toBe(true);
+    await grid.sortFilter.setSort("b", "asc");
+    await grid.sortFilter.setFilter("b", "b1");
+    expect(grid.sortFilter.getSortModel()).toEqual([{ colId: "b", direction: "asc" }]);
+    expect(grid.sortFilter.hasActiveFilter("b")).toBe(true);
 
     instructions.length = 0;
-    grid.setColumns([def("a")]);
+    grid.columns.set([def("a")]);
 
-    expect(grid.getSortModel()).toEqual([]);
-    expect(grid.getFilterModel()).toEqual({});
+    expect(grid.sortFilter.getSortModel()).toEqual([]);
+    expect(grid.sortFilter.getFilterModel()).toEqual({});
     const removed = instructions.filter((i) => i.type === "REMOVE_HEADERS");
     expect(removed).toEqual([{ type: "REMOVE_HEADERS", columnIds: ["b"] }]);
   });
@@ -199,11 +199,11 @@ describe("GridCore column state", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    expect(grid.startEdit(0, 1)).toBe(true);
-    expect(grid.getEditState()).not.toBeNull();
+    expect(grid.edit.start(0, 1)).toBe(true);
+    expect(grid.edit.getState()).not.toBeNull();
 
-    grid.setColumns([def("a")]);
-    expect(grid.getEditState()).toBeNull();
+    grid.columns.set([def("a")]);
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("moves the active cell with its column identity", () => {
@@ -217,7 +217,7 @@ describe("GridCore column state", () => {
     });
 
     // Retained ids keep their relative order, so c moves from 2 to 1.
-    grid.setColumns([def("a"), def("c")]);
+    grid.columns.set([def("a"), def("c")]);
 
     expect(ids(grid)).toEqual(["a", "c"]);
     expect(grid.selection.getActiveCell()).toEqual({ row: 0, col: 1 });
@@ -230,7 +230,7 @@ describe("GridCore column state", () => {
     grid.selection.setActiveCell(0, 0);
     grid.selection.setSelectionRange(range);
 
-    grid.setColumns([def("a", { headerName: "A" }), def("b")]);
+    grid.columns.set([def("a", { headerName: "A" }), def("b")]);
 
     expect(grid.selection.getSelectionRange()).toEqual(range);
   });
@@ -238,7 +238,7 @@ describe("GridCore column state", () => {
   it("clears the active cell when its column is gone", () => {
     const grid = createGrid([def("a"), def("b")]);
     grid.selection.setActiveCell(0, 1);
-    grid.setColumns([def("a")]);
+    grid.columns.set([def("a")]);
     expect(grid.selection.getActiveCell()).toBeNull();
   });
 
@@ -246,15 +246,15 @@ describe("GridCore column state", () => {
     const grid = createGrid([def("a"), def("b")]);
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
-    const beforeRange = grid.getVisibleRowRange();
-    const beforeRows = grid.getRowCount();
-    const beforeRow = grid.getRowData(1);
+    const beforeRange = grid.geometry.getVisibleRowWindow();
+    const beforeRows = grid.rows.getCount();
+    const beforeRow = grid.rows.getData(1);
 
-    grid.setColumns([def("b"), def("c")]);
+    grid.columns.set([def("b"), def("c")]);
 
-    expect(grid.getVisibleRowRange()).toEqual(beforeRange);
-    expect(grid.getRowCount()).toBe(beforeRows);
-    expect(grid.getRowData(1)).toBe(beforeRow);
+    expect(grid.geometry.getVisibleRowWindow()).toEqual(beforeRange);
+    expect(grid.rows.getCount()).toBe(beforeRows);
+    expect(grid.rows.getData(1)).toBe(beforeRow);
   });
 
   it("distinguishes numeric and string row ids and answers getRecordById", async () => {
@@ -264,28 +264,28 @@ describe("GridCore column state", () => {
     });
     await grid.initialize();
 
-    expect(grid.getRowId(0)).toBe(1);
-    expect(grid.getRowId(2)).toBe("1");
-    expect(grid.getViewRow(0)).toMatchObject({
+    expect(grid.rows.getId(0)).toBe(1);
+    expect(grid.rows.getId(2)).toBe("1");
+    expect(grid.rows.getViewRow(0)).toMatchObject({
       kind: "record",
       id: 1,
       viewIndex: 0,
     });
-    expect(grid.getRecordById(1)).toBe(grid.getRowData(0));
-    expect(grid.getRecordById("1")).toBe(grid.getRowData(2));
-    expect(grid.getRecordById(99)).toBeUndefined();
-    expect(grid.getViewRow(99)).toBeUndefined();
+    expect(grid.rows.getRecordById(1)).toBe(grid.rows.getData(0));
+    expect(grid.rows.getRecordById("1")).toBe(grid.rows.getData(2));
+    expect(grid.rows.getRecordById(99)).toBeUndefined();
+    expect(grid.rows.getViewRow(99)).toBeUndefined();
   });
 
   it("falls back to the view index as identity without getRowId", async () => {
     const grid = createGrid([def("a")]);
     await grid.initialize();
 
-    expect(grid.getViewRow(1)).toEqual({
+    expect(grid.rows.getViewRow(1)).toEqual({
       kind: "record",
       id: 1,
       viewIndex: 1,
-      record: grid.getRowData(1),
+      record: grid.rows.getData(1),
     });
   });
 
@@ -295,7 +295,7 @@ describe("GridCore column state", () => {
     await grid.initialize();
 
     expect(warn).toHaveBeenCalledWith("[gp-grid] Duplicate row id 1");
-    expect(grid.getRowId(0)).toBe(1);
+    expect(grid.rows.getId(0)).toBe(1);
   });
 
   it("ignores a commit tagged with a superseded slot generation", async () => {
@@ -314,20 +314,20 @@ describe("GridCore column state", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    expect(grid.startEdit(0, 0)).toBe(true);
-    const generation = grid.getSlotGeneration(0);
+    expect(grid.edit.start(0, 0)).toBe(true);
+    const generation = grid.rows.getSlotGeneration(0);
     expect(generation).toBeGreaterThanOrEqual(0);
-    expect(grid.isSlotGenerationCurrent(0, generation)).toBe(true);
+    expect(grid.rows.isSlotGenerationCurrent(0, generation)).toBe(true);
 
     // Scroll far enough that row 0 loses its slot; a callback captured at the
     // old generation is no longer current.
     grid.setViewport(10_000, 0, 800, 400);
-    expect(grid.getSlotGeneration(0)).toBe(-1);
-    expect(grid.isSlotGenerationCurrent(0, generation)).toBe(false);
+    expect(grid.rows.getSlotGeneration(0)).toBe(-1);
+    expect(grid.rows.isSlotGenerationCurrent(0, generation)).toBe(false);
 
-    grid.commitEdit();
+    grid.edit.commit();
     expect(onCellValueChanged).not.toHaveBeenCalled();
-    expect(grid.getEditState()).toBeNull();
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("exposes the slot generation on assigned slot data", async () => {
@@ -340,7 +340,7 @@ describe("GridCore column state", () => {
     expect(assigned.length).toBeGreaterThan(0);
     for (const instruction of assigned) {
       if (instruction.type === "ASSIGN_SLOT") {
-        expect(grid.getSlotGeneration(instruction.rowIndex)).toBe(
+        expect(grid.rows.getSlotGeneration(instruction.rowIndex)).toBe(
           instruction.generation,
         );
       }
@@ -365,12 +365,12 @@ describe("GridCore edit survival across slot refreshes", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    expect(grid.startEdit(0, 1)).toBe(true);
-    grid.updateEditValue("typed");
-    grid.setColumns([def("b", { editable: true }), def("a", { editable: true })]);
-    expect(grid.getEditState()).toMatchObject({ row: 0, col: 0, currentValue: "typed" });
+    expect(grid.edit.start(0, 1)).toBe(true);
+    grid.edit.updateValue("typed");
+    grid.columns.set([def("b", { editable: true }), def("a", { editable: true })]);
+    expect(grid.edit.getState()).toMatchObject({ row: 0, col: 0, currentValue: "typed" });
 
-    grid.commitEdit();
+    grid.edit.commit();
     expect(data[0]?.b).toBe("typed");
     expect(onCellValueChanged).toHaveBeenCalledTimes(1);
     expect(onCellValueChanged).toHaveBeenCalledWith(
@@ -389,11 +389,11 @@ describe("GridCore edit survival across slot refreshes", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    expect(grid.startEdit(1, 0)).toBe(true);
-    grid.updateEditValue("typed");
+    expect(grid.edit.start(1, 0)).toBe(true);
+    grid.edit.updateValue("typed");
     await grid.refresh();
 
-    grid.commitEdit();
+    grid.edit.commit();
     expect(data[1]?.a).toBe("typed");
     expect(onCellValueChanged).toHaveBeenCalledTimes(1);
   });
@@ -406,7 +406,7 @@ describe("GridCore definition changes on retained ids", () => {
     grid.setViewport(0, 0, 800, 400);
     const instructions = collect(grid);
 
-    grid.setColumns([def("a", { headerName: "New", editable: true })]);
+    grid.columns.set([def("a", { headerName: "New", editable: true })]);
 
     const published = instructions.filter((i) => i.type === "COLUMNS_CHANGED");
     expect(published).toHaveLength(1);
@@ -427,12 +427,12 @@ describe("GridCore identity through column-state commands", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    grid.startEdit(0, 0);
-    grid.updateEditValue("typed");
-    grid.setColumnState([{ columnId: "a", order: 1 }]);
-    expect(grid.getEditState()).toMatchObject({ col: 1, currentValue: "typed" });
+    grid.edit.start(0, 0);
+    grid.edit.updateValue("typed");
+    grid.columns.setState([{ columnId: "a", order: 1 }]);
+    expect(grid.edit.getState()).toMatchObject({ col: 1, currentValue: "typed" });
 
-    grid.commitEdit();
+    grid.edit.commit();
     expect(data[0]).toMatchObject({ a: "typed", b: "b1" });
   });
 
@@ -440,12 +440,12 @@ describe("GridCore identity through column-state commands", () => {
     const grid = createGrid(editable(), { getRowId: (row) => row.id });
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
-    grid.startEdit(0, 1);
-    grid.updateEditValue("typed");
-    const editId = grid.getEditState()?.editId;
+    grid.edit.start(0, 1);
+    grid.edit.updateValue("typed");
+    const editId = grid.edit.getState()?.editId;
     const instructions = collect(grid);
 
-    grid.setColumns([def("b", { editable: true }), def("a", { editable: true })]);
+    grid.columns.set([def("b", { editable: true }), def("a", { editable: true })]);
 
     const reanchored = instructions.filter((i) => i.type === "START_EDIT");
     expect(reanchored).toEqual([
@@ -459,17 +459,17 @@ describe("GridCore identity through column-state commands", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    grid.startEdit(0, 0);
-    const staleId = grid.getEditState()?.editId;
-    grid.cancelEdit();
-    grid.startEdit(1, 1);
-    grid.updateEditValue("current");
+    grid.edit.start(0, 0);
+    const staleId = grid.edit.getState()?.editId;
+    grid.edit.cancel();
+    grid.edit.start(1, 1);
+    grid.edit.updateValue("current");
 
-    grid.updateEditValue("stale", staleId);
-    grid.commitEdit(staleId);
-    expect(grid.getEditState()).toMatchObject({ row: 1, col: 1, currentValue: "current" });
-    grid.cancelEdit(staleId);
-    expect(grid.getEditState()).not.toBeNull();
+    grid.edit.updateValue("stale", staleId);
+    grid.edit.commit(staleId);
+    expect(grid.edit.getState()).toMatchObject({ row: 1, col: 1, currentValue: "current" });
+    grid.edit.cancel(staleId);
+    expect(grid.edit.getState()).not.toBeNull();
     expect(data[1]?.b).toBe("b2");
   });
 
@@ -477,11 +477,11 @@ describe("GridCore identity through column-state commands", () => {
     const grid = createGrid([def("a"), def("b")]);
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
-    expect(grid.startPeek(0, 1)).toBe(true);
+    expect(grid.edit.startPeek(0, 1)).toBe(true);
 
-    grid.setColumns([def("b"), def("a")]);
+    grid.columns.set([def("b"), def("a")]);
 
-    expect(grid.getPeekState()).toEqual({ row: 0, col: 0 });
+    expect(grid.edit.getPeekState()).toEqual({ row: 0, col: 0 });
   });
 
   it("reports the dragged row's identity, read before the move", async () => {
@@ -496,7 +496,7 @@ describe("GridCore identity through column-state commands", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    grid.commitRowDrag(0, 2);
+    grid.rowDrag.commit(0, 2);
 
     expect(onRowDragEnd).toHaveBeenCalledWith(expect.objectContaining({ rowId: 1 }));
   });
@@ -510,15 +510,15 @@ describe("GridCore identity through column-state commands", () => {
     const grid = createGrid([def("a"), def("b")], { data, getRowId: (row) => row.id });
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
-    await grid.setSort("b", "asc");
+    await grid.sortFilter.setSort("b", "asc");
     grid.selection.setActiveCell(0, 0);
-    expect(grid.getRowId(0)).toBe(3);
+    expect(grid.rows.getId(0)).toBe(3);
 
-    grid.setColumns([def("a")]);
-    await vi.waitFor(() => expect(grid.getRowId(0)).toBe(1));
+    grid.columns.set([def("a")]);
+    await vi.waitFor(() => expect(grid.rows.getId(0)).toBe(1));
 
     const active = grid.selection.getActiveCell();
-    expect(active && grid.getRowId(active.row)).toBe(3);
+    expect(active && grid.rows.getId(active.row)).toBe(3);
   });
 
   it("calls a source's getRecordById as a method", async () => {
@@ -537,7 +537,7 @@ describe("GridCore identity through column-state commands", () => {
     });
     await grid.initialize();
 
-    expect(grid.getRecordById(2)).toMatchObject({ a: "a2" });
+    expect(grid.rows.getRecordById(2)).toMatchObject({ a: "a2" });
   });
 
   it("diagnoses a duplicate row id beyond the load-time scan cap once visible", async () => {

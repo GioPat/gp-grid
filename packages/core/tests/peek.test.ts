@@ -71,42 +71,42 @@ describe("Peek state on GridCore", () => {
   });
 
   it("startPeek sets state and emits START_PEEK", () => {
-    const ok = grid.startPeek(0, 2);
+    const ok = grid.edit.startPeek(0, 2);
     expect(ok).toBe(true);
-    expect(grid.getPeekState()).toEqual({ row: 0, col: 2 });
+    expect(grid.edit.getPeekState()).toEqual({ row: 0, col: 2 });
     expect(batches.flat().some((i) => i.type === "START_PEEK")).toBe(true);
   });
 
   it("startPeek refuses when column.peekable is false", () => {
-    const ok = grid.startPeek(0, 3);
+    const ok = grid.edit.startPeek(0, 3);
     expect(ok).toBe(false);
-    expect(grid.getPeekState()).toBeNull();
+    expect(grid.edit.getPeekState()).toBeNull();
   });
 
   it("startPeek refuses when an edit is in progress", () => {
-    grid.startEdit(0, 0);
-    expect(grid.getEditState()).not.toBeNull();
-    const ok = grid.startPeek(0, 2);
+    grid.edit.start(0, 0);
+    expect(grid.edit.getState()).not.toBeNull();
+    const ok = grid.edit.startPeek(0, 2);
     expect(ok).toBe(false);
   });
 
   it("startEdit closes an open peek", () => {
-    grid.startPeek(0, 2);
-    expect(grid.getPeekState()).not.toBeNull();
-    grid.startEdit(0, 0);
-    expect(grid.getPeekState()).toBeNull();
+    grid.edit.startPeek(0, 2);
+    expect(grid.edit.getPeekState()).not.toBeNull();
+    grid.edit.start(0, 0);
+    expect(grid.edit.getPeekState()).toBeNull();
   });
 
   it("stopPeek clears state and emits STOP_PEEK", () => {
-    grid.startPeek(0, 2);
+    grid.edit.startPeek(0, 2);
     batches.length = 0;
-    grid.stopPeek();
-    expect(grid.getPeekState()).toBeNull();
+    grid.edit.stopPeek();
+    expect(grid.edit.getPeekState()).toBeNull();
     expect(batches.flat().some((i) => i.type === "STOP_PEEK")).toBe(true);
   });
 
   it("stopPeek is a no-op when no peek is open", () => {
-    grid.stopPeek();
+    grid.edit.stopPeek();
     expect(batches.flat().some((i) => i.type === "STOP_PEEK")).toBe(false);
   });
 });
@@ -121,14 +121,14 @@ describe("Input handler dblclick routing", () => {
 
   it("double-click on a non-editable peekable cell opens peek", () => {
     grid.input.handleCellDoubleClick(0, 2);
-    expect(grid.getPeekState()).toEqual({ row: 0, col: 2 });
-    expect(grid.getEditState()).toBeNull();
+    expect(grid.edit.getPeekState()).toEqual({ row: 0, col: 2 });
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("double-click on an editable cell starts edit, not peek", () => {
     grid.input.handleCellDoubleClick(0, 0);
-    expect(grid.getEditState()).not.toBeNull();
-    expect(grid.getPeekState()).toBeNull();
+    expect(grid.edit.getState()).not.toBeNull();
+    expect(grid.edit.getPeekState()).toBeNull();
   });
 });
 
@@ -138,7 +138,7 @@ describe("Keyboard handler while peek is open", () => {
   beforeEach(async () => {
     grid = makeGrid();
     await grid.initialize();
-    grid.startPeek(0, 2);
+    grid.edit.startPeek(0, 2);
   });
 
   it("Ctrl+A is not intercepted (browser handles selection inside the peek)", () => {
@@ -161,7 +161,7 @@ describe("Keyboard handler while peek is open", () => {
       false,
     );
     expect(result.preventDefault).toBe(true);
-    expect(grid.getPeekState()).toBeNull();
+    expect(grid.edit.getPeekState()).toBeNull();
   });
 
   it("arrow keys do not move grid focus while peek is open", () => {

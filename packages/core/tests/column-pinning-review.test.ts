@@ -162,7 +162,7 @@ describe("column pinning — publication", () => {
 
   it("[5] publishes retention when starting an off-window edit", async () => {
     const { grid, instructions } = await fixture();
-    grid.startEdit(0, 60);
+    grid.edit.start(0, 60);
 
     expect(instructions.some((i) => i.type === "SET_COLUMN_WINDOW")).toBe(true);
     expect(ids(grid.geometry.getColumnWindow().center)).toContain("c60");
@@ -173,7 +173,7 @@ describe("column pinning — publication", () => {
     const seen: GridInstruction[][] = [];
     grid.onBatchInstruction((batch) => seen.push(batch));
 
-    grid.startEdit(0, 60);
+    grid.edit.start(0, 60);
 
     // The window is mounted in the same delivery as the editor, before it.
     const lifecycle = seen.flat();
@@ -253,14 +253,14 @@ describe("column pinning — seed and state", () => {
 
   it("[12] preserves an editor while resetting only the pin state", async () => {
     const { grid } = await fixture([column("a"), column("b"), column("c")], 300);
-    grid.setColumnPinned("c", "start");
-    grid.startEdit(0, 0);
-    grid.updateEditValue("draft");
-    grid.resetColumnState(["c"]);
+    grid.columns.setPinned("c", "start");
+    grid.edit.start(0, 0);
+    grid.edit.updateValue("draft");
+    grid.columns.resetState(["c"]);
 
     // The editor stays open and follows its column (c) back to base slot 2.
-    expect(grid.getEditState()).toMatchObject({ col: 2, currentValue: "draft" });
-    expect(grid.getColumnState().map((state) => state.pinned)).toEqual([null, null, null]);
+    expect(grid.edit.getState()).toMatchObject({ col: 2, currentValue: "draft" });
+    expect(grid.columns.getState().map((state) => state.pinned)).toEqual([null, null, null]);
   });
 
   it("[12] commits an editor whose column returns to a hidden default", async () => {
@@ -269,11 +269,11 @@ describe("column pinning — seed and state", () => {
       column("b", { hidden: true }),
       column("c"),
     ], 300);
-    grid.setColumnState([{ columnId: "b", hidden: false }]);
-    grid.startEdit(0, 1);
-    grid.updateEditValue("draft");
-    grid.resetColumnState();
-    expect(grid.getEditState()).toBeNull();
+    grid.columns.setState([{ columnId: "b", hidden: false }]);
+    grid.edit.start(0, 1);
+    grid.edit.updateValue("draft");
+    grid.columns.resetState();
+    expect(grid.edit.getState()).toBeNull();
   });
 
   it("[16] keeps seed pin lookup linear in the number of columns", () => {

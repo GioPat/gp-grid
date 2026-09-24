@@ -115,7 +115,7 @@ describe("geometry viewport updates", () => {
     });
     await harness.grid.initialize();
     harness.grid.setViewport(0, 0, 320, 320);
-    harness.grid.setColumnState([{ columnId: "c0", pinned: "start" }]);
+    harness.grid.columns.setState([{ columnId: "c0", pinned: "start" }]);
 
     const queriesBefore = harness.queries();
     harness.instructions.length = 0;
@@ -166,7 +166,7 @@ describe("geometry viewport updates", () => {
     const harness = createGrid({ columnLayout: "fixed" });
     await harness.grid.initialize();
     harness.grid.setViewport(0, 0, 400, 320);
-    harness.grid.setColumnState([{ columnId: "id", width: 100 }, { columnId: "name", width: 100 }]);
+    harness.grid.columns.setState([{ columnId: "id", width: 100 }, { columnId: "name", width: 100 }]);
 
     const queriesBefore = harness.queries();
     harness.instructions.length = 0;

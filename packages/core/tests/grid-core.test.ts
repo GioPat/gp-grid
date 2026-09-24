@@ -205,7 +205,7 @@ describe("GridCore", () => {
       emittedInstructions = [];
 
       // Filter to reduce rows significantly
-      await grid.setFilter("name", "Name 0"); // Only matches "Name 0"
+      await grid.sortFilter.setFilter("name", "Name 0"); // Only matches "Name 0"
 
       const destroySlots = emittedInstructions.filter((i) => i.type === "DESTROY_SLOT");
       expect(destroySlots.length).toBeGreaterThan(0);
@@ -217,7 +217,7 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      await grid.setSort("name", "asc");
+      await grid.sortFilter.setSort("name", "asc");
 
       // Should emit DATA_LOADING, DATA_LOADED
       expect(emittedInstructions.some((i) => i.type === "DATA_LOADING")).toBe(true);
@@ -232,7 +232,7 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      await grid.setSort("name", "asc");
+      await grid.sortFilter.setSort("name", "asc");
 
       const headerUpdates = emittedInstructions.filter((i) => i.type === "UPDATE_HEADER");
       const nameHeader = headerUpdates.find(
@@ -247,21 +247,21 @@ describe("GridCore", () => {
 
     it("should clear sort when direction is null", async () => {
       await grid.initialize();
-      await grid.setSort("name", "asc");
+      await grid.sortFilter.setSort("name", "asc");
       emittedInstructions = [];
 
-      await grid.setSort("name", null);
+      await grid.sortFilter.setSort("name", null);
 
-      expect(grid.getSortModel()).toHaveLength(0);
+      expect(grid.sortFilter.getSortModel()).toHaveLength(0);
     });
 
     it("should support multi-column sort with addToExisting", async () => {
       await grid.initialize();
 
-      await grid.setSort("name", "asc");
-      await grid.setSort("age", "desc", true);
+      await grid.sortFilter.setSort("name", "asc");
+      await grid.sortFilter.setSort("age", "desc", true);
 
-      const sortModel = grid.getSortModel();
+      const sortModel = grid.sortFilter.getSortModel();
       expect(sortModel).toHaveLength(2);
       expect(sortModel[0]).toEqual({ colId: "name", direction: "asc" });
       expect(sortModel[1]).toEqual({ colId: "age", direction: "desc" });
@@ -270,11 +270,11 @@ describe("GridCore", () => {
     it("should update existing sort in multi-sort mode", async () => {
       await grid.initialize();
 
-      await grid.setSort("name", "asc");
-      await grid.setSort("age", "desc", true);
-      await grid.setSort("name", "desc", true);
+      await grid.sortFilter.setSort("name", "asc");
+      await grid.sortFilter.setSort("age", "desc", true);
+      await grid.sortFilter.setSort("name", "desc", true);
 
-      const sortModel = grid.getSortModel();
+      const sortModel = grid.sortFilter.getSortModel();
       expect(sortModel).toHaveLength(2);
       expect(sortModel[0]).toEqual({ colId: "name", direction: "desc" });
     });
@@ -285,32 +285,32 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      await grid.setFilter("name", "alice");
+      await grid.sortFilter.setFilter("name", "alice");
 
       const contentSize = emittedInstructions.find((i) => i.type === "SET_CONTENT_SIZE");
       expect(contentSize).toBeDefined();
       
-      expect(grid.getRowCount()).toBe(1);
+      expect(grid.rows.getCount()).toBe(1);
     });
 
     it("should clear filter when value is empty", async () => {
       await grid.initialize();
-      await grid.setFilter("name", "alice");
+      await grid.sortFilter.setFilter("name", "alice");
       
-      await grid.setFilter("name", "");
+      await grid.sortFilter.setFilter("name", "");
 
-      expect(grid.getFilterModel()).toEqual({});
-      expect(grid.getRowCount()).toBe(5);
+      expect(grid.sortFilter.getFilterModel()).toEqual({});
+      expect(grid.rows.getCount()).toBe(5);
     });
 
     it("should support multiple filters", async () => {
       await grid.initialize();
 
-      await grid.setFilter("name", "a");
-      await grid.setFilter("age", "30");
+      await grid.sortFilter.setFilter("name", "a");
+      await grid.sortFilter.setFilter("age", "30");
 
       // "Alice" has name containing 'a' and age 30
-      expect(grid.getRowCount()).toBe(1);
+      expect(grid.rows.getCount()).toBe(1);
     });
 
     it("should deliver SET_CONTENT_SIZE and slot instructions in the same batch when filtering", async () => {
@@ -334,8 +334,8 @@ describe("GridCore", () => {
       // --- Test applying a filter ---
       emittedInstructions = [];
       batchedInstructions = [];
-      await grid.setFilter("name", "Name 0");
-      expect(grid.getRowCount()).toBe(1);
+      await grid.sortFilter.setFilter("name", "Name 0");
+      expect(grid.rows.getCount()).toBe(1);
 
       // SET_CONTENT_SIZE and slot ops must be in the same batch (atomic update)
       const applyBatch = batchedInstructions.find((batch) =>
@@ -347,10 +347,10 @@ describe("GridCore", () => {
       // --- Test clearing the filter ---
       emittedInstructions = [];
       batchedInstructions = [];
-      await grid.setFilter("name", "");
+      await grid.sortFilter.setFilter("name", "");
 
       // Row count should return to 100
-      expect(grid.getRowCount()).toBe(100);
+      expect(grid.rows.getCount()).toBe(100);
 
       // SET_CONTENT_SIZE and slot creation must be in the same batch
       const clearBatch = batchedInstructions.find((batch) =>
@@ -389,8 +389,8 @@ describe("GridCore", () => {
 
       // Apply a filter that reduces to 1 row
       emittedInstructions = [];
-      await grid.setFilter("name", "Name 0");
-      expect(grid.getRowCount()).toBe(1);
+      await grid.sortFilter.setFilter("name", "Name 0");
+      expect(grid.rows.getCount()).toBe(1);
 
       // Don't call setViewport(0, ...) — simulating the browser scroll event
       // not having fired yet (the core still has scrollTop from before)
@@ -398,8 +398,8 @@ describe("GridCore", () => {
       // Clear the filter
       emittedInstructions = [];
       batchedInstructions = [];
-      await grid.setFilter("name", "");
-      expect(grid.getRowCount()).toBe(200);
+      await grid.sortFilter.setFilter("name", "");
+      expect(grid.rows.getCount()).toBe(200);
 
       // Slots should be created for rows near the TOP (row 0),
       // not near the old scroll position (row 50)
@@ -422,11 +422,11 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      grid.startEdit(0, 2); // age column is editable
+      grid.edit.start(0, 2); // age column is editable
 
       expect(emittedInstructions.some((i) => i.type === "START_EDIT")).toBe(true);
       
-      const editState = grid.getEditState();
+      const editState = grid.edit.getState();
       expect(editState).not.toBeNull();
       expect(editState?.row).toBe(0);
       expect(editState?.col).toBe(2);
@@ -436,51 +436,51 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      grid.startEdit(0, 0); // id column is not editable
+      grid.edit.start(0, 0); // id column is not editable
 
       expect(emittedInstructions.some((i) => i.type === "START_EDIT")).toBe(false);
-      expect(grid.getEditState()).toBeNull();
+      expect(grid.edit.getState()).toBeNull();
     });
 
     it("should commit edit and update cell value", async () => {
       await grid.initialize();
       
-      grid.startEdit(0, 2);
-      grid.updateEditValue(99);
+      grid.edit.start(0, 2);
+      grid.edit.updateValue(99);
       emittedInstructions = [];
       
-      grid.commitEdit();
+      grid.edit.commit();
 
       expect(emittedInstructions.some((i) => i.type === "COMMIT_EDIT")).toBe(true);
       expect(emittedInstructions.some((i) => i.type === "STOP_EDIT")).toBe(true);
       
-      expect(grid.getCellValue(0, 2)).toBe(99);
-      expect(grid.getEditState()).toBeNull();
+      expect(grid.cells.getValue(0, 2)).toBe(99);
+      expect(grid.edit.getState()).toBeNull();
     });
 
     it("should cancel edit without changing value", async () => {
       await grid.initialize();
-      const originalValue = grid.getCellValue(0, 2);
+      const originalValue = grid.cells.getValue(0, 2);
       
-      grid.startEdit(0, 2);
-      grid.updateEditValue(99);
+      grid.edit.start(0, 2);
+      grid.edit.updateValue(99);
       emittedInstructions = [];
       
-      grid.cancelEdit();
+      grid.edit.cancel();
 
       expect(emittedInstructions.some((i) => i.type === "STOP_EDIT")).toBe(true);
-      expect(grid.getCellValue(0, 2)).toBe(originalValue);
-      expect(grid.getEditState()).toBeNull();
+      expect(grid.cells.getValue(0, 2)).toBe(originalValue);
+      expect(grid.edit.getState()).toBeNull();
     });
 
     it("should emit ASSIGN_SLOT after commit to update slot", async () => {
       await grid.initialize();
       
-      grid.startEdit(0, 2);
-      grid.updateEditValue(99);
+      grid.edit.start(0, 2);
+      grid.edit.updateValue(99);
       emittedInstructions = [];
       
-      grid.commitEdit();
+      grid.edit.commit();
 
       expect(emittedInstructions.some((i) => i.type === "ASSIGN_SLOT")).toBe(true);
     });
@@ -492,21 +492,21 @@ describe("GridCore", () => {
       const testGrid = createTestGrid();
       await testGrid.initialize();
 
-      expect(testGrid.getCellValue(0, 0)).toBe(1); // id
-      expect(testGrid.getCellValue(0, 1)).toBe("Alice"); // name
-      expect(testGrid.getCellValue(0, 2)).toBe(30); // age
+      expect(testGrid.cells.getValue(0, 0)).toBe(1); // id
+      expect(testGrid.cells.getValue(0, 1)).toBe("Alice"); // name
+      expect(testGrid.cells.getValue(0, 2)).toBe(30); // age
     });
 
     it("should return null for invalid row index", async () => {
       await grid.initialize();
 
-      expect(grid.getCellValue(100, 0)).toBeNull();
+      expect(grid.cells.getValue(100, 0)).toBeNull();
     });
 
     it("should return null for invalid column index", async () => {
       await grid.initialize();
 
-      expect(grid.getCellValue(0, 100)).toBeNull();
+      expect(grid.cells.getValue(0, 100)).toBeNull();
     });
 
     it("should support nested field access", async () => {
@@ -525,7 +525,7 @@ describe("GridCore", () => {
       
       await nestedGrid.initialize();
 
-      expect(nestedGrid.getCellValue(0, 0)).toBe("test");
+      expect(nestedGrid.cells.getValue(0, 0)).toBe("test");
     });
   });
 
@@ -543,10 +543,10 @@ describe("GridCore", () => {
       await pasteGrid.initialize();
       pasteGrid.selection.startSelection({ row: 0, col: 2 });
 
-      const handled = pasteGrid.pasteClipboardText("44");
+      const handled = pasteGrid.edit.paste("44");
 
       expect(handled).toBe(true);
-      expect(pasteGrid.getCellValue(0, 2)).toBe(44);
+      expect(pasteGrid.cells.getValue(0, 2)).toBe(44);
       expect(onCellValueChanged).toHaveBeenCalledWith(
         expect.objectContaining({
           rowId: 1,
@@ -563,43 +563,42 @@ describe("GridCore", () => {
     it("should return columns", async () => {
       await grid.initialize();
       
-      expect(grid.getColumns()).toHaveLength(4);
-      expect(grid.getColumns()[0].field).toBe("id");
+      expect(grid.columns.get()).toHaveLength(4);
+      expect(grid.columns.get()[0].field).toBe("id");
     });
 
     it("should return column positions", async () => {
       await grid.initialize();
       grid.setViewport(0, 0, 480, 400);
 
-      const positions = grid.getColumnPositions();
-      expect(positions[0]).toBe(0);
-      expect(positions[1]).toBe(50); // After id column (width 50)
-      expect(positions[2]).toBe(200); // After name column (50 + 150)
+      const offsets = grid.geometry.getColumnLayout().columns.map((column) => column.offset);
+      expect(offsets[0]).toBe(0);
+      expect(offsets[1]).toBe(50); // After id column (width 50)
+      expect(offsets[2]).toBe(200); // After name column (50 + 150)
     });
 
     it("should return row count", async () => {
       await grid.initialize();
       
-      expect(grid.getRowCount()).toBe(5);
+      expect(grid.rows.getCount()).toBe(5);
     });
 
-    it("should return row height and header height", async () => {
-      expect(grid.getRowHeight()).toBe(32);
-      expect(grid.getHeaderHeight()).toBe(40);
+    it("should return the row height", async () => {
+      expect(grid.viewport.getRowHeight()).toBe(32);
     });
 
     it("should return total dimensions", async () => {
       await grid.initialize();
       grid.setViewport(0, 0, 480, 400);
 
-      expect(grid.getTotalWidth()).toBe(480); // 50 + 150 + 80 + 200
-      expect(grid.getTotalHeight()).toBe(5 * 32 + 40); // 5 rows + header
+      expect(grid.geometry.getColumnLayout().totalWidth).toBe(480); // 50 + 150 + 80 + 200
+      expect(grid.geometry.getContentSize().height).toBe(5 * 32);
     });
 
     it("should return row data by index", async () => {
       await grid.initialize();
       
-      const rowData = grid.getRowData(0);
+      const rowData = grid.rows.getData(0);
       expect(rowData).toBeDefined();
       expect(rowData?.name).toBe("Alice");
     });
@@ -624,8 +623,8 @@ describe("GridCore", () => {
       
       await grid.setDataSource(newDataSource);
 
-      expect(grid.getRowCount()).toBe(1);
-      expect(grid.getCellValue(0, 1)).toBe("New");
+      expect(grid.rows.getCount()).toBe(1);
+      expect(grid.cells.getValue(0, 1)).toBe("New");
     });
 
     it("should update columns", async () => {
@@ -637,11 +636,11 @@ describe("GridCore", () => {
         { field: "name", cellDataType: "text", width: 200 },
       ];
       
-      grid.setColumns(newColumns);
+      grid.columns.set(newColumns);
 
-      expect(grid.getColumns()).toHaveLength(2);
+      expect(grid.columns.get()).toHaveLength(2);
       // No measured viewport: the definition widths are used as-is.
-      expect(grid.getTotalWidth()).toBe(300);
+      expect(grid.geometry.getColumnLayout().totalWidth).toBe(300);
       
       // Should emit content size and headers
       expect(emittedInstructions.some((i) => i.type === "SET_CONTENT_SIZE")).toBe(true);
@@ -652,7 +651,7 @@ describe("GridCore", () => {
       await grid.initialize();
       emittedInstructions = [];
 
-      grid.refreshSlotData();
+      grid.rows.refreshSlotData();
 
       // Should emit ASSIGN_SLOT but not DATA_LOADING
       expect(emittedInstructions.some((i) => i.type === "ASSIGN_SLOT")).toBe(true);
@@ -726,17 +725,17 @@ describe("GridCore", () => {
       await grid.initialize();
       
       // Set a known value
-      grid.startEdit(0, 2);
-      grid.updateEditValue(100);
-      grid.commitEdit();
+      grid.edit.start(0, 2);
+      grid.edit.updateValue(100);
+      grid.edit.commit();
 
       // Fill down
       grid.fill.startFillDrag({ startRow: 0, startCol: 2, endRow: 0, endCol: 2 });
       grid.fill.updateFillDrag(2, 2);
       grid.fill.commitFillDrag();
 
-      expect(grid.getCellValue(1, 2)).toBe(100);
-      expect(grid.getCellValue(2, 2)).toBe(100);
+      expect(grid.cells.getValue(1, 2)).toBe(100);
+      expect(grid.cells.getValue(2, 2)).toBe(100);
     });
   });
 
@@ -866,7 +865,7 @@ describe("GridCore", () => {
 
       await extremeGrid.initialize();
       extremeGrid.setViewport(0, 0, 800, 600);
-      const ratio = extremeGrid.getScrollRatio();
+      const ratio = extremeGrid.viewport.getScrollRatio();
       expect(ratio).toBeLessThan(1);
 
       // Scroll to a position that lands mid-row in logical space. The
@@ -924,12 +923,12 @@ describe("GridCore", () => {
 
       await extremeGrid.initialize();
       extremeGrid.setViewport(0, 0, 800, 600);
-      const ratio = extremeGrid.getScrollRatio();
+      const ratio = extremeGrid.viewport.getScrollRatio();
 
       // The synthetic touch scroller sets a fractional override; a native
       // scroll event with the quantized value must not clobber it.
       const fractional = 1000.75;
-      extremeGrid.setScrollTopOverride(fractional);
+      extremeGrid.viewport.setTopOverride(fractional);
       instructions.length = 0;
       extremeGrid.setViewport(1000, 0, 800, 600); // quantized native value
 
@@ -944,7 +943,7 @@ describe("GridCore", () => {
       }
 
       // Clearing the override hands control back to native scroll values.
-      extremeGrid.setScrollTopOverride(null);
+      extremeGrid.viewport.setTopOverride(null);
       instructions.length = 0;
       extremeGrid.setViewport(2000, 0, 800, 600);
       const afterClear = instructions.find((i) => i.type === "UPDATE_VISIBLE_RANGE");
