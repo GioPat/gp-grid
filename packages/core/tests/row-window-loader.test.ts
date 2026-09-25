@@ -369,3 +369,58 @@ describe("RowWindowLoader — flat path", () => {
     expect(harness.cachedRows.has(4)).toBe(true);
   });
 });
+
+describe("RowWindowLoader — ranges, budget and stale loads", () => {
+  it("skips empty ranges and ranges past the known total", async () => {
+    const harness = createHarness(
+      { pageSize: 10, prefetchPages: 1, maxPages: 5 },
+      { metrics: { frozenCount: 0, rowCount: 20, totalRows: 20 } },
+    );
+
+    expect(harness.loader.hasMissingRows({ startRow: 5, endRow: 5 })).toBe(false);
+    expect(harness.loader.hasMissingRows({ startRow: 0, endRow: 10 })).toBe(true);
+    await harness.loader.loadRange({ startRow: 5, endRow: 5 });
+    expect(harness.requests).toEqual([]);
+
+    await harness.loader.loadRange({ startRow: 0, endRow: 10 });
+    expect(harness.requests).toEqual([[0, 10], [10, 20]]);
+    expect(harness.loader.hasMissingRows({ startRow: 0, endRow: 30 })).toBe(false);
+    expect(harness.loader.hasMissingRows({ startRow: 20, endRow: 30 })).toBe(false);
+
+    await harness.loader.loadRange({ startRow: 25, endRow: 30 });
+    expect(harness.requests).toHaveLength(2);
+  });
+
+  it("reports cache options and the page budget", () => {
+    const harness = createHarness({ pageSize: 10, prefetchPages: 0, maxPages: 4 });
+    expect(harness.loader.getPageSize()).toBe(10);
+    expect(harness.loader.getPageBudget()).toMatchObject({
+      viewportHeight: 100,
+      scrollTop: 0,
+      maxScrollTop: 9_900,
+      pageSize: 10,
+      maxPages: 4,
+    });
+
+    harness.loader.configure({ pageSize: 25, maxPages: 8 });
+    expect(harness.loader.getPageSize()).toBe(25);
+    expect(harness.loader.getPageBudget()).toMatchObject({ pageSize: 25, maxPages: 8 });
+  });
+
+  it.each([
+    ["flat", 0],
+    ["strict", 2],
+  ])("does not apply a %s load that a reset superseded", async (_, frozenCount) => {
+    const harness = createHarness(
+      { pageSize: 10, prefetchPages: 0, maxPages: 5 },
+      { metrics: { frozenCount }, manual: true },
+    );
+
+    const stale = harness.loader.loadRange(currentRange(harness));
+    harness.loader.reset();
+    await harness.resolveBlock(0);
+
+    await expect(stale).resolves.toEqual({ applied: false, loadedBlockCount: 0, totalRowsChanged: false });
+    expect(harness.cachedRows.has(0)).toBe(false);
+  });
+});

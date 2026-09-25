@@ -19,7 +19,7 @@ import {
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
