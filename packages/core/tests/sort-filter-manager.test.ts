@@ -240,3 +240,48 @@ describe("SortFilterManager.reconcileColumns", () => {
     ]);
   });
 });
+
+describe("SortFilterManager while loading", () => {
+  const setupLoading = () => {
+    let loading = true;
+    const harness = setup({ isLoading: () => loading });
+    return { ...harness, finishLoading: () => { loading = false; } };
+  };
+
+  it("ignores sort commands until the load finishes", async () => {
+    const { manager, onSortFilterChange, finishLoading } = setupLoading();
+
+    await manager.setSort("color", "asc");
+    expect(manager.getSortModel()).toEqual([]);
+    expect(onSortFilterChange).not.toHaveBeenCalled();
+
+    finishLoading();
+    await manager.setSort("color", "asc");
+    expect(manager.getSortModel()).toEqual([{ colId: "color", direction: "asc" }]);
+    expect(onSortFilterChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores filter commands until the load finishes", async () => {
+    const { manager, onSortFilterChange, finishLoading } = setupLoading();
+
+    await manager.setFilter("color", "red");
+    expect(manager.hasActiveFilter("color")).toBe(false);
+    expect(onSortFilterChange).not.toHaveBeenCalled();
+
+    finishLoading();
+    await manager.setFilter("color", "red");
+    expect(manager.hasActiveFilter("color")).toBe(true);
+    expect(onSortFilterChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open the filter popup until the load finishes", () => {
+    const { manager, instructions, finishLoading } = setupLoading();
+
+    manager.openFilterPopup(1, anchor, false);
+    expect(instructions).toEqual([]);
+
+    finishLoading();
+    manager.openFilterPopup(1, anchor, false);
+    expect(instructions.map((instruction) => instruction.type)).toContain("OPEN_FILTER_POPUP");
+  });
+});
