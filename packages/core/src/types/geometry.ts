@@ -4,14 +4,14 @@
 
 import type { ColumnDefinition } from "./columns";
 import type { RowRegion } from "../geometry/row-regions-mapping";
-import type { FrozenRowsState, RowRegionLayout } from "../geometry/row-regions";
+import type { RowRegionLayout } from "../geometry/row-regions";
 
 /**
  * Row region a virtualized row renders in. `"frozen"` is the always-visible
  * prefix, `"suffix"` the scrolling remainder (C5).
  */
 export type { RowRegion };
-export type { FrozenRowsState, RowRegionLayout };
+export type { FrozenRowsState, RowRegionLayout } from "../geometry/row-regions";
 
 /** Resolved display width policy for the grid's columns. */
 export type ColumnLayoutMode = "fit" | "fixed";
