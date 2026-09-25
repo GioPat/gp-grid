@@ -6,7 +6,7 @@ import type {
   SortModel,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
-import { createFrozenPrefixBudget, isUniformAxis } from "./page-reservation";
+import { createFrozenPrefixBudget, isUniformAxis } from "./page-capacity";
 import {
   RowWindowLoader,
   type RowLoadContext,

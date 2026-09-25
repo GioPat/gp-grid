@@ -10,15 +10,13 @@ import type { RowRegionLayout } from "../geometry/row-regions";
 import type { VirtualAxis } from "../geometry/virtual-axis";
 import { PageCache } from "./page-cache";
 import {
-  admitOptionalPages,
-  evictionCandidates,
   getRequiredPageBlocks,
   getRequiredPageRanges,
   getWindowPageBlocks,
-  resolvePrefixReservations,
   type BlockRange,
-  type PageBudget,
-} from "./page-reservation";
+} from "./page-blocks";
+import type { PageBudget } from "./page-capacity";
+import { admitOptionalPages, evictionCandidates, resolvePrefixReservations } from "./page-reservation";
 import {
   normalizeRowCacheOptions,
   type NormalizedRowCacheOptions,

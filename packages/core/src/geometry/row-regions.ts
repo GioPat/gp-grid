@@ -4,6 +4,7 @@
 // module; the page budget arrives as a numeric predicate.
 
 import type { VirtualAxis } from "./virtual-axis";
+import { normalizeCount, normalizeSize } from "../utils/number-guards";
 
 export type FrozenRowsLimit = "maxCount" | "cache" | "viewport" | null;
 
@@ -37,22 +38,16 @@ export const DEFAULT_MIN_SUFFIX_HEIGHT = 64;
 /** Mirrors ViewportState's estimate; geometry must not import a manager. */
 export const UNMEASURED_VIEWPORT_HEIGHT = 600;
 
-const normalizeCount = (value: number): number =>
-  Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
-
-const normalizeHeight = (value: number): number =>
-  Number.isFinite(value) && value > 0 ? value : 0;
-
 const maxCountOf = (input: FrozenRowsInput): number =>
   input.maxCount === undefined ? DEFAULT_MAX_FROZEN_ROWS : normalizeCount(input.maxCount);
 
 const minSuffixHeightOf = (input: FrozenRowsInput): number =>
   input.minSuffixHeight === undefined
     ? DEFAULT_MIN_SUFFIX_HEIGHT
-    : normalizeHeight(input.minSuffixHeight);
+    : normalizeSize(input.minSuffixHeight);
 
 const viewportHeightOf = (input: FrozenRowsInput): number =>
-  input.viewportMeasured ? normalizeHeight(input.viewportHeight) : UNMEASURED_VIEWPORT_HEIGHT;
+  input.viewportMeasured ? normalizeSize(input.viewportHeight) : UNMEASURED_VIEWPORT_HEIGHT;
 
 /** Freezing every row needs no suffix, so the minimum only constrains a prefix. */
 const fitsViewport = (

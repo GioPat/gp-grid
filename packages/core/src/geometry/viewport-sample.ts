@@ -4,6 +4,7 @@
 
 import type { RowScrollMapping } from "./row-geometry";
 import type { VirtualAxis } from "./virtual-axis";
+import { normalizeSize } from "../utils/number-guards";
 
 export interface GridViewportSample {
   /** Body content-area dimensions: height excludes the header. */
@@ -18,15 +19,11 @@ export interface GridViewportSample {
   readonly measured?: boolean;
 }
 
-/** Non-finite or non-positive measurements normalize to 0 (A5, A9). */
-const normalizeMeasurement = (value: number): number =>
-  Number.isFinite(value) && value > 0 ? value : 0;
-
 const normalizeOffset = (value: number): number => (Number.isFinite(value) ? value : 0);
 
 export const normalizeSample = (sample: GridViewportSample): GridViewportSample => ({
-  width: normalizeMeasurement(sample.width),
-  height: normalizeMeasurement(sample.height),
+  width: normalizeSize(sample.width),
+  height: normalizeSize(sample.height),
   scrollLeft: normalizeOffset(sample.scrollLeft),
   scrollTop: normalizeOffset(sample.scrollTop),
   measured: sample.measured ?? true,

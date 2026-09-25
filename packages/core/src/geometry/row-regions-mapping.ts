@@ -5,6 +5,7 @@
 import type { AxisBounds } from "../types/geometry";
 import type { RowMapper } from "./row-geometry";
 import type { AxisWindow, VirtualAxis } from "./virtual-axis";
+import { normalizeSize } from "../utils/number-guards";
 
 export type RowRegion = "frozen" | "suffix";
 
@@ -35,15 +36,12 @@ export interface RowRegionScrollCorrectionInput {
   previousFrozenExtent: number;
 }
 
-const normalizeHeight = (value: number): number =>
-  Number.isFinite(value) && value > 0 ? value : 0;
-
 const logicalTopOf = (input: RowRegionMappingInput): number =>
   input.mapper.toLogicalScrollTop(input.scrollTop);
 
 /** Height of the scrolling clip below the frozen block. */
 export const getSuffixViewportHeight = (input: RowRegionMappingInput): number =>
-  Math.max(0, normalizeHeight(input.viewportHeight) - input.frozenExtent);
+  Math.max(0, normalizeSize(input.viewportHeight) - input.frozenExtent);
 
 /** Half-open suffix range over the clip `[logicalTop + frozenExtent, logicalTop + height)`. */
 export const getSuffixWindow = (input: RowRegionMappingInput): AxisWindow => {
@@ -122,7 +120,7 @@ export const getRowClip = (
     return undefined;
   }
   if (rowIndex < input.frozenCount) return { start: 0, end: input.frozenExtent };
-  return { start: input.frozenExtent, end: normalizeHeight(input.viewportHeight) };
+  return { start: input.frozenExtent, end: normalizeSize(input.viewportHeight) };
 };
 
 /** C6: a suffix row aligns inside the suffix clip; a frozen row never moves. */
@@ -144,9 +142,9 @@ export const resolveRowRegionScrollTop = (
   if (logicalTop < rowLogical + frozenExtent) {
     return mapper.toDomScrollTopClamped(Math.max(0, logicalTop - frozenExtent));
   }
-  if (logicalBottom <= rowLogical + normalizeHeight(input.viewportHeight)) return undefined;
+  if (logicalBottom <= rowLogical + normalizeSize(input.viewportHeight)) return undefined;
 
-  const wanted = logicalBottom - normalizeHeight(input.viewportHeight);
+  const wanted = logicalBottom - normalizeSize(input.viewportHeight);
   const boundary = axis.indexAt(wanted);
   const snapped = boundary < axis.count && axis.getOffset(boundary) < wanted
     ? axis.getOffset(boundary + 1)

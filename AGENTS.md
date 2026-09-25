@@ -53,6 +53,7 @@ Two files in `packages/core` are produced by the build. Never hand-edit them:
 - Keep the cognitive complexity of function to a maximum of 15
 - The styling (CSS) is centralized in the `core` package. Use that one as much as you can. Use `:where` to enable styling rewriting from the users
 - Reduce inline styling
+- Before writing a helper, check `packages/core/src/utils` (e.g. `number-guards.ts` for sanitizing numeric inputs such as sizes, counts and page sizes against `NaN`/`Infinity`/negatives) and extend it instead of adding a local copy
 
 ## Gotchas
 
