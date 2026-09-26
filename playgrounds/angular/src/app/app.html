@@ -59,8 +59,25 @@
       [darkMode]="darkMode()"
       [highlighting]="highlighting"
       [rowDragEntireRow]="true"
+      [freezeRows]="freezeRows()"
+      (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>
+
+  <div class="row-update-controls">
+    <span>Frozen Rows:</span>
+    @for (value of freezeCounts; track value) {
+      <button
+        type="button"
+        class="update-btn"
+        [style.opacity]="freezeCount() === value ? 1 : 0.5"
+        (click)="freezeCount.set(value)"
+      >
+        {{ value }}
+      </button>
+    }
+    <span>{{ frozenStatus() }}</span>
+  </div>
 
   <div class="row-update-controls">
     <label>

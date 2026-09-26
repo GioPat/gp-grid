@@ -75,7 +75,7 @@ export const GridCell = <TData = unknown>(
   const core = coreRef.current;
 
   const isEditing = isCellEditing(rowIndex, layoutIndex, editingCell);
-  const liveEdit = isEditing ? core?.getEditState() : null;
+  const liveEdit = isEditing ? core?.edit.getState() : null;
   const active = isCellActive(rowIndex, layoutIndex, activeCell);
   const selected = isCellSelected(rowIndex, layoutIndex, selectionRange);
   const inFillPreview = isCellInFillPreview(
@@ -96,10 +96,10 @@ export const GridCell = <TData = unknown>(
 
   // Read the raw value through the core read path so a record-less (columnar)
   // row renders like an object row.
-  const rawValue = core?.getCellValue(rowIndex, layoutIndex) ?? null;
-  const rowId = core?.getRowId(rowIndex);
+  const rawValue = core?.cells.getValue(rowIndex, layoutIndex) ?? null;
+  const rowId = core?.rows.getId(rowIndex);
   const getValue = (field: string): CellValue =>
-    core?.getFieldValue(rowIndex, field) ?? null;
+    core?.cells.getFieldValue(rowIndex, field) ?? null;
 
   // Wrap only affects the default text content, so it is irrelevant (and would
   // clash with the edit input) in edit mode.

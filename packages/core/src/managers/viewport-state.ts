@@ -20,7 +20,7 @@ export class ViewportState {
   private scrollLeft = 0;
   private viewportWidth = 0;
   private viewportHeight = 0;
-  private isMeasured = false;
+  private measured = false;
 
   /** Raw DOM vertical scroll sample; geometry maps it to logical space. */
   getScrollTop(): number {
@@ -37,7 +37,15 @@ export class ViewportState {
   }
 
   getViewportHeight(): number {
-    return this.isMeasured ? this.viewportHeight : UNMEASURED_VIEWPORT_HEIGHT;
+    return this.measured ? this.viewportHeight : UNMEASURED_VIEWPORT_HEIGHT;
+  }
+
+  /**
+   * Whether a real measurement replaced the pre-mount estimate. Geometry
+   * needs the distinction: the estimate is a constant, a measured 600 is not.
+   */
+  isMeasured(): boolean {
+    return this.measured;
   }
 
   /**
@@ -46,6 +54,14 @@ export class ViewportState {
    */
   resetScrollTop(): void {
     this.scrollTop = 0;
+  }
+
+  /**
+   * Commit a corrected DOM scroll sample without a full measurement update,
+   * so geometry and the next sample agree on the anchor.
+   */
+  setScrollTop(domScrollTop: number): void {
+    this.scrollTop = domScrollTop;
   }
 
   /**
@@ -59,8 +75,8 @@ export class ViewportState {
     height: number,
   ): ViewportUpdateResult {
     // The first measurement replaces the estimate even when it reads 0 × 0.
-    const isFirstMeasurement = this.isMeasured === false;
-    this.isMeasured = true;
+    const isFirstMeasurement = this.measured === false;
+    this.measured = true;
     const viewportSizeChanged =
       isFirstMeasurement || this.viewportWidth !== width || this.viewportHeight !== height;
     const changed =

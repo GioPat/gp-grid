@@ -74,7 +74,7 @@ Clicking a column header cycles through:
 
 ```typescript
 // Set sort on a column
-core.setSort(colId: string, direction: 'asc' | 'desc' | null, addToExisting?: boolean);
+core.sortFilter.setSort(colId: string, direction: 'asc' | 'desc' | null, addToExisting?: boolean);
 
 // Check if sorting is enabled
 core.sortingEnabled; // boolean

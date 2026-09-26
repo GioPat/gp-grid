@@ -40,7 +40,7 @@ export class ColumnMoveDrag<TData = unknown> {
     if (event.button !== 0) {
       return { preventDefault: false, stopPropagation: false };
     }
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
     if (column?.movable === false) {
       return { preventDefault: false, stopPropagation: false };
     }
@@ -120,20 +120,20 @@ export class ColumnMoveDrag<TData = unknown> {
     if (toIndex === undefined) return;
     const fromIndex = this.sourceColIndex;
     if (fromIndex !== toIndex) {
-      this.core.moveColumn(fromIndex, toIndex);
+      this.core.columns.move(fromIndex, toIndex);
     }
   }
 
   private treatAsHeaderClick(
     cycleSortDirection: (current: SortDirection | null | undefined) => SortDirection | null,
   ): void {
-    const column = this.core.getColumns()[this.sourceColIndex];
+    const column = this.core.columns.get()[this.sourceColIndex];
     if (!column) return;
     const colId = column.colId ?? column.field;
     const currentDirection = this.core
-      .getSortModel()
+      .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
-    this.core.setSort(colId, cycleSortDirection(currentDirection), this.shiftKey);
+    this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), this.shiftKey);
   }
 
   private reset(): void {

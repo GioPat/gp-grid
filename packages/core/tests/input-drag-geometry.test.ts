@@ -57,7 +57,7 @@ const createGrid = async (): Promise<GridCore<Row>> => {
 };
 
 const columnIds = (grid: GridCore<Row>): string[] =>
-  grid.getColumns().map((column) => column.colId ?? column.field);
+  grid.columns.get().map((column) => column.colId ?? column.field);
 
 describe("pointer drags resolve through geometry", () => {
   it("targets the row under the pointer, measured from the body top", async () => {
@@ -76,7 +76,7 @@ describe("pointer drags resolve through geometry", () => {
 
   it("maps the pointer to a layout index when a column on the left is hidden", async () => {
     const grid = await createGrid();
-    grid.setColumnState([{ columnId: "a", hidden: true }]);
+    grid.columns.setState([{ columnId: "a", hidden: true }]);
     grid.input.handleCellMouseDown(1, 1, pointerAt(10, ROW_HEIGHT + 4));
     grid.input.startSelectionDrag();
 
@@ -93,7 +93,7 @@ describe("pointer drags resolve through geometry", () => {
 
   it("clamps a pointer outside the cells to the nearest cell", async () => {
     const grid = await createGrid();
-    grid.setColumnState([{ columnId: "a", hidden: true }]);
+    grid.columns.setState([{ columnId: "a", hidden: true }]);
     grid.input.handleCellMouseDown(1, 1, pointerAt(10, ROW_HEIGHT + 4));
     grid.input.startSelectionDrag();
 
@@ -120,7 +120,7 @@ describe("pointer drags resolve through geometry", () => {
 
   it("commits a column move to the layout index of the drop target", async () => {
     const grid = await createGrid();
-    grid.setColumnState([{ columnId: "a", hidden: true }]);
+    grid.columns.setState([{ columnId: "a", hidden: true }]);
     // Drag "c" (layout 2, displayed 1) onto the first displayed column, "b".
     grid.input.handleHeaderMouseDown(2, 100, HEADER_HEIGHT, pointerAt(150, -10));
     grid.input.handleDragMove(pointerAt(10, -10), bounds);
@@ -169,7 +169,7 @@ describe("pointer drags resolve through geometry", () => {
   it("drops before the indicated end pin when base and displayed orders differ", async () => {
     const grid = await createGrid();
     try {
-      grid.setColumnPinned("b", "end");
+      grid.columns.setPinned("b", "end");
       expect(columnIds(grid)).toEqual(["a", "c", "b"]);
 
       grid.input.handleHeaderMouseDown(0, 100, HEADER_HEIGHT, pointerAt(50, -10));
@@ -181,7 +181,7 @@ describe("pointer drags resolve through geometry", () => {
       grid.input.handleDragEnd();
 
       expect(columnIds(grid)).toEqual(["c", "a", "b"]);
-      expect(grid.getColumnState().find((column) => column.columnId === "a")?.pinned).toBe("end");
+      expect(grid.columns.getState().find((column) => column.columnId === "a")?.pinned).toBe("end");
     } finally {
       grid.destroy();
     }

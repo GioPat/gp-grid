@@ -57,7 +57,7 @@ describe("Grid write rejection", () => {
     await waitFor(() => expect(gridRef.current?.core).toBeTruthy());
 
     act(() => {
-      gridRef.current?.core?.setCellValue(0, 0, "Grace");
+      gridRef.current?.core?.cells.setValue(0, 0, "Grace");
     });
 
     expect(rejected).toHaveLength(1);

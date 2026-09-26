@@ -225,6 +225,58 @@
 }
 
 /* =============================================================================
+   Frozen Rows (C10)
+   ============================================================================= */
+
+/* Sticky block at the sizer level. The rows wrapper is absolute with z-index
+   1, so the block paints above it and covers its overlays. */
+.gp-grid-frozen-rows {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+:where(.gp-grid-frozen-rows) {
+  background-color: var(--gp-grid-bg);
+  border-bottom: 1px solid var(--gp-grid-border);
+}
+
+/* Frozen pinned cells stick on the inline axis, so they live in this sibling
+   layer at the sizer level. Wrappers pull it up by the block height so it
+   starts at the block's top instead of below it. */
+.gp-grid-frozen-pins {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.gp-grid-frozen-pins .gp-grid-pin {
+  pointer-events: auto;
+}
+
+/* No background: the block's center cells stay visible beneath the pins. */
+.gp-grid-frozen-pin-row {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+/* The transparent pin row gives `background: inherit` nothing to inherit. */
+:where(.gp-grid-frozen-pin-row > .gp-grid-pin) {
+  background-color: var(--gp-grid-bg);
+}
+
+/* C7 placeholder for an unavailable frozen row: static, never animated. */
+:where(.gp-grid-row--loading) {
+  background-color: var(--gp-grid-bg-alt);
+}
+
+/* =============================================================================
    Cell Peek (read-only multi-line overlay on dblclick of non-editable cell)
    ============================================================================= */
 

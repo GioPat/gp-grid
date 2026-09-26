@@ -30,7 +30,7 @@ export class ColumnResizeDrag<TData = unknown> {
     if (event.button !== 0) {
       return { preventDefault: false, stopPropagation: false };
     }
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
     if (column?.resizable === false) {
       return { preventDefault: false, stopPropagation: false };
     }
@@ -49,7 +49,7 @@ export class ColumnResizeDrag<TData = unknown> {
   }
 
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult {
-    const column = this.core.getColumns()[this.colIndex];
+    const column = this.core.columns.get()[this.colIndex];
     const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
     const maxWidth = column?.maxWidth;
     // In RTL the inline-end edge the handle sits on is the left one, so a
@@ -91,7 +91,7 @@ export class ColumnResizeDrag<TData = unknown> {
 
   end(): void {
     if (this.active) {
-      this.core.setColumnWidth(this.colIndex, this.currentWidth);
+      this.core.columns.setWidth(this.colIndex, this.currentWidth);
     }
     this.active = false;
     this.colIndex = -1;

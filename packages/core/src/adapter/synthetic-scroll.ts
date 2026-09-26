@@ -70,7 +70,7 @@ export class SyntheticScroll<TData = unknown> {
     }
     this.lastPipelineRunMs = nowMs;
     this.overrideActive = true;
-    core.setScrollTopOverride(domScrollTop);
+    core.viewport.setTopOverride(domScrollTop);
     el.scrollTop = domScrollTop;
     core.setViewport(
       domScrollTop,
@@ -86,7 +86,7 @@ export class SyntheticScroll<TData = unknown> {
     this.overrideActive = false;
     const core = this.getCore();
     if (core === null) return;
-    core.setScrollTopOverride(null);
+    core.viewport.setTopOverride(null);
     const el = this.getEl();
     if (el !== null) {
       core.setViewport(

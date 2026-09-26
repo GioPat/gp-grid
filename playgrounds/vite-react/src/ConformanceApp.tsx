@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Grid, createColumnarDataSource } from "@gp-grid/react";
 import type {
-  CellPosition,
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
@@ -12,9 +11,10 @@ import type {
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ColumnLayoutMode,
+  DataSource,
+  FreezeRowsOptions,
   GridRef,
   RowDragEndEvent,
-  RowId,
 } from "@gp-grid/react";
 import {
   createGeometryHooks,
@@ -23,10 +23,16 @@ import {
   createNarrowColumns,
   createWideColumns,
   createWideSource,
-  type CellBoundsSnapshot,
-  type ColumnWindowView,
-  type LayoutColumnSnapshot,
+  type GeometryHooks,
 } from "./conformance-geometry";
+import {
+  createFrozenFixture,
+  FROZEN_HEADER_HEIGHT,
+  FROZEN_HOST_HEIGHT,
+  FROZEN_HOST_NARROW_HEIGHT,
+  FROZEN_ROW_HEIGHT,
+  type FrozenMode,
+} from "./conformance-frozen";
 
 interface ConformanceRow {
   id: number;
@@ -153,7 +159,7 @@ const createColumnarFixture = (): ColumnarFixture => {
   };
 };
 
-interface ConformanceHooks {
+interface ConformanceHooks extends GeometryHooks {
   getCellValue: (row: number, col: number) => CellValue;
   getFieldValue: (row: number, field: string) => CellValue;
   revision: () => number;
@@ -169,11 +175,7 @@ interface ConformanceHooks {
   eventCounts: () => { resized: number; moved: number; dragged: number; pinned: number };
   resetEventCounts: () => void;
   useWideColumns: (count: number) => void;
-  columnWindow: () => ColumnWindowView | null;
-  layoutColumns: () => LayoutColumnSnapshot[];
-  cellBounds: (row: number, layoutIndex: number) => CellBoundsSnapshot | null;
-  identityBounds: (rowId: RowId, columnId: string) => CellBoundsSnapshot | null;
-  activeCell: () => CellPosition | null;
+  setFreezeCount: (count: number) => void;
 }
 
 interface EventCounts {
@@ -189,6 +191,8 @@ export const ConformanceApp = (): React.ReactNode => {
   const [columnarColumns, setColumnarColumns] = useState(createColumnarColumns);
   const [largeColumnarSource, setLargeColumnarSource] = useState<ReturnType<typeof createLargeColumnarSource> | null>(null);
   const [fixture] = useState(createColumnarFixture);
+  const [frozen] = useState(createFrozenFixture);
+  const [frozenMode, setFrozenMode] = useState<FrozenMode>("off");
   const [mode, setMode] = useState<"object" | "columnar">("object");
   const [revision, setRevision] = useState(0);
   const [mounted, setMounted] = useState(true);
@@ -198,6 +202,8 @@ export const ConformanceApp = (): React.ReactNode => {
   const [columnState, setColumnState] = useState<ColumnStateUpdate[] | undefined>(undefined);
   const [columnLayout, setColumnLayout] = useState<ColumnLayoutMode>("fit");
   const [hostWidth, setHostWidth] = useState(600);
+  const [hostHeight, setHostHeight] = useState(FROZEN_HOST_HEIGHT);
+  const [freezeOverride, setFreezeOverride] = useState<FreezeRowsOptions | undefined | null>(null);
   const [rtl, setRtl] = useState(false);
   const gridRef = useRef<GridRef<ConformanceRow> | null>(null);
   const eventCounts = useRef<EventCounts>({ resized: 0, moved: 0, dragged: 0, pinned: 0 });
@@ -205,6 +211,62 @@ export const ConformanceApp = (): React.ReactNode => {
   const nextCoreToken = useRef(1);
 
   const isColumnar = mode === "columnar";
+  const frozenActive = frozenMode !== "off";
+  const frozenObject = frozenMode === "object";
+
+  /** Arming swaps the data source and columns, so it remounts the grid. */
+  const armFrozenRows = useCallback((next: FrozenMode) => {
+    setFrozenMode(next);
+    setGeneration((value) => value + 1);
+  }, []);
+
+  const useFreezeRows = useCallback(() => armFrozenRows("columnar"), [armFrozenRows]);
+  const clearFreezeRows = useCallback(() => armFrozenRows("off"), [armFrozenRows]);
+  const useFrozenPaged = useCallback(() => armFrozenRows("paged"), [armFrozenRows]);
+  const useFrozenPagedTight = useCallback(() => armFrozenRows("paged-tight"), [armFrozenRows]);
+  const useFrozenObject = useCallback(() => armFrozenRows("object"), [armFrozenRows]);
+
+  // In-place controls: the option stays reactive, so these never touch the
+  // remount `generation`. `null` means "the armed mode's own option".
+  const freezeCount = useCallback((count: number) => {
+    setFreezeOverride({ count });
+  }, []);
+  const freezeThrough5 = useCallback(() => {
+    gridRef.current?.core?.frozenRows.freezeThrough(5);
+  }, []);
+  const unfreezeInPlace = useCallback(() => {
+    setFreezeOverride(undefined);
+  }, []);
+  /** Drives the core's own setter: a button click would blur and commit. */
+  const setFreezeCount = useCallback((count: number) => {
+    gridRef.current?.core?.frozenRows.set({ count });
+  }, []);
+  const toggleHostHeight = useCallback(() => {
+    setHostHeight((current) =>
+      current === FROZEN_HOST_HEIGHT ? FROZEN_HOST_NARROW_HEIGHT : FROZEN_HOST_HEIGHT);
+  }, []);
+
+  const activeColumns = (): ColumnDefinition[] => {
+    const frozenColumns = frozenActive ? frozen.columnsFor(frozenMode) : undefined;
+    if (frozenColumns !== undefined) return frozenColumns;
+    return isColumnar ? columnarColumns : columns;
+  };
+
+  /** A frozen arm replaces the data source; otherwise the mode picks it. */
+  const activeDataSource = (): DataSource<never> | undefined => {
+    if (frozenActive) return frozen.sourceFor(frozenMode);
+    if (isColumnar) return largeColumnarSource ?? fixture.source;
+    return undefined;
+  };
+
+  /** The writable arm keeps the caller's object rows; every other one is sourced. */
+  const activeRowData = (): ConformanceRow[] | undefined => {
+    if (frozenActive) return frozenObject ? rows : undefined;
+    return isColumnar ? undefined : rows;
+  };
+
+  const activeFreezeRows = (): FreezeRowsOptions | undefined =>
+    freezeOverride === null ? frozen.freezeRowsFor(frozenMode) : freezeOverride;
 
   const replaceColumns = useCallback(() => {
     setColumns([
@@ -245,8 +307,8 @@ export const ConformanceApp = (): React.ReactNode => {
   const unpinAll = useCallback(() => {
     setColumnState(undefined);
     const core = gridRef.current?.core;
-    for (const column of core?.getColumns() ?? []) {
-      core?.setColumnPinned(column.colId ?? column.field, null);
+    for (const column of core?.columns.get() ?? []) {
+      core?.columns.setPinned(column.colId ?? column.field, null);
     }
   }, []);
 
@@ -270,7 +332,10 @@ const hideColumn = useCallback(() => {
     setColumnState(undefined);
     setColumnLayout("fit");
     setHostWidth(600);
+    setHostHeight(FROZEN_HOST_HEIGHT);
+    setFreezeOverride(null);
     setMode("object");
+    setFrozenMode("off");
     setMounted(true);
     setGeneration((value) => value + 1);
     setEditEvents(0);
@@ -352,57 +417,59 @@ const hideColumn = useCallback(() => {
 
   const resetColumnState = useCallback(() => {
     setColumnState(undefined);
-    gridRef.current?.core?.resetColumnState();
+    gridRef.current?.core?.columns.resetState();
   }, []);
 
   const applySort = useCallback(() => {
-    void gridRef.current?.core?.setSort("score", "asc");
+    void gridRef.current?.core?.sortFilter.setSort("score", "asc");
   }, []);
 
   const applyFilter = useCallback(() => {
-    void gridRef.current?.core?.setFilter("city", "City 1");
+    void gridRef.current?.core?.sortFilter.setFilter("city", "City 1");
   }, []);
 
   const moveColumn = useCallback(() => {
-    gridRef.current?.core?.moveColumn(0, 2);
+    gridRef.current?.core?.columns.move(0, 2);
   }, []);
 
   const dragRow = useCallback(() => {
-    gridRef.current?.core?.commitRowDrag(0, 1);
+    gridRef.current?.core?.rowDrag.commit(0, 1);
   }, []);
 
   // Expose the wrapper's stripped built core for raw-value assertions and the
   // borrowed-source read counters for bounded-read assertions.
   useEffect(() => {
     const hooks: ConformanceHooks = {
-      getCellValue: (row, col) => gridRef.current?.core?.getCellValue(row, col) ?? null,
-      getFieldValue: (row, field) => gridRef.current?.core?.getFieldValue(row, field) ?? null,
+      getCellValue: (row, col) => gridRef.current?.core?.cells.getValue(row, col) ?? null,
+      getFieldValue: (row, field) => gridRef.current?.core?.cells.getFieldValue(row, field) ?? null,
       revision: () => fixture.source.revision,
       sourceReads: () => fixture.reads(),
       sourceDistinctRows: () => fixture.distinctRows(),
       resetSourceReads: () => fixture.resetReads(),
       recordMaterializations: () => fixture.recordMaterializations(),
       coreToken: readCoreToken,
-      columnIds: () => gridRef.current?.core?.getColumns().map((column) => column.colId ?? column.field) ?? [],
-      columnState: () => gridRef.current?.core?.getColumnState() ?? [],
-      sortColumn: () => gridRef.current?.core?.getSortModel()[0]?.colId ?? null,
-      filterCount: () => Object.keys(gridRef.current?.core?.getFilterModel() ?? {}).length,
+      columnIds: () => gridRef.current?.core?.columns.get().map((column) => column.colId ?? column.field) ?? [],
+      columnState: () => gridRef.current?.core?.columns.getState() ?? [],
+      sortColumn: () => gridRef.current?.core?.sortFilter.getSortModel()[0]?.colId ?? null,
+      filterCount: () => Object.keys(gridRef.current?.core?.sortFilter.getFilterModel() ?? {}).length,
       eventCounts: () => ({ ...eventCounts.current }),
       resetEventCounts: () => {
         eventCounts.current = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
       },
       useWideColumns,
-      ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never),
-      debugState: () => ({
-        coreWidth: gridRef.current?.core?.geometry.getColumnLayout().columns[0]?.width ?? -1,
-        domWidth: (document.querySelector('.gp-grid-header-cell[data-col-index="0"]') as HTMLElement | null)?.style.width ?? null,
-      }),
+      setFreezeCount,
+      ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never, frozen),
     };
     (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance = hooks;
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [fixture, readCoreToken, useWideColumns]);
+  }, [fixture, frozen, readCoreToken, setFreezeCount, useWideColumns]);
+
+  // Arming remounts the grid, so the announcement reader follows each core.
+  useEffect(() => {
+    frozen.track((gridRef.current?.core ?? null) as never);
+  }, [frozen, generation, mounted]);
 
   const metrics = useMemo(
     () => ({ generation, editEvents, writeRejected, mode, revision }),
@@ -411,6 +478,9 @@ const hideColumn = useCallback(() => {
 
   return (
     <main data-conformance-framework="react" style={{ width: 620, margin: 16 }}>
+      {/* Compact controls: the fixture page must fit the 720 px viewport, or
+          focusing the grid scrolls the page and moves rows under the pointer. */}
+      <style>{`[data-conformance-framework] button { padding: 2px 6px; font-size: 11px; }`}</style>
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <button data-testid="reset" onClick={reset}>Reset</button>
         <button data-testid="remount" onClick={remount}>Remount</button>
@@ -433,20 +503,32 @@ const hideColumn = useCallback(() => {
         <button data-testid="resize-host" onClick={resizeHost}>Resize host</button>
         <button data-testid="hide-column" onClick={hideColumn}>Hide column</button>
         <button data-testid="toggle-rtl" onClick={toggleRtl}>Toggle RTL</button>
+        <button data-testid="use-freeze-rows" onClick={useFreezeRows}>Freeze rows</button>
+        <button data-testid="clear-freeze-rows" onClick={clearFreezeRows}>Clear freeze rows</button>
+        <button data-testid="use-frozen-paged" onClick={useFrozenPaged}>Frozen paged</button>
+        <button data-testid="use-frozen-paged-tight" onClick={useFrozenPagedTight}>Frozen paged tight</button>
+        <button data-testid="use-frozen-object" onClick={useFrozenObject}>Frozen object</button>
+        <button data-testid="freeze-count-3" onClick={() => freezeCount(3)}>Freeze 3</button>
+        <button data-testid="freeze-count-5" onClick={() => freezeCount(5)}>Freeze 5</button>
+        <button data-testid="freeze-through-5" onClick={freezeThrough5}>Freeze through 5</button>
+        <button data-testid="unfreeze-in-place" onClick={unfreezeInPlace}>Unfreeze in place</button>
+        <button data-testid="toggle-host-height" onClick={toggleHostHeight}>Toggle host height</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
-      <div data-testid="grid-host" dir={rtl ? "rtl" : "ltr"} style={{ width: hostWidth, height: 360 }}>
+      <div data-testid="grid-host" dir={rtl ? "rtl" : "ltr"} style={{ width: hostWidth, height: hostHeight }}>
         {mounted && (
           <Grid
             key={generation}
             gridRef={gridRef}
-            columns={isColumnar ? columnarColumns : columns}
-            columnState={columnState}
+            columns={activeColumns()}
+            columnState={frozenActive ? frozen.columnState : columnState}
             columnLayout={columnLayout}
-            dataSource={isColumnar ? (largeColumnarSource ?? fixture.source) : undefined}
-            rowData={isColumnar ? undefined : rows}
-            rowHeight={32}
-            headerHeight={36}
+            dataSource={activeDataSource()}
+            rowData={activeRowData()}
+            rowHeight={frozenActive ? FROZEN_ROW_HEIGHT : 32}
+            headerHeight={frozenActive ? FROZEN_HEADER_HEIGHT : 36}
+            freezeRows={activeFreezeRows()}
+            rowLoading={frozen.rowLoadingFor(frozenMode)}
             getRowId={(row) => row.id}
             onCellValueChanged={onCellValueChanged}
             onWriteRejected={onWriteRejected}
@@ -454,6 +536,7 @@ const hideColumn = useCallback(() => {
             onColumnMoved={onColumnMoved}
             onRowDragEnd={onRowDragEnd}
             onColumnPinned={onColumnPinned}
+            onFrozenRowsChanged={frozen.recordFreezeEvent}
           />
         )}
       </div>

@@ -253,11 +253,13 @@ describe("synthetic-scroll direction", () => {
     Object.defineProperty(el, "scrollWidth", { configurable: true, value: 4000 });
     Object.defineProperty(el, "scrollHeight", { configurable: true, value: 10000 });
     const core = {
-      isScalingActive: () => true,
-      getScrollRatio: () => 1,
-      getMaxFlingVelocity: () => 5,
-      getRowHeight: () => 32,
-      setScrollTopOverride: vi.fn(),
+      viewport: {
+        isScaling: () => true,
+        getScrollRatio: () => 1,
+        getMaxFlingVelocity: () => 5,
+        getRowHeight: () => 32,
+        setTopOverride: vi.fn(),
+      },
       setViewport: vi.fn(),
       onBatchInstruction: () => () => {},
       input: { getDragState: () => ({ isDragging: false }) },

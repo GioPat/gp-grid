@@ -6,6 +6,7 @@ import {
     type ColumnDefinition,
     type HighlightingOptions,
     type GridLabels,
+    type FrozenRowsState,
 } from "@gp-grid/vue";
 import Currency from "./renderers/Currency.vue";
 import StatusBadge from "./renderers/StatusBadge.vue";
@@ -13,7 +14,11 @@ import Bold from "./renderers/Bold.vue";
 import Tags from "./renderers/Tags.vue";
 import AgeBucket from "./renderers/AgeBucket.vue";
 type HighlightMode = "row" | "column" | "cell";
+type FreezeCount = 0 | 1 | 3 | 5;
 const highlightMode = ref<HighlightMode>("row");
+const freezeCounts: FreezeCount[] = [0, 1, 3, 5];
+const freezeCount = ref<FreezeCount>(0);
+const frozenStatus = ref("0 of 0 rows frozen");
 
 // Types
 interface Person {
@@ -176,6 +181,12 @@ const handleUpdateRow = () => {
     });
 };
 
+const freezeRows = computed(() => ({ count: freezeCount.value }));
+
+const handleFrozenRowsChanged = (state: FrozenRowsState) => {
+    frozenStatus.value = `${state.effectiveCount} of ${state.requestedCount} rows frozen`;
+};
+
 const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
     computeRowClasses:
         highlightMode.value === "row"
@@ -227,12 +238,28 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         </button>
     </div>
 
+    <!-- Frozen Rows Switcher -->
+    <div class="mode-switcher">
+        <span class="mode-label">Frozen Rows:</span>
+        <button
+            v-for="value in freezeCounts"
+            :key="value"
+            @click="freezeCount = value"
+            :class="['mode-btn', { active: freezeCount === value }]"
+        >
+            {{ value }}
+        </button>
+        <span class="mode-label">{{ frozenStatus }}</span>
+    </div>
+
     <div class="grid-container">
         <GpGrid
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
             :columns="columns"
             :labels="gridLabels"
+            :freeze-rows="freezeRows"
+            :on-frozen-rows-changed="handleFrozenRowsChanged"
             :overscan="12"
             :data-source="dataSource"
             :row-height="36"

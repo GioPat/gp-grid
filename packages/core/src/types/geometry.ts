@@ -3,6 +3,15 @@
 // service and the framework adapters. Nothing here exposes DOM types.
 
 import type { ColumnDefinition } from "./columns";
+import type { RowRegion } from "../geometry/row-regions-mapping";
+import type { RowRegionLayout } from "../geometry/row-regions";
+
+/**
+ * Row region a virtualized row renders in. `"frozen"` is the always-visible
+ * prefix, `"suffix"` the scrolling remainder (C5).
+ */
+export type { RowRegion };
+export type { FrozenRowsState, RowRegionLayout } from "../geometry/row-regions";
 
 /** Resolved display width policy for the grid's columns. */
 export type ColumnLayoutMode = "fit" | "fixed";
@@ -158,6 +167,8 @@ export interface GridHit {
   readonly columnId?: string;
   /** Region the hit column renders in, or `null` outside every column. */
   readonly region: ColumnRegion | null;
+  /** Region the hit row renders in; `null` outside the row axis (C5). */
+  readonly rowRegion: RowRegion | null;
 }
 
 /** DOM scroll offsets that bring a target into view; an axis is omitted when
@@ -165,6 +176,27 @@ export interface GridHit {
 export interface ScrollTarget {
   readonly scrollTop?: number;
   readonly scrollLeft?: number;
+}
+
+/**
+ * C11 auto-scroll inputs for a body rectangle: the frozen band edge and the
+ * suffix clip it scrolls in, plus the vertical step limits in DOM scroll
+ * space. With no published regions `frozenExtent` is 0 and the clip is the
+ * whole body, which is the flat rectangle.
+ */
+export interface RowScrollEdges {
+  readonly region: {
+    /** Body-relative y where the frozen band ends; the suffix clip starts. */
+    readonly frozenExtent: number;
+    /** Body height left below the band; zero disables vertical movement. */
+    readonly suffixViewportHeight: number;
+  };
+  readonly limits: {
+    /** Clamped current scroll top: the up step stops here. */
+    readonly scrollTop: number;
+    /** Largest reachable scroll top: the down step stops here. */
+    readonly maxScrollTop: number;
+  };
 }
 
 export interface ContentSize {
@@ -179,8 +211,23 @@ export interface GridGeometry {
   getColumnLayout(): ColumnLayoutSnapshot;
   getRowWindow(): AxisBounds;
   getVisibleRowWindow(): AxisBounds;
+  /** C3 frozen/suffix layout; never `null`, reused while unchanged. */
+  getRowRegions(): RowRegionLayout;
   getRowBounds(viewIndex: number, space?: GeometrySpace): AxisBounds | undefined;
   getColumnBounds(layoutIndex: number, space?: GeometrySpace): AxisBounds | undefined;
+  /**
+   * Viewport y-range of the region a row renders in: the frozen band for a
+   * frozen row, `[frozenExtent, viewportHeight)` for a suffix row (C5).
+   */
+  getRowClip(viewIndex: number): AxisBounds | undefined;
+  /** Reachable logical (content) scroll range of the row axis. */
+  getRowScrollRange(): AxisBounds;
+  hasVerticalScrollRange(): boolean;
+  /**
+   * C11 auto-scroll rectangle and step limits for a drag inside the body
+   * rectangle `containerHeight` px tall, starting at `scrollTop`.
+   */
+  getRowScrollEdges(scrollTop: number, containerHeight: number): RowScrollEdges;
   /** Displayed column at a layout index, including its effective region. */
   getColumn(layoutIndex: number): ResolvedColumn | undefined;
   /**

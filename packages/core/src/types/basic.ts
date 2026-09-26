@@ -1,6 +1,8 @@
 // packages/core/src/types/basic.ts
 // Basic types: primitives, cell values, positions, ranges
 
+import type { RowRegion } from "../geometry/row-regions-mapping";
+
 /** Cell data type primitive types */
 export type CellDataType =
   | "text"
@@ -144,4 +146,8 @@ export interface SlotState {
   generation: number;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
+  /** Region the slot's row renders in (C7). */
+  region: RowRegion;
+  /** A frozen slot with no row data yet renders as a placeholder. */
+  loading: boolean;
 }

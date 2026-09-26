@@ -4,9 +4,15 @@ import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
+  RowRegionLayout,
 } from "../types/geometry";
 import type { GridInstruction } from "../types/instructions";
-import type { FilterPopupState, HeaderData, SlotData } from "../types/ui-state";
+import type {
+  FilterPopupState,
+  GridAnnouncement,
+  HeaderData,
+  SlotData,
+} from "../types/ui-state";
 import { applyInstruction } from "../state-reducer";
 
 type EditingCell = { row: number; col: number; initialValue: CellValue; editId: number } | null;
@@ -37,6 +43,10 @@ export interface BatchChangeSetters {
   setColumnWindow?: (v: ColumnWindowSnapshot) => void;
   /** Selected column layout mode, mirrored from the core. */
   setColumnLayout?: (v: ColumnLayoutMode) => void;
+  /** C3 frozen/suffix layout at the committed geometry revision. */
+  setRowRegions?: (v: RowRegionLayout) => void;
+  /** Live-region text the core decided to announce, or `null` to clear it. */
+  setAnnouncement?: (v: GridAnnouncement | null) => void;
   /** Committed geometry revision, for wrapper-side change detection. */
   setGeometryRevision?: (v: number) => void;
   onFilterPopupChange: (v: FilterPopupState | null) => void;
@@ -103,6 +113,12 @@ const applyPartialState = (
   }
   if (changes.columnWindow !== undefined && changes.columnWindow !== null) {
     setters.setColumnWindow?.(changes.columnWindow);
+  }
+  if (changes.rowRegions !== undefined) {
+    setters.setRowRegions?.(changes.rowRegions);
+  }
+  if (changes.announcement !== undefined) {
+    setters.setAnnouncement?.(changes.announcement);
   }
   if (changes.filterPopup !== undefined) {
     setters.onFilterPopupChange(changes.filterPopup);

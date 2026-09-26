@@ -35,14 +35,14 @@ const createGrid = (
   });
 
 const widthOf = (grid: GridCore<TestRow>, columnId: string): number | undefined =>
-  grid.getColumnState().find((state) => state.columnId === columnId)?.width;
+  grid.columns.getState().find((state) => state.columnId === columnId)?.width;
 
 describe("column resize stores the pixel override directly", () => {
   it("keeps the exact width in fit even when the columns leave viewport space", () => {
     const grid = createGrid([def("a"), def("b"), def("c")]);
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(1, 200);
+    grid.columns.setWidth(1, 200);
 
     expect(widthOf(grid, "b")).toBe(200);
     const layout = grid.geometry.getColumnLayout();
@@ -54,7 +54,7 @@ describe("column resize stores the pixel override directly", () => {
     const grid = createGrid([def("a"), def("b"), def("c")]);
     grid.setViewport(0, 0, 250, 400);
 
-    grid.setColumnWidth(1, 200);
+    grid.columns.setWidth(1, 200);
 
     expect(widthOf(grid, "b")).toBe(200);
     expect(grid.geometry.getColumnLayout().columns.map((column) => column.width)).toEqual([
@@ -66,7 +66,7 @@ describe("column resize stores the pixel override directly", () => {
     const grid = createGrid([def("a", { hidden: true }), def("b")]);
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(0, 240);
+    grid.columns.setWidth(0, 240);
 
     expect(widthOf(grid, "a")).toBe(240);
     expect(grid.geometry.getColumnLayout().columns.map((column) => column.columnId)).toEqual([
@@ -79,14 +79,14 @@ describe("column resize stores the pixel override directly", () => {
     const grid = createGrid([def("a"), def("b")], { onColumnResized });
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(0, 240);
+    grid.columns.setWidth(0, 240);
 
     expect(onColumnResized).toHaveBeenCalledWith({
       columnId: "a",
       width: 240,
       viewIndex: 0,
     });
-    const state = grid.getColumnState()[0]!;
+    const state = grid.columns.getState()[0]!;
     expect(state.width).toBe(240);
     expect(state.resolvedWidth).toBe(240);
   });
@@ -95,7 +95,7 @@ describe("column resize stores the pixel override directly", () => {
     const grid = createGrid([def("a"), def("b")]);
     grid.setViewport(0, 0, 0, 400);
 
-    grid.setColumnWidth(0, 240);
+    grid.columns.setWidth(0, 240);
 
     expect(widthOf(grid, "a")).toBe(240);
   });
@@ -104,23 +104,23 @@ describe("column resize stores the pixel override directly", () => {
     const grid = createGrid([def("a"), def("b")]);
     grid.setViewport(0, 0, 800, 400);
 
-    grid.setColumnWidth(0, 100);
-    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
+    grid.columns.setWidth(0, 100);
+    expect(grid.columns.getState()[0]?.resolvedWidth).toBe(100);
 
-    grid.resetColumnState(["a"]);
-    expect(grid.getColumnState()[0]?.width).toBeUndefined();
-    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(400);
+    grid.columns.resetState(["a"]);
+    expect(grid.columns.getState()[0]?.width).toBeUndefined();
+    expect(grid.columns.getState()[0]?.resolvedWidth).toBe(400);
   });
 
   it("ignores a resize of a column index outside the layout", () => {
     const onColumnResized = vi.fn();
     const grid = createGrid([def("a")], { onColumnResized });
 
-    grid.setColumnWidth(5, 240);
+    grid.columns.setWidth(5, 240);
 
     expect(onColumnResized).not.toHaveBeenCalled();
     expect(widthOf(grid, "a")).toBeUndefined();
-    expect(grid.getColumnState()[0]?.resolvedWidth).toBe(100);
+    expect(grid.columns.getState()[0]?.resolvedWidth).toBe(100);
   });
 });
 
@@ -129,7 +129,7 @@ describe("column move guards", () => {
     const onColumnMoved = vi.fn();
     const grid = createGrid([def("a"), def("b")], { onColumnMoved });
 
-    grid.moveColumn(5, 0);
+    grid.columns.move(5, 0);
 
     expect(onColumnMoved).not.toHaveBeenCalled();
   });
@@ -138,10 +138,10 @@ describe("column move guards", () => {
     const onColumnMoved = vi.fn();
     const grid = createGrid([def("a"), def("b")], { onColumnMoved });
 
-    grid.moveColumn(0, 1);
+    grid.columns.move(0, 1);
 
     expect(onColumnMoved).not.toHaveBeenCalled();
-    expect(grid.getColumnState().map((state) => state.columnId)).toEqual(["a", "b"]);
+    expect(grid.columns.getState().map((state) => state.columnId)).toEqual(["a", "b"]);
   });
 });
 
@@ -156,9 +156,9 @@ describe("row drag commit", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    grid.commitRowDrag(0, 2);
+    grid.rowDrag.commit(0, 2);
 
-    expect(grid.getRowData(0)).toMatchObject({ id: 1 });
+    expect(grid.rows.getData(0)).toMatchObject({ id: 1 });
   });
 
   it("reorders resident rows and clears highlight caches", async () => {
@@ -168,8 +168,8 @@ describe("row drag commit", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 400);
 
-    grid.commitRowDrag(0, 2);
+    grid.rowDrag.commit(0, 2);
 
-    expect(grid.getRowData(0)).toMatchObject({ id: 2 });
+    expect(grid.rows.getData(0)).toMatchObject({ id: 2 });
   });
 });

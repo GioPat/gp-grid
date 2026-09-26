@@ -16,10 +16,12 @@ const def = (field: string, width = 100): ColumnDefinition => ({
 const createGrid = async (
   columns: ColumnDefinition[],
   viewportWidth: number,
+  rowCount = 3,
 ): Promise<GridCore<Record<string, unknown>>> => {
+  const data = Array.from({ length: rowCount }, (_, id) => ({ id }));
   const grid = new GridCore<Record<string, unknown>>({
     columns,
-    dataSource: createClientDataSource([{ id: 1 }, { id: 2 }, { id: 3 }]),
+    dataSource: createClientDataSource(data),
     rowHeight: 32,
     columnLayout: "fixed",
   });
@@ -44,7 +46,7 @@ describe("calculateFillHandlePosition per region", () => {
 
   it("returns a start-pin anchor with the start region", async () => {
     const grid = await createGrid([def("a"), def("b"), def("c")], 300);
-    grid.setColumnPinned("a", "start");
+    grid.columns.setPinned("a", "start");
 
     const position = calculateFillHandlePosition({
       core: grid,
@@ -56,7 +58,7 @@ describe("calculateFillHandlePosition per region", () => {
 
   it("returns an end-pin anchor with the end region", async () => {
     const grid = await createGrid([def("a"), def("b"), def("c")], 300);
-    grid.setColumnPinned("c", "end");
+    grid.columns.setPinned("c", "end");
 
     const position = calculateFillHandlePosition({
       core: grid,
@@ -68,8 +70,8 @@ describe("calculateFillHandlePosition per region", () => {
 
   it("keeps a scrolled-away center anchor addressable while mounted", async () => {
     const grid = await createGrid([def("a"), def("b"), def("c"), def("d")], 200);
-    grid.setColumnPinned("a", "start");
-    grid.setColumnPinned("d", "end");
+    grid.columns.setPinned("a", "start");
+    grid.columns.setPinned("d", "end");
     grid.setViewport(0, 0, 200, 320);
 
     const position = calculateFillHandlePosition({
@@ -98,5 +100,65 @@ describe("calculateFillHandlePosition per region", () => {
       activeCell: { row: 0, col: 1 },
       selectionRange: null,
     })).toBeNull();
+  });
+});
+
+describe("calculateFillHandlePosition row regions", () => {
+  it("reports a frozen anchor with frozen-local coordinates", async () => {
+    const grid = await createGrid([def("a"), def("b"), def("c")], 300, 8);
+    grid.setFrozenRowsRequest({ requestedCount: 3 });
+
+    const positions = [0, 1, 2].map((row) =>
+      calculateFillHandlePosition({
+        core: grid,
+        activeCell: { row, col: 1 },
+        selectionRange: null,
+      }),
+    );
+    expect(positions.map((position) => position?.rowRegion)).toEqual([
+      "frozen",
+      "frozen",
+      "frozen",
+    ]);
+    // `top` is frozen-local: rows 0/1/2 occupy 0/32/64, the handle sits 5 px up.
+    expect([0, 1, 2].map((row) => grid.geometry.getCellBounds(row, 1, "rows")?.top))
+      .toEqual([0, 32, 64]);
+    expect(positions.map((position) => position?.top)).toEqual([27, 59, 91]);
+    expect(positions.map((position) => position?.left)).toEqual([180, 180, 180]);
+  });
+
+  it("keeps a frozen pin's region-local left", async () => {
+    const grid = await createGrid([def("a"), def("b"), def("c")], 300, 8);
+    grid.setFrozenRowsRequest({ requestedCount: 3 });
+    grid.columns.setPinned("a", "start");
+
+    const position = calculateFillHandlePosition({
+      core: grid,
+      activeCell: { row: 1, col: 0 },
+      selectionRange: null,
+    });
+    expect(position).toMatchObject({ rowRegion: "frozen", region: "start", left: 80, top: 59 });
+  });
+
+  it("keeps a suffix anchor's region and today's coordinates", async () => {
+    const grid = await createGrid([def("a"), def("b"), def("c")], 300, 8);
+    grid.setFrozenRowsRequest({ requestedCount: 3 });
+
+    const position = calculateFillHandlePosition({
+      core: grid,
+      activeCell: { row: 3, col: 1 },
+      selectionRange: null,
+    });
+    expect(position).toMatchObject({ rowRegion: "suffix", region: "center", top: 123, left: 180 });
+  });
+
+  it("keeps count 0's payload", async () => {
+    const grid = await createGrid([def("a"), def("b"), def("c")], 300);
+    const position = calculateFillHandlePosition({
+      core: grid,
+      activeCell: { row: 0, col: 0 },
+      selectionRange: null,
+    });
+    expect(position).toMatchObject({ rowRegion: "suffix", region: "center", top: 27, left: 80 });
   });
 });

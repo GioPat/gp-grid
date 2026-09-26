@@ -3,7 +3,32 @@
 // of the fixture component so the fixture file does not grow past its budget.
 
 import { createColumnarDataSource } from "@gp-grid/vue";
-import type { CellPosition, CellRange, ColumnDefinition, GridCore, RowId } from "@gp-grid/core";
+import type {
+  CellPosition,
+  CellRange,
+  ColumnDefinition,
+  FrozenRowsState,
+  GridAnnouncement,
+  GridCore,
+  RowId,
+  RowRegionLayout,
+} from "@gp-grid/core";
+
+/** Absolute row range a paginated fixture was asked for; `endRow` exclusive. */
+export interface RequestedRange {
+  startRow: number;
+  endRow: number;
+}
+
+/** Frozen-row hooks the fixture owns; the readers stay framework-agnostic. */
+export interface FrozenReaders {
+  requestedRanges: () => RequestedRange[];
+  announcement: () => GridAnnouncement | null;
+  /** Fixture control: withhold rows `[0, count)` from the next prefix page. */
+  holdFrozenRows: () => void;
+  freezeEvents: () => FrozenRowsState[];
+}
+
 
 /** Narrow columns whose declared total is far below the host width. */
 export const createNarrowColumns = (): ColumnDefinition[] => [
@@ -107,6 +132,12 @@ export interface GeometryHooks {
   columnWindow: () => ColumnWindowView | null;
   /** Activate a cell and scroll it into view; LTR-only, like the pinning suite. */
   activateCell: (row: number, layoutIndex: number) => void;
+  rowRegions: () => RowRegionLayout | null;
+  frozenRows: () => FrozenRowsState | null;
+  announcement: () => GridAnnouncement | null;
+  requestedRanges: () => RequestedRange[];
+  holdFrozenRows: () => void;
+  freezeEvents: () => FrozenRowsState[];
 }
 
 const boundsOf = (
@@ -122,6 +153,7 @@ const boundsOf = (
  */
 export const createGeometryHooks = (
   getCore: () => GridCore<unknown> | null | undefined,
+  frozen?: FrozenReaders,
 ): GeometryHooks => ({
   layoutColumns: () =>
     (getCore()?.geometry.getColumnLayout().columns ?? []).map((column) => ({
@@ -133,7 +165,7 @@ export const createGeometryHooks = (
   cellBounds: (row, layoutIndex) =>
     boundsOf(getCore()?.geometry.getCellBounds(row, layoutIndex, "viewport")),
   identityBounds: (rowId, columnId) =>
-    boundsOf(getCore()?.getCellBounds(rowId, columnId, "viewport")),
+    boundsOf(getCore()?.cells.getBounds(rowId, columnId, "viewport")),
   activeCell: () => getCore()?.selection.getActiveCell() ?? null,
   selectionRange: () => getCore()?.selection.getSelectionRange() ?? null,
   activateCell: (row, layoutIndex) => {
@@ -164,4 +196,10 @@ export const createGeometryHooks = (
       displayedCount: snapshot.layout.columns.length,
     };
   },
+  rowRegions: () => getCore()?.geometry.getRowRegions() ?? null,
+  frozenRows: () => getCore()?.frozenRows.get() ?? null,
+  announcement: () => frozen?.announcement() ?? null,
+  requestedRanges: () => frozen?.requestedRanges() ?? [],
+  holdFrozenRows: () => frozen?.holdFrozenRows(),
+  freezeEvents: () => frozen?.freezeEvents() ?? [],
 });

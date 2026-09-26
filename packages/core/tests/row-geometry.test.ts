@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRowGeometry, type RowGeometryDeps } from "../src/geometry/row-geometry";
+import type { FrozenRowsInput } from "../src/geometry/row-regions";
+import { createFixedAxis } from "../src/geometry/fixed-axis";
 
 interface HarnessOptions {
   rowCount?: number;
@@ -8,14 +10,34 @@ interface HarnessOptions {
   domScrollTop?: number;
   overscan?: number;
   ratio?: number;
+  frozenCount?: number;
+  minSuffixHeight?: number;
 }
 
 const createRows = (options: HarnessOptions = {}) => {
+  const rowCount = options.rowCount ?? 1000;
+  const rowHeight = options.rowHeight ?? 32;
+  const viewportHeight = options.viewportHeight ?? 320;
+  const frozenCount = Math.min(options.frozenCount ?? 0, rowCount);
   const deps: RowGeometryDeps = {
-    getRowCount: () => options.rowCount ?? 1000,
-    getRowHeight: () => options.rowHeight ?? 32,
-    getViewportHeight: () => options.viewportHeight ?? 320,
+    getRowCount: () => rowCount,
+    getRowHeight: () => rowHeight,
+    getViewportHeight: () => viewportHeight,
+    getSuffixViewportHeight: () =>
+      Math.max(0, viewportHeight - frozenCount * rowHeight),
     getOverscan: () => options.overscan ?? 3,
+    resolveRegions: (): FrozenRowsInput | null => {
+      if (options.frozenCount === undefined) return null;
+      return {
+        // Row geometry replaces this with its live axis; the request only
+        // carries the C2 inputs.
+        axis: createFixedAxis(rowCount, rowHeight),
+        requestedCount: options.frozenCount,
+        viewportHeight,
+        viewportMeasured: true,
+        minSuffixHeight: options.minSuffixHeight,
+      };
+    },
     mapping: {
       getDomScrollTop: () => options.domScrollTop ?? 0,
       toDomScrollTop: (logical) => logical * (options.ratio ?? 1),
@@ -92,19 +114,39 @@ describe("rows-space invariant", () => {
       const mapper = rows.getMapper();
       const logical = mapper.getLogicalScrollTop();
       for (const viewIndex of [0, 1, 7, 500_000]) {
-        const left = mapper.wrapperOffset() + mapper.rowPosition(viewIndex) - testCase.domScrollTop;
+        const left =
+          rows.getRowsWrapperOffset() + rows.getRowRegionPosition(viewIndex) - testCase.domScrollTop;
         const right = rows.getRowOffset(viewIndex) - logical;
         expect(left, `index ${viewIndex} ratio ${testCase.ratio}`).toBeCloseTo(right, 6);
       }
     }
   });
 
+  it("anchors compressed suffix rows below the frozen block", () => {
+    for (const domScrollTop of [0, 40_000, 90_000]) {
+      const rows = createRows({
+        rowCount: 1_000_000,
+        viewportHeight: 320,
+        frozenCount: 3,
+        domScrollTop,
+        ratio: 0.01,
+      });
+      const logical = rows.getMapper().getLogicalScrollTop();
+      for (const viewIndex of [3, 4, 500_000]) {
+        const top = rows.getRowsWrapperOffset() + rows.getRowRegionPosition(viewIndex) - domScrollTop;
+        expect(top, `index ${viewIndex} dom ${domScrollTop}`).toBeCloseTo(
+          rows.getRowOffset(viewIndex) - logical,
+          6,
+        );
+      }
+    }
+  });
+
   it("uses no wrapper offset and content positions when uncompressed", () => {
     const rows = createRows({ domScrollTop: 123.5 });
-    const mapper = rows.getMapper();
-    expect(mapper.wrapperOffset()).toBe(0);
-    expect(mapper.rowPosition(3)).toBe(96);
-    expect(rows.getRowViewportTop(3)).toBe(96 - 123.5);
+    expect(rows.getRowsWrapperOffset()).toBe(0);
+    expect(rows.getRowRegionPosition(3)).toBe(96);
+    expect(rows.getRowViewportTop(3, "suffix")).toBe(96 - 123.5);
   });
 
   it("positions rows relative to the logical top when compressed", () => {
@@ -112,28 +154,28 @@ describe("rows-space invariant", () => {
     const mapper = rows.getMapper();
     const logical = mapper.getLogicalScrollTop();
     expect(logical).toBe(10_000_000);
-    expect(mapper.rowPosition(312_500)).toBe(10_000_000 - logical);
-    expect(mapper.wrapperOffset()).toBe(100_000 - (logical % 32));
+    expect(rows.getRowRegionPosition(312_500)).toBe(10_000_000 - logical);
+    expect(rows.getRowsWrapperOffset()).toBe(100_000 - (logical % 32));
   });
 });
 
 describe("rows-space anchor", () => {
   it("clamps the anchor to the first row for a sample before the content", () => {
     const rows = createRows({ rowCount: 1000, domScrollTop: -500, ratio: 0.5 });
-    expect(rows.getMapper().rowPosition(0)).toBe(0);
-    expect(rows.getMapper().rowPosition(3)).toBe(96);
+    expect(rows.getRowRegionPosition(0)).toBe(0);
+    expect(rows.getRowRegionPosition(3)).toBe(96);
   });
 
   it("clamps the anchor to the end edge for a sample past the content", () => {
     const rows = createRows({ rowCount: 1000, domScrollTop: 1_000_000, ratio: 0.5 });
-    expect(rows.getMapper().rowPosition(1000)).toBe(0);
-    expect(rows.getMapper().rowPosition(999)).toBe(-32);
+    expect(rows.getRowRegionPosition(1000)).toBe(0);
+    expect(rows.getRowRegionPosition(999)).toBe(-32);
   });
 
   it("anchors an empty axis at zero", () => {
     const rows = createRows({ rowCount: 0, domScrollTop: 400, ratio: 0.5 });
-    expect(rows.getMapper().rowPosition(0)).toBe(0);
-    expect(rows.getMapper().wrapperOffset()).toBe(400 - 800);
+    expect(rows.getRowRegionPosition(0)).toBe(0);
+    expect(rows.getRowsWrapperOffset()).toBe(400 - 800);
   });
 });
 
@@ -188,6 +230,16 @@ describe("compressed range without scroll", () => {
 });
 
 describe("row edges", () => {
+  it("keeps frozen edges unscrolled in viewport space", () => {
+    const rows = createRows({ frozenCount: 3, domScrollTop: 320 });
+    expect(rows.getRowEdgeOffset(1, "viewport")).toBe(32);
+    expect(rows.getRowEdgeOffset(2, "viewport")).toBe(64);
+    // The prefix boundary is the bottom of the frozen block.
+    expect(rows.getRowEdgeOffset(3, "viewport")).toBe(96);
+    expect(rows.getRowEdgeOffset(20, "viewport")).toBe(640 - 320);
+    expect(rows.getRowEdgeOffset(2, "content")).toBe(64);
+  });
+
   it("accepts the end insertion edge and rejects invalid boundaries", () => {
     const rows = createRows({ rowCount: 10, rowHeight: 20 });
     expect(rows.getRowEdgeOffset(0, "content")).toBe(0);
@@ -213,5 +265,93 @@ describe("row edges", () => {
     expect(compressed.getRowEdgeOffset(100_000, "rows")).toBe(0);
     expect(compressed.getRowEdgeOffset(100_005, "rows")).toBe(160);
     expect(compressed.getRowEdgeOffset(100_010, "rows")).toBe(320);
+  });
+});
+
+describe("row regions", () => {
+  it("resolves the C3 layout and keeps it while nothing changed", () => {
+    const rows = createRows({ frozenCount: 3 });
+    const layout = rows.getRegionLayout();
+    expect(layout).toEqual({
+      frozenCount: 3,
+      frozenExtent: 96,
+      suffixViewportHeight: 224,
+      frozen: { requestedCount: 3, effectiveCount: 3, limit: null },
+    });
+    expect(rows.syncRegionLayout()).toBe(layout);
+  });
+
+  it("resolves a zero layout when the request is absent", () => {
+    const rows = createRows();
+    expect(rows.getRegionLayout()).toEqual({
+      frozenCount: 0,
+      frozenExtent: 0,
+      suffixViewportHeight: 320,
+      frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+    });
+  });
+
+  it("keeps frozen rows at their content offset and suffix rows at offset − logicalTop", () => {
+    const rows = createRows({
+      rowCount: 1_000_000,
+      domScrollTop: 32_000,
+      ratio: 0.01,
+      frozenCount: 3,
+    });
+    const logicalTop = rows.getMapper().getLogicalScrollTop();
+    expect(logicalTop).toBe(3_200_000);
+    // The suffix anchor is the first suffix row at logicalTop + 96.
+    expect(rows.getRowRegionPosition(100_005)).toBe(64);
+    expect(rows.getRowViewportTop(100_005, "suffix")).toBe(3_200_160 - logicalTop);
+    expect(rows.getRowRegionPosition(1)).toBe(32);
+    expect(rows.getRowViewportTop(1, "frozen")).toBe(32);
+  });
+
+  it("windows the suffix only, starting at the frozen count", () => {
+    const rows = createRows({ frozenCount: 3, domScrollTop: 0 });
+    expect(rows.getVisibleWindow()).toEqual({ start: 3, end: 10 });
+    expect(rows.getWindow()).toEqual({ start: 3, end: 13 });
+  });
+
+  it("subtracts the frozen extent from the suffix window, not just the viewport", () => {
+    const rows = createRows({ frozenCount: 3, minSuffixHeight: 64, viewportHeight: 320 });
+    expect(rows.getRegionLayout().frozenCount).toBe(3);
+    // 320 − 96 = 224 px of suffix, so 7 rows rather than the flat 10.
+    const window = rows.getVisibleWindow();
+    expect(window.end - window.start).toBe(7);
+  });
+
+  it("stores an empty suffix window at the frozen count when everything is frozen", () => {
+    const rows = createRows({ rowCount: 5, frozenCount: 5, viewportHeight: 320 });
+    expect(rows.getRegionLayout().frozenExtent).toBe(160);
+    expect(rows.getRegionLayout().suffixViewportHeight).toBe(160);
+    expect(rows.getWindow()).toEqual({ start: 5, end: 5 });
+    expect(rows.getVisibleWindow()).toEqual({ start: 5, end: 5 });
+  });
+
+  it("reports the scroll range from the mapper, independent of the region count", () => {
+    const flat = createRows({ rowCount: 1000, viewportHeight: 320 });
+    const frozen = createRows({ rowCount: 1000, viewportHeight: 320, frozenCount: 3 });
+    expect(flat.getRowScrollRange()).toEqual({ start: 0, end: 31_680 });
+    expect(frozen.getRowScrollRange()).toEqual(flat.getRowScrollRange());
+    expect(flat.hasVerticalScrollRange()).toBe(true);
+    expect(frozen.hasVerticalScrollRange()).toBe(true);
+
+    // 96 px of frozen rows leave a 64 px suffix in a 160 px body.
+    const shortSuffix = createRows({ rowCount: 1000, viewportHeight: 160, frozenCount: 3 });
+    expect(shortSuffix.getRegionLayout().suffixViewportHeight).toBe(64);
+    expect(shortSuffix.getRowScrollRange()).toEqual({ start: 0, end: 31_840 });
+    expect(shortSuffix.hasVerticalScrollRange()).toBe(true);
+
+    const empty = createRows({ rowCount: 0, viewportHeight: 320 });
+    expect(empty.getRowScrollRange()).toEqual({ start: 0, end: 0 });
+    expect(empty.hasVerticalScrollRange()).toBe(false);
+
+    const fits = createRows({ rowCount: 10, viewportHeight: 320, frozenCount: 3 });
+    expect(fits.hasVerticalScrollRange()).toBe(false);
+  });
+
+  it("keeps the bootstrap estimate independent of the region count", () => {
+    expect(createRows({ viewportHeight: 320, overscan: 3, frozenCount: 3 }).getBootstrapRowCount()).toBe(13);
   });
 });

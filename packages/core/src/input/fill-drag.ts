@@ -58,7 +58,7 @@ export class FillDrag<TData = unknown> {
   end(): void {
     if (this.active) {
       this.core.fill.commitFillDrag();
-      this.core.refreshSlotData();
+      this.core.rows.refreshSlotData();
     }
     this.active = false;
     this.sourceRange = null;

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { GpGrid, createColumnarDataSource } from "@gp-grid/vue";
 import type {
   CellValue,
+  DataSource,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
@@ -12,6 +13,7 @@ import type {
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ColumnLayoutMode,
+  FreezeRowsOptions,
   GridCore,
   RowDragEndEvent,
 } from "@gp-grid/vue";
@@ -23,6 +25,14 @@ import {
   createWideColumns,
   createWideSource,
 } from "./conformance-geometry";
+import {
+  createFrozenFixture,
+  FROZEN_HEADER_HEIGHT,
+  FROZEN_HOST_HEIGHT,
+  FROZEN_HOST_NARROW_HEIGHT,
+  FROZEN_ROW_HEIGHT,
+  type FrozenMode,
+} from "./conformance-frozen";
 
 interface ConformanceRow {
   id: number;
@@ -140,6 +150,8 @@ const columns = ref<ColumnDefinition[]>(createColumns());
 const columnarColumns = ref<ColumnDefinition[]>(createColumnarColumns());
 const fixture = createColumnarFixture();
 const largeColumnarSource = ref<ReturnType<typeof createLargeColumnarSource> | null>(null);
+const frozen = createFrozenFixture();
+const frozenMode = ref<FrozenMode>("off");
 const mode = ref<"object" | "columnar">("object");
 const revision = ref(0);
 const mounted = ref(true);
@@ -150,6 +162,8 @@ const writeRejected = ref(0);
 const columnState = ref<ColumnStateUpdate[] | undefined>(undefined);
 const columnLayout = ref<ColumnLayoutMode>("fit");
 const hostWidth = ref(600);
+const hostHeight = ref(FROZEN_HOST_HEIGHT);
+const freezeOverride = ref<FreezeRowsOptions | undefined | null>(null);
 const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
 const eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
 const coreTokens = new WeakMap<object, number>();
@@ -197,6 +211,64 @@ const useLargeColumnar = (): void => {
   revision.value = fixture.source.revision;
 };
 
+const frozenActive = computed(() => frozenMode.value !== "off");
+const frozenObject = computed(() => frozenMode.value === "object");
+
+/** Arming swaps the data source and columns, so it remounts the grid. */
+const armFrozenRows = (next: FrozenMode): void => {
+  frozenMode.value = next;
+  generation.value += 1;
+};
+
+const useFreezeRows = (): void => armFrozenRows("columnar");
+const clearFreezeRows = (): void => armFrozenRows("off");
+const useFrozenPaged = (): void => armFrozenRows("paged");
+const useFrozenPagedTight = (): void => armFrozenRows("paged-tight");
+const useFrozenObject = (): void => armFrozenRows("object");
+
+// In-place controls: the option stays reactive, so these never touch the
+// remount `generation`. `null` means "the armed mode's own option".
+const freezeCount = (count: number): void => {
+  freezeOverride.value = { count };
+};
+const freezeThrough5 = (): void => {
+  coreOf()?.frozenRows.freezeThrough(5);
+};
+const unfreezeInPlace = (): void => {
+  freezeOverride.value = undefined;
+};
+/** Drives the core's own setter: a button click would blur and commit. */
+const setFreezeCount = (count: number): void => {
+  coreOf()?.frozenRows.set({ count });
+};
+const toggleHostHeight = (): void => {
+  hostHeight.value = hostHeight.value === FROZEN_HOST_HEIGHT
+    ? FROZEN_HOST_NARROW_HEIGHT
+    : FROZEN_HOST_HEIGHT;
+};
+
+/** A frozen arm replaces the data source; otherwise the mode picks it. */
+const activeDataSource = (): DataSource<never> | undefined => {
+  if (frozenActive.value) return frozen.sourceFor(frozenMode.value);
+  if (mode.value === "columnar") return largeColumnarSource.value ?? fixture.source;
+  return undefined;
+};
+
+/** The writable arm keeps the caller's object rows; every other one is sourced. */
+const activeRowData = (): ConformanceRow[] | undefined => {
+  if (frozenActive.value) return frozenObject.value ? rows.value : undefined;
+  return mode.value === "columnar" ? undefined : rows.value;
+};
+
+const activeColumns = (): ColumnDefinition[] => {
+  const frozenColumns = frozenActive.value ? frozen.columnsFor(frozenMode.value) : undefined;
+  if (frozenColumns !== undefined) return frozenColumns;
+  return mode.value === "columnar" ? columnarColumns.value : columns.value;
+};
+
+const activeFreezeRows = (): FreezeRowsOptions | undefined =>
+  freezeOverride.value === null ? frozen.freezeRowsFor(frozenMode.value) : freezeOverride.value;
+
 /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
 const useWideColumns = (count: number): void => {
   mode.value = "columnar";
@@ -216,8 +288,8 @@ const pinColumns = (): void => {
 const unpinAll = (): void => {
   columnState.value = undefined;
   const core = coreOf();
-  for (const column of core?.getColumns() ?? []) {
-    core?.setColumnPinned(column.colId ?? column.field, null);
+  for (const column of core?.columns.get() ?? []) {
+    core?.columns.setPinned(column.colId ?? column.field, null);
   }
 };
 
@@ -234,12 +306,15 @@ const hideColumn = (): void => {
 };
 
 const reset = (): void => {
+  frozenMode.value = "off";
   rows.value = createRows();
   columns.value = createColumns();
   columnarColumns.value = createColumnarColumns();
   columnState.value = undefined;
   columnLayout.value = "fit";
   hostWidth.value = 600;
+  hostHeight.value = FROZEN_HOST_HEIGHT;
+  freezeOverride.value = null;
   mode.value = "object";
   mounted.value = true;
   rtl.value = false;
@@ -313,25 +388,25 @@ const applyColumnState = (): void => {
 };
 const resetColumnState = (): void => {
   columnState.value = undefined;
-  coreOf()?.resetColumnState();
+  coreOf()?.columns.resetState();
 };
 const applySort = (): void => {
-  void coreOf()?.setSort("score", "asc");
+  void coreOf()?.sortFilter.setSort("score", "asc");
 };
 const applyFilter = (): void => {
-  void coreOf()?.setFilter("city", "City 1");
+  void coreOf()?.sortFilter.setFilter("city", "City 1");
 };
 const moveColumn = (): void => {
-  coreOf()?.moveColumn(0, 2);
+  coreOf()?.columns.move(0, 2);
 };
 const dragRow = (): void => {
-  coreOf()?.commitRowDrag(0, 1);
+  coreOf()?.rowDrag.commit(0, 1);
 };
 
 if (typeof window !== "undefined") {
   (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
-    getCellValue: (row: number, col: number): CellValue => coreOf()?.getCellValue(row, col) ?? null,
-    getFieldValue: (row: number, field: string): CellValue => coreOf()?.getFieldValue(row, field) ?? null,
+    getCellValue: (row: number, col: number): CellValue => coreOf()?.cells.getValue(row, col) ?? null,
+    getFieldValue: (row: number, field: string): CellValue => coreOf()?.cells.getFieldValue(row, field) ?? null,
     revision: (): number => fixture.source.revision,
     sourceReads: (): number => fixture.reads(),
     sourceDistinctRows: (): number => fixture.distinctRows(),
@@ -339,10 +414,10 @@ if (typeof window !== "undefined") {
     recordMaterializations: (): number => fixture.recordMaterializations(),
     coreToken: readCoreToken,
     columnIds: (): string[] =>
-      coreOf()?.getColumns().map((column: ColumnDefinition) => column.colId ?? column.field) ?? [],
-    columnState: (): ColumnStateSnapshot[] => coreOf()?.getColumnState() ?? [],
-    sortColumn: (): string | null => coreOf()?.getSortModel()[0]?.colId ?? null,
-    filterCount: (): number => Object.keys(coreOf()?.getFilterModel() ?? {}).length,
+      coreOf()?.columns.get().map((column: ColumnDefinition) => column.colId ?? column.field) ?? [],
+    columnState: (): ColumnStateSnapshot[] => coreOf()?.columns.getState() ?? [],
+    sortColumn: (): string | null => coreOf()?.sortFilter.getSortModel()[0]?.colId ?? null,
+    filterCount: (): number => Object.keys(coreOf()?.sortFilter.getFilterModel() ?? {}).length,
     eventCounts: () => ({ ...eventCounts }),
     resetEventCounts: (): void => {
       eventCounts.resized = 0;
@@ -351,8 +426,15 @@ if (typeof window !== "undefined") {
       eventCounts.pinned = 0;
     },
     useWideColumns,
-    ...createGeometryHooks(() => coreOf()),
+    setFreezeCount,
+    ...createGeometryHooks(() => coreOf(), frozen),
   };
+  // Arming remounts the grid, so the announcement reader follows each core.
+  watch(generation, async () => {
+    await nextTick();
+    frozen.track(coreOf() ?? null);
+  }, { immediate: true });
+  onMounted(() => frozen.track(coreOf() ?? null));
 }
 </script>
 
@@ -362,6 +444,16 @@ if (typeof window !== "undefined") {
       <button data-testid="reset" @click="reset">Reset</button>
       <button data-testid="remount" @click="remount">Remount</button>
       <button data-testid="toggle-rtl" @click="toggleRtl">Toggle RTL</button>
+      <button data-testid="use-freeze-rows" @click="useFreezeRows">Freeze rows</button>
+      <button data-testid="clear-freeze-rows" @click="clearFreezeRows">Clear freeze rows</button>
+      <button data-testid="use-frozen-paged" @click="useFrozenPaged">Frozen paged</button>
+      <button data-testid="use-frozen-paged-tight" @click="useFrozenPagedTight">Frozen paged tight</button>
+      <button data-testid="use-frozen-object" @click="useFrozenObject">Frozen object</button>
+      <button data-testid="freeze-count-3" @click="freezeCount(3)">Freeze 3</button>
+      <button data-testid="freeze-count-5" @click="freezeCount(5)">Freeze 5</button>
+      <button data-testid="freeze-through-5" @click="freezeThrough5">Freeze through 5</button>
+      <button data-testid="unfreeze-in-place" @click="unfreezeInPlace">Unfreeze in place</button>
+      <button data-testid="toggle-host-height" @click="toggleHostHeight">Toggle host height</button>
       <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
       <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
       <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
@@ -382,18 +474,20 @@ if (typeof window !== "undefined") {
       <button data-testid="hide-column" @click="hideColumn">Hide column</button>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
-    <div data-testid="grid-host" :dir="rtl ? 'rtl' : 'ltr'" :style="{ width: `${hostWidth}px`, height: '360px' }">
+    <div data-testid="grid-host" :dir="rtl ? 'rtl' : 'ltr'" :style="{ width: `${hostWidth}px`, height: `${hostHeight}px` }">
       <GpGrid
         v-if="mounted"
         ref="gridRef"
         :key="generation"
-        :columns="mode === 'columnar' ? columnarColumns : columns"
-        :column-state="columnState"
+        :columns="activeColumns()"
+        :column-state="frozenActive ? frozen.columnState : columnState"
         :column-layout="columnLayout"
-        :data-source="mode === 'columnar' ? (largeColumnarSource ?? fixture.source) : undefined"
-        :row-data="mode === 'columnar' ? undefined : rows"
-        :row-height="32"
-        :header-height="36"
+        :data-source="activeDataSource()"
+        :row-data="activeRowData()"
+        :row-height="frozenActive ? FROZEN_ROW_HEIGHT : 32"
+        :header-height="frozenActive ? FROZEN_HEADER_HEIGHT : 36"
+        :freeze-rows="activeFreezeRows()"
+        :row-loading="frozen.rowLoadingFor(frozenMode)"
         :get-row-id="(row: unknown) => (row as ConformanceRow).id"
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"
@@ -401,7 +495,17 @@ if (typeof window !== "undefined") {
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"
         :on-column-pinned="onColumnPinned"
+        :on-frozen-rows-changed="frozen.recordFreezeEvent"
       />
     </div>
   </main>
 </template>
+
+<!-- Compact controls: the fixture page must fit the 720 px viewport, or
+     focusing the grid scrolls the page and moves rows under the pointer. -->
+<style scoped>
+main[data-conformance-framework] button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+</style>

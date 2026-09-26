@@ -29,6 +29,8 @@ import type {
   ColumnResizedEvent,
   ColumnStateUpdate,
   DataSource,
+  FreezeRowsOptions,
+  FrozenRowsState,
   GridCore,
   GridIcon,
   GridLabelOverrides,
@@ -94,6 +96,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   overscan = input<number>(3);
   /** Column overscan in CSS px per side for the mounted center window. */
   columnOverscan = input<number | undefined>(undefined);
+  /** Frozen prefix configuration; applied at runtime without recreating the core. */
+  freezeRows = input<FreezeRowsOptions | undefined>(undefined);
   /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
   columnLayout = input<ColumnLayoutMode>('fit');
   /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. */
@@ -107,6 +111,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onColumnResized = output<ColumnResizedEvent>();
   onColumnMoved = output<ColumnMovedEvent>();
   onColumnPinned = output<ColumnPinnedEvent>();
+  /** C9: fires on a published change of the effective frozen count or its limit. */
+  onFrozenRowsChanged = output<FrozenRowsState>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
@@ -137,6 +143,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
     effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncFreezeRows(this.freezeRows()), { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
@@ -148,6 +155,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         headerHeight: this.headerHeight(),
         overscan: this.overscan(),
         columnOverscan: this.columnOverscan(),
+        freezeRows: this.freezeRows(),
         columnLayout: this.columnLayout(),
         maxFlingVelocity: this.maxFlingVelocity(),
         rowLoading: this.rowLoading() ?? undefined,
@@ -155,6 +163,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,
         getRowId: this.getRowId() ?? undefined,
         rowDragEntireRow: this.rowDragEntireRow(),
+        labels: this.labels(),
       },
       {
         onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
@@ -163,6 +172,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onColumnResized: (event) => this.onColumnResized.emit(event),
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
         onColumnPinned: (event) => this.onColumnPinned.emit(event),
+        onFrozenRowsChanged: (state) => this.onFrozenRowsChanged.emit(state),
       },
     );
     this.boundCore.current = core;
@@ -223,7 +233,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   protected onFilterPointerDown(evt: FilterPointerDownEvent): void {
     this.vm.setFilterAnchor(evt.anchorEl);
     const rect = evt.anchorEl.getBoundingClientRect();
-    this.bindings.coreRef?.openFilterPopup(evt.colIndex, {
+    this.bindings.coreRef?.sortFilter.openFilterPopup(evt.colIndex, {
       top: rect.top,
       left: rect.left,
       width: rect.width,
@@ -263,13 +273,13 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Raw value reader shared with the body and peek: record-less rows work. */
   protected readCellValueFn = (rowIndex: number, colIndex: number): CellValue =>
-    this.bindings.coreRef?.getCellValue(rowIndex, colIndex) ?? null;
+    this.bindings.coreRef?.cells.getValue(rowIndex, colIndex) ?? null;
 
   protected readFieldValueFn = (rowIndex: number, field: string): CellValue =>
-    this.bindings.coreRef?.getFieldValue(rowIndex, field) ?? null;
+    this.bindings.coreRef?.cells.getFieldValue(rowIndex, field) ?? null;
 
   protected readRowIdFn = (rowIndex: number): RowId | undefined =>
-    this.bindings.coreRef?.getRowId(rowIndex);
+    this.bindings.coreRef?.rows.getId(rowIndex);
 
   protected computeCellClassesFn = (
     rowIndex: number,
@@ -290,7 +300,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onPeekClose(): void {
-    this.bindings.coreRef?.stopPeek();
+    this.bindings.coreRef?.edit.stopPeek();
   }
 
   protected peekContext = computed(() => {
@@ -304,23 +314,23 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   protected onEditValueChange(value: string): void {
-    this.bindings.coreRef?.updateEditValue(value, this.vm.editingCell()?.editId);
+    this.bindings.coreRef?.edit.updateValue(value, this.vm.editingCell()?.editId);
   }
 
   protected onEditCommit(): void {
-    this.bindings.coreRef?.commitEdit(this.vm.editingCell()?.editId);
+    this.bindings.coreRef?.edit.commit(this.vm.editingCell()?.editId);
   }
 
   protected onEditCancel(): void {
-    this.bindings.coreRef?.cancelEdit(this.vm.editingCell()?.editId);
+    this.bindings.coreRef?.edit.cancel(this.vm.editingCell()?.editId);
   }
 
   protected onHeaderSort(evt: HeaderSortEvent): void {
-    this.bindings.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
+    this.bindings.coreRef?.sortFilter.setSort(evt.colId, evt.direction, evt.addToExisting);
   }
 
   protected onHeaderPin(evt: { columnId: string; pinned: ColumnPin | null }): void {
-    this.bindings.coreRef?.setColumnPinned(evt.columnId, evt.pinned);
+    this.bindings.coreRef?.columns.setPinned(evt.columnId, evt.pinned);
   }
 
   protected onWheel(event: WheelEvent): void {
@@ -364,12 +374,12 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onFilterApply(event: { colId: string; filter: ColumnFilterModel | null }): void {
-    this.bindings.coreRef?.setFilter(event.colId, event.filter);
+    this.bindings.coreRef?.sortFilter.setFilter(event.colId, event.filter);
     this.vm.filterPopup.set(null);
   }
 
   protected onFilterClose(): void {
-    this.bindings.coreRef?.closeFilterPopup();
+    this.bindings.coreRef?.sortFilter.closeFilterPopup();
     this.vm.filterPopup.set(null);
   }
 

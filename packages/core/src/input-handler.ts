@@ -118,14 +118,14 @@ export class InputHandler<TData = unknown> {
     event: PointerEventData,
   ): InputResult {
     if (event.button !== 0) return noopResult;
-    if (this.core.getEditState() !== null) return noopResult;
+    if (this.core.edit.getState() !== null) return noopResult;
 
     // Any new cell interaction closes an open peek overlay.
-    this.core.stopPeek();
+    this.core.edit.stopPeek();
 
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
     const wantsRowDrag =
-      (column?.rowDrag === true || this.core.isRowDragEntireRow()) &&
+      (column?.rowDrag === true || this.core.rowDrag.isEntireRow()) &&
       !event.shiftKey;
 
     if (wantsRowDrag && event.pointerType === "touch") {
@@ -209,12 +209,12 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
     if (column?.editable) {
-      this.core.startEdit(rowIndex, colIndex);
+      this.core.edit.start(rowIndex, colIndex);
       return;
     }
-    this.core.startPeek(rowIndex, colIndex);
+    this.core.edit.startPeek(rowIndex, colIndex);
   }
 
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {
@@ -235,9 +235,9 @@ export class InputHandler<TData = unknown> {
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
     const currentDirection = this.core
-      .getSortModel()
+      .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
-    this.core.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
+    this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
   }
 
   // ---------------------------------------------------------------------------
@@ -322,7 +322,7 @@ export class InputHandler<TData = unknown> {
     deltaX: number,
     dampening: number,
   ): { dy: number; dx: number } | null {
-    if (!this.core.isScalingActive()) return null;
+    if (!this.core.viewport.isScaling()) return null;
     return { dy: deltaY * dampening, dx: deltaX * dampening };
   }
 

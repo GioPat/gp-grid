@@ -18,6 +18,7 @@ interface HarnessOptions {
   overridden?: number[];
   pins?: Record<string, ColumnPin>;
   mapping?: { ratio?: number; override?: number | null };
+  frozenCount?: number;
 }
 
 interface Harness {
@@ -27,6 +28,7 @@ interface Harness {
   setViewport: (sample: { width?: number; height?: number; scrollTop?: number; scrollLeft?: number }) => void;
   setColumns: (columns: ColumnDefinition[]) => void;
   setOverridden: (indices: number[]) => void;
+  setFrozenCount: (count: number) => void;
 }
 
 const column = (id: string, width: number, hidden = false): ColumnDefinition =>
@@ -46,6 +48,7 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
   let columns = options.columns ?? twoColumns();
   let overridden = options.overridden ?? [];
   let override: number | null = options.mapping?.override ?? null;
+  let frozenCount = options.frozenCount ?? 0;
   const ratio = options.mapping?.ratio ?? 1;
 
   const deps: GridGeometryDeps = {
@@ -55,6 +58,7 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
     getColumnOverscan: () => options.columnOverscan ?? 240,
     getColumns: () => columns,
     isWidthOverridden: (layoutIndex) => overridden.includes(layoutIndex),
+    getFrozenRowsRequest: () => ({ requestedCount: frozenCount }),
     getViewport: () => ({
       width: viewport.width,
       height: viewport.height,
@@ -87,6 +91,9 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
       overridden = indices;
       // Mirrors the column model: any state change yields a new layout array.
       columns = [...columns];
+    },
+    setFrozenCount: (count) => {
+      frozenCount = count;
     },
   };
 };
@@ -211,6 +218,7 @@ describe("GridGeometry — hit testing", () => {
       col: 0,
       columnId: "a",
       region: "center",
+      rowRegion: "suffix",
     });
     expect(harness.geometry.hitTest({ x: 250, y: 100 })).toMatchObject({
       row: 5,
@@ -262,6 +270,7 @@ describe("GridGeometry — hit testing", () => {
       col: 0,
       columnId: "a",
       region: "center",
+      rowRegion: null,
     });
     harness.setColumns([]);
     expect(harness.geometry.hitTest({ x: 10, y: 10 })).toEqual({
@@ -270,6 +279,7 @@ describe("GridGeometry — hit testing", () => {
       col: -1,
       columnId: undefined,
       region: null,
+      rowRegion: null,
     });
   });
 });
@@ -514,5 +524,139 @@ describe("GridGeometry — revision", () => {
     harness.geometry.refresh();
     expect(harness.geometry.revision).toBeGreaterThan(before);
     expect(harness.geometry.getRowWindow()).toEqual({ start: 0, end: 2 });
+  });
+});
+
+describe("GridGeometry — row regions", () => {
+  const createRegionHarness = (frozenCount: number) =>
+    createHarness({ rowCount: 1000, viewportWidth: 400, viewportHeight: 320, frozenCount });
+
+  it("publishes the C3 layout and answers region-local bounds", () => {
+    const harness = createRegionHarness(3);
+    harness.geometry.refresh();
+    expect(harness.geometry.getRowRegions()).toEqual({
+      frozenCount: 3,
+      frozenExtent: 96,
+      suffixViewportHeight: 224,
+      frozen: { requestedCount: 3, effectiveCount: 3, limit: null },
+    });
+    // A frozen row answers its region-local range [offset, offset + rowHeight).
+    expect(harness.geometry.getRowBounds(0, "viewport")).toEqual({ start: 0, end: 32 });
+    expect(harness.geometry.getRowBounds(0)).toEqual({ start: 0, end: 32 });
+    expect(harness.geometry.getRowBounds(0, "content")).toEqual({ start: 0, end: 32 });
+    // Row 3 is the first suffix row at scrollTop 0.
+    expect(harness.geometry.getRowBounds(3, "viewport")).toEqual({ start: 96, end: 128 });
+  });
+
+  it("clips each row to the region it renders in", () => {
+    const harness = createRegionHarness(3);
+    harness.geometry.refresh();
+    expect(harness.geometry.getRowClip(0)).toEqual({ start: 0, end: 96 });
+    expect(harness.geometry.getRowClip(2)).toEqual({ start: 0, end: 96 });
+    expect(harness.geometry.getRowClip(3)).toEqual({ start: 96, end: 320 });
+    expect(harness.geometry.getRowClip(999)).toEqual({ start: 96, end: 320 });
+    expect(harness.geometry.getRowClip(-1)).toBeUndefined();
+    expect(harness.geometry.getRowClip(1000)).toBeUndefined();
+    expect(harness.geometry.getRowClip(2.5)).toBeUndefined();
+  });
+
+  it("hit-tests the frozen band before scroll and keeps the sentinels region-less", () => {
+    const harness = createRegionHarness(3);
+    harness.geometry.refresh();
+    const rowAt = (y: number): { row: number; rowRegion: string | null } => {
+      const hit = harness.geometry.hitTest({ x: 10, y });
+      return { row: hit.row, rowRegion: hit.rowRegion };
+    };
+    expect(rowAt(0)).toEqual({ row: 0, rowRegion: "frozen" });
+    expect(rowAt(31.9)).toEqual({ row: 0, rowRegion: "frozen" });
+    expect(rowAt(32)).toEqual({ row: 1, rowRegion: "frozen" });
+    expect(rowAt(95)).toEqual({ row: 2, rowRegion: "frozen" });
+    expect(rowAt(96)).toEqual({ row: 3, rowRegion: "suffix" });
+    expect(rowAt(-10)).toEqual({ row: -1, rowRegion: null });
+    expect(rowAt(100_000)).toEqual({ row: 1000, rowRegion: null });
+
+    // The band wins over the scroll offset: a scrolled grid keeps hitting it.
+    harness.setViewport({ scrollTop: 5000 });
+    const scrolled = harness.geometry.hitTest({ x: 10, y: 40 });
+    expect(scrolled.row).toBe(1);
+    expect(scrolled.rowRegion).toBe("frozen");
+  });
+
+  it("omits scrollTop for frozen rows and keeps the suffix rules", () => {
+    const harness = createRegionHarness(3);
+    harness.geometry.refresh();
+    // A frozen row never needs vertical movement, however far it is scrolled.
+    expect(harness.geometry.getScrollTarget(0, 0, { scrollTop: 5000, scrollLeft: 0 })).toEqual({});
+    expect(harness.geometry.getScrollTarget(2, 0, { scrollTop: 5000, scrollLeft: 0 })).toEqual({});
+    // The first suffix row is visible at the clip top.
+    expect(harness.geometry.getScrollTarget(3, 0)).toEqual({});
+    // Hidden above the clip: align it to the clip start.
+    expect(harness.geometry.getScrollTarget(3, 0, { scrollTop: 500, scrollLeft: 0 })).toEqual({
+      scrollTop: 0,
+    });
+    // Below the clip bottom: the flat end rule still applies.
+    expect(harness.geometry.getScrollTarget(40, 0)).toEqual({ scrollTop: 992 });
+  });
+
+  it("keeps the content size and the scroll range independent of the count", () => {
+    const flat = createHarness({ rowCount: 1000, viewportWidth: 400, viewportHeight: 320 });
+    const frozen = createRegionHarness(3);
+    flat.geometry.refresh();
+    frozen.geometry.refresh();
+    expect(frozen.geometry.getContentSize()).toEqual(flat.geometry.getContentSize());
+    expect(frozen.geometry.getContentSize().height).toBe(32_000);
+    expect(frozen.geometry.getRowScrollRange()).toEqual(flat.geometry.getRowScrollRange());
+    expect(frozen.geometry.getRowScrollRange()).toEqual({ start: 0, end: 31_680 });
+    expect(frozen.geometry.hasVerticalScrollRange()).toBe(true);
+  });
+
+  it("bumps the revision once per region change and never on a raw scroll sample", () => {
+    const harness = createHarness({ rowCount: 1000, viewportWidth: 400, viewportHeight: 320 });
+    harness.geometry.refresh();
+    const layout = harness.geometry.getRowRegions();
+    const before = harness.geometry.revision;
+
+    expect(harness.geometry.syncRowRegions()).toBe(layout);
+    expect(harness.geometry.revision).toBe(before);
+
+    harness.setViewport({ scrollTop: 320 });
+    harness.geometry.syncRowRegions();
+    expect(harness.geometry.getRowRegions()).toBe(layout);
+    expect(harness.geometry.revision).toBe(before);
+
+    harness.setFrozenCount(3);
+    harness.geometry.syncRowRegions();
+    expect(harness.geometry.getRowRegions().frozenCount).toBe(3);
+    expect(harness.geometry.revision).toBeGreaterThan(before);
+    const afterRegionChange = harness.geometry.revision;
+    harness.geometry.syncRowRegions();
+    expect(harness.geometry.revision).toBe(afterRegionChange);
+  });
+
+  it("resolves the auto-scroll edges and limits from the region layout", () => {
+    const flat = createHarness({ rowCount: 1000, viewportWidth: 400, viewportHeight: 320 });
+    flat.geometry.refresh();
+    expect(flat.geometry.getRowScrollEdges(64, 320)).toEqual({
+      region: { frozenExtent: 0, suffixViewportHeight: 320 },
+      limits: { scrollTop: 64, maxScrollTop: 31_680 },
+    });
+
+    const frozen = createRegionHarness(3);
+    frozen.geometry.refresh();
+    expect(frozen.geometry.getRowScrollEdges(64, 320)).toEqual({
+      region: { frozenExtent: 96, suffixViewportHeight: 224 },
+      limits: { scrollTop: 64, maxScrollTop: 31_680 },
+    });
+    // A sample past the reachable range clamps to the scroll limit.
+    expect(frozen.geometry.getRowScrollEdges(100_000, 320).limits).toEqual({
+      scrollTop: 31_680,
+      maxScrollTop: 31_680,
+    });
+    expect(frozen.geometry.getRowScrollEdges(-10, 320).limits.scrollTop).toBe(0);
+    // A collapsed body has no suffix clip left below the band.
+    expect(frozen.geometry.getRowScrollEdges(0, 0).region).toEqual({
+      frozenExtent: 96,
+      suffixViewportHeight: 0,
+    });
   });
 });

@@ -242,7 +242,7 @@ grid.destroy(); // Wrappers manage their core's lifetime automatically.
 
 Update all resident columns to consistent lengths before adopting a revision. An invalid count or inconsistent declared lengths throws, leaving the source's previous revision and row-count metadata unchanged. This does not undo changes the caller has already made to its arrays. Keep data stable while the grid reads it.
 
-Columnar rows have no materialized record: `grid.getRowData(viewIndex)` returns `undefined`. Read raw values with `grid.getCellValue(viewIndex, colIndex)` or `grid.getFieldValue(viewIndex, field)`, including source fields without a grid column. Cell renderers use `params.getValue(field)` and `params.rowId`; `params.value` remains the formatted display value.
+Columnar rows have no materialized record: `grid.rows.getData(viewIndex)` returns `undefined`. Read raw values with `grid.cells.getValue(viewIndex, colIndex)` or `grid.cells.getFieldValue(viewIndex, field)`, including source fields without a grid column. Cell renderers use `params.getValue(field)` and `params.rowId`; `params.value` remains the formatted display value.
 
 #### Read-only write rejection
 
@@ -265,11 +265,11 @@ const grid = new GridCore({
 
 | Attempt | Result on a columnar source | `operation` |
 | --- | --- | --- |
-| `grid.setCellValue(row, col, value)` | value unchanged; rejection event | `"setCellValue"` |
-| `grid.startEdit(row, col)` on an `editable` column | no edit state; rejection event | `"edit"` |
-| `grid.pasteClipboardText(text)` | returns `false`; rejection event | `"paste"` |
+| `grid.cells.setValue(row, col, value)` | value unchanged; rejection event | `"setCellValue"` |
+| `grid.edit.start(row, col)` on an `editable` column | no edit state; rejection event | `"edit"` |
+| `grid.edit.paste(text)` | returns `false`; rejection event | `"paste"` |
 | `grid.fill.startFillDrag(range)` | no active fill; rejection event | `"fill"` |
-| `grid.commitRowDrag(from, to)` | no reorder and no `onRowDragEnd`; rejection event | `"row-move"` |
+| `grid.rowDrag.commit(from, to)` | no reorder and no `onRowDragEnd`; rejection event | `"row-move"` |
 
 A non-editable column is a disabled control and emits no attempted-command
 event. A rejected write never emits `onCellValueChanged`. React and Vue accept
@@ -471,10 +471,10 @@ interface ColumnStateSnapshot {
 
 | Command | Behavior |
 | --- | --- |
-| `setColumnState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. `pinned: null` unpins even against a definition default. Silent, like every state command. |
-| `resetColumnState(columnIds?)` | Drop user state. No argument resets every column to its definition defaults; IDs reset only those columns. |
-| `getColumnState()` | Effective width, visibility, order and pin per column, in layout order. |
-| `setColumnPinned(columnId, pinned)` | Pin a column to the inline start or end (`null` unpins). Fires `onColumnPinned`. |
+| `columns.setState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. `pinned: null` unpins even against a definition default. Silent, like every state command. |
+| `columns.resetState(columnIds?)` | Drop user state. No argument resets every column to its definition defaults; IDs reset only those columns. |
+| `columns.getState()` | Effective width, visibility, order and pin per column, in layout order. |
+| `columns.setPinned(columnId, pinned)` | Pin a column to the inline start or end (`null` unpins). Fires `onColumnPinned`. |
 
 Only a pin change moves a column between regions; `order` clamps into the column's own region, and unpinning returns it to its base-order slot.
 
@@ -492,8 +492,8 @@ Definitions are caller-owned and the grid treats them as read-only. Resizing, mo
 // 0.x: mutated the caller's definition
 columns[2].width = newWidth;
 // 1.0
-grid.setColumnState([{ columnId: "city", width: newWidth }]);
-grid.resetColumnState(["city"]);
+grid.columns.setState([{ columnId: "city", width: newWidth }]);
+grid.columns.resetState(["city"]);
 ```
 
 ### Events
@@ -507,23 +507,25 @@ Column and row interaction events are object-shaped.
 | `onColumnPinned` | `{ columnId, pinned }` (`null` when unpinned) |
 | `onRowDragEnd` | `{ rowId, fromViewIndex, toViewIndex }` |
 
-`onColumnPinned` fires for `setColumnPinned`, the header pin toggle and a cross-region header drag — not for `setColumnState`.
+`onColumnPinned` fires for `columns.setPinned`, the header pin toggle and a cross-region header drag — not for `columns.setState`.
 
 `CellValueChangedEvent` gained `columnId`; `colIndex` remains and is the current view column index. Cell, edit and header renderer params gained `columnId` as well.
 
 ### Record access
 
+On `grid.rows`:
+
 - `getViewRow(viewIndex): ViewRow<TData> | undefined` — `ViewRow` is `{ kind: "record"; id: RowId; viewIndex: number; record?: TData }`, built on request. `id` falls back to the source position when no `getRowId` is configured.
 - `getRecordById(rowId): TData | undefined` — answers for resident rows and for sources that provide a direct lookup; columnar and server windows outside the resident set are not searched.
-- `hasRow(viewIndex)` — whether the view row exists; a `null` cell is a value, not an unloaded row.
-- `getSlotGeneration(rowIndex)` / `isSlotGenerationCurrent(rowIndex, generation)` — tag async renderer callbacks so stale slot assignments can be dropped.
-- `getRowData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
-- `getRowCount()` — the number of displayed view rows (after sort/filter).
+- `has(viewIndex)` — whether the view row exists; a `null` cell is a value, not an unloaded row.
+- `getSlotGeneration(viewIndex)` / `isSlotGenerationCurrent(viewIndex, generation)` — tag async renderer callbacks so stale slot assignments can be dropped.
+- `getData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
+- `getCount()` — the number of displayed view rows (after sort/filter).
 
 ## Column layout and geometry
 
 Core owns grid geometry. `columnLayout` selects how displayed widths are
-resolved and is changeable at runtime with `GridCore.setColumnLayout(mode)`:
+resolved and is changeable at runtime with `GridCore.columns.setLayout(mode)`:
 
 - `"fit"` (default) expands columns without an explicit pixel override so
   their total reaches the viewport. It never shrinks; a manual override keeps
@@ -541,9 +543,13 @@ resolved and is changeable at runtime with `GridCore.setColumnLayout(mode)`:
 | `hitTest({ x, y })` / `getScrollTarget(row, col)` | Pointer target (with the resolved `region`) / DOM scroll offsets |
 | `getColumnClip(layoutIndex)` | Viewport x-range of the region a column renders in |
 | `getColumnWindow()` | The mounted window: `{ layout, range, start, center, end }` |
+| `getRowRegions()` | The frozen/suffix layout: `{ frozenCount, frozenExtent, suffixViewportHeight, frozen }` |
+| `getRowClip(i)` | Viewport y-range the row renders in: the frozen band or the suffix clip |
+| `getRowScrollRange()` / `hasVerticalScrollRange()` | Reachable logical row scroll range and whether it scrolls |
+| `getRowScrollEdges(scrollTop, containerHeight)` | Auto-scroll rectangle and its vertical step limits |
 | `getContentSize()` | Logical body size in `"content"` coordinates |
 
-`GridCore.getCellBounds(rowId, columnId, space?)` resolves identities through
+`GridCore.cells.getBounds(rowId, columnId, space?)` resolves identities through
 the bounded current row window and the resident records; a remote or columnar
 identity outside that window answers `undefined` and is never materialized.
 
@@ -597,6 +603,50 @@ and `adapter/inline-axis.ts` is the only direction-aware code. `readIsRtl`,
 `ContainerBounds` describes the client box with an inline-relative `scrollLeft`
 and an optional `rtl`. A `dir` flip without a resize needs a remount. See
 [Column pinning](../../docs/features/column-pinning.md).
+
+### Frozen rows
+
+`freezeRows: { count, maxCount?, minSuffixHeight? }` keeps the displayed rows
+`[0, count)` below the header while the rest scroll. Defaults are `count 0`,
+`maxCount 100` and `minSuffixHeight 64`; invalid values throw a `RangeError`
+naming the field.
+
+`frozenRows.set(config?)` replaces the whole configuration at runtime: omitted
+fields take the option defaults, `undefined` unfreezes and a value-equal call
+emits nothing, so calling it on every prop change is
+safe. `frozenRows.freezeThrough(viewIndex)` sets `count = viewIndex + 1` (`-1`
+unfreezes) over the current limits. Growing the prefix corrects the scroll top to
+`max(0, logicalTop − Δ)` in the same batch, so the first visible suffix row
+stays put below the bigger block; shrinking keeps the logical top clamped and
+uncovers what was beneath it. An open edit whose row changes region is committed
+first, as hiding a column does.
+
+`count` is a request. `frozenRows.get()` answers the effective result:
+
+```ts
+interface FrozenRowsState {
+  requestedCount: number; // the configured count
+  effectiveCount: number; // 0 .. requestedCount
+  limit: "maxCount" | "viewport" | "cache" | null; // last constraint that reduced it
+}
+```
+
+`maxCount` applies first, then the viewport (`frozenExtent + minSuffixHeight`
+must fit the body, while the all-rows candidate needs no suffix), then the page
+budget for paginated sources. A zero request or an empty data set answers
+`limit: null`; a constraint that reduced the count names itself. The state is a
+pure function of the current inputs and is re-resolved on row-count, size,
+viewport and cache-configuration changes — never per scroll.
+
+`onFrozenRowsChanged(state)` fires on every later change of `effectiveCount` or
+`limit`; the core's first resolution is the baseline and never fires, and a
+change that leaves both fields equal is silent. The core formats
+`labels.frozenRowsLimited` (`"{effective} of {requested} rows frozen"` by
+default) and publishes it as the live-region announcement on every limit
+change; `GridLabelOverrides` stays optional. `GridState.rowRegions` and
+`GridState.announcement` carry both to a wrapper, with `SET_ROW_REGIONS` and
+`SET_ANNOUNCEMENT` emitted in one atomic batch. See
+[Frozen rows](../../docs/features/frozen-rows.md).
 
 ## Creating a Framework Adapter
 
@@ -688,26 +738,24 @@ class MyGridAdapter {
 | --------------------------------------------------- | ------------------------------------------ |
 | `initialize()`                                      | Initialize grid and load initial data      |
 | `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
-| `setColumns(columns)`                               | Reconcile definitions by column id         |
-| `setColumnState(updates)`                           | Apply explicit width/hidden/order/pin commands |
-| `resetColumnState(columnIds?)`                      | Drop user column state                     |
-| `getColumnState()`                                  | Effective width/hidden/order/pin per column |
-| `setColumnPinned(columnId, pinned)`                 | Pin a column to an edge, or unpin with `null` |
-| `setColumnLayout(mode)`                             | Select `"fit"` or `"fixed"` displayed widths |
-| `setSort(colId, direction, addToExisting)`          | Set column sort                            |
-| `setFilter(colId, value)`                           | Set column filter                          |
-| `startEdit(row, col)`                               | Start editing a cell                       |
-| `updateEditValue(value, editId?)`                   | Update the open edit's draft               |
-| `commitEdit(editId?)`                               | Commit current edit                        |
-| `cancelEdit(editId?)`                               | Cancel current edit                        |
+| `setDataSource(dataSource)`                         | Swap the source, keeping sort, filter and scroll |
 | `refresh()`                                         | Refetch data from source                   |
-| `getRowCount()`                                     | Displayed view-row count (after sort/filter) |
-| `getRowData(viewIndex)`                             | Source record, or `undefined` when record-less/unloaded |
-| `hasRow(viewIndex)`                                 | Whether the view row exists                |
-| `getViewRow(viewIndex)`                             | Displayed row and its identity, built on request |
-| `getRecordById(rowId)`                              | Source record by stable identity           |
-| `getSlotGeneration(rowIndex)`                       | Current slot assignment generation         |
-| `isSlotGenerationCurrent(rowIndex, generation)`     | Whether a slot generation is still current |
+| `refreshFromTransaction()`                          | Refetch the visible window after a transaction |
+| `onBatchInstruction(listener)`                      | Subscribe to instruction batches           |
+| `destroy()`                                         | Release listeners and managers             |
+
+### GridCore Namespaces
+
+| Namespace    | Members |
+| ------------ | ------- |
+| `rows`       | `getCount()`, `getId(i)`, `getData(i)`, `has(i)`, `getViewRow(i)`, `getRecordById(id)`, `isWritable()`, `getSlotGeneration(i)`, `isSlotGenerationCurrent(i, generation)`, `refreshSlotData()` |
+| `cells`      | `getValue(row, col)`, `setValue(row, col, value)`, `getFieldValue(i, field)`, `getBounds(rowId, columnId, space?)` |
+| `edit`       | `start(row, col)`, `updateValue(value, editId?)`, `commit(editId?)`, `cancel(editId?)`, `getState()`, `startPeek(row, col)`, `stopPeek()`, `getPeekState()`, `paste(text)` |
+| `columns`    | `get()`, `set(columns)`, `setWidth(colIndex, width)`, `move(from, to)`, `setPinned(columnId, pinned)`, `getState()`, `setState(updates)`, `resetState(columnIds?)`, `setLayout(mode)` |
+| `frozenRows` | `set(config?)`, `freezeThrough(viewIndex)`, `get()` |
+| `rowDrag`    | `commit(from, to)`, `isEntireRow()` |
+| `sortFilter` | `setSort(colId, direction, addToExisting?)`, `setFilter(colId, filter)`, `getSortModel()`, `getFilterModel()`, `hasActiveFilter(colId)`, `openFilterPopup(colIndex, anchorRect, computeDistinctValues?)`, `closeFilterPopup()`; ignored while a load is in flight |
+| `viewport`   | Touch-scroller hooks: `setTopOverride(domScrollTop)`, `isScaling()`, `getScrollRatio()`, `getMaxFlingVelocity()`, `getRowHeight()` |
 
 ### GridCore Properties
 
@@ -715,6 +763,8 @@ class MyGridAdapter {
 | ----------- | ------------------------- |
 | `selection` | SelectionManager instance |
 | `fill`      | FillManager instance      |
+| `input`     | InputHandler instance     |
+| `highlight` | HighlightManager instance, or `null` without highlighting |
 | `geometry`  | Read-only geometry queries (bounds, hit test, scroll target, layout) |
 
 ## Donations

@@ -381,12 +381,17 @@ const generateRowData = (): Person[] =>
   }));
 
 type HighlightMode = "row" | "column" | "cell";
+type FreezeCount = 0 | 1 | 3 | 5;
+
+const freezeCounts: FreezeCount[] = [0, 1, 3, 5];
 
 const initialRowData = generateRowData();
 
 function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
+  const [freezeCount, setFreezeCount] = useState<FreezeCount>(0);
+  const [frozenStatus, setFrozenStatus] = useState("0 of 0 rows frozen");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
   const showTouchDebug = shouldShowTouchDebug();
 
@@ -420,6 +425,8 @@ function MainDemo() {
     }),
     [highlightMode],
   );
+
+  const freezeRows = useMemo(() => ({ count: freezeCount }), [freezeCount]);
 
   const handleUpdateRow = () => {
     updateRow(rowIdToUpdate, {
@@ -464,10 +471,50 @@ function MainDemo() {
         ))}
       </div>
 
+      {/* Frozen Rows Switcher */}
+      <div
+        style={{
+          marginBottom: "12px",
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>
+          Frozen Rows:
+        </span>
+        {freezeCounts.map((value) => (
+          <button
+            key={value}
+            onClick={() => setFreezeCount(value)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "4px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: freezeCount === value ? "600" : "400",
+              backgroundColor: freezeCount === value ? "#3b82f6" : "#374151",
+              color: freezeCount === value ? "white" : "#9ca3af",
+            }}
+          >
+            {value}
+          </button>
+        ))}
+        <span style={{ color: "#9ca3af", marginLeft: "8px" }}>
+          {frozenStatus}
+        </span>
+      </div>
+
       {showTouchDebug && <DebugOverlay totalRows={1500000} />}
       <div className="demo-grid-shell">
         <Grid
           highlighting={highlighting}
+          freezeRows={freezeRows}
+          onFrozenRowsChanged={(state) =>
+            setFrozenStatus(
+              `${state.effectiveCount} of ${state.requestedCount} rows frozen`,
+            )
+          }
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
           columns={columns}

@@ -27,6 +27,28 @@ function isReady(): boolean {
   return document.querySelectorAll(".gp-grid-row").length > 0;
 }
 
+interface CoreReads {
+  getScrollRatio(): number;
+  getRowCount(): number;
+  getRowData(rowIndex: number): BenchmarkRow | undefined;
+}
+
+/** Row reads across the published baseline (flat API) and the candidate (namespaces). */
+const readCore = (core: unknown): CoreReads | undefined => {
+  if (core === null || core === undefined) return undefined;
+  const candidate = core as {
+    rows?: { getCount(): number; getData(rowIndex: number): BenchmarkRow | undefined };
+    viewport: { getScrollRatio(): number };
+  };
+  if (typeof candidate.rows?.getCount !== "function") return core as CoreReads;
+  const { rows, viewport } = candidate;
+  return {
+    getScrollRatio: () => viewport.getScrollRatio(),
+    getRowCount: () => rows.getCount(),
+    getRowData: (rowIndex) => rows.getData(rowIndex),
+  };
+};
+
 export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.length }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
   const gridRef = useRef<GridRef<BenchmarkRow> | null>(null);
@@ -91,7 +113,7 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
     async (field: string, direction: "asc" | "desc"): Promise<void> => {
       const core = gridRef.current?.core;
       if (core) {
-        await core.setSort(field, direction);
+        await core.sortFilter.setSort(field, direction);
       }
     },
     [],
@@ -101,7 +123,7 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
     const core = gridRef.current?.core;
     if (core) {
       // Passing null direction clears all sorts when addToExisting is false (default)
-      await core.setSort("", null);
+      await core.sortFilter.setSort("", null);
     }
   }, []);
 
@@ -110,10 +132,10 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
     if (!core || rules.length === 0) return;
 
     const [firstRule, ...remainingRules] = rules;
-    await core.setSort(firstRule.field, firstRule.direction);
+    await core.sortFilter.setSort(firstRule.field, firstRule.direction);
 
     for (const rule of remainingRules) {
-      await core.setSort(rule.field, rule.direction, true);
+      await core.sortFilter.setSort(rule.field, rule.direction, true);
     }
   }, []);
 
@@ -171,7 +193,7 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
           return;
       }
 
-      await core.setFilter(field, {
+      await core.sortFilter.setFilter(field, {
         conditions: [coreCondition],
         combination: "and",
       });
@@ -183,8 +205,8 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
     const core = gridRef.current?.core;
     if (core) {
       // Only active filters need clearing; each call refreshes the data source.
-      for (const field of Object.keys(core.getFilterModel())) {
-        await core.setFilter(field, null);
+      for (const field of Object.keys(core.sortFilter.getFilterModel())) {
+        await core.sortFilter.setFilter(field, null);
       }
     }
   }, []);
@@ -204,10 +226,10 @@ export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.l
       getRowCount: () => data.length,
       // Above ~312k rows gp-grid compresses its DOM scroll space (ratio < 1);
       // the scroll benchmark reads this to recover the true logical travel.
-      getScrollRatio: () => gridRef.current?.core?.getScrollRatio() ?? 1,
-      getDisplayedRowCount: () => gridRef.current?.core?.getRowCount() ?? 0,
+      getScrollRatio: () => readCore(gridRef.current?.core)?.getScrollRatio() ?? 1,
+      getDisplayedRowCount: () => readCore(gridRef.current?.core)?.getRowCount() ?? 0,
       getDisplayedRows: (start, count) => {
-        const core = gridRef.current?.core;
+        const core = readCore(gridRef.current?.core);
         if (!core) return [];
 
         const rows: BenchmarkRow[] = [];

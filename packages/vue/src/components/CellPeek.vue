@@ -132,13 +132,13 @@ const overlayStyle = computed(() => ({
 const peekVNode = computed(() => {
   const core = props.core;
   const getValue = (field: string): CellValue =>
-    core?.getFieldValue(props.peekCell.row, field) ?? null;
+    core?.cells.getFieldValue(props.peekCell.row, field) ?? null;
 
   return renderCell({
     column: props.column,
     rowData: props.rowData,
-    rawValue: core?.getCellValue(props.peekCell.row, props.peekCell.col) ?? null,
-    rowId: core?.getRowId(props.peekCell.row),
+    rawValue: core?.cells.getValue(props.peekCell.row, props.peekCell.col) ?? null,
+    rowId: core?.rows.getId(props.peekCell.row),
     getValue,
     rowIndex: props.peekCell.row,
     colIndex: props.peekCell.col,

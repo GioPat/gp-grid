@@ -16,6 +16,8 @@ import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
+  RowRegion,
+  RowRegionLayout,
 } from "./geometry";
 
 // =============================================================================
@@ -37,6 +39,13 @@ export interface SlotData<TData = unknown> {
    */
   generation: number;
   translateY: number;
+  /** Region the slot is rendered in (C7). */
+  region: RowRegion;
+  /**
+   * Frozen slot with no row data yet: it renders as a row box with no cells.
+   * A suffix slot is never `loading`.
+   */
+  loading: boolean;
 }
 
 export interface HeaderData {
@@ -68,6 +77,12 @@ export interface InitialStateArgs {
   initialLayout?: ColumnLayoutSnapshot;
   /** Layout mode seeded alongside `initialLayout`. Default: "fit". */
   initialColumnLayout?: ColumnLayoutMode;
+}
+
+/** Live-region text the core decided to announce (C13). */
+export interface GridAnnouncement {
+  message: string;
+  revision: number;
 }
 
 /**
@@ -121,6 +136,17 @@ const seedColumnWindow = (
   );
 };
 
+/**
+ * Pre-mount region layout: no frozen rows, no resolved extents. The core
+ * replaces it with the geometry's own zero layout on the first batch.
+ */
+const seedRowRegions = (): RowRegionLayout => ({
+  frozenCount: 0,
+  frozenExtent: 0,
+  suffixViewportHeight: 0,
+  frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+});
+
 export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => {
   const layout = seedLayout(args);
   return {
@@ -145,6 +171,8 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
     layout,
     columnWindow: seedColumnWindow(layout, args?.initialWidth ?? 0),
     columnLayout: args?.initialColumnLayout ?? "fit",
+    rowRegions: seedRowRegions(),
+    announcement: null,
     geometryRevision: 0,
     pendingScrollTop: null,
     pendingScrollLeft: null,
@@ -191,6 +219,10 @@ export interface GridState<TData = unknown> {
   columnWindow: ColumnWindowSnapshot | null;
   /** Selected column layout mode, mirrored from the core. */
   columnLayout: ColumnLayoutMode;
+  /** C3 frozen/suffix layout; the zero layout until the core publishes one. */
+  rowRegions: RowRegionLayout;
+  /** Live-region announcement, or `null` when there is nothing to announce. */
+  announcement: GridAnnouncement | null;
   /** Last committed geometry revision, for change detection. */
   geometryRevision: number;
   /** Pending programmatic vertical scroll — framework applies it and clears it */

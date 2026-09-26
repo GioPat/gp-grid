@@ -26,6 +26,8 @@ const OPTIONAL_SETTERS = [
   "setLayout",
   "setColumnWindow",
   "setColumnLayout",
+  "setRowRegions",
+  "setAnnouncement",
   "setGeometryRevision",
 ] as const;
 
@@ -92,6 +94,8 @@ describe("applyBatchInstructions — slot and header maps", () => {
       rowData: { id: 7 },
       generation: 2,
       translateY: 224,
+      region: "suffix",
+      loading: false,
     });
     expect(slots.size).toBe(0);
     expect(maps.slots).not.toBe(slots);
@@ -100,8 +104,30 @@ describe("applyBatchInstructions — slot and header maps", () => {
 
   it("recycles from the current slots and destroys the ones released", () => {
     const current = new Map<string, SlotData>([
-      ["slot-0", { slotId: "slot-0", rowIndex: 0, rowData: { id: 0 }, generation: 1, translateY: 0 }],
-      ["slot-1", { slotId: "slot-1", rowIndex: 1, rowData: { id: 1 }, generation: 1, translateY: 32 }],
+      [
+        "slot-0",
+        {
+          slotId: "slot-0",
+          rowIndex: 0,
+          rowData: { id: 0 },
+          generation: 1,
+          translateY: 0,
+          region: "suffix",
+          loading: false,
+        },
+      ],
+      [
+        "slot-1",
+        {
+          slotId: "slot-1",
+          rowIndex: 1,
+          rowData: { id: 1 },
+          generation: 1,
+          translateY: 32,
+          region: "suffix",
+          loading: false,
+        },
+      ],
     ]);
     const { maps } = apply(
       [
@@ -307,6 +333,49 @@ describe("applyBatchInstructions — columns, layout and filter popup", () => {
     const { setters } = apply([{ type: "SET_COLUMN_WINDOW", window, revision: 6 }]);
     expect(setters.setColumnWindow).toHaveBeenCalledWith(window);
     expect(setters.setGeometryRevision).toHaveBeenCalledWith(6);
+  });
+
+  it("publishes the row regions and the announcement with their revision", () => {
+    const rowRegions = {
+      frozenCount: 3,
+      frozenExtent: 96,
+      suffixViewportHeight: 224,
+      frozen: { requestedCount: 3, effectiveCount: 3, limit: null },
+    };
+    const announcement = { message: "3 of 3 rows frozen", revision: 6 };
+    const { setters } = apply([
+      { type: "SET_ROW_REGIONS", regions: rowRegions, revision: 6 },
+      { type: "SET_ANNOUNCEMENT", announcement, revision: 6 },
+    ]);
+    expect(setters.setRowRegions).toHaveBeenCalledWith(rowRegions);
+    expect(setters.setAnnouncement).toHaveBeenCalledWith(announcement);
+    expect(setters.setGeometryRevision).toHaveBeenCalledWith(6);
+    expect(calledSetters(setters)).toEqual([
+      "setAnnouncement",
+      "setGeometryRevision",
+      "setRowRegions",
+    ]);
+  });
+
+  it("keeps both maps by identity for a region-only batch", () => {
+    const slots = new Map<string, SlotData>();
+    const headers = new Map<string, HeaderData>();
+    const regions = {
+      frozenCount: 0,
+      frozenExtent: 0,
+      suffixViewportHeight: 320,
+      frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+    };
+
+    const { maps } = apply(
+      [{ type: "SET_ROW_REGIONS", regions, revision: 2 }],
+      makeSetters(),
+      slots,
+      headers,
+    );
+
+    expect(maps.slots).toBe(slots);
+    expect(maps.headers).toBe(headers);
   });
 
   it("never hands a missing layout to the wrapper", () => {

@@ -57,6 +57,7 @@ export type {
   DataSourceResponse,
   DataSourceRange,
   DataSourceLoadMode,
+  FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
   RowCacheOptions,
@@ -80,6 +81,9 @@ export type {
   GridFilterOperatorLabels,
   GridIcon,
 
+  // Live region
+  GridAnnouncement,
+
   // Instructions (for advanced use cases)
   GridInstruction,
   // Geometry
@@ -92,6 +96,18 @@ export type {
   ColumnWindowSnapshot,
   ResolvedColumn,
   FillHandlePosition,
+  // GridCore namespaces
+  GridRowsApi,
+  GridCellsApi,
+  GridEditApi,
+  GridColumnsApi,
+  GridFrozenRowsApi,
+  GridRowDragApi,
+  GridViewportApi,
+  // Row virtualization and freezing
+  RowRegion,
+  FrozenRowsState,
+  RowRegionLayout,
   GeometrySpace,
   AxisBounds,
   CellBounds,

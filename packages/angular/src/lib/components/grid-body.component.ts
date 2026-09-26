@@ -22,6 +22,7 @@ import {
   DragState,
   GridCore,
   GridLabels,
+  RowRegionLayout,
   defaultGridLabels,
 } from "@gp-grid/core";
 import { GRID_BODY_TEMPLATE } from "./grid-body.template";
@@ -79,7 +80,12 @@ export class GridBodyComponent {
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();
   rowsWrapperOffset = input.required<number>();
-  slotsArray = input.required<SlotData[]>();
+  /** C3 layout; the frozen band renders only while `frozenCount > 0`. */
+  rowRegions = input.required<RowRegionLayout>();
+  /** Height of the sticky frozen band. */
+  frozenHeight = input.required<number>();
+  frozenSlots = input.required<SlotData[]>();
+  suffixSlots = input.required<SlotData[]>();
   totalWidth = input.required<number>();
   columnWindow = input.required<ColumnWindowSnapshot | null>();
   /** 0-based displayed index of a column id, for `aria-colindex`. */
@@ -141,6 +147,37 @@ export class GridBodyComponent {
     if (ds?.dragType !== 'row-drag') return null;
     if (ds.rowDrag === null || ds.rowDrag.dropTargetIndex === null) return null;
     return ds.rowDrag;
+  });
+
+  /** C10: the overlay follows the row it targets. */
+  protected frozenDropIndicator = computed(() => {
+    const drag = this.rowDropIndicator();
+    return drag?.dropIndicatorRegion === 'frozen' ? drag : null;
+  });
+
+  protected suffixDropIndicator = computed(() => {
+    const drag = this.rowDropIndicator();
+    if (drag === null) return null;
+    return drag.dropIndicatorRegion === 'frozen' ? null : drag;
+  });
+
+  /** Fill handle before the row-region split; `null` while it is hidden. */
+  private visibleHandle = computed<FillHandlePosition | null>(() => {
+    const position = this.fillHandlePosition();
+    if (position === null || this.editingCell() !== null) return null;
+    return position;
+  });
+
+  /** A frozen anchor hosts the handle in the frozen band, not in the wrapper. */
+  protected frozenHandle = computed<FillHandlePosition | null>(() => {
+    const handle = this.visibleHandle();
+    return handle?.rowRegion === 'frozen' ? handle : null;
+  });
+
+  protected suffixHandle = computed<FillHandlePosition | null>(() => {
+    const handle = this.visibleHandle();
+    if (handle === null) return null;
+    return handle.rowRegion === 'frozen' ? null : handle;
   });
 
   protected rowDropIndicatorWidth = computed(() =>
@@ -330,7 +367,7 @@ export class GridBodyComponent {
 
   private currentEditValue(editing: EditingCellState | null): CellValue {
     if (editing === null) return null;
-    const live = this.core()?.getEditState();
+    const live = this.core()?.edit.getState();
     return live?.editId === editing.editId ? live.currentValue : editing.initialValue;
   }
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createFixedAxis } from "../src/geometry/fixed-axis";
+import type { RowRegionLayout } from "../src/geometry/row-regions";
 import { InstructionBatcher } from "../src/managers/instruction-batcher";
 import {
   RowDataManager,
@@ -40,10 +42,21 @@ const createDeferred = <T>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
+/** Mutable geometry sample the harness windows and paging contexts read. */
+interface HarnessMetrics {
+  scrollTop: number;
+  viewportHeight: number;
+  rowHeight: number;
+  overscan: number;
+  frozenCount: number;
+  rowCount: number;
+}
+
 interface ManagerHarness {
   manager: RowDataManager<TestRow>;
   instructions: GridInstruction[];
   loadedNotifications: boolean[];
+  metrics: HarnessMetrics;
 }
 
 const createManager = (
@@ -56,14 +69,41 @@ const createManager = (
   const loadedNotifications: boolean[] = [];
   batcher.subscribe((batch) => instructions.push(...batch));
 
-  // The manager reads geometry windows; these mirror the old harness math
-  // (rowHeight 20, overscan 0, viewport 100, scrollTop 0). A test may override
-  // the scroll/viewport numbers the window is derived from.
-  const metrics = { scrollTop: 0, viewportHeight: 100, rowHeight: 20, overscan: 0 };
-  const visibleWindow = () => ({
-    start: Math.max(0, Math.floor(metrics.scrollTop / metrics.rowHeight)),
-    end: Math.ceil((metrics.scrollTop + metrics.viewportHeight) / metrics.rowHeight),
+  // Mirrors the geometry service (rowHeight 20, overscan 0 by default): a
+  // frozen count moves the visible window to the suffix and shifts the budget.
+  const metrics: HarnessMetrics = {
+    scrollTop: 0,
+    viewportHeight: 100,
+    rowHeight: 20,
+    overscan: 0,
+    frozenCount: 0,
+    rowCount: 100,
+  };
+  const axis = () => createFixedAxis(metrics.rowCount, metrics.rowHeight);
+  const frozenExtent = () => axis().getOffset(metrics.frozenCount);
+  const suffixWindow = (overscan: number) =>
+    axis().getWindow(
+      metrics.scrollTop + frozenExtent(),
+      Math.max(0, metrics.viewportHeight - frozenExtent()),
+      overscan,
+    );
+  const regions = (): RowRegionLayout => ({
+    frozenCount: metrics.frozenCount,
+    frozenExtent: frozenExtent(),
+    suffixViewportHeight: Math.max(0, metrics.viewportHeight - frozenExtent()),
+    frozen: {
+      requestedCount: metrics.frozenCount,
+      effectiveCount: metrics.frozenCount,
+      limit: null,
+    },
   });
+  const getPageBudgetInput = () => ({
+    axis: axis(),
+    viewportHeight: metrics.viewportHeight,
+    scrollTop: metrics.scrollTop,
+    maxScrollTop: Math.max(0, axis().extent - metrics.viewportHeight),
+  });
+
   const manager = new RowDataManager<TestRow>({
     dataSource,
     rowLoading,
@@ -71,24 +111,54 @@ const createManager = (
     getColumns: () => columns,
     getSortModel: () => [],
     getFilterModel: () => ({}),
-    getRowWindow: () => ({
-      start: Math.max(0, visibleWindow().start - metrics.overscan),
-      end: visibleWindow().end + metrics.overscan,
-    }),
-    getVisibleRowWindow: () => visibleWindow(),
+    getRowWindow: () => suffixWindow(metrics.overscan),
+    getVisibleRowWindow: () => suffixWindow(0),
     getBootstrapRowCount: () => 0,
+    getPageBudgetInput,
+    getLoadContext: () => ({
+      ...getPageBudgetInput(),
+      visibleWindow: suffixWindow(0),
+      overscanWindow: suffixWindow(metrics.overscan),
+      regions: regions(),
+    }),
     onRowsLoaded: (totalRowsChanged) => {
       loadedNotifications.push(totalRowsChanged);
     },
     ...overrides,
   });
 
-  return { manager, instructions, loadedNotifications };
+  return { manager, instructions, loadedNotifications, metrics };
 };
 
 const response = (rows: TestRow[] = []): DataSourceResponse<TestRow> => ({
   rows,
   totalRows: rows.length,
+});
+
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+const rangesOf = (requests: DataSourceRequest[]): Array<[number, number]> =>
+  requests.map((request) => [request.range.startRow, request.range.endRow]);
+
+const rowsBetween = (startRow: number, endRow: number): TestRow[] =>
+  Array.from({ length: endRow - startRow }, (_, index) => ({
+    id: startRow + index,
+    name: `Row ${startRow + index}`,
+  }));
+
+/** Always-resolving paginated source that records every requested range. */
+const createRecorder = (
+  requests: DataSourceRequest[],
+  totalRows: number,
+): DataSource<TestRow> => ({
+  loadMode: "paginated",
+  query: async (request) => {
+    requests.push(request);
+    return {
+      rows: rowsBetween(request.range.startRow, request.range.endRow),
+      totalRows,
+    };
+  },
 });
 
 describe("RowDataManager", () => {
@@ -236,5 +306,106 @@ describe("RowDataManager", () => {
     manager.requestVisibleRows();
 
     expect(queryCount).toBe(0);
+  });
+});
+
+describe("RowDataManager — C8 paging", () => {
+  it("emits no loading overlay for a frozen-only miss", async () => {
+    const requests: DataSourceRequest[] = [];
+    const { manager, instructions, metrics } = createManager(
+      createRecorder(requests, 1_000),
+      { cache: { pageSize: 5, prefetchPages: 0, maxPages: 10 } },
+    );
+    metrics.rowCount = 1_000;
+    metrics.viewportHeight = 500;
+
+    await manager.loadInitial();
+    metrics.scrollTop = 1_000;
+    manager.requestVisibleRows();
+    await settle();
+
+    // Scrolling back under a 22-row prefix shows exactly the rows the flat
+    // load cached (50–74), while blocks 0–4 hold frozen rows only: their miss
+    // must not raise the suffix overlay.
+    metrics.scrollTop = 560;
+    metrics.frozenCount = 22;
+    const before = instructions.length;
+    manager.requestVisibleRows();
+    await settle();
+
+    expect(rangesOf(requests)).toContainEqual([0, 5]);
+    expect(rangesOf(requests)).toContainEqual([20, 25]);
+    expect(instructions.slice(before).some(({ type }) => type === "DATA_LOADING")).toBe(false);
+
+    // A visible suffix miss keeps today's overlay.
+    metrics.scrollTop = 1_560;
+    manager.requestVisibleRows();
+    await settle();
+
+    expect(instructions.slice(before).some(({ type }) => type === "DATA_LOADING")).toBe(true);
+  });
+
+  it("discards a response for a block the latest load no longer admits", async () => {
+    const requests: DataSourceRequest[] = [];
+    const pending = new Map<number, Deferred<DataSourceResponse<TestRow>>>();
+    const { manager, metrics } = createManager(
+      {
+        loadMode: "paginated",
+        query: (request) => {
+          requests.push(request);
+          const deferred = createDeferred<DataSourceResponse<TestRow>>();
+          pending.set(request.range.startRow, deferred);
+          return deferred.promise;
+        },
+      },
+      { cache: { pageSize: 10, prefetchPages: 0, maxPages: 5 } },
+    );
+    metrics.rowCount = 1_000;
+    metrics.frozenCount = 2;
+
+    const settleBlock = async (startRow: number): Promise<void> => {
+      pending.get(startRow)!.resolve({
+        rows: rowsBetween(startRow, startRow + 10),
+        totalRows: 1_000,
+      });
+      await settle();
+    };
+
+    manager.requestVisibleRows();
+    await settleBlock(0);
+    metrics.scrollTop = 140;
+    manager.requestVisibleRows();
+    metrics.scrollTop = 400;
+    manager.requestVisibleRows();
+    expect([...pending.keys()]).toEqual([0, 10, 20]);
+
+    await settleBlock(20);
+    await settleBlock(10);
+
+    expect(manager.getRowData(22)?.name).toBe("Row 22");
+    expect(manager.getRowData(11)).toBeUndefined();
+    expect(manager.hasRow(11)).toBe(false);
+  });
+
+  it("requests the prefix and the straddling visible blocks, never the gap", async () => {
+    const requests: DataSourceRequest[] = [];
+    const { manager, metrics } = createManager(
+      createRecorder(requests, 1_000_000),
+      { cache: { pageSize: 100, prefetchPages: 0, maxPages: 3 } },
+    );
+    metrics.rowCount = 1_000_000;
+    metrics.rowHeight = 8;
+    metrics.viewportHeight = 320;
+    metrics.frozenCount = 2;
+    metrics.scrollTop = 7_199_976;
+
+    manager.requestVisibleRows();
+    await settle();
+
+    expect(rangesOf(requests)).toEqual([
+      [0, 100],
+      [899_900, 900_000],
+      [900_000, 900_100],
+    ]);
   });
 });

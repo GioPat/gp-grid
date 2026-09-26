@@ -29,6 +29,12 @@ import {
 } from "../../packages/core/dist/index.js";
 import { collectPackageProvenance } from "./artifact-resolution.js";
 
+/** Inclusive visible row range from the half-open geometry window. */
+const visibleRange = (core) => {
+  const { start, end } = core.geometry.getVisibleRowWindow();
+  return end > start ? { start, end: end - 1 } : { start: 0, end: -1 };
+};
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
 
@@ -162,7 +168,7 @@ const deterministicCase = async (n) => {
   check(`n=${n} bind and initial render read no cells`, readsAfterBind === 0, `reads=${readsAfterBind}`);
 
   core.setViewport(0, 0, VIEWPORT.width, VIEWPORT.height);
-  const firstRange = core.getVisibleRowRange();
+  const firstRange = visibleRange(core);
   const readsAfterWindow = store.reads();
   check(`n=${n} first window reads no cells`, readsAfterWindow === 0, `reads=${readsAfterWindow}`);
   check(`n=${n} first window starts at row 0`, firstRange.start === 0, JSON.stringify(firstRange));
@@ -170,7 +176,7 @@ const deterministicCase = async (n) => {
   // Resize-only case: the scroll offset is unchanged, only the viewport height
   // changes. Kept separate from the real scroll case below.
   core.setViewport(0, 0, VIEWPORT.width, 320);
-  const resizeRange = core.getVisibleRowRange();
+  const resizeRange = visibleRange(core);
   const readsAfterResize = store.reads();
   check(`n=${n} resize-only reads no cells`, readsAfterResize === 0, `reads=${readsAfterResize}`);
   check(
@@ -181,7 +187,7 @@ const deterministicCase = async (n) => {
 
   // Real scroll case: fixed viewport dimensions, changed scroll offset.
   core.setViewport(SCROLL_TOP, 0, VIEWPORT.width, VIEWPORT.height);
-  const scrollRange = core.getVisibleRowRange();
+  const scrollRange = visibleRange(core);
   const readsAfterScroll = store.reads();
   // Scroll virtualization compresses the DOM scroll space at large row counts,
   // so the row mapped from a given offset is not simply scrollTop / rowHeight.
@@ -201,7 +207,7 @@ const deterministicCase = async (n) => {
   // Horizontal-only case: the row window must not move, no cells may be read
   // and no row-data assignment may be triggered by a pure `scrollLeft` change.
   core.setViewport(SCROLL_TOP, 120, VIEWPORT.width, VIEWPORT.height);
-  const horizontalRange = core.getVisibleRowRange();
+  const horizontalRange = visibleRange(core);
   const readsAfterHorizontal = store.reads();
   check(
     `n=${n} horizontal-only reads no cells`,
@@ -220,7 +226,7 @@ const deterministicCase = async (n) => {
   const values = [];
   const expectedValues = [];
   for (let row = scrollRange.start; row <= scrollRange.end; row += 1) {
-    values.push(core.getCellValue(row, SCORE_COLUMN_INDEX));
+    values.push(core.cells.getValue(row, SCORE_COLUMN_INDEX));
     expectedValues.push(backing.score[row]);
   }
   const readRows = store.readRows();
@@ -248,10 +254,10 @@ const deterministicCase = async (n) => {
   check(`n=${n} same-array revision refresh reads no cells`, readsAfterRefresh === 0, `reads=${readsAfterRefresh}`);
 
   // Read-only write rejection leaves the borrowed value untouched.
-  core.setCellValue(0, SCORE_COLUMN_INDEX, 999);
+  core.cells.setValue(0, SCORE_COLUMN_INDEX, 999);
   const sourceUnchanged = store.source.access.getValue(0, "score") === (0 * 7919) % 1000;
-  core.startEdit(0, SCORE_COLUMN_INDEX);
-  const editRejected = core.getEditState() === null;
+  core.edit.start(0, SCORE_COLUMN_INDEX);
+  const editRejected = core.edit.getState() === null;
   check(`n=${n} rejected write leaves the source unchanged`, sourceUnchanged, "borrowed score changed");
   check(`n=${n} edit rejected on a read-only source`, editRejected, "edit state opened");
   check(`n=${n} no implicit record materialization`, store.materializations() === 0, `calls=${store.materializations()}`);

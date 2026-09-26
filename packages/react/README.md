@@ -482,7 +482,7 @@ function TaskGrid() {
 
 Passing a new `columns` array reconciles the schema by column id (`colId ?? field`) in one batch. The core instance is reused: unrelated sort, filter and scroll state survive, surviving columns keep their user width/order/visibility, and removed columns drop their headers and state.
 
-Definition `width`/`hidden` are initial defaults. A definition change only applies when the column has no user override for that property; otherwise call `core.resetColumnState(["id"])` first.
+Definition `width`/`hidden` are initial defaults. A definition change only applies when the column has no user override for that property; otherwise call `core.columns.resetState(["id"])` first.
 
 Drive width, visibility and order from your own state with the controlled `columnState` prop:
 
@@ -527,10 +527,10 @@ The old prop-driven `columns[i].width = newWidth` mutation becomes `columnState=
 ## Column pinning
 
 Set `pinned: "start"` or `"end"` on a definition, or drive it at runtime with
-`gridRef.current.core.setColumnPinned(columnId, "start")`. `"start"`/`"end"`
+`gridRef.current.core.columns.setPinned(columnId, "start")`. `"start"`/`"end"`
 abut that edge; `null` unpins. A pin is a request: when the viewport cannot fit
 it the column renders in the scrolling center and is admitted again once there
-is room, so read the effective `region` from `core.getColumnState()` rather
+is room, so read the effective `region` from `core.columns.getState()` rather
 than assuming the request took effect.
 
 The default header cycles through physical left, physical right and unpinned.
@@ -555,6 +555,43 @@ is the CSS px of center columns kept mounted past each edge (default `240`). An
 open editor keeps its column mounted until the edit ends. See
 [Column pinning](../../docs/features/column-pinning.md).
 
+## Frozen rows
+
+`freezeRows: { count, maxCount?, minSuffixHeight? }` keeps the displayed rows
+`[0, count)` fixed below the header while the rest scroll, across sort, filter
+and data changes. Defaults: `count 0`, `maxCount 100`, `minSuffixHeight 64` (CSS
+px of suffix viewport kept below the prefix). Invalid values throw.
+
+```tsx
+<Grid
+  columns={columns}
+  rowData={rows}
+  rowHeight={36}
+  freezeRows={{ count: 3 }}
+  onFrozenRowsChanged={(state) => setFrozen(`${state.effectiveCount}/${state.requestedCount}`)}
+/>
+```
+
+`count` is a request: the effective count is bounded by `maxCount`, by the
+viewport (a frozen prefix always leaves `minSuffixHeight` for the suffix) and,
+with a paginated source, by the page budget. `onFrozenRowsChanged` fires
+whenever the effective count or its `limit` (`"maxCount" | "viewport" | "cache" | null`)
+changes — not for the initial resolution and not per scroll. `state.limit`
+tells you which constraint applied.
+
+When the limit reduces the prefix, the grid announces
+`labels.frozenRowsLimited` (`"{effective} of {requested} rows frozen"` by
+default) in a visually hidden live region, so a screen reader hears the
+reduction. Frozen rows render in a sticky block above the scrolling rows, with
+their pinned cells in a sibling sticky layer; an unavailable frozen row (a
+paginated page not loaded yet) renders a cell-less placeholder.
+
+Changing `freezeRows` after mount applies the new count through
+`core.frozenRows.set` without rebuilding the core or resetting scroll; the runtime
+setter also corrects the scroll position so the visible suffix stays anchored,
+and an equal-valued object is silent. See
+[Frozen rows](../../docs/features/frozen-rows.md).
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference
@@ -567,6 +604,7 @@ The public website documentation for this package lives outside this repository 
 | `columnState`     | `ColumnStateUpdate[]`                 | -           | Controlled `{ columnId, width?, hidden?, order?, pinned? }` state applied through the core |
 | `columnLayout`   | `"fit" \| "fixed"`                    | `"fit"`    | Displayed-width policy: `"fit"` expands columns to the viewport, `"fixed"` keeps declared/overridden widths |
 | `columnOverscan` | `number`                              | `240`       | CSS px of center columns kept mounted past each clip edge    |
+| `freezeRows`      | `FreezeRowsOptions`                   | `{ count: 0 }` | Frozen prefix: `{ count, maxCount?, minSuffixHeight? }`, applied at runtime |
 | `dataSource`      | `DataSource<TData>`                   | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                             | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                              | required    | Height of each row in pixels                                |
@@ -584,6 +622,7 @@ The public website documentation for this package lives outside this repository 
 | `onColumnResized` | `(event: ColumnResizedEvent) => void` | -           | Called with `{ columnId, width, viewIndex }`                |
 | `onColumnMoved`   | `(event: ColumnMovedEvent) => void`   | -           | Called with `{ columnId, fromViewIndex, toViewIndex }`      |
 | `onColumnPinned`  | `(event: ColumnPinnedEvent) => void`  | -           | Called with `{ columnId, pinned }` when a pin changes       |
+| `onFrozenRowsChanged` | `(state: FrozenRowsState) => void` | -          | Called with `{ requestedCount, effectiveCount, limit }` when the frozen prefix changes |
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -           | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
 | `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |

@@ -99,11 +99,11 @@ export function renderHeader<TData>(
     pinned: pinOf(column),
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
-        core.setSort(column.colId ?? column.field, direction, addToExisting);
+        core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
       }
     },
     onPinChange: (pinned) => {
-      core?.setColumnPinned(column.colId ?? column.field, pinned);
+      core?.columns.setPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {
@@ -112,7 +112,7 @@ export function renderHeader<TData>(
         ) as HTMLElement | null;
         if (headerCell) {
           const rect = headerCell.getBoundingClientRect();
-          core.openFilterPopup(
+          core.sortFilter.openFilterPopup(
             colIndex,
             {
               top: rect.top,

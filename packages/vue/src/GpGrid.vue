@@ -19,7 +19,7 @@ import {
   resolveGridLabels,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellRange, CellValueChangedEvent, CellWriteRejectedEvent, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -44,6 +44,13 @@ const props = withDefaults(
     /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
     columnLayout?: ColumnLayoutMode;
     rowLoading?: RowLoadingOptions;
+    /**
+     * Number of leading displayed rows kept visible below the header. Applied
+     * at runtime; a new identity never rebuilds the core.
+     */
+    freezeRows?: FreezeRowsOptions;
+    /** Called when the effective frozen count or its limiting reason changes. */
+    onFrozenRowsChanged?: (state: FrozenRowsState) => void;
     sortingEnabled?: boolean;
     darkMode?: boolean;
     wheelDampening?: number;
@@ -208,7 +215,7 @@ function handleScrollWithHeaderSync(): void {
 function handleFilterApply(colId: string, filter: ColumnFilterModel | null): void {
   const core = coreRef.value;
   if (core) {
-    core.setFilter(colId, filter);
+    core.sortFilter.setFilter(colId, filter);
   }
 }
 
@@ -216,13 +223,13 @@ function handleFilterApply(colId: string, filter: ColumnFilterModel | null): voi
 function handleFilterPopupClose(): void {
   const core = coreRef.value;
   if (core) {
-    core.closeFilterPopup();
+    core.sortFilter.closeFilterPopup();
   }
 }
 
 // Handle peek overlay close
 function handlePeekClose(): void {
-  coreRef.value?.stopPeek();
+  coreRef.value?.edit.stopPeek();
 }
 
 // Resolve peek column + row data from current state
@@ -281,6 +288,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     columnLayout: props.columnLayout ?? "fit",
     maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
+    freezeRows: props.freezeRows,
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
     getRowId: props.getRowId,
@@ -293,10 +301,12 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onColumnResized: (event) => props.onColumnResized?.(event),
     onColumnMoved: (event) => props.onColumnMoved?.(event),
     onColumnPinned: (event) => props.onColumnPinned?.(event),
+    onFrozenRowsChanged: (state) => props.onFrozenRowsChanged?.(state),
+    labels: props.labels,
   });
 
   // The columnState watcher only fires on change; apply the current value here.
-  if (props.columnState) core.setColumnState(props.columnState);
+  if (props.columnState) core.columns.setState(props.columnState);
   coreRef.value = core;
   touchScroll.syncCore();
 
@@ -435,7 +445,16 @@ watch(
 watch(
   () => props.columnLayout,
   (mode) => {
-    coreRef.value?.setColumnLayout(mode ?? "fit");
+    coreRef.value?.columns.setLayout(mode ?? "fit");
+  },
+);
+
+// Apply a new freeze configuration without recreating the core; the setter is
+// silent for an equal request, and creation already received the prop.
+watch(
+  () => props.freezeRows,
+  (config) => {
+    coreRef.value?.frozenRows.set(config);
   },
 );
 
@@ -453,7 +472,7 @@ watch(
 watch(
   () => props.columns,
   (columns) => {
-    coreRef.value?.setColumns(columns as unknown as CoreColumnDefinition[]);
+    coreRef.value?.columns.set(columns as unknown as CoreColumnDefinition[]);
   },
 );
 
@@ -461,7 +480,7 @@ watch(
 watch(
   () => props.columnState,
   (columnState) => {
-    if (columnState) coreRef.value?.setColumnState(columnState);
+    if (columnState) coreRef.value?.columns.setState(columnState);
   },
 );
 
@@ -513,6 +532,8 @@ defineExpose({
       :content-height="state.contentHeight"
       :total-width="totalWidth"
       :rows-wrapper-offset="state.rowsWrapperOffset"
+      :row-regions="state.rowRegions"
+      :announcement="state.announcement"
       :active-cell="state.activeCell"
       :selection-range="state.selectionRange"
       :editing-cell="state.editingCell"

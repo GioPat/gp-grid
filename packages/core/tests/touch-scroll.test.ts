@@ -22,12 +22,16 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     rowHeight: options.rowHeight ?? 32,
   };
   let batchListener: MockBatchListener | null = null;
+  const setTopOverride = vi.fn();
   const core = {
-    isScalingActive: () => state.scalingActive,
-    getScrollRatio: () => state.scrollRatio,
-    getMaxFlingVelocity: () => state.maxFlingVelocity,
-    getRowHeight: () => state.rowHeight,
-    setScrollTopOverride: vi.fn(),
+    viewport: {
+      isScaling: () => state.scalingActive,
+      getScrollRatio: () => state.scrollRatio,
+      getMaxFlingVelocity: () => state.maxFlingVelocity,
+      getRowHeight: () => state.rowHeight,
+      setTopOverride,
+    },
+    setTopOverride,
     setViewport: vi.fn(),
     onBatchInstruction: (listener: MockBatchListener) => {
       batchListener = listener;
@@ -54,7 +58,7 @@ const emitBatch = (
   );
 
 interface MockedCore {
-  setScrollTopOverride: ReturnType<typeof vi.fn>;
+  setTopOverride: ReturnType<typeof vi.fn>;
   setViewport: ReturnType<typeof vi.fn>;
 }
 
@@ -453,7 +457,7 @@ describe("TouchScrollController", () => {
 
     const mocks = getMocks(core);
     // 1 finger px past the slop offset → fractional DOM position 0.5
-    expect(mocks.setScrollTopOverride).toHaveBeenLastCalledWith(0.5);
+    expect(mocks.setTopOverride).toHaveBeenLastCalledWith(0.5);
     expect(mocks.setViewport).toHaveBeenLastCalledWith(
       0.5,
       el.scrollLeft,
@@ -470,7 +474,7 @@ describe("TouchScrollController", () => {
     el.dispatchEvent(touchEvent("touchend", [{ clientY: 200 }], 310));
 
     const mocks = getMocks(core);
-    expect(mocks.setScrollTopOverride).toHaveBeenLastCalledWith(null);
+    expect(mocks.setTopOverride).toHaveBeenLastCalledWith(null);
     // The final sync re-reads the element's (quantized) scroll position.
     expect(mocks.setViewport).toHaveBeenLastCalledWith(
       el.scrollTop,
@@ -490,7 +494,7 @@ describe("TouchScrollController", () => {
       raf.pump(now);
       frames++;
     }
-    expect(getMocks(core).setScrollTopOverride).toHaveBeenLastCalledWith(null);
+    expect(getMocks(core).setTopOverride).toHaveBeenLastCalledWith(null);
   });
 
   it("renders a fast fling every frame while the device keeps pace", () => {

@@ -100,6 +100,8 @@ Every UI change is one of these instructions. Each wrapper has its own dispatch 
 | `SET_HOVER_POSITION` | Update hover position (drives highlighting). |
 | `SET_CONTENT_SIZE` | Update virtual content size (for the inner scroll surface). |
 | `SET_COLUMN_WINDOW` | Publish `GridState.columnWindow` — the admitted pins plus the bounded center window a wrapper mounts instead of every displayed column. |
+| `SET_ROW_REGIONS` | Publish `GridState.rowRegions` (`{ frozenCount, frozenExtent, suffixViewportHeight, frozen }`), emitted in the same batch as `SET_CONTENT_SIZE` and the slot instructions whenever the frozen/suffix split changes. |
+| `SET_ANNOUNCEMENT` | Publish `GridState.announcement` (`{ message, revision }`) — live-region text the core decided, for example a reduced frozen prefix. |
 
 The full set is exported from `@gp-grid/core` as discriminated TypeScript types (`CreateSlotInstruction`, `DestroySlotInstruction`, etc., all under the `GridInstruction` union).
 
@@ -157,40 +159,48 @@ These exist because every wrapper needs them. Use them instead of reinventing.
 Outside of input wiring, the imperative methods on `GridCore` are the same set the framework wrappers expose:
 
 ```ts
-grid.setSort("colId", "asc", false);            // or "desc", null to clear; addToExisting controls multi-sort
-grid.setFilter("colId", { /* ColumnFilterModel */ } /* or null */);
-grid.startEdit(rowIndex, colIndex);
-grid.commitEdit();
-grid.cancelEdit();
+grid.sortFilter.setSort("colId", "asc", false);      // or "desc", null to clear; addToExisting controls multi-sort
+grid.sortFilter.setFilter("colId", { /* ColumnFilterModel */ } /* or null */);
+grid.edit.start(rowIndex, colIndex);
+grid.edit.commit();
+grid.edit.cancel();
 // Custom adapters: tag editor callbacks with the session token from START_EDIT /
-// getEditState().editId so a callback from a closed editor is ignored.
-grid.updateEditValue(value, editId);
-grid.commitEdit(editId);
-grid.setDataSource(newDataSource);              // hot-swap, preserves state
-grid.refresh();                                  // re-fetch from data source
-grid.refreshFromTransaction();                   // apply mutable ds queued txns
-grid.getRowCount();                              // displayed view-row count
-grid.getRowData(viewIndex);                      // source record, or undefined
-grid.hasRow(viewIndex);                          // whether the view row exists
-grid.getViewRow(viewIndex);                      // { kind, id, viewIndex, record? } | undefined
-grid.getRecordById(rowId);                       // source record for a stable id
-grid.setColumnState([{ columnId, width, hidden, order, pinned }]);
-grid.setColumnPinned(columnId, "start");         // "end", or null to unpin
-grid.setColumnLayout("fixed");                   // or "fit" (default)
-grid.resetColumnState([columnId]);               // omit arg to reset all
-grid.getColumnState();                           // [{ columnId, width?, resolvedWidth, hidden, order, pinned, region }]
-grid.geometry.getColumnLayout();                 // { revision, mode, columns, totalWidth, regions }
-grid.geometry.getColumnWindow();                 // { layout, range, start, center, end }
-grid.geometry.getColumnClip(0);                  // viewport x-range of that column's region
-grid.geometry.getCellBounds(0, 0, "viewport");   // { top, left, width, height, ... }
-grid.geometry.hitTest({ x: 10, y: 10 });         // { row, displayIndex, col, columnId?, region }
-grid.geometry.getScrollTarget(12, 0);            // { scrollTop?, scrollLeft? }
-grid.getSlotGeneration(rowIndex);                // slot recycle guard
-grid.isSlotGenerationCurrent(rowIndex, generation);
+// edit.getState().editId so a callback from a closed editor is ignored.
+grid.edit.updateValue(value, editId);
+grid.edit.commit(editId);
+grid.edit.paste(text);                              // tab/newline text at the selection
+grid.setDataSource(newDataSource);                  // hot-swap, preserves state
+grid.refresh();                                     // re-fetch from data source
+grid.refreshFromTransaction();                      // apply mutable ds queued txns
+grid.rows.getCount();                               // displayed view-row count
+grid.rows.getData(viewIndex);                       // source record, or undefined
+grid.rows.has(viewIndex);                           // whether the view row exists
+grid.rows.getViewRow(viewIndex);                    // { kind, id, viewIndex, record? } | undefined
+grid.rows.getRecordById(rowId);                     // source record for a stable id
+grid.cells.getValue(row, col);                      // cell value; cells.setValue writes one
+grid.cells.getBounds(rowId, columnId, "viewport");  // identity-addressed cell bounds
+grid.columns.setState([{ columnId, width, hidden, order, pinned }]);
+grid.columns.setPinned(columnId, "start");          // "end", or null to unpin
+grid.columns.setLayout("fixed");                    // or "fit" (default)
+grid.columns.resetState([columnId]);                // omit arg to reset all
+grid.columns.getState();                            // [{ columnId, width?, resolvedWidth, hidden, order, pinned, region }]
+grid.geometry.getColumnLayout();                    // { revision, mode, columns, totalWidth, regions }
+grid.geometry.getColumnWindow();                    // { layout, range, start, center, end }
+grid.geometry.getColumnClip(0);                     // viewport x-range of that column's region
+grid.frozenRows.get();                              // { requestedCount, effectiveCount, limit }
+grid.frozenRows.set({ count: 3 });                  // replaces the whole config; omitted limits take defaults
+grid.frozenRows.freezeThrough(4);                   // count = 5, current limits kept; -1 unfreezes
+grid.geometry.getRowRegions();                      // { frozenCount, frozenExtent, suffixViewportHeight, frozen }
+grid.geometry.getRowClip(0);                        // viewport y-range of that row's region
+grid.geometry.getCellBounds(0, 0, "viewport");      // { top, left, width, height, ... }
+grid.geometry.hitTest({ x: 10, y: 10 });            // { row, displayIndex, col, columnId?, region }
+grid.geometry.getScrollTarget(12, 0);               // { scrollTop?, scrollLeft? }
+grid.rows.getSlotGeneration(rowIndex);              // slot recycle guard
+grid.rows.isSlotGenerationCurrent(rowIndex, generation);
 grid.selection.startSelection({ row, col }, { shift, ctrl });
 grid.fill.startFill(/* ... */);
 grid.highlight?.updateOptions(highlighting);
-grid.destroy();                                  // release everything
+grid.destroy();                                     // release everything
 ```
 
 See `packages/core/README.md` for the canonical surface.
@@ -236,8 +246,9 @@ The minimal wrapper does five things, in order:
 2. **Instantiate `GridCore`** with the user's options.
 3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
-5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved`, `onColumnPinned` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.setColumnState`.
+5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved`, `onColumnPinned` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.columns.setState`.
 6. **Render the mounted column window**, not every displayed column: `GridState.columnWindow` gives `start` / `center` / `end` resolved columns, each with a region-local `regionOffset`. Key cells and headers by `columnId` so a column keeps its DOM node when it changes region, and place `lineX` / `dropIndicatorX` (viewport x) and the fill handle's region-local `left` directly.
+7. **Render the frozen prefix from `GridState.rowRegions`**, only while `frozenCount > 0`: a sticky block of height `frozenExtent` for the frozen center cells, plus a sibling sticky layer at the sizer level for their pinned cells (a pin inside the horizontally scrolling block would ride its content box out of the viewport). Split slots by `SlotData.region`, never by `rowIndex < frozenCount`, render `SlotData.loading` frozen rows as cell-less placeholders, and render `GridState.announcement` in one `aria-live="polite"` region. `freezeRows: { count, maxCount?, minSuffixHeight? }` is the option; a wrapper applies a changed prop through `frozenRows.set(config?)`, which replaces the whole config (omitted fields take the defaults) and stays silent for an equal-valued call, so no remount is needed. `frozenRows.get()` reports the effective count and its limiting constraint.
 
 For a complete reference implementation, read **`packages/react/src/Grid.tsx`** and **`packages/react/src/gridState/`** end to end. The Vue wrapper (`packages/vue/src/GpGrid.vue` + `packages/vue/src/gridState/`) is the same shape with Vue reactivity. The Angular wrapper (`packages/angular/src/lib/gp-grid.component.ts` + `gp-grid-bindings.ts` + `gp-grid-view-model.ts`) is the same shape with signals.
 
@@ -254,7 +265,7 @@ Adapters can call `formatCellValue` (exported from `@gp-grid/core`) to match the
 
 ### Localization and long text
 
-- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridLabelOverrides`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(overrides)`, and `formatLabel(template, params)`. The pin action uses `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. The official wrappers resolve a `GridLabelOverrides` prop into full labels and pass them to their UI; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
+- **Labels:** the core exports the label model and helpers — `GridLabels`, `GridLabelOverrides`, `GridFilterOperatorLabels`, `defaultGridLabels`, `resolveGridLabels(overrides)`, and `formatLabel(template, params)`. The pin action uses `pinLeftColumn`, `pinRightColumn` and `unpinColumn`; the frozen-prefix announcement uses `frozenRowsLimited` (tokens `{effective}` and `{requested}`). `GridCoreOptions.labels` accepts overrides directly, so a core-only consumer can localize what the core formats. The official wrappers resolve a `GridLabelOverrides` prop into full labels and pass them to their UI; a custom adapter should do the same. `resolveGridLabels` shallow-merges top-level keys (and one level deep for `operators`) and never mutates the defaults.
 - **Pin icon:** `GridIcon` is `{ path: string; viewBox?: string }`; `defaultPinIcon` is the framework-neutral SVG definition used by the wrappers.
 - **Long text:** `ColumnDefinition.wrapText` (default `false`) makes the default renderer wrap overflowing text onto new lines instead of truncating with an ellipsis. The canonical CSS already ships the `.gp-grid-cell--wrap` and `.gp-grid-cell-content` rules, so adapters that apply the core's cell classes get this for free.
 

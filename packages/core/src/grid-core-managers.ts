@@ -15,8 +15,13 @@ import {
   ViewportState,
 } from "./managers";
 import { RowDataManager } from "./managers/row-data-manager";
+import type {
+  RowLoadContext,
+  RowPageBudgetInput,
+} from "./managers/row-window-loader";
 import { ViewSync } from "./grid-core-view-sync";
 import type { GridGeometryService } from "./geometry/grid-geometry";
+import type { FrozenRowsState } from "./geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import type { CellValue, ColumnDefinition } from "./types";
 
@@ -27,6 +32,8 @@ export interface GridManagersDeps<TData> {
   getColumns: () => ColumnDefinition[];
   /** Built after the managers; only read once construction has finished. */
   getGeometry: () => GridGeometryService;
+  /** C9 baseline: the core's first frozen-rows resolution. */
+  getFrozenRowsBaseline: () => FrozenRowsState;
   /** Bounded keep-alive for the edited column (B7). */
   retainEditColumn: (columnId: string | null) => void;
 }
@@ -118,7 +125,9 @@ export const buildGridManagers = <TData>(
   const slotPool = new SlotPoolManager({
     getRowWindow: () => getRowGeometry().getWindow(),
     getRowCount: getTotalRows,
-    getRowOffset: (rowIndex) => getRowGeometry().getMapper().rowPosition(rowIndex),
+    getRowRegions: () => deps.getGeometry().getRowRegions(),
+    // Region-aware rows space: frozen rows keep their content offset (C4).
+    getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
     getRowData: (rowIndex) => getCachedRows().get(rowIndex),
     isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
   });
@@ -145,10 +154,12 @@ export const buildGridManagers = <TData>(
     isSortingEnabled: () => config.sortingEnabled,
     getCachedRows,
     getRowAccess: () => rowData.getRowAccess(),
+    isLoading: () => rowData.isLoading(),
     onSortFilterChange: async () => {
-      await rowData.loadInitial();
-      // Filtered/sorted results are a new view — start from the top.
+      // Size the first request from the view the reset is about to show, not
+      // from the scroll position the user left behind.
       viewport.resetScrollTop();
+      await rowData.loadInitial();
       batcher.start();
       try {
         batcher.emit({ type: "SCROLL_TO", scrollTop: 0 });
@@ -175,6 +186,29 @@ export const buildGridManagers = <TData>(
     getColumns,
     getGeometry: deps.getGeometry,
     getTotalRows,
+    labels: config.labels,
+    getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
+    onFrozenRowsChanged: config.onFrozenRowsChanged,
+  });
+
+  // C8 paging context. The budget input deliberately reads no region layout:
+  // `row-geometry` resolves the layout lazily and calls `admitsPrefix` inside
+  // that resolution, so a region read here would recurse.
+  const getPageBudgetInput = (): RowPageBudgetInput => {
+    const geometry = getRowGeometry();
+    const mapper = geometry.getMapper();
+    return {
+      axis: geometry.syncAxis(),
+      viewportHeight: viewport.getViewportHeight(),
+      scrollTop: mapper.getLogicalScrollTop(),
+      maxScrollTop: mapper.getMaxLogicalScrollTop(),
+    };
+  };
+  const getLoadContext = (): RowLoadContext => ({
+    ...getPageBudgetInput(),
+    visibleWindow: getRowGeometry().getVisibleWindow(),
+    overscanWindow: getRowGeometry().getWindow(),
+    regions: deps.getGeometry().getRowRegions(),
   });
 
   rowData = new RowDataManager<TData>({
@@ -187,6 +221,8 @@ export const buildGridManagers = <TData>(
     getRowWindow: () => getRowGeometry().getWindow(),
     getVisibleRowWindow: () => getRowGeometry().getVisibleWindow(),
     getBootstrapRowCount: () => getRowGeometry().getBootstrapRowCount(),
+    getPageBudgetInput,
+    getLoadContext,
     onCellValueChanged: config.onCellValueChanged,
     onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,

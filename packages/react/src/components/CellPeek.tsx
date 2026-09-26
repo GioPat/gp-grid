@@ -140,7 +140,7 @@ export function CellPeek<TData = unknown>({
   }, [updatePosition]);
 
   // Close on outside click. ESC is handled by the grid's keyboard handler
-  // (which routes through core.stopPeek), so we don't duplicate it here.
+  // (which routes through core.edit.stopPeek), so we don't duplicate it here.
   useEffect(() => {
     const onPointerDown = (e: PointerEvent): void => {
       const target = e.target as HTMLElement;

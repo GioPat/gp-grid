@@ -373,10 +373,10 @@ function PeopleGrid() {
           gridRef={gridRef}
         />
       </div>
-      <button onClick={() => gridRef.current?.core?.setSort("name", "asc", false)}>
+      <button onClick={() => gridRef.current?.core?.sortFilter.setSort("name", "asc", false)}>
         Sort by name
       </button>
-      <button onClick={() => gridRef.current?.core?.startEdit(0, 1)}>
+      <button onClick={() => gridRef.current?.core?.edit.start(0, 1)}>
         Edit cell (0, 1)
       </button>
     </>
@@ -431,7 +431,7 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 
 ## Reactive `columns` and column state
 
-Replacing the `columns` array never recreates the core: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.setColumnState` whenever it changes:
+Replacing the `columns` array never recreates the core: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.columns.setState` whenever it changes:
 
 ```tsx
 <Grid
@@ -446,26 +446,43 @@ Replacing the `columns` array never recreates the core: it reconciles by column 
 
 `pinned: "start"` / `"end"` on a definition pins it against that edge; the
 controlled `columnState` form is `{ columnId, pinned: "start" | "end" | null }`.
-At runtime use `gridRef.current?.core.setColumnPinned(columnId, pin)`.
+At runtime use `gridRef.current?.core.columns.setPinned(columnId, pin)`.
 `onColumnPinned={({ columnId, pinned }) => ...}` fires for that call, the header
 toggle and a cross-region header drag.
 
 A pin that does not fit the viewport renders in the scrolling center until it
 is admitted, so persist the request but read the effective `region` from
-`core.getColumnState()`. `columnOverscan` (default `240` px) is how far past
+`core.columns.getState()`. `columnOverscan` (default `240` px) is how far past
 each clip edge center columns stay mounted; an open editor keeps its column
 mounted regardless. The default header action uses `pinIcon` and cycles through
 physical left, physical right and unpinned; override `pinLeftColumn`,
 `pinRightColumn` and `unpinColumn` in `labels` for its accessible names. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
 
+## Frozen rows
+
+`freezeRows={{ count: 3 }}` keeps the first displayed rows below the header
+while the rest scroll (defaults `maxCount 100`, `minSuffixHeight 64`).
+`onFrozenRowsChanged={(state) => ...}` receives
+`{ requestedCount, effectiveCount, limit }` whenever either reported field
+changes — the effective count can be reduced by `maxCount`, the viewport or, for
+a paginated source, the page budget, and `state.limit` names the constraint
+(`"maxCount" | "viewport" | "cache" | null`). The core announces a reduced
+prefix as `labels.frozenRowsLimited` in a hidden live region.
+
+A changed prop is applied at runtime through `core.frozenRows.set`: the core is
+not recreated, the scroll position is corrected so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `columns` | `ColumnDefinition[]` | required | |
-| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order/pinned; applied via `setColumnState` |
+| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order/pinned; applied via `columns.setState` |
 | `columnOverscan` | `number` | `240` | CSS px of center columns mounted past each clip edge |
+| `freezeRows` | `FreezeRowsOptions` | `{ count: 0 }` | `{ count, maxCount?, minSuffixHeight? }`; applied at runtime, no remount |
 | `dataSource` | `DataSource<TData>` | — | mutually exclusive with `rowData`; takes precedence |
 | `rowData` | `TData[]` | — | wrapped in a client data source by the wrapper |
 | `rowHeight` | `number` | required | px |
@@ -485,7 +502,7 @@ physical left, physical right and unpinned; override `pinLeftColumn`,
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn` and `unpinColumn` action labels |
+| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn` and `frozenRowsLimited` |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
@@ -495,6 +512,7 @@ physical left, physical right and unpinned; override `pinLeftColumn`,
 | `onColumnResized` | `(e: ColumnResizedEvent) => void` | — | persist user state |
 | `onColumnMoved` | `(e: ColumnMovedEvent) => void` | — | persist user state |
 | `onColumnPinned` | `(e: ColumnPinnedEvent) => void` | — | `{ columnId, pinned }`; fired by the pin command, header toggle or cross-region drag |
+| `onFrozenRowsChanged` | `(s: FrozenRowsState) => void` | — | `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution |
 
 ## React-specific gotchas
 

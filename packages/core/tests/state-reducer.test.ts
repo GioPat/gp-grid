@@ -48,6 +48,8 @@ describe("applyInstruction", () => {
         rowData: undefined,
         generation: 0,
         translateY: 0,
+        region: "suffix",
+        loading: false,
       });
     });
 
@@ -58,6 +60,8 @@ describe("applyInstruction", () => {
         rowData: { id: 1, name: "a" },
         generation: 1,
         translateY: 0,
+        region: "suffix",
+        loading: false,
       });
 
       const result = applyInstruction<Row>(
@@ -88,6 +92,8 @@ describe("applyInstruction", () => {
         rowData: {} as Row,
         generation: 0,
         translateY: 64,
+        region: "suffix",
+        loading: false,
       });
 
       const rowData: Row = { id: 42, name: "Alice" };
@@ -110,7 +116,26 @@ describe("applyInstruction", () => {
         rowData,
         generation: 7,
         translateY: 64,
+        region: "suffix",
+        loading: false,
       });
+    });
+
+    it("keeps the region and loading fields an instruction carries", () => {
+      applyInstruction<Row>(
+        { type: "CREATE_SLOT", slotId: "s1", generation: 0, region: "frozen", loading: true },
+        slots,
+        headers,
+      );
+      expect(slots.get("s1")).toMatchObject({ region: "frozen", loading: true });
+
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 2, rowData: undefined, generation: 1 },
+        slots,
+        headers,
+      );
+      // The defaults apply on every assign: an unfrozen row returns to suffix.
+      expect(slots.get("s1")).toMatchObject({ region: "suffix", loading: false });
     });
 
     it("ASSIGN_SLOT on an unknown slot id is ignored", () => {
@@ -137,6 +162,8 @@ describe("applyInstruction", () => {
         rowData: { id: 2, name: "b" },
         generation: 1,
         translateY: 0,
+        region: "suffix",
+        loading: false,
       });
 
       const result = applyInstruction<Row>(
@@ -484,6 +511,38 @@ describe("applyInstruction", () => {
         slots,
         headers,
       )).toEqual({ columns: [column], layout, geometryRevision: 10 });
+    });
+  });
+
+  describe("row regions and announcements", () => {
+    const rowRegions = {
+      frozenCount: 3,
+      frozenExtent: 96,
+      suffixViewportHeight: 224,
+      frozen: { requestedCount: 5, effectiveCount: 3, limit: "viewport" as const },
+    };
+
+    it("SET_ROW_REGIONS publishes the layout with the committed revision", () => {
+      expect(applyInstruction<Row>(
+        { type: "SET_ROW_REGIONS", regions: rowRegions, revision: 11 },
+        slots,
+        headers,
+      )).toEqual({ rowRegions, geometryRevision: 11 });
+    });
+
+    it("SET_ANNOUNCEMENT publishes the message and its clear", () => {
+      const announcement = { message: "3 of 5 rows frozen", revision: 11 };
+      expect(applyInstruction<Row>(
+        { type: "SET_ANNOUNCEMENT", announcement, revision: 11 },
+        slots,
+        headers,
+      )).toEqual({ announcement });
+
+      expect(applyInstruction<Row>(
+        { type: "SET_ANNOUNCEMENT", announcement: null, revision: 12 },
+        slots,
+        headers,
+      )).toEqual({ announcement: null });
     });
   });
 

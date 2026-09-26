@@ -90,6 +90,27 @@ describe("formatLabel", () => {
   });
 });
 
+describe("frozenRowsLimited", () => {
+  it("defaults to wording neutral enough for both directions", () => {
+    expect(defaultGridLabels.frozenRowsLimited).toBe("{effective} of {requested} rows frozen");
+  });
+
+  it("interpolates both tokens", () => {
+    expect(
+      formatLabel(defaultGridLabels.frozenRowsLimited, { effective: 0, requested: 3 }),
+    ).toBe("0 of 3 rows frozen");
+    expect(
+      formatLabel(defaultGridLabels.frozenRowsLimited, { effective: 2, requested: 8 }),
+    ).toBe("2 of 8 rows frozen");
+  });
+
+  it("lets an override replace the template", () => {
+    const labels = resolveGridLabels({ frozenRowsLimited: "{effective}/{requested} righe" });
+    expect(labels.frozenRowsLimited).toBe("{effective}/{requested} righe");
+    expect(formatLabel(labels.frozenRowsLimited, { effective: 1, requested: 4 })).toBe("1/4 righe");
+  });
+});
+
 describe("operator option helpers", () => {
   it("text operators use word labels in display order", () => {
     const options = getTextOperatorOptions(defaultGridLabels);

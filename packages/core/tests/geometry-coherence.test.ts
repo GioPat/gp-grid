@@ -58,7 +58,7 @@ const unloadedRows = (grid: GridCore<Row>): number[] => {
   const window = grid.geometry.getVisibleRowWindow();
   const missing: number[] = [];
   for (let row = window.start; row < window.end; row++) {
-    if (grid.getRowData(row) === undefined) missing.push(row);
+    if (grid.rows.getData(row) === undefined) missing.push(row);
   }
   return missing;
 };
@@ -90,9 +90,9 @@ describe("committed geometry revisions", () => {
   it("advances on every column width change", async () => {
     const grid = await createLocalGrid();
     const first = grid.geometry.revision;
-    grid.setColumnWidth(0, 250);
+    grid.columns.setWidth(0, 250);
     const second = grid.geometry.revision;
-    grid.setColumnWidth(0, 300);
+    grid.columns.setWidth(0, 300);
     expect(second).toBeGreaterThan(first);
     expect(grid.geometry.revision).toBeGreaterThan(second);
   });
@@ -101,7 +101,7 @@ describe("committed geometry revisions", () => {
     const grid = await createLocalGrid();
     const batches: GridInstruction[][] = [];
     grid.onBatchInstruction((batch) => batches.push(batch));
-    grid.setColumnWidth(0, 250);
+    grid.columns.setWidth(0, 250);
     const batch = batches.at(-1)!;
     const layout = batch.find((i) => i.type === "COLUMNS_CHANGED");
     const size = batch.find((i) => i.type === "SET_CONTENT_SIZE");
@@ -129,10 +129,10 @@ describe("public geometry surface", () => {
       coordinateSpace: "content",
     });
 
-    grid.setColumnLayout("fit");
+    grid.columns.setLayout("fit");
     expect(grid.geometry.getColumnLayout().mode).toBe("fit");
     const before = grid.geometry.revision;
-    grid.setColumnWidth(0, 250);
+    grid.columns.setWidth(0, 250);
     expect(grid.geometry.revision).toBeGreaterThan(before);
   });
 });

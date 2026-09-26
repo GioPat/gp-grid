@@ -187,23 +187,23 @@ describe("GridCore with a columnar source", () => {
     await grid.initialize();
     grid.setViewport(0, 0, 800, 320);
 
-    expect(grid.getRowCount()).toBe(5);
+    expect(grid.rows.getCount()).toBe(5);
     // Binding and slot sync must not read a single cell value.
     expect(reads()).toBe(0);
-    expect(grid.getRowData(0)).toBeUndefined();
-    expect(grid.getCellValue(0, 0)).toBe(1);
-    expect(grid.getCellValue(4, 2)).toBe(30);
-    expect(grid.getRowId(2)).toBe(3);
-    expect(grid.isWritable()).toBe(false);
+    expect(grid.rows.getData(0)).toBeUndefined();
+    expect(grid.cells.getValue(0, 0)).toBe(1);
+    expect(grid.cells.getValue(4, 2)).toBe(30);
+    expect(grid.rows.getId(2)).toBe(3);
+    expect(grid.rows.isWritable()).toBe(false);
   });
 
   it("sorts displayed order while leaving the source unchanged", async () => {
     const { source } = makeSource();
     const grid = new GridCore({ columns, dataSource: source, rowHeight: 32 });
     await grid.initialize();
-    await grid.setSort("score", "asc");
+    await grid.sortFilter.setSort("score", "asc");
 
-    const displayed = Array.from({ length: 5 }, (_, row) => grid.getCellValue(row, 2));
+    const displayed = Array.from({ length: 5 }, (_, row) => grid.cells.getValue(row, 2));
     expect(displayed).toEqual([10, 20, 30, 40, 50]);
     expect(scores).toEqual([50, 20, 40, 10, 30]);
   });
@@ -212,9 +212,9 @@ describe("GridCore with a columnar source", () => {
     const { source } = makeSource();
     const grid = new GridCore({ columns, dataSource: source, rowHeight: 32 });
     await grid.initialize();
-    await grid.setFilter("name", "a");
+    await grid.sortFilter.setFilter("name", "a");
 
-    const displayed = Array.from({ length: grid.getRowCount() }, (_, row) => grid.getCellValue(row, 1));
+    const displayed = Array.from({ length: grid.rows.getCount() }, (_, row) => grid.cells.getValue(row, 1));
     expect(displayed).toEqual(["Alice", "Charlie", "Diana"]);
   });
 
@@ -235,8 +235,8 @@ describe("GridCore with a columnar source", () => {
     await grid.initialize();
 
     // Direct setter.
-    grid.setCellValue(0, 1, "Mallory");
-    expect(grid.getCellValue(0, 1)).toBe("Alice");
+    grid.cells.setValue(0, 1, "Mallory");
+    expect(grid.cells.getValue(0, 1)).toBe("Alice");
     expect(rejected).toEqual([
       expect.objectContaining({
         row: 0,
@@ -249,8 +249,8 @@ describe("GridCore with a columnar source", () => {
 
     // Edit activation on an editable column of a read-only source.
     rejected.length = 0;
-    grid.startEdit(0, 1);
-    expect(grid.getEditState()).toBeNull();
+    grid.edit.start(0, 1);
+    expect(grid.edit.getState()).toBeNull();
     expect(rejected).toEqual([
       expect.objectContaining({ row: 0, col: 1, field: "name", operation: "edit" }),
     ]);
@@ -258,7 +258,7 @@ describe("GridCore with a columnar source", () => {
     // Paste into the active cell.
     rejected.length = 0;
     grid.selection.startSelection({ row: 0, col: 1 });
-    expect(grid.pasteClipboardText("Mallory")).toBe(false);
+    expect(grid.edit.paste("Mallory")).toBe(false);
     expect(rejected).toEqual([
       expect.objectContaining({ row: 0, col: 1, field: "name", operation: "paste" }),
     ]);
@@ -273,7 +273,7 @@ describe("GridCore with a columnar source", () => {
 
     // Source row move.
     rejected.length = 0;
-    grid.commitRowDrag(0, 2);
+    grid.rowDrag.commit(0, 2);
     expect(rejected).toEqual([
       expect.objectContaining({ row: 0, col: -1, operation: "row-move" }),
     ]);
@@ -296,8 +296,8 @@ describe("GridCore with a columnar source", () => {
     await grid.initialize();
 
     // Column 0 (id) is not editable, so the control is disabled: no event.
-    grid.startEdit(0, 0);
-    expect(grid.getEditState()).toBeNull();
+    grid.edit.start(0, 0);
+    expect(grid.edit.getState()).toBeNull();
     expect(rejected).toEqual([]);
   });
 
@@ -311,7 +311,7 @@ describe("GridCore with a columnar source", () => {
     await grid.refresh();
 
     expect(source.revision).toBe(1);
-    expect(grid.getCellValue(0, 1)).toBe("Alicia");
+    expect(grid.cells.getValue(0, 1)).toBe("Alicia");
   });
 });
 
@@ -375,8 +375,8 @@ describe("borrowed storage and observable reads", () => {
     // A revision refresh re-reads metadata, not the whole column.
     expect(nameStore.reads()).toBe(0);
 
-    expect(grid.getCellValue(1, 0)).toBe("Grace Hopper");
-    expect(grid.getCellValue(1, 1)).toBe(99);
+    expect(grid.cells.getValue(1, 0)).toBe("Grace Hopper");
+    expect(grid.cells.getValue(1, 1)).toBe(99);
     // Reading one cell reads exactly one borrowed value and one accessor value.
     expect(nameStore.reads()).toBe(1);
     expect(scoreReads).toBe(1);
@@ -419,8 +419,8 @@ describe("borrowed storage and observable reads", () => {
     source.setRevision(1);
     await grid.refresh();
 
-    expect(grid.getCellValue(0, 0)).toBe(30);
-    expect(grid.getCellValue(3, 0)).toBe(60);
+    expect(grid.cells.getValue(0, 0)).toBe(30);
+    expect(grid.cells.getValue(3, 0)).toBe(60);
     // The caller's view keeps its own buffer, offset and length.
     expect(view.buffer).toBe(backing.buffer);
     expect(view.byteOffset).toBe(16);
@@ -457,15 +457,15 @@ describe("borrowed storage and observable reads", () => {
 
     await grid.initialize();
     grid.setViewport(0, 0, 400, 128);
-    await grid.setSort("score", "asc");
-    await grid.setFilter("name", "a");
+    await grid.sortFilter.setSort("score", "asc");
+    await grid.sortFilter.setFilter("name", "a");
     await grid.refresh();
 
     // No implicit record materialization on bind, render, sort, filter, refresh.
     expect(getRecord).not.toHaveBeenCalled();
     // Binding never enumerates rows to build an eager ID table.
     expect(identityReads).toBe(0);
-    const id = grid.getRowId(0);
+    const id = grid.rows.getId(0);
     expect(typeof id).toBe("number");
     expect(identityReads).toBe(1);
   });
@@ -495,7 +495,7 @@ describe("columnar identity, revisions and field access", () => {
       rowHeight: 32,
     });
     await grid.initialize();
-    expect(grid.getRowCount()).toBe(2);
+    expect(grid.rows.getCount()).toBe(2);
 
     ids.push(3);
     rowNames.push("Linus");
@@ -503,8 +503,8 @@ describe("columnar identity, revisions and field access", () => {
     await grid.refresh();
 
     expect(source.revision).toBe(1);
-    expect(grid.getRowCount()).toBe(3);
-    expect(grid.getFieldValue(2, "name")).toBe("Linus");
+    expect(grid.rows.getCount()).toBe(3);
+    expect(grid.cells.getFieldValue(2, "name")).toBe("Linus");
   });
 
   it("adopts removed rows when a revision is revalidated", async () => {
@@ -518,13 +518,13 @@ describe("columnar identity, revisions and field access", () => {
       rowHeight: 32,
     });
     await grid.initialize();
-    expect(grid.getRowCount()).toBe(3);
+    expect(grid.rows.getCount()).toBe(3);
 
     rowNames.pop();
     source.setRevision(1);
     await grid.refresh();
 
-    expect(grid.getRowCount()).toBe(2);
+    expect(grid.rows.getCount()).toBe(2);
   });
 
   it("falls back to source-position identity preserved through sort", async () => {
@@ -541,15 +541,15 @@ describe("columnar identity, revisions and field access", () => {
     });
     await grid.initialize();
 
-    expect(grid.getRowId(0)).toBe(0);
-    expect(grid.getRowId(2)).toBe(2);
+    expect(grid.rows.getId(0)).toBe(0);
+    expect(grid.rows.getId(2)).toBe(2);
 
-    await grid.setSort("score", "asc");
+    await grid.sortFilter.setSort("score", "asc");
     // Source positions reordered by score: [1]=10, [2]=20, [0]=30.
     expect([
-      grid.getRowId(0),
-      grid.getRowId(1),
-      grid.getRowId(2),
+      grid.rows.getId(0),
+      grid.rows.getId(1),
+      grid.rows.getId(2),
     ]).toEqual([1, 2, 0]);
   });
 
@@ -568,12 +568,12 @@ describe("columnar identity, revisions and field access", () => {
       rowHeight: 32,
     });
     await grid.initialize();
-    await grid.setSort("score", "asc");
+    await grid.sortFilter.setSort("score", "asc");
 
     expect([
-      grid.getRowId(0),
-      grid.getRowId(1),
-      grid.getRowId(2),
+      grid.rows.getId(0),
+      grid.rows.getId(1),
+      grid.rows.getId(2),
     ]).toEqual([200, 300, 100]);
   });
 
@@ -592,8 +592,8 @@ describe("columnar identity, revisions and field access", () => {
     });
     await grid.initialize();
 
-    expect(grid.getFieldValue(1, "score")).toBe(20);
-    expect(grid.getFieldValue(1, "missing")).toBeNull();
+    expect(grid.cells.getFieldValue(1, "score")).toBe(20);
+    expect(grid.cells.getFieldValue(1, "missing")).toBeNull();
   });
 
   it("updates an explicit row count when a revision is adopted", async () => {
@@ -608,14 +608,14 @@ describe("columnar identity, revisions and field access", () => {
       rowHeight: 32,
     });
     await grid.initialize();
-    expect(grid.getRowCount()).toBe(2);
+    expect(grid.rows.getCount()).toBe(2);
 
     ids.push(3);
     source.setRevision(1, 3);
     await grid.refresh();
 
-    expect(grid.getRowCount()).toBe(3);
-    expect(grid.getCellValue(2, 0)).toBe(3);
+    expect(grid.rows.getCount()).toBe(3);
+    expect(grid.cells.getValue(2, 0)).toBe(3);
   });
 
   it("rejects an explicit row count that disagrees with a resident column", () => {
@@ -644,12 +644,12 @@ describe("columnar identity, revisions and field access", () => {
       rowHeight: 32,
     });
     await grid.initialize();
-    expect(grid.getRowCount()).toBe(2);
+    expect(grid.rows.getCount()).toBe(2);
 
     source.setRevision(1, 3);
     await grid.refresh();
 
-    expect(grid.getRowCount()).toBe(3);
-    expect(grid.getFieldValue(2, "value")).toBe(20);
+    expect(grid.rows.getCount()).toBe(3);
+    expect(grid.cells.getFieldValue(2, "value")).toBe(20);
   });
 });

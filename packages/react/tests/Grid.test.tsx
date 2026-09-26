@@ -5,7 +5,7 @@ import type { MutableRefObject } from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { Grid, type GridProps } from "../src/Grid";
 import { createClientDataSource } from "@gp-grid/core";
-import type { ColumnDefinition, CellRendererParams, HeaderRendererParams } from "@gp-grid/core";
+import type { ColumnDefinition, CellRendererParams, GridInstruction, HeaderRendererParams } from "@gp-grid/core";
 import type { GridRef } from "../src/types";
 
 // Test data
@@ -644,7 +644,7 @@ describe("Grid", () => {
       });
 
       await waitFor(() => {
-        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+        expect(gridRef.current?.core.columns.getState().find(({ columnId }) => columnId === "a")?.pinned)
           .toBe("end");
       });
       expect(idPin().getAttribute("aria-label")).toBe("Détacher");
@@ -653,7 +653,7 @@ describe("Grid", () => {
         fireEvent.click(idPin());
       });
       await waitFor(() => {
-        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+        expect(gridRef.current?.core.columns.getState().find(({ columnId }) => columnId === "a")?.pinned)
           .toBeNull();
       });
       expect(idPin().getAttribute("aria-label")).toBe("Épingler à gauche");
@@ -663,7 +663,7 @@ describe("Grid", () => {
         fireEvent.click(idPin());
       });
       await waitFor(() => {
-        expect(gridRef.current?.core.getColumnState().find(({ columnId }) => columnId === "a")?.pinned)
+        expect(gridRef.current?.core.columns.getState().find(({ columnId }) => columnId === "a")?.pinned)
           .toBe("start");
       });
       expect(idPin().getAttribute("aria-label")).toBe("Épingler à droite");
@@ -754,7 +754,7 @@ describe("Grid", () => {
       const input = document.querySelector<HTMLInputElement>(".gp-grid-edit-input")!;
       await act(async () => {
         fireEvent.change(input, { target: { value: "draft" } });
-        gridRef.current?.core?.setColumnPinned("name", "start");
+        gridRef.current?.core?.columns.setPinned("name", "start");
       });
 
       await waitFor(() => {
@@ -787,13 +787,53 @@ describe("Grid", () => {
         expect(document.querySelector('.gp-grid-cell[data-cell-region="end"]')).toBeTruthy();
       });
       await act(async () => {
-        gridRef.current?.core?.startPeek(0, 1);
+        gridRef.current?.core?.edit.startPeek(0, 1);
       });
 
       await waitFor(() => {
         const peek = document.querySelector<HTMLElement>(".gp-grid-cell-peek");
         expect(peek?.style.width).toBe("500px");
       });
+    });
+  });
+
+  describe("frozen rows", () => {
+    it("should keep the flat DOM and instruction stream by default", async () => {
+      stubViewport(400, 200);
+      const gridRef: MutableRefObject<GridRef<TestRow> | null> = { current: null };
+      const batches: GridInstruction[][] = [];
+
+      render(<Grid {...createDefaultProps()} gridRef={gridRef} />);
+
+      await waitFor(() => {
+        expect(document.querySelectorAll(".gp-grid-cell").length).toBeGreaterThan(0);
+      });
+
+      gridRef.current?.core.onBatchInstruction((batch) => batches.push([...batch]));
+
+      await act(async () => {
+        gridRef.current?.core.setViewport(0, 0, 400, 220);
+      });
+
+      const instructions = batches.flat();
+      expect(instructions.length).toBeGreaterThan(0);
+      expect(instructions.map((instruction) => instruction.type)).not.toContain("SET_ANNOUNCEMENT");
+      const regionLayouts = instructions.flatMap((instruction) =>
+        instruction.type === "SET_ROW_REGIONS" ? [instruction.regions] : [],
+      );
+      expect(regionLayouts.length).toBeGreaterThan(0);
+      for (const layout of regionLayouts) {
+        expect(layout.frozenCount).toBe(0);
+      }
+
+      expect(gridRef.current?.core.frozenRows.get()).toEqual({
+        requestedCount: 0,
+        effectiveCount: 0,
+        limit: null,
+      });
+      expect(document.querySelector(".gp-grid-frozen-rows")).toBeNull();
+      expect(document.querySelector(".gp-grid-frozen-pins")).toBeNull();
+      expect(document.querySelector('[role="status"]')).toBeNull();
     });
   });
 });

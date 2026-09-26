@@ -21,6 +21,9 @@ export const applyInstruction = <TData = unknown>(
         rowData: undefined,
         generation: instruction.generation,
         translateY: 0,
+        // The flat payload omits both; the reducer owns the defaults (C7).
+        region: instruction.region ?? "suffix",
+        loading: instruction.loading ?? false,
       });
       return null;
 
@@ -36,6 +39,8 @@ export const applyInstruction = <TData = unknown>(
           rowIndex: instruction.rowIndex,
           rowData: instruction.rowData as TData,
           generation: instruction.generation,
+          region: instruction.region ?? "suffix",
+          loading: instruction.loading ?? false,
         });
       }
       return null;
@@ -154,6 +159,15 @@ export const applyInstruction = <TData = unknown>(
         columnWindow: instruction.window,
         geometryRevision: instruction.revision,
       };
+
+    case "SET_ROW_REGIONS":
+      return {
+        rowRegions: instruction.regions,
+        geometryRevision: instruction.revision,
+      };
+
+    case "SET_ANNOUNCEMENT":
+      return { announcement: instruction.announcement };
 
     default:
       return null;

@@ -146,7 +146,7 @@ export class TouchScrollController<TData = unknown> {
     const carriedVelocity = this.fling.currentVelocity;
     this.stop();
     const ctx = this.resolveContext();
-    if (ctx === null || ctx.core.isScalingActive() === false) return;
+    if (ctx === null || ctx.core.viewport.isScaling() === false) return;
     const target = event.target as Element | null;
     if (target?.closest(OWN_GESTURE_SELECTOR)) return;
     const touch = (event as TouchEventLike).changedTouches[0];
@@ -229,7 +229,7 @@ export class TouchScrollController<TData = unknown> {
     this.pendingDragTarget = computeDragTarget(
       gesture,
       ctx.el,
-      ctx.core.getScrollRatio(),
+      ctx.core.viewport.getScrollRatio(),
       logicalDx,
       logicalDy,
     );
@@ -291,7 +291,7 @@ export class TouchScrollController<TData = unknown> {
     }
     if (gesture.engaged === false) return;
 
-    const maxFlingVelocity = ctx.core.getMaxFlingVelocity();
+    const maxFlingVelocity = ctx.core.viewport.getMaxFlingVelocity();
     const samples = pruneSamples(gesture.samples, event.timeStamp);
     const release = computeReleaseVelocity(samples, maxFlingVelocity);
     if (Math.abs(release) < MIN_FLING_VELOCITY) {

@@ -136,7 +136,7 @@ export class App {
 `"fit"` expands columns without an explicit pixel override so their total
 reaches the body scroll container's width; `"fixed"` keeps declared/overridden
 widths and scrolls horizontally. Changing the input switches the mode without
-recreating the core. `getColumnState()` reports `width` only while an explicit
+recreating the core. `columns.getState()` reports `width` only while an explicit
 override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
 
 `columnOverscan` (default `240` CSS px) is how far past each clip edge center
@@ -145,18 +145,35 @@ right and unpinned. `pinIcon` replaces its SVG; `labels.pinLeftColumn`,
 `labels.pinRightColumn` and `labels.unpinColumn` replace its accessible names.
 
 Pinning: set `pinned: "start"` or `"end"` on a definition, or call
-`core.setColumnPinned(columnId, "start" | "end" | null)` on the exposed core
+`core.columns.setPinned(columnId, "start" | "end" | null)` on the exposed core
 (`grid.core` via `@ViewChild`). A pin is a request — when the viewport cannot
 fit it the column renders in the scrolling center and is admitted again once
-there is room, so read `region` from `getColumnState()`. Only the admitted pins
+there is room, so read `region` from `columns.getState()`. Only the admitted pins
 plus a window of center columns are mounted. See
 [Column pinning](../../docs/features/column-pinning.md).
+
+Frozen rows: `freezeRows` is an optional input of type
+`{ count, maxCount?, minSuffixHeight? }` (defaults `count 0`, `maxCount 100`,
+`minSuffixHeight 64`) that keeps the displayed rows `[0, count)` fixed below
+the header. `count` is a request — the effective count is bounded by
+`maxCount`, by the viewport (a frozen prefix always leaves `minSuffixHeight`
+for the suffix) and, with a paginated source, by the page budget — so read
+`grid.core.frozenRows.get()` for `{ requestedCount, effectiveCount, limit }`.
+The `(onFrozenRowsChanged)` output fires whenever either reported field
+changes, not for the initial resolution and not per scroll. A reduced prefix is
+announced through `labels.frozenRowsLimited` in a visually hidden live region.
+Changing the input after mount applies the new count through
+`core.frozenRows.set` without recreating the component or resetting scroll; the
+runtime setter also corrects the scroll position so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[Frozen rows](../../docs/features/frozen-rows.md).
 
 | Output | Payload |
 | --- | --- |
 | `(onColumnResized)` | `{ columnId, width, viewIndex }` |
 | `(onColumnMoved)` | `{ columnId, fromViewIndex, toViewIndex }` |
 | `(onColumnPinned)` | `{ columnId, pinned }` (`null` when unpinned) |
+| `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
 | `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
 
@@ -175,7 +192,7 @@ plus a window of center columns are mounted. See
 
 The old payloads `{ colIndex, newWidth }`, `{ fromIndex, toIndex }` and `{ source, target }` became `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }` and `{ rowId, fromViewIndex, toViewIndex }`. There is no compatibility adapter.
 
-Reassigning `columns` reconciles the schema by column id (`colId ?? field`) without recreating the core: retained columns keep their user width/order/visibility, unrelated sort/filter/scroll survives, and removed columns drop their headers and state. A definition `width`/`hidden` change only applies when the column has no user override for that property; otherwise call `resetColumnState(["id"])` on the exposed core.
+Reassigning `columns` reconciles the schema by column id (`colId ?? field`) without recreating the core: retained columns keep their user width/order/visibility, unrelated sort/filter/scroll survives, and removed columns drop their headers and state. A definition `width`/`hidden` change only applies when the column has no user override for that property; otherwise call `columns.resetState(["id"])` on the exposed core.
 
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 

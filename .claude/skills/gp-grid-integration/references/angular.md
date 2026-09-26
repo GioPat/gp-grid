@@ -350,7 +350,7 @@ Important details:
 - **Templates are resolved at `AfterViewInit`** with `{ static: true }`. Build the columns array there, then call `cdr.detectChanges()` to push the new columns into the grid input. Building columns in the constructor or class fields gives `undefined` template refs.
 - **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, `params.columnId`, etc.); `params.columnId` is the normalized `colId ?? field` and `params.rowId` is present when the row has a stable id.
 - **For edit renderers**, call `event.stopPropagation()` in `keydown` so the grid's keyboard handler doesn't intercept arrow keys / Enter while the user types in the editor.
-- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by column id (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.setColumnState` whenever it changes.
+- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by column id (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.columns.setState` whenever it changes.
 
 `AngularColumnDefinition` accepts three forms for each renderer:
 
@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)`, `(onColumnPinned)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)` outputs:
 
 ```html
 <gp-grid
@@ -389,12 +389,14 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejecte
   [rowHeight]="36"
   [getRowId]="getRowId"
   [columnOverscan]="240"
+  [freezeRows]="freezeRows"
   (onCellValueChanged)="onCellValueChanged($event)"
   (onWriteRejected)="onWriteRejected($event)"
   (onRowDragEnd)="onRowDragEnd($event)"
   (onColumnResized)="onColumnResized($event)"
   (onColumnMoved)="onColumnMoved($event)"
   (onColumnPinned)="onColumnPinned($event)"
+  (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
 />
 ```
 
@@ -405,18 +407,29 @@ Output payloads:
 - `onRowDragEnd: { rowId: RowId; fromViewIndex: number; toViewIndex: number }`
 - `onColumnResized: { columnId: string; width: number; viewIndex: number }`
 - `onColumnMoved: { columnId: string; fromViewIndex: number; toViewIndex: number }`
-- `onColumnPinned: { columnId: string; pinned: "start" | "end" | null }` — fired by `setColumnPinned`, the header toggle or a cross-region drag
+- `onColumnPinned: { columnId: string; pinned: "start" | "end" | null }` — fired by `columns.setPinned`, the header toggle or a cross-region drag
+- `onFrozenRowsChanged: FrozenRowsState` — `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution
 
 `pinned: "start"` / `"end"` on a definition pins it against that edge; the
 controlled `[columnState]` form is `{ columnId, pinned }`. At runtime call
-`this.grid.core?.setColumnPinned(id, pin)`. A pin that does not fit the
+`this.grid.core?.columns.setPinned(id, pin)`. A pin that does not fit the
 viewport renders in the scrolling center until it is admitted, so persist the
-request but read the effective `region` from `getColumnState()`.
+request but read the effective `region` from `columns.getState()`.
 `[columnOverscan]` (default `240` px) is how far past each clip edge center
 columns stay mounted; an open editor keeps its column mounted regardless. The
 default pin action cycles through physical left, physical right and unpinned;
 its labels are `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. See
 [docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+
+Frozen rows: `[freezeRows]="{ count: 3 }"` keeps the first displayed rows below
+the header (defaults `maxCount 100`, `minSuffixHeight 64`). `count` is a request
+— `this.grid.core?.frozenRows.get()` answers
+`{ requestedCount, effectiveCount, limit }` where `limit` is
+`"maxCount" | "viewport" | "cache" | null`. A changed input is applied at
+runtime through `core.frozenRows.set`, so the component is not recreated and the
+scroll position is corrected to keep the visible suffix anchored; a reduced
+prefix is announced through `labels.frozenRowsLimited`. See
+[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
@@ -457,7 +470,7 @@ Get the `GridCore` through the component's public `get core()` accessor:
 ```ts
 @ViewChild(GpGridComponent) private grid?: GpGridComponent;
 
-this.grid?.core?.setSort("name", "asc");
+this.grid?.core?.sortFilter.setSort("name", "asc");
 ```
 
 For the common operations (sort, filter, edit), you'll usually drive them via `[columns]` / `[dataSource]` inputs and `output()` events instead of imperative calls.
@@ -497,6 +510,7 @@ Inputs:
 | `[columns]` | `AngularColumnDefinition[]` | required |
 | `[columnState]` | `ColumnStateUpdate[]` | `null` |
 | `[columnOverscan]` | `number` | `240` |
+| `[freezeRows]` | `FreezeRowsOptions \| undefined` | `undefined` |
 | `[rows]` | `unknown[]` | `[]` |
 | `[dataSource]` | `DataSource<unknown> \| null` | `null` |
 | `[getRowId]` | `((row: unknown) => RowId) \| null` | `null` |
@@ -528,6 +542,7 @@ Outputs:
 | `(onColumnResized)` | `{ columnId: string; width: number; viewIndex: number }` |
 | `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
 | `(onColumnPinned)` | `{ columnId: string; pinned: "start" \| "end" \| null }` |
+| `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
 
 ## Angular-specific gotchas
 

@@ -85,22 +85,22 @@ describe("column pinning follow-up review", () => {
     const columns = wideColumns();
     columns[90] = column("c90", { editable: false });
     const { grid } = await fixture(columns);
-    expect(grid.startEdit(0, 60)).toBe(true);
-    expect(grid.startEdit(0, 90)).toBe(false);
-    expect(grid.getEditState()).toMatchObject({ col: 60 });
+    expect(grid.edit.start(0, 60)).toBe(true);
+    expect(grid.edit.start(0, 90)).toBe(false);
+    expect(grid.edit.getState()).toMatchObject({ col: 60 });
     expect(ids(grid.geometry.getColumnWindow().center)).toContain("c60");
   });
 
   it("publishes edit and retention in one atomic batch", async () => {
     const { grid, batches } = await fixture();
-    grid.startEdit(0, 60);
+    grid.edit.start(0, 60);
     const editBatch = batches.find((batch) => batch.some((i) => i.type === "START_EDIT"));
     expect(editBatch?.some((i) => i.type === "SET_COLUMN_WINDOW")).toBe(true);
   });
 
   it("merges retained edits in displayed order", async () => {
     const { grid } = await fixture();
-    grid.startEdit(0, 0);
+    grid.edit.start(0, 0);
     grid.setViewport(0, 2000, 200, 320);
     expect(ids(grid.geometry.getColumnWindow().center)).toEqual(["c0", "c20", "c21"]);
   });

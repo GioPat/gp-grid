@@ -17,6 +17,7 @@ import type {
   ColumnLayoutMode,
   ColumnStateUpdate,
   DataSource,
+  FreezeRowsOptions,
   HighlightingOptions,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
@@ -88,7 +89,7 @@ export class GpGridBindings<TData = unknown> {
   attach(core: GridCore<TData>): void {
     this.coreRef = core;
     this.touchScroll.syncCore();
-    this.deps.vm.columns.set(core.getColumns());
+    this.deps.vm.columns.set(core.columns.get());
     this.unsubscribe = core.onBatchInstruction((instructions) => {
       const vm = this.deps.vm;
       // The applier is copy-on-write: a map the batch did not touch comes back
@@ -155,12 +156,12 @@ export class GpGridBindings<TData = unknown> {
   syncColumns(cols: ColumnDefinition[]): void {
     const core = this.coreRef;
     if (core === null) return;
-    if (this.dataSourceOwner.syncColumns(cols)) core.setColumns(cols);
+    if (this.dataSourceOwner.syncColumns(cols)) core.columns.set(cols);
   }
 
   /** Apply a controlled column-state input; explicit commands win. */
   syncColumnState(updates: ColumnStateUpdate[]): void {
-    this.coreRef?.setColumnState(updates);
+    this.coreRef?.columns.setState(updates);
   }
 
   syncRows(rows: TData[], dataSource: DataSource<TData> | null): void {
@@ -189,7 +190,12 @@ export class GpGridBindings<TData = unknown> {
 
   /** Switch the displayed-width policy without recreating the core. */
   syncColumnLayout(mode: ColumnLayoutMode): void {
-    this.coreRef?.setColumnLayout(mode);
+    this.coreRef?.columns.setLayout(mode);
+  }
+
+  /** Apply a runtime freeze configuration without recreating the core. */
+  syncFreezeRows(config: FreezeRowsOptions | undefined): void {
+    this.coreRef?.frozenRows.set(config);
   }
 
   scrollToCell(cell: { row: number; col: number }): void {

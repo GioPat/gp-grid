@@ -23,6 +23,13 @@ import { createColumnLayoutResolver } from "./column-layout";
 import { createColumnGeometry } from "./column-geometry";
 import { createRowGeometry } from "./row-geometry";
 import type { RowGeometry, RowGeometryDeps, RowScrollMapping } from "./row-geometry";
+import type { FrozenRowsInput, RowRegionLayout } from "./row-regions";
+import {
+  getRowClip as resolveRowClip,
+  hitTestRowRegion,
+  resolveRowRegionScrollTop,
+  type RowRegion,
+} from "./row-regions-mapping";
 import { resolveScrollTarget } from "./scroll-target";
 import { createColumnWindowResolver } from "./column-window";
 import {
@@ -34,6 +41,14 @@ import {
 
 export type { GridViewportSample } from "./viewport-sample";
 
+/** Everything `FrozenRowsInput` needs except the axis and the viewport. */
+export interface FrozenRowsRequest {
+  requestedCount: number;
+  maxCount?: number;
+  minSuffixHeight?: number;
+  admitsPrefix?: (count: number) => boolean;
+}
+
 export interface GridGeometryDeps {
   getRowCount(): number;
   getRowHeight(): number;
@@ -44,6 +59,8 @@ export interface GridGeometryDeps {
   isWidthOverridden(layoutIndex: number): boolean;
   getViewport(): GridViewportSample;
   getScrollMapping(): RowScrollMapping;
+  /** C2 request; absent or `null` resolves the zero-count layout. */
+  getFrozenRowsRequest?: () => FrozenRowsRequest | null;
   createRowGeometry?: (deps: RowGeometryDeps) => RowGeometry;
 }
 
@@ -61,6 +78,8 @@ export interface GridGeometryService extends GridGeometry {
   setColumnLayoutMode(mode: ColumnLayoutMode): void;
   getColumnLayoutMode(): ColumnLayoutMode;
   getRowGeometry(): RowGeometry;
+  /** Resolve the C3 region layout against the current axis and viewport. */
+  syncRowRegions(): RowRegionLayout;
   /** Columns kept mounted outside the window, keyed and bounded. */
   retainColumns(key: string, columnIds: readonly string[]): void;
   releaseColumns(key: string): void;
@@ -103,11 +122,25 @@ export const createGridGeometry = (
   const scrollTopOf = (): number => clampTop(viewportOf(deps).scrollTop);
 
   const buildRowGeometry = deps.createRowGeometry ?? createRowGeometry;
-  const rowGeometry = buildRowGeometry({
+  // The region callbacks read `rowGeometry` lazily: nothing resolves a region
+  // layout before the service exists, and the zero request short-circuits.
+  const rowGeometry: RowGeometry = buildRowGeometry({
     getRowCount: () => deps.getRowCount(),
     getRowHeight: () => deps.getRowHeight(),
     getViewportHeight: () => viewportOf(deps).height,
+    getSuffixViewportHeight: () => rowGeometry.getRegionLayout().suffixViewportHeight,
     getOverscan: () => deps.getOverscan(),
+    resolveRegions: (): FrozenRowsInput | null => {
+      const request = deps.getFrozenRowsRequest?.() ?? null;
+      if (request === null) return null;
+      const sample = viewportOf(deps);
+      return {
+        ...request,
+        axis: rowGeometry.getAxis(),
+        viewportHeight: sample.height,
+        viewportMeasured: sample.measured ?? true,
+      };
+    },
     mapping: {
       getDomScrollTop: scrollTopOf,
       toDomScrollTop: (logical) => deps.getScrollMapping().toDomScrollTop(logical),
@@ -174,9 +207,13 @@ export const createGridGeometry = (
   const displayedOf = (layoutIndex: number): ResolvedColumn | undefined =>
     resolveColumnGeometry().byLayoutIndex.get(layoutIndex);
 
+  /** Region a row renders in; frozen rows keep their content offset (C5). */
+  const rowRegionOf = (viewIndex: number): RowRegion =>
+    viewIndex < rowGeometry.getRegionLayout().frozenCount ? "frozen" : "suffix";
+
   const rowTop = (viewIndex: number, space: GeometrySpace): number => {
-    if (space === "rows") return rowGeometry.getMapper().rowPosition(viewIndex);
-    if (space === "viewport") return rowGeometry.getRowViewportTop(viewIndex);
+    if (space === "rows") return rowGeometry.getRowRegionPosition(viewIndex);
+    if (space === "viewport") return rowGeometry.getRowViewportTop(viewIndex, rowRegionOf(viewIndex));
     return rowGeometry.getRowOffset(viewIndex);
   };
 
@@ -219,7 +256,10 @@ export const createGridGeometry = (
     const column = displayedOf(layoutIndex);
     if (column === undefined || isRowIndex(viewIndex, axis.count) === false) return {};
     const scrollLeft = from?.scrollLeft ?? scrollLeftOf();
-    return resolveScrollTarget({
+    const scrollTop = from?.scrollTop ?? scrollTopOf();
+    // Horizontal rules are region-independent; the vertical target resolves
+    // against the row's own clip, so a frozen row never moves (C6).
+    const horizontal = resolveScrollTarget({
       axis,
       mapper: rowGeometry.getMapper(),
       layout,
@@ -230,11 +270,19 @@ export const createGridGeometry = (
       viewIndex,
       rowHeight: deps.getRowHeight(),
       viewport: viewportOf(deps),
-      from: {
-        scrollTop: from?.scrollTop ?? scrollTopOf(),
-        scrollLeft,
-      },
+      from: { scrollTop, scrollLeft },
     });
+    const target: { scrollTop?: number; scrollLeft?: number } = {};
+    const vertical = resolveRowRegionScrollTop(
+      {
+        ...rowGeometry.getRegionInput(scrollTop),
+        rowHeight: deps.getRowHeight(),
+      },
+      viewIndex,
+    );
+    if (vertical !== undefined) target.scrollTop = vertical;
+    if (horizontal.scrollLeft !== undefined) target.scrollLeft = horizontal.scrollLeft;
+    return target;
   };
 
   const service: GridGeometryService = {
@@ -244,6 +292,7 @@ export const createGridGeometry = (
     refresh: () => {
       rowGeometry.syncAxis();
       syncDimensions();
+      service.syncRowRegions();
       refreshWindows();
       return resolveLayout();
     },
@@ -277,6 +326,29 @@ export const createGridGeometry = (
       return rowGeometry.getVisibleWindow();
     },
     getRowGeometry: () => rowGeometry,
+    syncRowRegions: () => {
+      const previous = rowGeometry.getRegionLayout();
+      const next = rowGeometry.syncRegionLayout();
+      // A region move is a committed geometry dependency (C9): clips, hits
+      // and slots all read it, so it advances the batch revision.
+      if (next !== previous) bumpRevision();
+      return next;
+    },
+    getRowRegions: () => rowGeometry.getRegionLayout(),
+    getRowClip: (viewIndex) => resolveRowClip(rowGeometry.getRegionInput(), viewIndex),
+    getRowScrollRange: () => rowGeometry.getRowScrollRange(),
+    hasVerticalScrollRange: () => rowGeometry.hasVerticalScrollRange(),
+    getRowScrollEdges: (scrollTop, containerHeight) => {
+      const bodyHeight = Number.isFinite(containerHeight) && containerHeight > 0
+        ? containerHeight
+        : 0;
+      const frozenExtent = rowGeometry.getRegionLayout().frozenExtent;
+      const maxTop = maxScrollTop(bodyHeight);
+      return {
+        region: { frozenExtent, suffixViewportHeight: Math.max(0, bodyHeight - frozenExtent) },
+        limits: { scrollTop: clampScroll(scrollTop, maxTop), maxScrollTop: maxTop },
+      };
+    },
     retainColumns: (key, columnIds) => {
       windowResolver.retain(key, columnIds);
     },
@@ -315,23 +387,22 @@ export const createGridGeometry = (
         ? windowResolver.clampScrollLeft(point.scrollLeft!)
         : scrollLeftOf();
       rowGeometry.syncAxis();
-      const axis = rowGeometry.getAxis();
       const geometry = resolveColumnGeometry();
 
-      // The point arrives in DOM/viewport px; the axis is addressed in
-      // logical content px, so the sample is mapped before the lookup.
-      const logicalScrollTop = rowGeometry.getMapper().toLogicalScrollTop(domScrollTop);
-      const row = axis.count === 0 ? -1 : axis.indexAt(point.y + logicalScrollTop);
+      // C5: the frozen band is resolved before scroll is applied, and a point
+      // outside the body keeps the axis sentinel without a region.
+      const rowHit = hitTestRowRegion(rowGeometry.getRegionInput(domScrollTop), point.y);
       const displayIndex = geometry.columns.length === 0
         ? -1
         : geometry.displayedAt(point.x, scrollLeft);
       const column = geometry.columns[displayIndex];
       return {
-        row: clampRowSentinel(row, axis.count),
+        row: rowHit.rowIndex,
         displayIndex,
         col: column?.layoutIndex ?? -1,
         columnId: column?.columnId,
         region: column?.region ?? null,
+        rowRegion: rowHit.rowRegion,
       };
     },
     getScrollTarget,
@@ -345,9 +416,4 @@ export const createGridGeometry = (
     },
   };
   return service;
-};
-
-const clampRowSentinel = (row: number, count: number): number => {
-  if (count === 0) return -1;
-  return Math.min(Math.max(row, -1), count);
 };
