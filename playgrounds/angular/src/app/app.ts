@@ -74,12 +74,26 @@ export class App implements AfterViewInit {
   @ViewChild('ageBadge', { static: true }) ageBadge!: CellRendererTemplate;
   @ViewChild('cityHeader', { static: true }) cityHeader!: HeaderRendererTemplate;
   @ViewChild('cityEditor', { static: true }) cityEditor!: EditRendererTemplate;
+  @ViewChild(GpGridComponent) gridComponent?: GpGridComponent;
 
   protected readonly cityOptions = CITIES;
 
   protected readonly grid = injectGridData<Person>();
 
   protected rowIdToUpdate = signal(1);
+
+  /** Row heights (PRD 006): identity commands through the exposed core. */
+  protected tallRows(): void {
+    this.gridComponent?.core?.rowHeights.set([
+      { rowId: 1, height: 48 },
+      { rowId: 2, height: 64 },
+      { rowId: 3, height: 96 },
+    ]);
+  }
+
+  protected resetRowHeights(): void {
+    this.gridComponent?.core?.rowHeights.reset();
+  }
 
   protected readonly freezeCounts = [0, 1, 3, 5] as const;
 

@@ -79,6 +79,13 @@
     <span>{{ frozenStatus() }}</span>
   </div>
 
+  <!-- Row Heights (PRD 006): heights by identity, no remount -->
+  <div class="row-update-controls">
+    <span>Row heights:</span>
+    <button type="button" class="update-btn" (click)="tallRows()">Tall rows</button>
+    <button type="button" class="update-btn" (click)="resetRowHeights()">Reset heights</button>
+  </div>
+
   <div class="row-update-controls">
     <label>
       Row ID:

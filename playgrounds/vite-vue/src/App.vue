@@ -5,6 +5,7 @@ import {
     useGridData,
     type ColumnDefinition,
     type HighlightingOptions,
+    type GridCore,
     type GridLabels,
     type FrozenRowsState,
 } from "@gp-grid/vue";
@@ -19,6 +20,21 @@ const highlightMode = ref<HighlightMode>("row");
 const freezeCounts: FreezeCount[] = [0, 1, 3, 5];
 const freezeCount = ref<FreezeCount>(0);
 const frozenStatus = ref("0 of 0 rows frozen");
+const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
+const coreOf = (): GridCore<unknown> | undefined =>
+    (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+
+/** Row heights (PRD 006): identity commands through the exposed core. */
+const tallRows = (): void => {
+    coreOf()?.rowHeights.set([
+        { rowId: 1, height: 48 },
+        { rowId: 2, height: 64 },
+        { rowId: 3, height: 96 },
+    ]);
+};
+const resetRowHeights = (): void => {
+    coreOf()?.rowHeights.reset();
+};
 
 // Types
 interface Person {
@@ -252,8 +268,16 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         <span class="mode-label">{{ frozenStatus }}</span>
     </div>
 
+    <!-- Row Heights (PRD 006): heights by identity, no remount -->
+    <div class="mode-switcher">
+        <span class="mode-label">Row heights:</span>
+        <button class="mode-btn" @click="tallRows">Tall rows</button>
+        <button class="mode-btn" @click="resetRowHeights">Reset heights</button>
+    </div>
+
     <div class="grid-container">
         <GpGrid
+            ref="gridRef"
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
             :columns="columns"
@@ -262,6 +286,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :on-frozen-rows-changed="handleFrozenRowsChanged"
             :overscan="12"
             :data-source="dataSource"
+            :get-row-id="(row: unknown) => (row as Person).id"
             :row-height="36"
             :header-height="40"
             :dark-mode="true"
