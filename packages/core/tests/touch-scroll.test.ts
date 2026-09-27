@@ -9,6 +9,7 @@ interface MockCoreOptions {
   isDragging?: boolean;
   maxFlingVelocity?: number;
   rowHeight?: number;
+  topOverride?: number | null;
 }
 
 type MockBatchListener = (instructions: { type: string }[]) => void;
@@ -20,15 +21,19 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     isDragging: options.isDragging ?? false,
     maxFlingVelocity: options.maxFlingVelocity ?? MAX_FLING_VELOCITY,
     rowHeight: options.rowHeight ?? 32,
+    topOverride: options.topOverride ?? null,
   };
   let batchListener: MockBatchListener | null = null;
-  const setTopOverride = vi.fn();
+  const setTopOverride = vi.fn((value: number | null) => {
+    state.topOverride = value;
+  });
   const core = {
     viewport: {
       isScaling: () => state.scalingActive,
       getScrollRatio: () => state.scrollRatio,
       getMaxFlingVelocity: () => state.maxFlingVelocity,
       getRowHeight: () => state.rowHeight,
+      getTopOverride: () => state.topOverride,
       setTopOverride,
     },
     setTopOverride,
@@ -330,6 +335,39 @@ describe("TouchScrollController", () => {
     expect(el.scrollTop).toBeGreaterThan(afterRelease);
   });
 
+  it("adopts a scroll correction made while the fling is in flight", () => {
+    const { core, el } = setup({ scrollRatio: 1 });
+    fastSwipe(el);
+    raf.pump(116);
+    const before = el.scrollTop;
+
+    // A row size change corrects the top through the viewport override (D5).
+    getState(core).topOverride = before + 1000;
+    raf.pump(132);
+
+    expect(el.scrollTop).toBeGreaterThan(before + 900);
+
+    // The fling continues from the corrected top instead of snapping back.
+    const corrected = el.scrollTop;
+    raf.pump(148);
+    expect(el.scrollTop).toBeGreaterThan(corrected);
+  });
+
+  it("maps the logical position through a ratio that changed mid-fling", () => {
+    const { core, el } = setup({ scrollRatio: 0.5 });
+    fastSwipe(el);
+    raf.pump(116);
+    const before = el.scrollTop;
+
+    // Scroll scaling re-tuned mid-fling: the same logical position now costs
+    // 2 DOM px per logical px instead of 0.5, so the next tick jumps ~4x.
+    getState(core).scrollRatio = 2;
+    raf.pump(132);
+
+    expect(el.scrollTop).toBeGreaterThanOrEqual(before * 3.9);
+    expect(el.scrollTop).toBeLessThanOrEqual(before * 5.1);
+  });
+
   it("does not fling on a slow release", () => {
     const { el } = setup();
     el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 0));
@@ -540,6 +578,24 @@ describe("TouchScrollController", () => {
     expect(mocks.setViewport.mock.calls.length).toBeLessThanOrEqual(3);
     expect(mocks.setViewport.mock.calls.length).toBeGreaterThan(0);
     expect(el.scrollTop).toBeGreaterThan(before);
+  });
+
+  it("keeps a throttled fling moving forward between pipeline runs", () => {
+    const { el } = setup({ scrollRatio: 0.5, rowHeight: 2 });
+    fastSwipe(el);
+
+    const tops: number[] = [el.scrollTop];
+    let now = 100;
+    for (let i = 0; i < 6; i++) {
+      now += 40;
+      raf.pump(now);
+      tops.push(el.scrollTop);
+    }
+
+    // The override left behind by the last pipeline run is not a correction.
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i]).toBeGreaterThan(tops[i - 1]!);
+    }
   });
 
   it("keeps rendering every frame at low row flux even when frames are heavy", () => {

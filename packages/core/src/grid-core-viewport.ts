@@ -19,6 +19,12 @@ export interface GridViewportApi {
   isScaling(): boolean;
   /** DOM px per logical px while scaling. */
   getScrollRatio(): number;
+  /**
+   * The DOM top overriding native scroll, or `null` when native positions own
+   * the viewport. A fling re-reads it to notice a correction another actor
+   * made while it was in flight.
+   */
+  getTopOverride(): number | null;
   /** Maximum accumulated touch-fling velocity, logical px/ms. */
   getMaxFlingVelocity(): number;
   getRowHeight(): number;
@@ -49,6 +55,10 @@ export class ViewportController<TData> implements GridViewportApi {
 
   isScaling(): boolean {
     return this.deps.scrollVirtualization.isScalingActive();
+  }
+
+  getTopOverride(): number | null {
+    return this.topOverride;
   }
 
   getScrollRatio(): number {
