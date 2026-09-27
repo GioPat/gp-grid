@@ -25,6 +25,7 @@ import {
   createNarrowColumns,
   createWideColumns,
   createWideSource,
+  type RequestedRange,
 } from './conformance-geometry';
 import {
   createFrozenFixture,
@@ -35,6 +36,12 @@ import {
   NO_ROW_LOADING,
   type FrozenMode,
 } from './conformance-frozen';
+import {
+  createRowHeightsFixture,
+  ROW_HEIGHTS_HEADER_HEIGHT,
+  ROW_HEIGHTS_ROW_HEIGHT,
+  type RowHeightsMode,
+} from './conformance-row-heights';
 
 interface ConformanceRow {
   id: number;
@@ -184,6 +191,13 @@ const createColumnarFixture = () => {
         <button data-testid="freeze-through-5" (click)="freezeThrough5()">Freeze through 5</button>
         <button data-testid="unfreeze-in-place" (click)="unfreezeInPlace()">Unfreeze in place</button>
         <button data-testid="toggle-host-height" (click)="toggleHostHeight()">Toggle host height</button>
+        <button data-testid="use-row-heights" (click)="useRowHeights()">Row heights</button>
+        <button data-testid="use-row-heights-large" (click)="useRowHeightsLarge()">Heights large</button>
+        <button data-testid="use-row-heights-paged" (click)="useRowHeightsPaged()">Heights paged</button>
+        <button data-testid="set-row-heights" (click)="setRowHeights()">Set heights</button>
+        <button data-testid="grow-above-viewport" (click)="growAboveViewport()">Grow above</button>
+        <button data-testid="grow-frozen-row" (click)="growFrozenRow()">Grow frozen row</button>
+        <button data-testid="reset-row-heights" (click)="resetRowHeights()">Reset heights</button>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="hostHeight()">
@@ -212,7 +226,7 @@ const createColumnarFixture = () => {
               [columns]="activeColumns()"
               [columnState]="frozenColumnState()"
               [columnLayout]="columnLayout()"
-              [rows]="rows()"
+              [rows]="activeRowData()"
               [rowHeight]="frozenRowHeight()"
               [headerHeight]="frozenHeaderHeight()"
               [freezeRows]="freezeRowsBinding()"
@@ -243,6 +257,9 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   protected readonly frozen = createFrozenFixture();
   protected readonly frozenMode = signal<FrozenMode>('off');
   protected readonly frozenActive = computed(() => this.frozenMode() !== 'off');
+  protected readonly rowHeights = createRowHeightsFixture();
+  protected readonly rowHeightsMode = signal<RowHeightsMode>('off');
+  protected readonly rowHeightsActive = computed(() => this.rowHeightsMode() !== 'off');
   protected readonly mode = signal<'object' | 'columnar'>('object');
   protected readonly revision = signal(0);
   protected readonly mounted = signal(true);
@@ -267,10 +284,15 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   });
   protected readonly getRowId = (row: unknown): number => (row as ConformanceRow).id;
 
-  /** Arming remounts the grid, so the reader follows the recreated core. */
+  /** Arming remounts the grid, so the readers follow the recreated core. */
   constructor() {
     effect(() => {
-      this.frozen.track(this.grid()?.core ?? null);
+      const core = this.grid()?.core ?? null;
+      this.frozen.track(core);
+      // Arm presets run against the core the arm just created (D1, D2).
+      if (core !== null && this.rowHeightsActive()) {
+        this.rowHeights.applyPreset(core, this.rowHeightsMode());
+      }
     });
   }
 
@@ -315,6 +337,9 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
       useWideColumns: (count: number): void => this.useWideColumns(count),
       setFreezeCount: (count: number): void => this.setFreezeCount(count),
       ...createGeometryHooks(() => (this.coreOf() ?? null) as never, this.frozen),
+      // Each arm records its own requests; the frozen reader is the other arm's.
+      requestedRanges: (): RequestedRange[] =>
+        this.rowHeightsActive() ? this.rowHeights.requestedRanges() : this.frozen.requestedRanges(),
     };
   }
 
@@ -339,6 +364,15 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   /** Arming swaps the data source and columns, so it remounts the grid. */
   private armFrozenRows(next: FrozenMode): void {
     this.frozenMode.set(next);
+    this.rowHeightsMode.set('off');
+    this.mode.set(next === 'object' || next === 'off' ? 'object' : 'columnar');
+    this.remount();
+  }
+
+  /** The row-height arms remount the same way, and clear the frozen arm. */
+  private armRowHeights(next: RowHeightsMode): void {
+    this.rowHeightsMode.set(next);
+    this.frozenMode.set('off');
     this.mode.set(next === 'object' || next === 'off' ? 'object' : 'columnar');
     this.remount();
   }
@@ -361,6 +395,18 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
 
   protected useFrozenObject(): void {
     this.armFrozenRows('object');
+  }
+
+  protected useRowHeights(): void {
+    this.armRowHeights('object');
+  }
+
+  protected useRowHeightsLarge(): void {
+    this.armRowHeights('large');
+  }
+
+  protected useRowHeightsPaged(): void {
+    this.armRowHeights('paged');
   }
 
   // In-place controls: the option stays reactive, so these never touch the
@@ -387,16 +433,46 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
       current === FROZEN_HOST_HEIGHT ? FROZEN_HOST_NARROW_HEIGHT : FROZEN_HOST_HEIGHT);
   }
 
-  /** A frozen arm replaces the data source; otherwise the mode picks it. */
+  /** In-place height controls: the arm stays mounted (AC-006-01/03/04). */
+  protected setRowHeights(): void {
+    const core = this.coreOf();
+    if (core) this.rowHeights.setControlHeights(core);
+  }
+
+  protected growAboveViewport(): void {
+    const core = this.coreOf();
+    if (core) this.rowHeights.growAboveViewport(core);
+  }
+
+  protected growFrozenRow(): void {
+    const core = this.coreOf();
+    if (core) this.rowHeights.growFrozenRow(core);
+  }
+
+  protected resetRowHeights(): void {
+    const core = this.coreOf();
+    if (core) this.rowHeights.resetHeights(core);
+  }
+
+  /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.rowHeightsActive()) return this.rowHeights.sourceFor(this.rowHeightsMode()) ?? this.columnarSource;
     if (this.frozenActive()) return this.frozen.sourceFor(this.frozenMode()) ?? this.columnarSource;
     return this.largeColumnarSource() ?? this.columnarSource;
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    const heightsColumns = this.rowHeightsActive() ? this.rowHeights.columnsFor(this.rowHeightsMode()) : undefined;
+    if (heightsColumns !== undefined) return heightsColumns;
     const frozenColumns = this.frozenActive() ? this.frozen.columnsFor(this.frozenMode()) : undefined;
     if (frozenColumns !== undefined) return frozenColumns;
     return this.mode() === 'columnar' ? this.columnarColumns() : this.columns();
+  }
+
+  /** The writable arms keep the caller's object rows; every other one is sourced. */
+  protected activeRowData(): ConformanceRow[] {
+    const heightsRows = this.rowHeightsActive() ? this.rowHeights.rowDataFor(this.rowHeightsMode()) : undefined;
+    return heightsRows ?? this.rows();
   }
 
   protected activeFreezeRows(): FreezeRowsOptions | undefined {
@@ -411,7 +487,8 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   }
 
   protected activeRowLoading(): RowLoadingOptions {
-    return this.frozen.rowLoadingFor(this.frozenMode()) ?? NO_ROW_LOADING;
+    const heightsLoading = this.rowHeightsActive() ? this.rowHeights.rowLoadingFor(this.rowHeightsMode()) : undefined;
+    return heightsLoading ?? this.frozen.rowLoadingFor(this.frozenMode()) ?? NO_ROW_LOADING;
   }
 
   protected frozenColumnState(): ColumnStateUpdate[] {
@@ -419,11 +496,15 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   }
 
   protected frozenRowHeight(): number {
-    return this.frozenActive() ? FROZEN_ROW_HEIGHT : 32;
+    if (this.frozenActive()) return FROZEN_ROW_HEIGHT;
+    if (this.rowHeightsActive()) return ROW_HEIGHTS_ROW_HEIGHT;
+    return 32;
   }
 
   protected frozenHeaderHeight(): number {
-    return this.frozenActive() ? FROZEN_HEADER_HEIGHT : 36;
+    if (this.frozenActive()) return FROZEN_HEADER_HEIGHT;
+    if (this.rowHeightsActive()) return ROW_HEIGHTS_HEADER_HEIGHT;
+    return 36;
   }
 
   /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
@@ -473,6 +554,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   protected reset(): void {
     this.mounted.set(false);
     this.frozenMode.set('off');
+    this.rowHeightsMode.set('off');
     this.rows.set(createRows());
     this.columns.set(createColumns());
     this.columnarColumns.set(createColumnarColumns());

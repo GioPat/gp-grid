@@ -17,8 +17,10 @@ import type {
   GridIcon,
   GridInstruction,
   GridLabelOverrides,
+  GridRowHeightsApi,
   HeaderRendererParams,
   RowDragEndEvent,
+  RowHeightUpdate,
   RowRegionLayout,
   ViewRow,
 } from "@gp-grid/core";
@@ -102,6 +104,18 @@ const rowRegions: RowRegionLayout = core.geometry.getRowRegions();
 void core.frozenRows.set({ count: 3 });
 void core.frozenRows.set(undefined);
 void core.frozenRows.freezeThrough(2);
+
+// Row-height commands by identity (PRD 006) and the axis input they publish.
+const rowHeightUpdate: RowHeightUpdate = { rowId: 1, height: 64 };
+void core.rowHeights.set([rowHeightUpdate]);
+const rowHeightCommands: GridRowHeightsApi = core.rowHeights;
+void core.rowHeights.set([{ rowId: "row-2", height: 96 }]);
+void core.rowHeights.reset([1]);
+void core.rowHeights.reset();
+const storedHeights: readonly RowHeightUpdate[] = core.rowHeights.getOverrides();
+const tallest: number = storedHeights[0]?.height ?? 0;
+void rowHeightCommands;
+void tallest;
 const fillHandle: FillHandlePosition | null = null;
 const headerPinControl = (params: HeaderRendererParams): void => {
   let nextPin: ColumnPin | null = null;

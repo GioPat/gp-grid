@@ -138,6 +138,42 @@ await check("core frozen rows resolve zero on the server", async () => {
   return `effective 0, suffix ${regions.suffixViewportHeight}px, content ${size.width}x${size.height}`;
 });
 
+await check("core row heights resolve after the first load", async () => {
+  if (typeof window !== "undefined" || typeof document !== "undefined") {
+    throw new Error("The core check must run without browser globals.");
+  }
+  const core = new coreArtifact.GridCore({
+    columns,
+    dataSource: coreArtifact.createClientDataSource(rows),
+    rowHeight: 32,
+    getRowId: (row) => row.id,
+  });
+  // A height set before the first load lists, and its row is not placed yet.
+  core.rowHeights.set([{ rowId: 1, height: 64 }]);
+  const listed = core.rowHeights.getOverrides();
+  if (listed.length !== 1 || listed[0].height !== 64) {
+    throw new Error(`Unlisted override: ${JSON.stringify(listed)}`);
+  }
+  if (core.geometry.getRowBounds(0, "content") !== undefined) {
+    throw new Error("A row resolved before its data arrived.");
+  }
+  const before = core.geometry.getContentSize();
+  if (Number.isFinite(before.width) === false || Number.isFinite(before.height) === false) {
+    throw new Error(`Non-finite content size: ${JSON.stringify(before)}`);
+  }
+
+  await core.initialize();
+
+  const bounds = core.geometry.getRowBounds(0, "content");
+  if (bounds === undefined) throw new Error("The loaded row has no content bounds.");
+  if (bounds.end - bounds.start !== 64) {
+    throw new Error(`Row 1 is ${bounds.end - bounds.start}px, expected 64px`);
+  }
+  const after = core.geometry.getContentSize().height;
+  core.destroy();
+  return `rowId 1 is 64px, extent ${before.height} -> ${after}`;
+});
+
 await check("React native server render", async () => {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
