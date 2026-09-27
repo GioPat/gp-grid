@@ -15,6 +15,7 @@ import {
   toInlineX,
   toPhysicalX,
   TouchScrollController,
+  PendingScrollLatch,
   defaultPinIcon,
   resolveGridLabels,
 } from "@gp-grid/core";
@@ -127,6 +128,7 @@ const scrollLeft = ref(0);
 const rtl = ref(false);
 
 // State
+const pendingScroll = new PendingScrollLatch();
 const { state, renderToken, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
@@ -311,7 +313,9 @@ function initializeCore(dataSource: DataSource<Row>): void {
   touchScroll.syncCore();
 
   // Subscribe to batched instructions
+  pendingScroll.clear();
   coreUnsubscribeRef.value = core.onBatchInstruction((instructions) => {
+    pendingScroll.collect(instructions);
     applyInstructions(instructions);
   });
 
@@ -428,15 +432,15 @@ watch(
 // Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM has
 // been updated before the scroll positions are written.
 watch(
-  () => [state.value.pendingScrollTop, state.value.pendingScrollLeft] as const,
-  ([scrollTop, scrollLeft]) => {
+  renderToken,
+  () => {
+    const pending = pendingScroll.take();
     const container = bodyContainerRef.value;
-    if (container === null) return;
-    if (scrollTop === null && scrollLeft === null) return;
+    if (pending === null || container === null) return;
     // A programmatic scroll wins over any in-flight synthetic fling.
     touchScroll.stop();
-    if (scrollTop !== null) container.scrollTop = scrollTop;
-    if (scrollLeft !== null) container.scrollLeft = toPhysicalX(scrollLeft, rtl.value);
+    if (pending.top !== null) container.scrollTop = pending.top;
+    if (pending.left !== null) container.scrollLeft = toPhysicalX(pending.left, rtl.value);
   },
   { flush: "post" },
 );

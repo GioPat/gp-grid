@@ -16,6 +16,8 @@ export type { PendingCellTapDeps } from "./pending-cell-tap";
 export { TouchScrollController } from "./touch-scroll";
 export type { TouchScrollDeps } from "./touch-scroll";
 export { applyBatchInstructions } from "./batch-applier";
+export { PendingScrollLatch } from "./pending-scroll";
+export type { PendingScroll } from "./pending-scroll";
 export type { BatchChangeSetters } from "./batch-applier";
 export { DataSourceOwner } from "./data-source-owner";
 export { InputEventAdapter } from "./input-event-adapter";

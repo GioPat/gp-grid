@@ -332,6 +332,7 @@ export {
   PendingCellTapController,
   TouchScrollController,
   applyBatchInstructions,
+  PendingScrollLatch,
   DataSourceOwner,
   InputEventAdapter,
 } from "./adapter";
@@ -340,6 +341,7 @@ export type {
   PendingCellTapDeps,
   TouchScrollDeps,
   BatchChangeSetters,
+  PendingScroll,
   InputEventAdapterDeps,
   CellPointerAction,
   FillPointerAction,
