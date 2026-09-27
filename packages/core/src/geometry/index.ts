@@ -91,4 +91,5 @@ export {
   type GridViewportSample,
 } from "./grid-geometry";
 export { resolveScrollLeft, type ScrollTargetInput } from "./scroll-target";
+export { captureRowAnchor, resolveAnchoredScrollTop, type RowAnchor } from "./row-anchor";
 export { toReadonlyGeometry } from "./readonly-geometry";

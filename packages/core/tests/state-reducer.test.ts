@@ -48,6 +48,7 @@ describe("applyInstruction", () => {
         rowData: undefined,
         generation: 0,
         translateY: 0,
+        height: 0,
         region: "suffix",
         loading: false,
       });
@@ -60,6 +61,7 @@ describe("applyInstruction", () => {
         rowData: { id: 1, name: "a" },
         generation: 1,
         translateY: 0,
+        height: 32,
         region: "suffix",
         loading: false,
       });
@@ -92,6 +94,7 @@ describe("applyInstruction", () => {
         rowData: {} as Row,
         generation: 0,
         translateY: 64,
+        height: 32,
         region: "suffix",
         loading: false,
       });
@@ -116,6 +119,7 @@ describe("applyInstruction", () => {
         rowData,
         generation: 7,
         translateY: 64,
+        height: 32,
         region: "suffix",
         loading: false,
       });
@@ -155,32 +159,56 @@ describe("applyInstruction", () => {
       expect(slots.size).toBe(0);
     });
 
-    it("moves a slot's translateY while preserving other fields", () => {
+    it("moves a slot's translateY and height while preserving other fields", () => {
       slots.set("s1", {
         slotId: "s1",
         rowIndex: 2,
         rowData: { id: 2, name: "b" },
         generation: 1,
         translateY: 0,
+        height: 32,
         region: "suffix",
         loading: false,
       });
 
       const result = applyInstruction<Row>(
-        { type: "MOVE_SLOT", slotId: "s1", translateY: 256 },
+        { type: "MOVE_SLOT", slotId: "s1", translateY: 256, height: 48 },
         slots,
         headers,
       );
 
       expect(result).toBeNull();
       expect(slots.get("s1")?.translateY).toBe(256);
+      expect(slots.get("s1")?.height).toBe(48);
       expect(slots.get("s1")?.rowIndex).toBe(2);
       expect(slots.get("s1")?.rowData).toEqual({ id: 2, name: "b" });
     });
 
+    it("a height-only MOVE_SLOT keeps the position", () => {
+      slots.set("s1", {
+        slotId: "s1",
+        rowIndex: 2,
+        rowData: { id: 2, name: "b" },
+        generation: 1,
+        translateY: 64,
+        height: 32,
+        region: "suffix",
+        loading: false,
+      });
+
+      applyInstruction<Row>(
+        { type: "MOVE_SLOT", slotId: "s1", translateY: 64, height: 96 },
+        slots,
+        headers,
+      );
+
+      expect(slots.get("s1")?.translateY).toBe(64);
+      expect(slots.get("s1")?.height).toBe(96);
+    });
+
     it("MOVE_SLOT on an unknown slot id is ignored", () => {
       const result = applyInstruction<Row>(
-        { type: "MOVE_SLOT", slotId: "missing", translateY: 10 },
+        { type: "MOVE_SLOT", slotId: "missing", translateY: 10, height: 32 },
         slots,
         headers,
       );

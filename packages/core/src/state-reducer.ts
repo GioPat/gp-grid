@@ -21,6 +21,7 @@ export const applyInstruction = <TData = unknown>(
         rowData: undefined,
         generation: instruction.generation,
         translateY: 0,
+        height: 0,
         // The flat payload omits both; the reducer owns the defaults (C7).
         region: instruction.region ?? "suffix",
         loading: instruction.loading ?? false,
@@ -52,6 +53,7 @@ export const applyInstruction = <TData = unknown>(
         slots.set(instruction.slotId, {
           ...existing,
           translateY: instruction.translateY,
+          height: instruction.height,
         });
       }
       return null;

@@ -134,6 +134,8 @@ export interface ColumnMoveDragState {
 /** Row drag state */
 export interface RowDragState {
   sourceRowIndex: number;
+  /** Axis height of the dragged row; 0 when it has no bounds. */
+  sourceRowHeight: number;
   currentX: number;
   currentY: number;
   dropTargetIndex: number | null;

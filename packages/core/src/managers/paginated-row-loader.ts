@@ -46,6 +46,8 @@ export interface PaginatedRowLoaderOptions<TData> {
   diagnostics: RowIdDiagnostics<TData>;
   emitDataError: (error: unknown) => void;
   setDataLoading: (loading: boolean) => void;
+  /** Changes whenever row order or membership may have changed (D6). */
+  bumpDataRevision: () => void;
   /**
    * A row window arrived from a fire-and-forget load (scroll-triggered), so
    * nobody is awaiting it: the view must be synced from here.
@@ -162,11 +164,14 @@ export class PaginatedRowLoader<TData = unknown> {
     }
 
     try {
+      // A cache reset drops the pages and the identities the old query named.
+      if (options.resetCache) this.options.bumpDataRevision();
       const result = await this.rowWindowLoader.loadRange(
         options.range,
         options.resetCache,
       );
       if (result.applied === false) return;
+      if (options.resetCache) this.options.bumpDataRevision();
       if (result.loadedBlockCount > 0) {
         this.options.diagnostics.diagnoseLoadedRows();
         this.options.diagnostics.diagnoseWindowRows();

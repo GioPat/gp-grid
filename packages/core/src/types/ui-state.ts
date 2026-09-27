@@ -39,6 +39,8 @@ export interface SlotData<TData = unknown> {
    */
   generation: number;
   translateY: number;
+  /** Row height from the row axis; 0 until the first `MOVE_SLOT` (D8). */
+  height: number;
   /** Region the slot is rendered in (C7). */
   region: RowRegion;
   /**

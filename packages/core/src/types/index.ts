@@ -18,6 +18,7 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   SlotState,
+  RowHeightUpdate,
 } from "./basic";
 
 /** Object-shaped interaction events */

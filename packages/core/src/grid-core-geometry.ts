@@ -2,6 +2,7 @@
 // Binds the geometry service to GridCore's live state.
 
 import { createGridGeometry, type FrozenRowsRequest, type GridGeometryService } from "./geometry";
+import type { PlacedRowSize } from "./geometry/override-axis";
 import type { ColumnModel } from "./column-model";
 import type { ScrollVirtualizationManager, ViewportState } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
@@ -16,6 +17,8 @@ export interface CoreGeometryDeps<TData> {
   /** Effective DOM scroll sample, including the touch override. */
   getDomScrollTop: () => number;
   getFrozenRowsRequest: () => FrozenRowsRequest | null;
+  /** Application-set row sizes at their view indices (D2/D3). */
+  getPlacedRowSizes: () => readonly PlacedRowSize[];
 }
 
 export const createCoreGeometry = <TData>(deps: CoreGeometryDeps<TData>): GridGeometryService => {
@@ -36,6 +39,7 @@ export const createCoreGeometry = <TData>(deps: CoreGeometryDeps<TData>): GridGe
         scrollTop: deps.getDomScrollTop(),
       }),
       getFrozenRowsRequest: deps.getFrozenRowsRequest,
+      getPlacedRowSizes: deps.getPlacedRowSizes,
       getScrollMapping: () => ({
         getDomScrollTop: deps.getDomScrollTop,
         toDomScrollTop: (logical) => scrollVirtualization.toDomScrollTop(logical),

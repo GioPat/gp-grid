@@ -11,6 +11,7 @@ export type { GridCellsApi } from "./grid-core-cells";
 export type { GridEditApi } from "./grid-core-edit";
 export type { GridColumnsApi } from "./grid-core-column-api";
 export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
+export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
 export type { GridViewportApi } from "./grid-core-viewport";
 
@@ -136,6 +137,8 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   SlotState,
+  /** Application-set row height by identity (PRD 006) */
+  RowHeightUpdate,
 
   /** DataSource */
   DataSource,

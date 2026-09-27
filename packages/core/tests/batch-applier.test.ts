@@ -83,7 +83,7 @@ describe("applyBatchInstructions — slot and header maps", () => {
       [
         { type: "CREATE_SLOT", slotId: "slot-0", generation: 1 },
         { type: "ASSIGN_SLOT", slotId: "slot-0", rowIndex: 7, rowData: { id: 7 }, generation: 2 },
-        { type: "MOVE_SLOT", slotId: "slot-0", translateY: 224 },
+        { type: "MOVE_SLOT", slotId: "slot-0", translateY: 224, height: 32 },
       ],
       makeSetters(),
       slots,
@@ -94,6 +94,7 @@ describe("applyBatchInstructions — slot and header maps", () => {
       rowData: { id: 7 },
       generation: 2,
       translateY: 224,
+      height: 32,
       region: "suffix",
       loading: false,
     });
@@ -112,6 +113,7 @@ describe("applyBatchInstructions — slot and header maps", () => {
           rowData: { id: 0 },
           generation: 1,
           translateY: 0,
+          height: 32,
           region: "suffix",
           loading: false,
         },
@@ -124,6 +126,7 @@ describe("applyBatchInstructions — slot and header maps", () => {
           rowData: { id: 1 },
           generation: 1,
           translateY: 32,
+          height: 32,
           region: "suffix",
           loading: false,
         },
@@ -132,8 +135,8 @@ describe("applyBatchInstructions — slot and header maps", () => {
     const { maps } = apply(
       [
         { type: "DESTROY_SLOT", slotId: "slot-1" },
-        { type: "MOVE_SLOT", slotId: "slot-0", translateY: 64 },
-        { type: "MOVE_SLOT", slotId: "missing", translateY: 1 },
+        { type: "MOVE_SLOT", slotId: "slot-0", translateY: 64, height: 96 },
+        { type: "MOVE_SLOT", slotId: "missing", translateY: 1, height: 32 },
         { type: "ASSIGN_SLOT", slotId: "missing", rowIndex: 3, rowData: {}, generation: 9 },
       ],
       makeSetters(),
@@ -141,6 +144,7 @@ describe("applyBatchInstructions — slot and header maps", () => {
     );
     expect([...maps.slots.keys()]).toEqual(["slot-0"]);
     expect(maps.slots.get("slot-0")?.translateY).toBe(64);
+    expect(maps.slots.get("slot-0")?.height).toBe(96);
     expect(current.size).toBe(2);
     expect(current.get("slot-0")?.translateY).toBe(0);
   });

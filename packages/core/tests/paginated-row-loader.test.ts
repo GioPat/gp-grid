@@ -39,6 +39,8 @@ interface LoaderHarness {
   cachedRows: Map<number, TestRow>;
   errors: unknown[];
   metrics: LoaderMetrics;
+  /** D6 revisions bumped by this loader, in order. */
+  bumps: () => number;
 }
 
 const createHarness = (options: {
@@ -60,6 +62,7 @@ const createHarness = (options: {
   const cachedRows = new Map<number, TestRow>();
   const errors: unknown[] = [];
   let totalRows = 0;
+  let bumpCount = 0;
 
   const dataSource: DataSource<TestRow> = {
     loadMode: "paginated",
@@ -129,9 +132,12 @@ const createHarness = (options: {
     emitDataError: (error) => errors.push(error),
     setDataLoading: () => undefined,
     onRowsLoaded: () => undefined,
+    bumpDataRevision: () => {
+      bumpCount += 1;
+    },
   });
 
-  return { loader, requests, cachedRows, errors, metrics };
+  return { loader, requests, cachedRows, errors, metrics, bumps: () => bumpCount };
 };
 
 describe("PaginatedRowLoader — ranges", () => {

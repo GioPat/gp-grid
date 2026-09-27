@@ -33,12 +33,20 @@ const createPool = (options: HarnessOptions = {}) => {
   const state = new Map<string, SlotData>();
   const headers = new Map<string, HeaderData>();
   const batches: GridInstruction[][] = [];
+  const sizes = new Map<number, number>();
 
   const pool = new SlotPoolManager({
     getRowWindow: () => window,
     getRowCount: () => rowCount,
     getRowRegions: () => layoutOf(frozenCount),
-    getRowOffset: (rowIndex) => rowIndex * ROW_HEIGHT,
+    getRowOffset: (rowIndex) => {
+      let offset = 0;
+      for (let index = 0; index < rowIndex; index += 1) {
+        offset += sizes.get(index) ?? ROW_HEIGHT;
+      }
+      return offset;
+    },
+    getRowSize: (rowIndex) => sizes.get(rowIndex) ?? ROW_HEIGHT,
     getRowData: (rowIndex) => ({ id: rowIndex }),
     isRowAvailable: (rowIndex) => missing.has(rowIndex) === false,
   });
@@ -86,6 +94,9 @@ const createPool = (options: HarnessOptions = {}) => {
     setMissing: (rows: number[]) => {
       missing.clear();
       for (const row of rows) missing.add(row);
+    },
+    setRowSize: (rowIndex: number, size: number) => {
+      sizes.set(rowIndex, size);
     },
   };
 };
@@ -261,5 +272,48 @@ describe("SlotPoolManager — frozen rows (C7)", () => {
       rowData: { id: 1 },
     });
     expect(harness.slotAt(1)).toMatchObject({ region: "frozen", loading: false });
+  });
+});
+
+describe("SlotPoolManager — published row heights (D8)", () => {
+  const movesOf = (instructions: readonly GridInstruction[]) =>
+    instructions.filter((instruction) => instruction.type === "MOVE_SLOT");
+
+  it("carries the axis height on assignment and on refresh", () => {
+    const harness = createPool({ window: { start: 0, end: 3 } });
+    harness.setRowSize(1, 96);
+
+    const batch = harness.sync();
+    expect(movesOf(batch)).toEqual([
+      { type: "MOVE_SLOT", slotId: "slot-0", translateY: 0, height: ROW_HEIGHT },
+      { type: "MOVE_SLOT", slotId: "slot-1", translateY: ROW_HEIGHT, height: 96 },
+      { type: "MOVE_SLOT", slotId: "slot-2", translateY: ROW_HEIGHT + 96, height: ROW_HEIGHT },
+    ]);
+    expect(harness.slotAt(1)?.height).toBe(96);
+
+    const refreshed = harness.refresh();
+    const heights = refreshed
+      .filter((instruction) => instruction.type === "MOVE_SLOT")
+      .map((instruction) => instruction.height);
+    expect(heights).toEqual([ROW_HEIGHT, 96, ROW_HEIGHT]);
+  });
+
+  it("emits MOVE_SLOT for a height-only change", () => {
+    const harness = createPool({ window: { start: 0, end: 3 } });
+    harness.sync();
+
+    harness.setRowSize(2, 64);
+    const batch = harness.sync();
+
+    const moved = movesOf(batch).filter(
+      (instruction) => "height" in instruction && instruction.height === 64,
+    );
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({
+      slotId: harness.slotAt(2)?.slotId,
+      translateY: 2 * ROW_HEIGHT,
+      height: 64,
+    });
+    expect(harness.slotAt(2)?.height).toBe(64);
   });
 });

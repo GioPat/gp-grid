@@ -122,6 +122,120 @@ describe("server paginated loading", () => {
   });
 });
 
+describe("server paginated loading with variable row heights", () => {
+  const ROW_HEIGHT = 32;
+  const TALL = 96;
+  const TOTAL = 10_000_000;
+  const PAGE = 100;
+  const OVERRIDES = 50;
+  const FIRST_TALL = 5_000_000;
+
+  const rangesOf = (requests: DataSourceRequest[]): Array<[number, number]> =>
+    requests.map(({ range }) => [range.startRow, range.endRow]);
+
+  const createHeightsGrid = async (requests: DataSourceRequest[]): Promise<GridCore<TestRow>> => {
+    const grid = new GridCore<TestRow>({
+      columns,
+      dataSource: createPaginatedDataSource(requests, TOTAL),
+      rowHeight: ROW_HEIGHT,
+      headerHeight: 36,
+      overscan: 2,
+      getRowId: (row) => row.id,
+      rowLoading: { cache: { pageSize: PAGE, prefetchPages: 0, maxPages: 3 } },
+    });
+    await grid.initialize();
+    grid.setViewport(0, 0, 400, 320);
+    return grid;
+  };
+
+  const record = (grid: GridCore<TestRow>): GridInstruction[][] => {
+    const batches: GridInstruction[][] = [];
+    grid.onBatchInstruction((batch) => batches.push([...batch]));
+    return batches;
+  };
+
+  const heightAt = (grid: GridCore<TestRow>, viewIndex: number): number | undefined => {
+    const bounds = grid.geometry.getRowBounds(viewIndex, "content");
+    return bounds === undefined ? undefined : bounds.end - bounds.start;
+  };
+
+  /** First suffix row at the clip top, and where the clip shows it. */
+  const anchorOf = (grid: GridCore<TestRow>): { index: number; top: number } => {
+    const index = grid.geometry.getVisibleRowWindow().start;
+    return { index, top: grid.geometry.getRowBounds(index, "viewport")?.start ?? 0 };
+  };
+
+  const pendingHeights = (): Array<{ rowId: number; height: number }> =>
+    Array.from({ length: OVERRIDES }, (_, index) => ({
+      rowId: FIRST_TALL + index,
+      height: TALL,
+    }));
+
+  it("places pending heights when their page arrives without moving the anchor", async () => {
+    const requests: DataSourceRequest[] = [];
+    const grid = await createHeightsGrid(requests);
+    const idle = record(grid);
+
+    grid.rowHeights.set(pendingHeights());
+
+    // Nothing is resident yet: no batch, no placement, no sized-by-count state.
+    expect(idle).toHaveLength(0);
+    expect(grid.rowHeights.getOverrides()).toHaveLength(OVERRIDES);
+    expect(grid.geometry.getContentSize().height).toBe(TOTAL * ROW_HEIGHT);
+
+    const target = grid.geometry.getScrollTarget(FIRST_TALL + 60, 0);
+    grid.setViewport(target.scrollTop ?? 0, 0, 400, 320);
+    const before = anchorOf(grid);
+    const batches = record(grid);
+    await waitForAsyncFetch();
+
+    expect(rangesOf(requests)).toEqual([
+      [0, PAGE],
+      [FIRST_TALL, FIRST_TALL + PAGE],
+    ]);
+
+    // The arrival is one batch that publishes the new extent and anchors.
+    const batch = batches.find((candidate) =>
+      candidate.some((instruction) => instruction.type === "SCROLL_TO"),
+    );
+    expect(batch).toBeDefined();
+    expect(batch!.some((instruction) => instruction.type === "SET_CONTENT_SIZE")).toBe(true);
+    const scrollTo = batch!.find((instruction) => instruction.type === "SCROLL_TO");
+    expect(scrollTo?.type === "SCROLL_TO" && (scrollTo.scrollTop ?? 0) > 0).toBe(true);
+
+    const after = anchorOf(grid);
+    expect(after.index).toBe(before.index);
+    expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1);
+    expect(grid.geometry.getContentSize().height).toBe(
+      TOTAL * ROW_HEIGHT + OVERRIDES * (TALL - ROW_HEIGHT),
+    );
+  });
+
+  it("sizes only what it placed and unplaces the heights on a sort", async () => {
+    const requests: DataSourceRequest[] = [];
+    const grid = await createHeightsGrid(requests);
+    grid.rowHeights.set(pendingHeights());
+    const target = grid.geometry.getScrollTarget(FIRST_TALL + 60, 0);
+
+    grid.setViewport(target.scrollTop ?? 0, 0, 400, 320);
+    await waitForAsyncFetch();
+
+    for (let index = 0; index < OVERRIDES; index += 1) {
+      expect(heightAt(grid, FIRST_TALL + index)).toBe(TALL);
+    }
+    expect(heightAt(grid, FIRST_TALL + OVERRIDES)).toBe(ROW_HEIGHT);
+    expect(heightAt(grid, FIRST_TALL - 1)).toBe(ROW_HEIGHT);
+
+    await grid.sortFilter.setSort("id", "desc");
+
+    // The heights stay known by identity but wait for their pages again.
+    expect(grid.rowHeights.getOverrides()).toHaveLength(OVERRIDES);
+    expect(heightAt(grid, FIRST_TALL)).toBe(ROW_HEIGHT);
+    expect(grid.geometry.getContentSize().height).toBe(TOTAL * ROW_HEIGHT);
+    expect(rangesOf(requests).at(-1)).toEqual([0, PAGE]);
+  });
+});
+
 describe("server paginated loading with frozen rows", () => {
   const rangesOf = (requests: DataSourceRequest[]): Array<[number, number]> =>
     requests.map(({ range }) => [range.startRow, range.endRow]);
