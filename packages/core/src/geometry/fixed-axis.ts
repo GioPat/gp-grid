@@ -24,6 +24,8 @@ export const createFixedAxis = (count: number, size: number): VirtualAxis => {
   const axis = {
     count,
     extent,
+    uniformSize: size,
+    minSize: size,
     getSize: (index: number): number => getSize(index, count, size),
     getOffset: (index: number): number => {
       assertSafeIndex(index, "index");

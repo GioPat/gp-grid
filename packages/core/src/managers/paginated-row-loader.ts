@@ -6,7 +6,7 @@ import type {
   SortModel,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
-import { createFrozenPrefixBudget, isUniformAxis } from "./page-capacity";
+import { createFrozenPrefixBudget } from "./page-capacity";
 import {
   RowWindowLoader,
   type RowLoadContext,
@@ -75,9 +75,7 @@ export class PaginatedRowLoader<TData = unknown> {
   /** C2's cache predicate; undefined while paging is inactive or unbounded. */
   getPrefixAdmission(): ((count: number) => boolean) | undefined {
     if (this.isPaginatedLoading() === false) return undefined;
-    const budget = this.rowWindowLoader.getPageBudget();
-    if (isUniformAxis(budget.axis) === false) return undefined;
-    return createFrozenPrefixBudget(budget);
+    return createFrozenPrefixBudget(this.rowWindowLoader.getPageBudget());
   }
 
   reset(): void {

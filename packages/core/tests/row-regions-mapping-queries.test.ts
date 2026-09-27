@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createSeedColumnLayout } from "../src/geometry/column-layout";
 import { createPrefixAxis } from "../src/geometry/prefix-axis";
 import { createRowMapper, type RowMapper } from "../src/geometry/row-mapping";
 import {
@@ -12,47 +11,71 @@ import {
   resolveRegionScrollCorrection,
   resolveRowRegionScrollTop,
 } from "../src/geometry/row-regions-mapping";
-import { resolveScrollTarget } from "../src/geometry/scroll-target";
-import type { DisplayedColumn } from "../src/types/geometry";
 import { createHarness, frameInput, type HarnessOptions } from "./row-regions-harness";
 
 describe("row region parity and queries", () => {
-  it("equals today's RowMapper and scroll target output with count 0", () => {
-    const probe: DisplayedColumn = {
-      columnId: "col",
-      layoutIndex: 0,
-      column: { field: "col", cellDataType: "text", width: 100 },
-      offset: 0,
-      width: 100,
-    };
-    const layout = createSeedColumnLayout([], "fixed", 500);
-    const fixtures: HarnessOptions[] = [
-      { rowCount: 1000, rowHeight: 32, viewportHeight: 320, domScrollTop: 0 },
-      { rowCount: 1000, rowHeight: 32, viewportHeight: 320, domScrollTop: 5000 },
-      { rowCount: 1_000_000, rowHeight: 32, viewportHeight: 320, domScrollTop: 320, ratio: 0.01 },
-      { rowCount: 1_000_000, rowHeight: 32, viewportHeight: 320, domScrollTop: 123.5, ratio: 0.01 },
+  it("answers the same windows, positions and targets as the fixed-axis path", () => {
+    // Captured from the fixture before the vertical target moved onto the axis
+    // (plan 006 step 6); the numbers are the pre-move output, not new ones.
+    const fixtures: Array<{
+      options: HarnessOptions;
+      window: { start: number; end: number };
+      wrapperOffset: number;
+      positions: number[];
+      targets: Array<number | undefined>;
+    }> = [
+      {
+        options: { rowCount: 1000, rowHeight: 32, viewportHeight: 320, domScrollTop: 0 },
+        window: { start: 0, end: 13 },
+        wrapperOffset: 0,
+        positions: [0, 96, 1280, 31968],
+        targets: [undefined, undefined, 992, 31680],
+      },
+      {
+        options: { rowCount: 1000, rowHeight: 32, viewportHeight: 320, domScrollTop: 5000 },
+        window: { start: 153, end: 170 },
+        wrapperOffset: 0,
+        positions: [0, 96, 1280, 31968],
+        targets: [0, 96, 1280, 31680],
+      },
+      {
+        options: {
+          rowCount: 1_000_000,
+          rowHeight: 32,
+          viewportHeight: 320,
+          domScrollTop: 320,
+          ratio: 0.01,
+        },
+        window: { start: 997, end: 1013 },
+        wrapperOffset: 320,
+        positions: [-32000, -31904, -30720, 31967968],
+        targets: [0, 0.96, 12.799999999999999, 319996.8],
+      },
+      {
+        options: {
+          rowCount: 1_000_000,
+          rowHeight: 32,
+          viewportHeight: 320,
+          domScrollTop: 123.5,
+          ratio: 0.01,
+        },
+        window: { start: 382, end: 399 },
+        wrapperOffset: 93.5,
+        positions: [-12320, -12224, -11040, 31987648],
+        targets: [0, 0.96, 12.799999999999999, 319996.8],
+      },
     ];
+    const probes = [0, 3, 40];
     for (const fixture of fixtures) {
-      const harness = createHarness(fixture);
+      const harness = createHarness(fixture.options);
       const input = frameInput(harness, { frozenCount: 0, overscan: harness.overscan });
-      expect(getSuffixWindow(input)).toEqual(harness.rows.getWindow());
-      expect(getSuffixWrapperOffset(input)).toBe(harness.rows.getRowsWrapperOffset());
-      for (const rowIndex of [0, 3, 40, harness.rowCount - 1]) {
-        expect(getRowRegionPosition(input, rowIndex)).toBe(harness.rows.getRowRegionPosition(rowIndex));
-        const today = resolveScrollTarget({
-          axis: harness.axis,
-          mapper: harness.mapper,
-          layout,
-          column: probe,
-          region: "start",
-          centerClip: { start: 0, end: 0 },
-          viewIndex: rowIndex,
-          rowHeight: harness.rowHeight,
-          viewport: { width: 500, height: harness.viewportHeight },
-          from: { scrollTop: harness.domScrollTop, scrollLeft: 0 },
-        }).scrollTop;
-        expect(resolveRowRegionScrollTop({ ...input, rowHeight: harness.rowHeight }, rowIndex)).toBe(today);
-      }
+      expect(getSuffixWindow(input), JSON.stringify(fixture.options)).toEqual(fixture.window);
+      expect(getSuffixWrapperOffset(input)).toBe(fixture.wrapperOffset);
+      const indices = [...probes, harness.rowCount - 1];
+      expect(indices.map((rowIndex) => getRowRegionPosition(input, rowIndex)))
+        .toEqual(fixture.positions);
+      expect(indices.map((rowIndex) => resolveRowRegionScrollTop(input, rowIndex)))
+        .toEqual(fixture.targets);
     }
   });
 
@@ -101,7 +124,7 @@ describe("row region parity and queries", () => {
 
   it("resolves C6 targets and keeps a zero viewport concrete", () => {
     const harness = createHarness({ rowCount: 1000, rowHeight: 32, viewportHeight: 320, domScrollTop: 1000 });
-    const input = { ...frameInput(harness, { frozenCount: 3 }), rowHeight: 32 };
+    const input = frameInput(harness, { frozenCount: 3 });
     expect(resolveRowRegionScrollTop(input, 0)).toBeUndefined();
     expect(resolveRowRegionScrollTop(input, 2)).toBeUndefined();
     expect(resolveRowRegionScrollTop(input, 5)).toBe(64);
@@ -111,15 +134,14 @@ describe("row region parity and queries", () => {
     expect(resolveRowRegionScrollTop(input, 1000)).toBeUndefined();
 
     const tall = createHarness({ rowCount: 100, rowHeight: 400, viewportHeight: 320, domScrollTop: 0 });
-    const tallInput = { ...frameInput(tall, { frozenCount: 3 }), rowHeight: 400 };
+    const tallInput = frameInput(tall, { frozenCount: 3 });
     expect(resolveRowRegionScrollTop(tallInput, 5)).toBe(800);
     expect(resolveRowRegionScrollTop(tallInput, 0)).toBeUndefined();
     const aligned = createHarness({ rowCount: 100, rowHeight: 400, viewportHeight: 320, domScrollTop: 800 });
-    expect(resolveRowRegionScrollTop({ ...frameInput(aligned, { frozenCount: 3 }), rowHeight: 400 }, 5))
-      .toBeUndefined();
+    expect(resolveRowRegionScrollTop(frameInput(aligned, { frozenCount: 3 }), 5)).toBeUndefined();
 
     const zero = createHarness({ rowCount: 100, rowHeight: 32, viewportHeight: 0, domScrollTop: 0 });
-    const zeroInput = { ...frameInput(zero, { frozenCount: 3, viewportHeight: 0 }), rowHeight: 32 };
+    const zeroInput = frameInput(zero, { frozenCount: 3, viewportHeight: 0 });
     expect(getSuffixWindow(zeroInput)).toEqual({ start: 3, end: 3 });
     expect(getSuffixViewportHeight(zeroInput)).toBe(0);
     expect(getRowClip(zeroInput, 0)).toEqual({ start: 0, end: 96 });

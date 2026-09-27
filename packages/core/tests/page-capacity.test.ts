@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createFixedAxis } from "../src/geometry/fixed-axis";
+import { createOverrideAxis } from "../src/geometry/override-axis";
 import { createPrefixAxis } from "../src/geometry/prefix-axis";
 import { resolveFrozenRows } from "../src/geometry/row-regions";
 import type { VirtualAxis } from "../src/geometry/virtual-axis";
@@ -117,11 +118,84 @@ describe("page capacity", () => {
     expect(shrunk).toBeLessThan(plain);
   });
 
-  it("requires a uniform row axis for the capacity bound", () => {
+  it("bounds a non-uniform axis without a uniformity precondition", () => {
     const axis = createPrefixAxis([13, 12, 39, 6, 33, 16, 35, 26, 5, 4, 7, 14, 1, 40]);
     const position = { axis, pageSize: 2, viewportHeight: 122, frozenCount: 4 };
     expect(getRequiredPageBlocks({ ...position, scrollTop: 88.25 })).toEqual([0, 1, 3, 4, 5, 6]);
-    expect(() => maxRequiredPages(position)).toThrow(RangeError);
+    const exact = bruteForceMaxPages(axis, 2, 122, 4);
+    const bound = maxRequiredPages(position);
+    expect(bound).toBeGreaterThanOrEqual(exact);
+    // Conservative on purpose: the three interior first rows of the uniform
+    // enumeration are not reachable here, so the prefix+suffix bound exceeds
+    // the exact maximum by one block.
+    expect(bound).toBeGreaterThan(exact);
+  });
+
+  it("never undershoots a brute-force oracle on random non-uniform axes", () => {
+    const random = createRandom(90210);
+    const heights = [5, 8, 13, 21, 34, 40];
+    for (let sample = 0; sample < 120; sample++) {
+      const rowCount = 1 + random(24);
+      const sizes = Array.from({ length: rowCount }, () => pick(random, heights));
+      const axis = createPrefixAxis(sizes);
+      const pageSize = pick(random, [1, 2, 3, 5]);
+      const viewportHeight = pick(random, [0, 24, 64, 120, 200]);
+      const frozenCount = random(rowCount + 1);
+      const input = { axis, pageSize, viewportHeight, frozenCount };
+      const exact = bruteForceMaxPages(axis, pageSize, viewportHeight, frozenCount);
+      const bound = maxRequiredPages(input);
+      expect(bound, JSON.stringify({ sizes, pageSize, viewportHeight, frozenCount }))
+        .toBeGreaterThanOrEqual(exact);
+    }
+  });
+
+  it("never undershoots when the clip spans several pages below the prefix", () => {
+    const random = createRandom(26092026);
+    for (let sample = 0; sample < 80; sample++) {
+      const rowCount = 20 + random(60);
+      const placed = [...new Set(Array.from({ length: 1 + random(8) }, () => random(rowCount)))]
+        .sort((a, b) => a - b)
+        .map((index) => ({ index, size: pick(random, [4, 20, 48]) }));
+      const axis = createOverrideAxis(rowCount, 10, placed);
+      const pageSize = pick(random, [3, 7, 10]);
+      const viewportHeight = pick(random, [120, 215, 300]);
+      const frozenCount = random(Math.min(rowCount, 8) + 1);
+      const exact = bruteForceMaxPages(axis, pageSize, viewportHeight, frozenCount);
+      const bound = maxRequiredPages({ axis, pageSize, viewportHeight, frozenCount });
+      expect(bound, JSON.stringify({ placed, rowCount, pageSize, viewportHeight, frozenCount }))
+        .toBeGreaterThanOrEqual(exact);
+    }
+  });
+
+  it("reduces the prefix with a cache limit on a non-uniform axis", () => {
+    const axis = createPrefixAxis([13, 12, 39, 6, 33, 16, 35, 26, 5, 4, 7, 14, 1, 40]);
+    const budget = { axis, pageSize: 2, viewportHeight: 122, maxPages: 3 };
+    expect(resolveFrozenRows({
+      axis,
+      requestedCount: 4,
+      viewportHeight: 122,
+      viewportMeasured: true,
+      admitsPrefix: createFrozenPrefixBudget(budget),
+    })).toEqual({ requestedCount: 4, effectiveCount: 0, limit: "cache" });
+    // A roomy budget admits the same request; the viewport limit is not the
+    // cache's, so the reduce path is what this asserts.
+    const roomy = createFrozenPrefixBudget({ ...budget, maxPages: 8 });
+    const generous = resolveFrozenRows({
+      axis,
+      requestedCount: 2,
+      viewportHeight: 122,
+      viewportMeasured: true,
+      admitsPrefix: roomy,
+    });
+    expect(generous).toEqual({ requestedCount: 2, effectiveCount: 2, limit: null });
+  });
+
+  it("keeps the exact bound for uniform prefix axes", () => {
+    const uniform = createPrefixAxis([12, 12, 12, 12, 12, 12, 12, 12]);
+    const fixed = createFixedAxis(8, 12);
+    const input = { pageSize: 2, viewportHeight: 64, frozenCount: 3 };
+    expect(maxRequiredPages({ ...input, axis: uniform }))
+      .toBe(maxRequiredPages({ ...input, axis: fixed }));
   });
 
   it("matches a brute-force oracle on small datasets", () => {

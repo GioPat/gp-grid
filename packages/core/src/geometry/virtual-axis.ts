@@ -19,6 +19,10 @@ export interface VirtualAxis {
   getOffset(index: number): number;
   indexAt(offset: number): number;
   getWindow(offset: number, viewportExtent: number, overscan?: number): AxisWindow;
+  /** The one size every item has; `undefined` while sizes differ. */
+  readonly uniformSize?: number;
+  /** Lower bound on every item size, for bounds that must never undershoot. */
+  readonly minSize?: number;
 }
 
 /**

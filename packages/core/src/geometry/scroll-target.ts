@@ -1,52 +1,21 @@
 // packages/core/src/geometry/scroll-target.ts
-// Minimal scroll needed to bring one cell into view. Axes already in view are
-// omitted so the caller leaves them untouched.
+// Minimal horizontal scroll needed to bring a column into view; the vertical
+// half is region-local and lives in `row-regions-mapping`. An axis already in
+// view is omitted so the caller leaves it untouched.
 
-import type {
-  AxisBounds,
-  ColumnLayoutSnapshot,
-  ColumnRegion,
-  DisplayedColumn,
-  ScrollTarget,
-} from "../types/geometry";
-import type { RowMapper } from "./row-geometry";
-import type { VirtualAxis } from "./virtual-axis";
+import type { AxisBounds, ColumnLayoutSnapshot, ColumnRegion, DisplayedColumn } from "../types/geometry";
 
 export interface ScrollTargetInput {
-  axis: VirtualAxis;
-  mapper: RowMapper;
   layout: ColumnLayoutSnapshot;
   column: DisplayedColumn;
   /** Effective region the target column renders in. */
   region: ColumnRegion;
   /** Viewport x-range the center columns scroll inside. */
   centerClip: AxisBounds;
-  viewIndex: number;
-  rowHeight: number;
   viewport: { width: number; height: number };
   /** DOM scroll sample the target is measured from. */
   from: { scrollTop: number; scrollLeft: number };
 }
-
-const resolveScrollTop = (input: ScrollTargetInput): number | undefined => {
-  const { axis, mapper, viewIndex, rowHeight, viewport } = input;
-  const rowLogical = mapper.toLogicalScrollTop(input.from.scrollTop);
-  const logicalTop = axis.getOffset(viewIndex);
-  const logicalBottom = logicalTop + rowHeight;
-
-  if (rowHeight >= viewport.height) {
-    return logicalTop === rowLogical ? undefined : mapper.toDomScrollTopClamped(logicalTop);
-  }
-  if (logicalTop < rowLogical) return mapper.toDomScrollTopClamped(logicalTop);
-  if (logicalBottom <= rowLogical + viewport.height) return undefined;
-
-  const wanted = logicalBottom - viewport.height;
-  const boundary = axis.indexAt(wanted);
-  const snapped = boundary < axis.count && axis.getOffset(boundary) < wanted
-    ? axis.getOffset(boundary + 1)
-    : axis.getOffset(boundary);
-  return mapper.toDomScrollTopClamped(snapped);
-};
 
 /**
  * Center columns align inside the scrolling clip, not the whole viewport, so
@@ -57,7 +26,7 @@ const resolveScrollTop = (input: ScrollTargetInput): number | undefined => {
  * `scrollLeft` is the content-space sample the center scrolls by, so both
  * clip edges move by it before they can be compared.
  */
-const resolveScrollLeft = (input: ScrollTargetInput): number | undefined => {
+export const resolveScrollLeft = (input: ScrollTargetInput): number | undefined => {
   if (input.region !== "center") return undefined;
   const { column, layout, viewport, centerClip, from } = input;
   if (layout.regions.centerViewportWidth <= 0) return undefined;
@@ -77,13 +46,4 @@ const resolveScrollLeft = (input: ScrollTargetInput): number | undefined => {
   if (left < clipStart) return Math.min(Math.max(alignedToStart, 0), maxScroll);
   if (right > clipEnd) return Math.min(Math.max(right - centerClip.end, 0), maxScroll);
   return undefined;
-};
-
-export const resolveScrollTarget = (input: ScrollTargetInput): ScrollTarget => {
-  const target: { scrollTop?: number; scrollLeft?: number } = {};
-  const scrollTop = resolveScrollTop(input);
-  if (scrollTop !== undefined) target.scrollTop = scrollTop;
-  const scrollLeft = resolveScrollLeft(input);
-  if (scrollLeft !== undefined) target.scrollLeft = scrollLeft;
-  return target;
 };

@@ -1,7 +1,7 @@
 // packages/core/src/managers/page-capacity.ts
 // C8 capacity bound: the largest required block union over every reachable
-// scroll position. Exact for the uniform (fixed-size) row axis the grid uses
-// today; PRD 006 replaces its candidate derivation for variable row sizes.
+// scroll position. Exact for a uniform row axis; a conservative bound for the
+// variable-size axis of PRD 006 (D4).
 
 import type { AxisWindow, VirtualAxis } from "../geometry/virtual-axis";
 import { clampCount, normalizePositiveInteger, normalizeSize } from "../utils/number-guards";
@@ -11,6 +11,7 @@ import {
   prefixRangeOf,
   rangeOfWindow,
   unionSize,
+  type BlockRange,
   type PageCapacityInput,
 } from "./page-blocks";
 
@@ -67,32 +68,44 @@ const interiorFirstRows = (
   return candidates.filter((rowIndex) => rowIndex >= from);
 };
 
-/** Uniform (fixed-size) row axis: the candidate enumeration's precondition. */
-export const isUniformAxis = (axis: VirtualAxis): boolean => {
-  if (axis.count <= 1) return true;
-  const size = axis.getSize(0);
-  const mid = Math.floor((axis.count - 1) / 2);
-  return (
-    axis.getSize(axis.count - 1) === size &&
-    axis.getSize(mid) === size &&
-    axis.getOffset(axis.count) === axis.count * size
+/**
+ * D4's conservative bound for a non-uniform axis, where the exact enumeration
+ * is not available. The scrolling clip intersects at most
+ * `ceil(clip / minSize) + 1` rows, which span at most
+ * `ceil((rows − 1) / pageSize) + 1` blocks at their worst alignment; those are
+ * added to the prefix's without deduplication. The bound can admit fewer
+ * frozen rows than an exact one would, but never more.
+ */
+const conservativeRequiredPages = (
+  axis: VirtualAxis,
+  prefix: BlockRange | null,
+  frozenCount: number,
+  clipHeight: number,
+  pageSize: number,
+): number => {
+  const minSize = axis.minSize ?? 0;
+  // A non-uniform axis that cannot bound its smallest row gets no bound at all:
+  // over-refusing a prefix is the safe direction, admitting one is not.
+  if (minSize <= 0) return Number.POSITIVE_INFINITY;
+  const rows = Math.min(
+    Math.ceil(clipHeight / minSize) + 1,
+    Math.max(0, axis.count - frozenCount),
   );
+  if (rows <= 0) return blockCountOf(prefix);
+  return blockCountOf(prefix) + Math.ceil((rows - 1) / pageSize) + 1;
 };
 
-const assertUniformAxis = (axis: VirtualAxis): void => {
-  if (isUniformAxis(axis)) return;
-  throw new RangeError("maxRequiredPages requires a uniform row axis; PRD 006 replaces this bound");
-};
-
-/** C8 bound: the largest required union over every reachable scroll position, uniform axes only. */
+/** C8 bound: the largest required union over every reachable scroll position. */
 export const maxRequiredPages = (input: PageCapacityInput): number => {
   const axis = input.axis;
-  assertUniformAxis(axis);
   const pageSize = normalizePositiveInteger(input.pageSize);
   const frozenCount = clampCount(input.frozenCount, axis.count);
   const prefix = prefixRangeOf(frozenCount, pageSize);
   const clipHeight = clipHeightOf(input, frozenCount);
   if (clipHeight <= 0 || frozenCount >= axis.count) return blockCountOf(prefix);
+  if (axis.uniformSize === undefined) {
+    return conservativeRequiredPages(axis, prefix, frozenCount, clipHeight, pageSize);
+  }
 
   const frozenExtent = axis.getOffset(frozenCount);
   const top = axis.getWindow(frozenExtent, clipHeight);

@@ -111,6 +111,10 @@ describe("createFixedAxis", () => {
   });
 
   it("allocates nothing per row for very large counts (AC-003-01)", () => {
+    // Warm the call path first, and keep this file's own suite off the heap
+    // sample: the first axis through it pays a one-off allocation, and a
+    // concurrently running file would show up in `heapUsed` as well.
+    createFixedAxis(1, 32);
     const before = process.memoryUsage().heapUsed;
     const axis = createFixedAxis(1e12, 32);
     const after = process.memoryUsage().heapUsed;
@@ -203,6 +207,40 @@ describe("createPrefixAxis", () => {
       expect(() => axis.getSize(Number.MAX_SAFE_INTEGER + 1)).toThrow(RangeError);
       expect(axis.getSize(-1)).toBe(0);
     }
+  });
+});
+
+describe("axis size flags", () => {
+  it("keeps a fixed axis uniform at its size", () => {
+    for (const [count, size] of [[0, 32], [1, 32], [7, 10], [1000, 32.5]] as Array<[number, number]>) {
+      const axis = createFixedAxis(count, size);
+      expect(axis.uniformSize).toBe(size);
+      expect(axis.minSize).toBe(size);
+    }
+  });
+
+  it("flags a prefix axis by its sizes", () => {
+    const uniform = createPrefixAxis([12, 12, 12, 12]);
+    expect(uniform.uniformSize).toBe(12);
+    expect(uniform.minSize).toBe(12);
+
+    const mixed = createPrefixAxis([13, 12, 39, 6]);
+    expect(mixed.uniformSize).toBeUndefined();
+    expect(mixed.minSize).toBe(6);
+
+    const empty = createPrefixAxis([]);
+    expect(empty.uniformSize).toBeUndefined();
+    expect(empty.minSize).toBe(0);
+
+    expect(createPrefixAxis([32]).uniformSize).toBe(32);
+  });
+
+  it("does not flag a uniform prefix axis whose sum overflows the size", () => {
+    // 1e15 + 1 is representable; 1e16 + 1 is not, and the axis rejects it
+    // through its offsets rather than claiming a uniform size it cannot use.
+    expect(createPrefixAxis([1e15, 1e15]).uniformSize).toBe(1e15);
+    expect(createPrefixAxis([1e15, 1]).uniformSize).toBeUndefined();
+    expect(createPrefixAxis([1e15, 1]).minSize).toBe(1);
   });
 });
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ScrollVirtualizationManager } from "../src/managers/scroll-virtualization-manager";
 import { createFixedAxis } from "../src/geometry/fixed-axis";
+import { createOverrideAxis } from "../src/geometry/override-axis";
+import type { VirtualAxis } from "../src/geometry/virtual-axis";
 
 interface HarnessOptions {
   rowCount?: number;
@@ -9,17 +11,16 @@ interface HarnessOptions {
   headerHeight?: number;
 }
 
-const createManager = (options: HarnessOptions = {}) => {
+const createManager = (options: HarnessOptions = {}, axis?: VirtualAxis) => {
   const rowCount = options.rowCount ?? 1000;
   const rowHeight = options.rowHeight ?? 32;
   const viewportHeight = options.viewportHeight ?? 320;
   const headerHeight = options.headerHeight ?? rowHeight;
-  const axis = createFixedAxis(rowCount, rowHeight);
 
   const manager = new ScrollVirtualizationManager({
     getHeaderHeight: () => headerHeight,
     getViewportHeight: () => viewportHeight,
-    getAxis: () => axis,
+    getAxis: () => axis ?? createFixedAxis(rowCount, rowHeight),
   });
   return { manager, axis, rowCount, rowHeight, viewportHeight, headerHeight };
 };
@@ -86,6 +87,36 @@ describe("ScrollVirtualizationManager — compressed", () => {
     // The DOM end maps onto that same boundary, so the clamp never pulls back.
     expect(manager.getMaxLogicalScrollTop()).toBe(expected);
     expect(manager.toDomScrollTop(manager.getMaxLogicalScrollTop())).toBeCloseTo(virtualRange, 6);
+  });
+
+  it("stops the rounding before a last row taller than the viewport", () => {
+    // D4: when the natural range ends inside the last row, the range stays
+    // `extent − viewportHeight` so that row's bottom is reachable and the row
+    // never scrolls wholly out of view.
+    const axis = createOverrideAxis(1_000_000, 32, [{ index: 999_999, size: 480 }]);
+    const { manager } = createManager(
+      { rowCount: 1_000_000, rowHeight: 32, viewportHeight: 320, headerHeight: 32 },
+      axis,
+    );
+    const naturalRange = axis.extent - 320;
+    expect(axis.indexAt(naturalRange)).toBe(999_999);
+    expect(manager.getMaxLogicalScrollTop()).toBe(naturalRange);
+    expect(manager.getScrollRatio()).toBeCloseTo((10_000_000 - 32 - 320) / naturalRange, 12);
+    expect(manager.toDomScrollTop(naturalRange)).toBeCloseTo(10_000_000 - 32 - 320, 6);
+  });
+
+  it("keeps the rounding for a last row shorter than the viewport", () => {
+    const axis = createOverrideAxis(1_000_000, 32, [{ index: 999_999, size: 8 }]);
+    const { manager } = createManager(
+      { rowCount: 1_000_000, rowHeight: 32, viewportHeight: 320, headerHeight: 32 },
+      axis,
+    );
+    const naturalRange = axis.extent - 320;
+    // The range ends inside row 999,997, so it still rounds up to that row's
+    // next boundary as before.
+    const boundary = axis.getOffset(axis.indexAt(naturalRange) + 1);
+    expect(boundary).toBeLessThan(axis.extent);
+    expect(manager.getMaxLogicalScrollTop()).toBe(boundary);
   });
 
   it("recomputes the ratio when the viewport height changes", () => {
