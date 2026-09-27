@@ -147,6 +147,7 @@ import {
   AutoScrollDriver,
   PendingRowDragController,
   applyBatchInstructions,
+  PendingScrollLatch,
   DataSourceOwner,
   InputEventAdapter,
 } from "@gp-grid/core";
@@ -192,6 +193,9 @@ grid.frozenRows.set({ count: 3 });                  // replaces the whole config
 grid.frozenRows.freezeThrough(4);                   // count = 5, current limits kept; -1 unfreezes
 grid.geometry.getRowRegions();                      // { frozenCount, frozenExtent, suffixViewportHeight, frozen }
 grid.geometry.getRowClip(0);                        // viewport y-range of that row's region
+grid.rowHeights.set([{ rowId: 2, height: 96 }]);    // heights by identity; all-or-nothing, finite and > 0
+grid.rowHeights.reset([2]);                         // or reset() for every stored height
+grid.rowHeights.getOverrides();                     // [{ rowId, height }] in insertion order, pending included
 grid.geometry.getCellBounds(0, 0, "viewport");      // { top, left, width, height, ... }
 grid.geometry.hitTest({ x: 10, y: 10 });            // { row, displayIndex, col, columnId?, region }
 grid.geometry.getScrollTarget(12, 0);               // { scrollTop?, scrollLeft? }
@@ -244,7 +248,7 @@ The minimal wrapper does five things, in order:
 
 1. **Render a stable container DOM** with explicit dimensions and a body that the core will fill with virtual scroll content.
 2. **Instantiate `GridCore`** with the user's options.
-3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape.
+3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape. Feed every batch to a `PendingScrollLatch` too, and after each render `take()` the latched `SCROLL_TO` and write it to the scroll element: coalesced batches must not drop a correction.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
 5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onColumnMoved`, `onColumnPinned` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.columns.setState`.
 6. **Render the mounted column window**, not every displayed column: `GridState.columnWindow` gives `start` / `center` / `end` resolved columns, each with a region-local `regionOffset`. Key cells and headers by `columnId` so a column keeps its DOM node when it changes region, and place `lineX` / `dropIndicatorX` (viewport x) and the fill handle's region-local `left` directly.

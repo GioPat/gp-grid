@@ -648,6 +648,46 @@ change; `GridLabelOverrides` stays optional. `GridState.rowRegions` and
 `SET_ANNOUNCEMENT` emitted in one atomic batch. See
 [Frozen rows](../../docs/features/frozen-rows.md).
 
+### Row heights
+
+Rows are `rowHeight` px tall unless the application sets a height by row
+identity. `rowHeights.set(updates)` stores `{ rowId, height }` pairs,
+`rowHeights.reset(rowIds?)` drops the named heights (all of them without the
+argument) and `rowHeights.getOverrides()` lists every stored height in insertion
+order, including the ones still waiting for their row.
+
+```ts
+const core = new GridCore({ columns, dataSource, rowHeight: 32, getRowId: (row) => row.id });
+core.rowHeights.set([{ rowId: 2, height: 96 }, { rowId: 10, height: 64 }]);
+core.rowHeights.reset([10]);
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws `RangeError('Invalid row height for row "<rowId>": <height>')` and
+applies nothing. A value equal to `rowHeight` is stored but places nothing and
+emits no instruction, and both commands are no-ops after `destroy()`.
+
+With a stable identity (`getRowId`, or a columnar source's row access) a height
+follows its row through sort, filter, refresh and paging; an ID the source does
+not hold yet stays pending until its row arrives — including a page that has not
+loaded. Without one, an integer `rowId` in `[0, rowCount)` places at that view
+index and is dropped at the next data revision (sort, filter, refresh,
+transaction, cache reset, data-source swap or row move).
+
+Applying a height is one atomic size change: the core captures the row at the
+clip top, re-resolves the geometry and corrects the scroll position so that row
+keeps its viewport position, all in the same batch as the content size and the
+row sync. A viewport resize, a sort or filter, a data revision and a user scroll
+keep their own anchoring rules. A data revision re-resolves every placement in
+one resident-row pass, so a consumer that keeps a very large object cache
+resident pays that pass on each sort or refresh.
+
+The height reaches a wrapper as `SlotData.height`, published in the same
+`MOVE_SLOT` instruction as `slot.translateY`; a row drag ghost sizes itself from
+`RowDragState.sourceRowHeight`; and `SET_CONTENT_SIZE.height` follows the row
+extent plus the header band, so a change reaches the scroll range. See
+[Row heights](../../docs/features/row-heights.md).
+
 ## Creating a Framework Adapter
 
 To integrate @gp-grid/core with any UI framework:

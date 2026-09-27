@@ -592,6 +592,34 @@ setter also corrects the scroll position so the visible suffix stays anchored,
 and an equal-valued object is silent. See
 [Frozen rows](../../docs/features/frozen-rows.md).
 
+### Row heights
+
+Rows are `rowHeight` px tall unless you set a height by row identity. The
+commands live on the core handle, so a height change never remounts the grid:
+
+```tsx
+const gridRef = useRef<GridRef<Person> | null>(null);
+
+<Grid gridRef={gridRef} columns={columns} rowData={rows} getRowId={(row) => row.id} />;
+
+gridRef.current?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+gridRef.current?.core?.rowHeights.reset([2]);   // or reset() for all of them
+gridRef.current?.core?.rowHeights.getOverrides();
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws a `RangeError` and applies nothing. With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded yet waits for its row. Without `getRowId`, an integer `rowId`
+addresses a view index and is dropped at the next data revision.
+
+Applying a height is one atomic size change: the grid anchors the row at the
+clip top and corrects the scroll position in the same batch, so the viewport
+does not jump. Row boxes are sized from `SlotData.height`, cells fill their row
+through the shipped CSS, and the row drag ghost matches
+`RowDragState.sourceRowHeight`. Nothing is measured — auto height is a later
+feature. See [Row heights](../../docs/features/row-heights.md).
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference

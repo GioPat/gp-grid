@@ -603,6 +603,38 @@ setter also corrects the scroll position so the visible suffix stays anchored,
 and an equal-valued object is silent. See
 [Frozen rows](../../docs/features/frozen-rows.md).
 
+### Row heights
+
+Rows are `row-height` px tall unless you set a height by row identity. The
+commands live on the exposed core, so a height change never remounts the grid:
+
+```vue
+<GpGrid ref="gridRef" :columns="columns" :data-source="dataSource" />
+
+<script setup lang="ts">
+const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
+const coreOf = () => (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+
+coreOf()?.rowHeights.set([{ rowId: 2, height: 96 }]);
+coreOf()?.rowHeights.reset([2]);   // or reset() for all of them
+coreOf()?.rowHeights.getOverrides();
+</script>
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws a `RangeError` and applies nothing. With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded yet waits for its row. Without `getRowId`, an integer `rowId`
+addresses a view index and is dropped at the next data revision.
+
+Applying a height is one atomic size change: the grid anchors the row at the
+clip top and corrects the scroll position in the same batch, so the viewport
+does not jump. Row boxes are sized from `SlotData.height` (published in
+`useGpGrid`'s `slotsArray`), cells fill their row through the shipped CSS, and
+the row drag ghost matches `RowDragState.sourceRowHeight`. Nothing is measured —
+auto height is a later feature. See
+[Row heights](../../docs/features/row-heights.md).
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference

@@ -43,6 +43,19 @@ All notable changes to gp-grid will be documented in this file.
 - Paging: with a positive count a paginated source requests the prefix pages plus the visible suffix blocks, never the pages between them, and keeps the prefix resident across scrolling
 - See [Frozen rows](./features/frozen-rows.md)
 
+#### Row heights (PRD 006)
+- `GridCore.rowHeights` (`GridRowHeightsApi`): `set([{ rowId, height }])` stores heights by row identity, `reset(rowIds?)` drops the named ones or all of them, and `getOverrides()` lists every stored height in insertion order, including the ones still waiting for their row. `set` is all or nothing: a `height` that is not finite and `> 0` throws `RangeError('Invalid row height for row "<rowId>": <height>')` and applies nothing. A value equal to `rowHeight` is stored, places nothing and emits nothing, and both commands are no-ops after `destroy()`.
+- `RowHeightUpdate` (`{ rowId: RowId, height: number }`), the command and listing payload
+- Heights by identity: with `getRowId` (or a columnar source's row access) a height follows its row through sort, filter, refresh, row moves and paging; without a stable identity an integer `rowId` in `[0, rowCount)` places at that view index and is dropped at the next data revision. An ID the source does not hold yet stays pending.
+- Scroll anchoring (D5): a height change captures the row at the clip top and restores the scroll position so that row keeps its viewport position, in the same batch as the geometry, the content size and the row sync. A viewport resize, a sort or filter, a data revision and a user scroll keep their own anchoring rules.
+- Paging (D7): a height for a row on an unloaded page is stored and pending, and is placed in the batch that carries its arrival — anchoring included — so the visible rows do not move. Eviction never unplaces a height.
+- `SlotData.height` on every mounted slot, published in the same `MOVE_SLOT` instruction as `slot.translateY`, so a wrapper sizes a row box from the instruction alone
+- `RowDragState.sourceRowHeight`, so a row drag ghost matches the row it started on instead of the configured default
+- `SET_CONTENT_SIZE.height` follows the row extent plus the header band, so a height change reaches the scroll range; the compressed last-row stop is preserved
+- `GridViewportApi.getTopOverride()`, so a momentum fling notices a scroll correction another actor made while it was in flight and maps its logical position through the current scroll ratio
+- `PendingScrollLatch` in the adapter kit: it holds `SCROLL_TO` corrections outside the render state until the wrapper writes them, so batches coalesced into one render cannot drop a correction and taking it costs no extra render. React and Vue use it.
+- See [Row heights](./features/row-heights.md)
+
 ### Changed
 
 #### GridCore API (1.0)
@@ -111,6 +124,22 @@ All notable changes to gp-grid will be documented in this file.
 - An unavailable frozen row renders a cell-less `.gp-grid-row--loading` placeholder instead of triggering the grid-level loading overlay; the overlay still reacts to missing suffix rows only.
 - Growing the frozen prefix corrects the scroll position to `max(0, logicalTop − Δ)` in the same batch as the region publication, so the first visible suffix row stays below the bigger block; shrinking is uncorrected and the read-time clamp holds the logical top, uncovering the newly unfrozen rows.
 - An open edit whose row changes region is committed by a freeze or unfreeze command (cancelled only when its assignment is already stale), like an edit in a hidden column; a row that stays in its region keeps its editor and draft.
+
+#### Row heights (PRD 006)
+- **Breaking (0.x → 1.0):** `MOVE_SLOT` now carries a required `height`, and `SlotData.height` and `SlotState.height` are required fields, so a consumer that builds those objects by hand must set them
+- **Breaking (0.x → 1.0):** the Angular `GridBodyComponent` and `GridOverlaysComponent` `rowHeight` inputs are removed; those components are internal and the grid component's own `rowHeight` input is unchanged
+- Wrappers no longer write an inline cell height. A cell fills its row through the shipped `.gp-grid-cell { height: 100% }` rule, and the row box keeps an explicit pixel height taken from `slot.height`, so a cell can never disagree with its row.
+- A row whose height changes re-publishes one `MOVE_SLOT` per mounted slot, so a wrapper can key off the instruction alone
+- Applying a height is an atomic size change: geometry, the content size, the scroll correction and the row sync land in one batch, and an overscan row that is no longer needed is unmounted in the same one
+- A data revision re-resolves placements against the new order in one resident-row pass, once per revision rather than per scroll or query
+
+#### Vue rendering
+- Scrolling no longer re-renders every mounted row and cell. A cell re-renders when its row is re-assigned (`slot.generation`) or when a batch can change core-backed content; a batch that only places rows and columns leaves it alone. `useGpGrid().renderToken` still bumps once per batch.
+- `GpGrid` passes rows a stable `displayedIndexOf` that is rebuilt only when the column layout changes
+- A hover change no longer re-renders every cell: the hover position reaches cells and rows through `provide`/`inject`, and their classes are computed, so only the cells whose highlight classes change re-render. Row and cell styles are strings, which Vue writes only when they change.
+
+#### Wheel scrolling on scaled grids
+- A dampened wheel delta keeps its fraction: `TouchScrollController.scrollByWheel(domDy)` accumulates it and drives the core through the synthetic scroll override, once per frame, and hands the top back to native scroll 150 ms after the last wheel event. Writing the dampened delta to `scrollTop` directly lost every trackpad delta under 5 px (the DOM rounds each write), so momentum stopped abruptly and speed stepped. All three wrappers use it and fall back to the direct write when no controller is attached.
 
 ### Removed
 

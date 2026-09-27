@@ -168,6 +168,26 @@ runtime setter also corrects the scroll position so the visible suffix stays
 anchored, and an equal-valued object is silent. See
 [Frozen rows](../../docs/features/frozen-rows.md).
 
+Row heights: rows are `rowHeight` px tall unless you set a height by row
+identity through the exposed core (`grid.core` via `@ViewChild`):
+
+```ts
+grid.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+grid.core?.rowHeights.reset([2]);   // or reset() for all of them
+grid.core?.rowHeights.getOverrides();
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws a `RangeError` and applies nothing. With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded yet waits for its row. Without `getRowId`, an integer `rowId`
+addresses a view index and is dropped at the next data revision. Applying a
+height anchors the row at the clip top and corrects the scroll position in the
+same batch, so the viewport does not jump; row boxes are sized from
+`slot.height` and the row drag ghost from `rd.sourceRowHeight`. Nothing is
+measured — auto height is a later feature. See
+[Row heights](../../docs/features/row-heights.md).
+
 | Output | Payload |
 | --- | --- |
 | `(onColumnResized)` | `{ columnId, width, viewIndex }` |
