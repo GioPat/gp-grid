@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type CSSProperties } from "vue";
+import { computed } from "vue";
 import type {
   ColumnRegion,
   ColumnWindowSnapshot,
@@ -23,7 +23,6 @@ const props = defineProps<{
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
   contentWidthPx: number;
-  rowHeight: number;
   cellContext: GridRowCellContext;
   /** Frozen-branch handle; `null` when it is hidden or belongs to the suffix. */
   fillHandlePosition: FillHandlePosition | null;
@@ -50,20 +49,14 @@ const pinOverlayWidth = (region: "start" | "end"): number | null => {
 const startOverlayWidth = computed(() => pinOverlayWidth("start"));
 const endOverlayWidth = computed(() => pinOverlayWidth("end"));
 
-const pinRowStyle = (translateY: number): CSSProperties => ({
-  position: "absolute",
-  top: 0,
-  insetInlineStart: 0,
-  transform: `translateY(${translateY}px)`,
-  width: `${props.contentWidthPx}px`,
-  height: `${props.rowHeight}px`,
-  display: "flex",
-});
+const pinRowStyle = (translateY: number, height: number): string =>
+  `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${translateY}px); width: ${props.contentWidthPx}px; height: ${height}px; display: flex;`;
 
 const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: slot.rowIndex,
   rowData: slot.rowData,
+  generation: slot.generation,
   column,
   displayedIndex: props.displayedIndexOf(column.columnId),
 });
@@ -89,7 +82,6 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
             :column-window="props.columnWindow"
             :displayed-index-of="props.displayedIndexOf"
             :width="props.contentWidthPx"
-            :row-height="props.rowHeight"
             :cell-context="props.cellContext"
             :regions="CENTER_REGIONS"
           />
@@ -116,7 +108,7 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
           :key="slot.slotId"
           class="gp-grid-frozen-pin-row"
           role="presentation"
-          :style="pinRowStyle(slot.translateY)"
+          :style="pinRowStyle(slot.translateY, slot.height)"
         >
           <div
             v-if="startPinColumns.length > 0"

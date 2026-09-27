@@ -93,6 +93,7 @@ export interface UseGpGridResult<TData = unknown> {
   state: ShallowRef<GridState>;
   /** Bumped once per core batch; cells read it so core-backed content updates. */
   renderToken: ShallowRef<number>;
+  /** Mounted slots: size each row box from `slot.height`; cells fill the row. */
   slotsArray: ComputedRef<SlotData[]>;
 
   // Computed
@@ -192,6 +193,7 @@ export function useGpGrid<TData = unknown>(
       editingCell: computed(() => state.value.editingCell),
       filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
       onBeforeProgrammaticScroll: () => touchScroll.stop(),
+      scrollByWheel: (domDy) => touchScroll.scrollByWheel(domDy),
     },
   );
 

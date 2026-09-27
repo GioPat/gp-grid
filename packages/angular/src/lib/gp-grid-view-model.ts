@@ -23,7 +23,6 @@ import type { ActiveFilterPopup, EditingCellState } from './components';
 
 export interface GpGridViewModelDeps {
   getRows: () => unknown[];
-  getRowHeight: () => number;
   /** Bound core, used for geometry queries (fill handle, peek anchoring). */
   getCore: () => GridCore<unknown> | null;
 }

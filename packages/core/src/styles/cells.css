@@ -92,6 +92,7 @@
 .gp-grid-cell {
   position: absolute;
   top: 0;
+  height: 100%;
   box-sizing: border-box;
   display: flex;
   overflow: hidden;
@@ -112,7 +113,7 @@
 }
 
 /* Wrapped cell content - ColumnDefinition.wrapText: true.
-   Text flows onto additional lines and is clipped to the fixed row height. */
+   Text flows onto additional lines and is clipped to the row height. */
 .gp-grid-cell--wrap {
   align-items: flex-start;
 }

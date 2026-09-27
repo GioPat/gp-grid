@@ -35,6 +35,8 @@ export interface UseInputHandlerOptions {
   filterPopupOpen: ComputedRef<boolean>;
   /** Cancel an active synthetic fling before a programmatic scroll target. */
   onBeforeProgrammaticScroll?: () => void;
+  /** Apply a dampened wheel delta keeping its fraction; false writes it directly. */
+  scrollByWheel?: (domDy: number) => boolean;
 }
 
 export interface UseInputHandlerResult {
@@ -455,7 +457,7 @@ export function useInputHandler<TData = unknown>(
     const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening);
     if (dampened) {
       e.preventDefault();
-      container.scrollTop += dampened.dy;
+      if (options.scrollByWheel?.(dampened.dy) !== true) container.scrollTop += dampened.dy;
       container.scrollLeft += dampened.dx;
     }
   }

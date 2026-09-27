@@ -21,7 +21,6 @@ export interface GridFrozenRowsProps<TData = unknown> {
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
   contentWidthPx: number;
-  rowHeight: number;
   cellContext: GridRowCellContext<TData>;
   fillHandlePosition: FillHandlePosition | null;
   /** Handle overlay node, placed by row region and column region. */
@@ -44,7 +43,6 @@ export const GridFrozenRows = <TData = unknown>(
     columnWindow,
     displayedIndexOf,
     contentWidthPx,
-    rowHeight,
     cellContext,
     fillHandlePosition,
     fillHandle,
@@ -84,7 +82,6 @@ export const GridFrozenRows = <TData = unknown>(
           columnWindow={columnWindow}
           displayedIndexOf={displayedIndexOf}
           width={contentWidthPx}
-          rowHeight={rowHeight}
           cellContext={cellContext}
           regions={CENTER_REGION}
         />
@@ -101,7 +98,7 @@ export const GridFrozenRows = <TData = unknown>(
             key={slot.slotId}
             className="gp-grid-frozen-pin-row"
             role="presentation"
-            style={rowBoxStyle(slot.translateY, contentWidthPx, rowHeight)}
+            style={rowBoxStyle(slot.translateY, contentWidthPx, slot.height)}
           >
             <GridRowPins
               slot={slot}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, provide, ref } from "vue";
 import type {
   CellPosition,
   CellRange,
@@ -16,11 +16,10 @@ import type {
 import { formatLabel } from "@gp-grid/core";
 import GridRow from "./GridRow.vue";
 import GridFrozenRows from "./GridFrozenRows.vue";
-import type { GridRowCellContext } from "./cell-props";
+import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
-  rowHeight: number;
   totalHeaderHeight: number;
   contentWidth: number;
   contentHeight: number;
@@ -64,11 +63,11 @@ const bodyRef = ref<HTMLDivElement | null>(null);
 
 const contentWidthPx = computed(() => Math.max(props.contentWidth, props.totalWidth));
 
+provide(HOVER_POSITION, computed(() => props.hoverPosition));
+
 const cellContext = computed<GridRowCellContext>(() => ({
-  rowHeight: props.rowHeight,
   activeCell: props.activeCell,
   selectionRange: props.selectionRange,
-  hoverPosition: props.hoverPosition,
   renderToken: props.renderToken,
   editingCell: props.editingCell,
   dragState: props.dragState,
@@ -155,7 +154,6 @@ defineExpose({ bodyRef });
         :column-window="props.columnWindow"
         :displayed-index-of="props.displayedIndexOf"
         :content-width-px="contentWidthPx"
-        :row-height="props.rowHeight"
         :cell-context="cellContext"
         :fill-handle-position="frozenHandlePosition"
         :show-drop-indicator="frozenDropIndicator"
@@ -195,7 +193,6 @@ defineExpose({ bodyRef });
             :column-window="props.columnWindow"
             :displayed-index-of="props.displayedIndexOf"
             :width="contentWidthPx"
-            :row-height="props.rowHeight"
             :cell-context="cellContext"
           />
         </template>

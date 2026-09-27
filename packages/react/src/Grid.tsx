@@ -118,6 +118,11 @@ export function Grid<TData = unknown>(
     touchScrollRef.current?.stop();
   }, []);
 
+  const scrollByWheel = useCallback(
+    (domDy: number) => touchScrollRef.current?.scrollByWheel(domDy) ?? false,
+    [],
+  );
+
   /** Push the container's client box and inline-relative scroll into the core. */
   const syncViewport = useCallback((core: GridCore<TData>, container: HTMLElement): void => {
     core.setViewport(
@@ -255,6 +260,7 @@ export function Grid<TData = unknown>(
     editingCell: state.editingCell,
     filterPopupOpen: state.filterPopup?.isOpen ?? false,
     onBeforeProgrammaticScroll: stopTouchScroll,
+    scrollByWheel,
   });
 
   // Initialize GridCore
@@ -612,7 +618,6 @@ export function Grid<TData = unknown>(
 
       <GridBody
         ref={containerRef}
-        rowHeight={rowHeight}
         totalHeaderHeight={totalHeaderHeight}
         contentWidth={state.contentWidth}
         contentHeight={state.contentHeight}
@@ -768,9 +773,9 @@ export function Grid<TData = unknown>(
           className="gp-grid-row-drag-ghost"
           style={{
             left: dragState.rowDrag.currentX + 12,
-            top: dragState.rowDrag.currentY - rowHeight / 2,
+            top: dragState.rowDrag.currentY - dragState.rowDrag.sourceRowHeight / 2,
             width: Math.min(300, totalWidth),
-            height: rowHeight,
+            height: dragState.rowDrag.sourceRowHeight,
           }}
         />
       )}

@@ -19,6 +19,7 @@ import {
 } from "./touch-gesture";
 import { TouchPolicy } from "./touch-policy";
 import { cancelFrame } from "./touch-scroll-helpers";
+import { WheelScroll } from "./wheel-scroll";
 
 export interface TouchScrollDeps<TData = unknown> {
   getCore: () => GridCore<TData> | null;
@@ -58,6 +59,7 @@ export class TouchScrollController<TData = unknown> {
   private readonly deps: TouchScrollDeps<TData>;
   private readonly scroll: SyntheticScroll<TData>;
   private readonly fling: FlingAnimator<TData>;
+  private readonly wheel: WheelScroll<TData>;
   private attachedEl: HTMLElement | null = null;
   private policy: TouchPolicy<TData> | null = null;
   private gesture: GestureState | null = null;
@@ -69,6 +71,7 @@ export class TouchScrollController<TData = unknown> {
     this.deps = deps;
     this.scroll = new SyntheticScroll(deps.getCore, () => this.attachedEl);
     this.fling = new FlingAnimator(this.scroll);
+    this.wheel = new WheelScroll(this.scroll);
   }
 
   attach(): void {
@@ -111,7 +114,20 @@ export class TouchScrollController<TData = unknown> {
   /** Cancel an in-flight fling (call before programmatic scrollTop writes). */
   stop(): void {
     this.fling.stop();
+    this.wheel.stop();
     this.scroll.release();
+  }
+
+  /**
+   * Scroll a scaled grid by a dampened wheel delta in DOM px, keeping its
+   * fraction. False when no grid is attached, so the caller writes it itself.
+   */
+  scrollByWheel(domDy: number): boolean {
+    const ctx = this.resolveContext();
+    if (ctx === null) return false;
+    this.fling.stop();
+    this.wheel.scrollBy(ctx.core, ctx.el, domDy);
+    return true;
   }
 
   private resolveContext(): ScrollContext<TData> | null {
@@ -122,8 +138,15 @@ export class TouchScrollController<TData = unknown> {
   }
 
   private readonly onWheel = (): void => {
-    this.stop();
     this.syncCore();
+    if (this.deps.getCore()?.viewport.isScaling() !== true) {
+      this.stop();
+      return;
+    }
+    // The wrapper's dampened handler continues from the fling's position, so
+    // the override is kept; the idle release covers a handler that is not wired.
+    this.fling.stop();
+    this.wheel.scheduleRelease();
   };
 
   private readonly onTouchStart = (event: Event): void => {

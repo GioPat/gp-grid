@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, inject } from "vue";
 import type { CellValue, ColumnDefinition } from "@gp-grid/core";
 import {
   buildCellClasses,
@@ -9,17 +10,18 @@ import {
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
-import type { GridCellProps } from "./cell-props";
+import { HOVER_POSITION, type GridCellProps } from "./cell-props";
 
 const props = defineProps<GridCellProps>();
+const hoverPosition = inject(HOVER_POSITION, null);
 
-// Region-local inset: the same markup renders inside a pin container and as an
-// absolute center cell.
 const getCellClasses = (): string => {
   const { rowIndex, column, rowData } = props;
-  // Registers the hover signal as a dependency: highlight classes read live
-  // core state, which is not reactive on its own.
-  void props.hoverPosition;
+  // Highlight classes read live core state, which is not reactive: these are
+  // the signals that it changed.
+  void hoverPosition?.value;
+  void props.renderToken;
+  void props.generation;
   const definition: ColumnDefinition = column.column;
   const isEditing = isCellEditing(rowIndex, column.layoutIndex, props.editingCell);
   const active = isCellActive(rowIndex, column.layoutIndex, props.activeCell);
@@ -52,6 +54,14 @@ const getCellClasses = (): string => {
   ].filter(Boolean).join(" ");
 };
 
+// A hover change re-renders only the cells whose classes it changed.
+const cellClasses = computed(getCellClasses);
+
+// Region-local inset: the same markup renders inside a pin container and as an
+// absolute center cell. A string style is only written when it changes.
+const cellStyle = computed(() =>
+  `position: absolute; inset-inline-start: ${props.column.regionOffset}px; top: 0; width: ${props.column.width}px;`);
+
 const isEditing = (): boolean =>
   isCellEditing(props.rowIndex, props.column.layoutIndex, props.editingCell);
 
@@ -77,6 +87,7 @@ const initialEditValue = (): CellValue => {
 const cellContent = () => {
   const { column, rowData } = props;
   void props.renderToken;
+  void props.generation;
   const definition = column.column;
   const editing = props.editingCell;
   if (isEditing() && editing) {
@@ -114,19 +125,13 @@ const cellContent = () => {
 
 <template>
   <div
-    :class="getCellClasses()"
+    :class="cellClasses"
     role="gridcell"
     :aria-colindex="props.displayedIndex + 1"
     :data-cell-row="props.rowIndex"
     :data-cell-col="props.column.layoutIndex"
     :data-cell-region="props.column.region"
-    :style="{
-      position: 'absolute',
-      insetInlineStart: `${props.column.regionOffset}px`,
-      top: 0,
-      width: `${props.column.width}px`,
-      height: `${props.rowHeight}px`,
-    }"
+    :style="cellStyle"
     @pointerdown="(e) => props.onCellMouseDown(props.rowIndex, props.column.layoutIndex, e)"
     @dblclick="() => props.onCellDoubleClick(props.rowIndex, props.column.layoutIndex)"
     @mouseenter="() => props.onCellMouseEnter(props.rowIndex, props.column.layoutIndex)"

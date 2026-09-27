@@ -129,7 +129,7 @@ const rtl = ref(false);
 
 // State
 const pendingScroll = new PendingScrollLatch();
-const { state, renderToken, applyInstructions, reset: resetState } = useGridState({
+const { state, renderToken, contentToken, applyInstructions, reset: resetState } = useGridState({
   initialWidth: props.initialWidth,
   initialHeight: props.initialHeight,
   initialColumns: props.columns as unknown as CoreColumnDefinition[],
@@ -152,11 +152,12 @@ const displayedColumnCount = computed(() => state.value.layout?.columns.length ?
 const totalWidth = computed(() => state.value.contentWidth);
 const slotsArray = computed(() => Array.from(state.value.slots.values()));
 
-// Displayed index per column id, for `aria-colindex`. Keyed on the layout, so
-// scrolling the window never rebuilds it.
+// Displayed index per column id, for `aria-colindex`. Keyed on the layout
+// computed, not on `state`: a new function per batch re-renders every row.
+const layout = computed(() => state.value.layout);
 const displayedIndexOf = computed(() => {
   const index = new Map<string, number>();
-  state.value.layout?.columns.forEach((column, at) => index.set(column.columnId, at));
+  layout.value?.columns.forEach((column, at) => index.set(column.columnId, at));
   return (columnId: string): number => index.get(columnId) ?? 0;
 });
 
@@ -178,6 +179,7 @@ const {
   editingCell: computed(() => state.value.editingCell),
   filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
   onBeforeProgrammaticScroll: () => touchScroll.stop(),
+  scrollByWheel: (domDy) => touchScroll.scrollByWheel(domDy),
 });
 
 // Fill handle position, resolved by core geometry in rows-wrapper space.
@@ -530,7 +532,6 @@ defineExpose({
 
     <GridBody
       ref="gridBodyComp"
-      :row-height="rowHeight"
       :total-header-height="totalHeaderHeight"
       :content-width="state.contentWidth"
       :content-height="state.contentHeight"
@@ -549,7 +550,7 @@ defineExpose({
       :slots-array="slotsArray"
       :column-window="columnWindow"
       :displayed-index-of="displayedIndexOf"
-      :render-token="renderToken"
+      :render-token="contentToken"
       :fill-handle-position="fillHandlePosition"
       :drag-state="dragState"
       :on-scroll="handleScrollWithHeaderSync"
@@ -658,9 +659,9 @@ defineExpose({
       class="gp-grid-row-drag-ghost"
       :style="{
         left: `${dragState.rowDrag!.currentX + 12}px`,
-        top: `${dragState.rowDrag!.currentY - rowHeight / 2}px`,
+        top: `${dragState.rowDrag!.currentY - dragState.rowDrag!.sourceRowHeight / 2}px`,
         width: `${Math.min(300, totalWidth)}px`,
-        height: `${rowHeight}px`,
+        height: `${dragState.rowDrag!.sourceRowHeight}px`,
       }"
     />
   </div>
