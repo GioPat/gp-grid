@@ -260,6 +260,24 @@ describe("page capacity", () => {
     expect(maxRequiredPages({ ...input, maxScrollTop: Number.NaN })).toBe(maxRequiredPages(input));
   });
 
+  it("refuses any bound on a non-uniform axis without a positive minimum size", () => {
+    const sized = createPrefixAxis([5, 10, 20]);
+    const withMinSize = (minSize?: number): VirtualAxis => ({
+      count: sized.count,
+      extent: sized.extent,
+      getSize: (index) => sized.getSize(index),
+      getOffset: (index) => sized.getOffset(index),
+      indexAt: (offset) => sized.indexAt(offset),
+      getWindow: (offset, extent, overscan) => sized.getWindow(offset, extent, overscan),
+      minSize,
+    });
+    const input = { pageSize: 1, viewportHeight: 15, frozenCount: 0 };
+
+    expect(maxRequiredPages({ ...input, axis: withMinSize() })).toBe(Number.POSITIVE_INFINITY);
+    expect(maxRequiredPages({ ...input, axis: withMinSize(0) })).toBe(Number.POSITIVE_INFINITY);
+    expect(maxRequiredPages({ ...input, axis: withMinSize(5) })).toBe(maxRequiredPages({ ...input, axis: sized }));
+  });
+
   it("treats an invalid page size as one row per page", () => {
     const axis = createFixedAxis(100, 32);
     expect(maxRequiredPages({ axis, pageSize: 0, viewportHeight: 320, frozenCount: 0 }))

@@ -15,7 +15,7 @@ export const WHEEL_RELEASE_MS = 150;
 export class WheelScroll<TData = unknown> {
   private readonly scroll: SyntheticScroll<TData>;
   private target: number | null = null;
-  private pending: { core: GridCore<TData>; el: HTMLElement } | null = null;
+  private pending: { core: GridCore<TData>; el: HTMLElement; top: number } | null = null;
   private frame: number | null = null;
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -26,7 +26,7 @@ export class WheelScroll<TData = unknown> {
   scrollBy(core: GridCore<TData>, el: HTMLElement, domDy: number): void {
     const base = this.target ?? startTop(core, el);
     this.target = clamp(base + domDy, 0, el.scrollHeight - el.clientHeight);
-    this.scheduleApply(core, el);
+    this.scheduleApply(core, el, this.target);
     this.scheduleRelease();
   }
 
@@ -50,8 +50,8 @@ export class WheelScroll<TData = unknown> {
     this.pending = null;
   }
 
-  private scheduleApply(core: GridCore<TData>, el: HTMLElement): void {
-    this.pending = { core, el };
+  private scheduleApply(core: GridCore<TData>, el: HTMLElement, top: number): void {
+    this.pending = { core, el, top };
     if (this.frame !== null) return;
     const raf = globalThis.requestAnimationFrame;
     if (raf === undefined) {
@@ -68,8 +68,8 @@ export class WheelScroll<TData = unknown> {
     const pending = this.pending;
     this.pending = null;
     this.frame = cancelFrame(this.frame);
-    if (pending === null || this.target === null) return;
-    this.scroll.apply(pending.core, pending.el, this.target, nowMs);
+    if (pending === null) return;
+    this.scroll.apply(pending.core, pending.el, pending.top, nowMs);
   }
 }
 

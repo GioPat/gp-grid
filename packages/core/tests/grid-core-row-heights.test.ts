@@ -4,6 +4,9 @@
 
 import { describe, expect, it } from "vitest";
 import { GridCore } from "../src/grid-core";
+import { RowHeightsController } from "../src/grid-core-row-heights";
+import { InstructionBatcher } from "../src/managers";
+import { RowHeightOverrides } from "../src/managers/row-height-overrides";
 import { createClientDataSource } from "../src/data-source";
 import type {
   ColumnDefinition,
@@ -287,6 +290,56 @@ describe("GridCore.rowHeights — reset and no-ops", () => {
 
     expect(batches).toHaveLength(0);
     expect(grid.rowHeights.getOverrides()).toEqual([]);
+  });
+
+  it("applies a height without a scroll correction when there is no suffix clip", async () => {
+    const { grid } = await createGrid({ getRowId: (row) => row.id });
+    grid.setViewport(0, 0, WIDTH, 0);
+    const batches = record(grid);
+
+    grid.rowHeights.set([{ rowId: 5, height: 96 }]);
+
+    expect(batches).toHaveLength(1);
+    expect(scrollTosOf(batches[0]!)).toEqual([]);
+    expect(heightAt(grid, 5)).toBe(96);
+  });
+});
+
+describe("RowHeightsController — after destroy", () => {
+  const unreachable = (): never => {
+    throw new Error("reached a destroyed controller");
+  };
+
+  const createDestroyed = () => {
+    const batcher = new InstructionBatcher();
+    const batches: GridInstruction[][] = [];
+    batcher.subscribe((batch) => batches.push([...batch]));
+    const controller = new RowHeightsController<Row>({
+      batcher,
+      overrides: new RowHeightOverrides({
+        getRowHeight: () => ROW_HEIGHT,
+        getRowCount: () => ROW_COUNT,
+        hasStableIdentity: () => true,
+        getDataRevision: () => 0,
+      }),
+      getGeometry: unreachable,
+      getRowData: unreachable,
+      getView: unreachable,
+      refreshGeometry: unreachable,
+      writeScrollTop: unreachable,
+      isDestroyed: () => true,
+    });
+    return { controller, batches };
+  };
+
+  it("ignores reset, loaded rows and moved rows", () => {
+    const { controller, batches } = createDestroyed();
+
+    controller.reset();
+    controller.onRowsLoaded(true);
+    controller.onRowsMoved();
+
+    expect(batches).toHaveLength(0);
   });
 });
 

@@ -91,7 +91,6 @@ const conservativeRequiredPages = (
     Math.ceil(clipHeight / minSize) + 1,
     Math.max(0, axis.count - frozenCount),
   );
-  if (rows <= 0) return blockCountOf(prefix);
   return blockCountOf(prefix) + Math.ceil((rows - 1) / pageSize) + 1;
 };
 

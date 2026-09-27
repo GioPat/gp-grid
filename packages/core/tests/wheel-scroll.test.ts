@@ -3,8 +3,8 @@ import type { GridCore } from "../src/grid-core";
 import { TouchScrollController } from "../src/adapter/touch-scroll";
 import { WHEEL_RELEASE_MS } from "../src/adapter/wheel-scroll";
 
-const createCore = (scaling = true) => {
-  const state = { topOverride: null as number | null };
+const createCore = (scaling = true, topOverride: number | null = null) => {
+  const state = { topOverride };
   const setTopOverride = vi.fn((value: number | null) => {
     state.topOverride = value;
   });
@@ -32,8 +32,8 @@ const createScrollEl = (): HTMLElement => {
   return el;
 };
 
-const setup = (scaling = true) => {
-  const mocks = createCore(scaling);
+const setup = (scaling = true, topOverride: number | null = null) => {
+  const mocks = createCore(scaling, topOverride);
   const el = createScrollEl();
   const controller = new TouchScrollController({
     getCore: () => mocks.core,
@@ -119,5 +119,41 @@ describe("TouchScrollController — dampened wheel", () => {
     pump(16);
     el.dispatchEvent(new Event("wheel"));
     expect(setTopOverride).toHaveBeenLastCalledWith(null);
+  });
+
+  it("continues from a top override the DOM still agrees with", () => {
+    const { controller, el, setTopOverride } = setup(true, 100.4);
+    el.scrollTop = 100;
+    controller.scrollByWheel(2);
+    pump(16);
+
+    expect(setTopOverride).toHaveBeenLastCalledWith(expect.closeTo(102.4, 6));
+  });
+
+  it("restarts from the DOM top when the override is stale", () => {
+    const { controller, el, setTopOverride } = setup(true, 400);
+    el.scrollTop = 100;
+    controller.scrollByWheel(2);
+    pump(16);
+
+    expect(setTopOverride).toHaveBeenLastCalledWith(102);
+  });
+
+  it("applies at once without requestAnimationFrame", () => {
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const { controller, setViewport } = setup();
+    controller.scrollByWheel(3);
+
+    expect(setViewport).toHaveBeenCalledTimes(1);
+    expect(setViewport.mock.calls[0]![0]).toBe(3);
+  });
+
+  it("releases without re-applying a top the frame already applied", () => {
+    const { controller, setTopOverride } = setup();
+    controller.scrollByWheel(4);
+    pump(16);
+    vi.advanceTimersByTime(WHEEL_RELEASE_MS);
+
+    expect(setTopOverride.mock.calls).toEqual([[4], [null]]);
   });
 });
