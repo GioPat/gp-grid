@@ -4,9 +4,13 @@
 
 import type { RowHeightUpdate, RowId } from "./types";
 import type { AxisBounds } from "./types/geometry";
-import type { GridGeometryService } from "./geometry";
-import { captureRowAnchor, resolveAnchoredScrollTop, type RowAnchor } from "./geometry";
-import type { RowRegionMappingInput } from "./geometry";
+import {
+  captureRowAnchor,
+  resolveAnchoredScrollTop,
+  type GridGeometryService,
+  type RowAnchor,
+  type RowRegionMappingInput,
+} from "./geometry";
 import type { InstructionBatcher } from "./managers";
 import type { LocateRowIds, RowHeightOverrides } from "./managers/row-height-overrides";
 import type { RowDataManager } from "./managers/row-data-manager";
