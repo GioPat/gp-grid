@@ -36,6 +36,12 @@ export interface GridManagersDeps<TData> {
   getFrozenRowsBaseline: () => FrozenRowsState;
   /** Bounded keep-alive for the edited column (B7). */
   retainEditColumn: (columnId: string | null) => void;
+  /**
+   * A row window arrived from a fire-and-forget load (scroll-triggered), so
+   * nobody is awaiting it: the view must be synced from here. Bound lazily to
+   * the row-heights controller, which may place heights on arrival (D7).
+   */
+  onRowsLoaded: (totalRowsChanged: boolean) => void;
 }
 
 export interface GridManagers<TData> {
@@ -128,6 +134,7 @@ export const buildGridManagers = <TData>(
     getRowRegions: () => deps.getGeometry().getRowRegions(),
     // Region-aware rows space: frozen rows keep their content offset (C4).
     getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
+    getRowSize: (rowIndex) => getRowGeometry().syncAxis().getSize(rowIndex),
     getRowData: (rowIndex) => getCachedRows().get(rowIndex),
     isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
   });
@@ -226,7 +233,7 @@ export const buildGridManagers = <TData>(
     onCellValueChanged: config.onCellValueChanged,
     onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,
-    onRowsLoaded: (totalRowsChanged) => view.syncVisibleRows(totalRowsChanged),
+    onRowsLoaded: (totalRowsChanged) => deps.onRowsLoaded(totalRowsChanged),
   });
 
   return {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, type CSSProperties } from "vue";
+import { computed, inject } from "vue";
 import type { ColumnRegion, ColumnWindowSnapshot, ResolvedColumn, SlotData } from "@gp-grid/core";
 import GridCell from "./GridCell.vue";
-import type { GridRowCellContext } from "./cell-props";
+import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
 import type { Row } from "../types";
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -13,7 +13,6 @@ const props = defineProps<{
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
   width: number;
-  rowHeight: number;
   cellContext: GridRowCellContext;
   /** Column regions this row renders: the frozen block renders `center` only. */
   regions?: readonly ColumnRegion[];
@@ -27,26 +26,25 @@ const startColumns = computed(() =>
 const endColumns = computed(() =>
   renderedRegions.value.includes("end") ? props.columnWindow.end : []);
 
-const rowStyle = computed<CSSProperties>(() => ({
-  position: "absolute",
-  top: 0,
-  insetInlineStart: 0,
-  transform: `translateY(${props.slot.translateY}px)`,
-  width: `${props.width}px`,
-  height: `${props.rowHeight}px`,
-  display: "flex",
-}));
+const hoverPosition = inject(HOVER_POSITION, null);
 
-const getRowClasses = (): string => {
+// A string style is only written when it changes; an object rewrites every key.
+const rowStyle = computed(() =>
+  `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${props.slot.translateY}px); width: ${props.width}px; height: ${props.slot.height}px; display: flex;`);
+
+const rowClasses = computed(() => {
+  void hoverPosition?.value;
+  void props.cellContext.renderToken;
   const highlightRowClasses =
     props.cellContext.coreRef?.highlight?.computeRowClasses(props.slot.rowIndex, props.slot.rowData) ?? [];
   return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
-};
+});
 
 const cellProps = (column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: props.slot.rowIndex,
   rowData: props.slot.rowData,
+  generation: props.slot.generation,
   column,
   displayedIndex: props.displayedIndexOf(column.columnId),
 });
@@ -63,7 +61,7 @@ const cellProps = (column: ResolvedColumn) => ({
   />
   <div
     v-else
-    :class="getRowClasses()"
+    :class="rowClasses"
     role="row"
     :aria-rowindex="props.slot.rowIndex + 1"
     :style="rowStyle"

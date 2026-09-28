@@ -4,6 +4,7 @@ export { buildOffsets, searchOffsets, clampIndex } from "./offsets";
 export { windowOf, type AxisWindow, type VirtualAxis } from "./virtual-axis";
 export { createFixedAxis } from "./fixed-axis";
 export { createPrefixAxis } from "./prefix-axis";
+export { createOverrideAxis, type PlacedRowSize } from "./override-axis";
 export {
   DEFAULT_MIN_COLUMN_WIDTH,
   isUsableWidth,
@@ -81,7 +82,6 @@ export {
   type RowRegionHit,
   type RowRegionMappingInput,
   type RowRegionScrollCorrectionInput,
-  type RowRegionScrollInput,
 } from "./row-regions-mapping";
 export {
   createGridGeometry,
@@ -90,4 +90,6 @@ export {
   type GridGeometryService,
   type GridViewportSample,
 } from "./grid-geometry";
+export { resolveScrollLeft, type ScrollTargetInput } from "./scroll-target";
+export { captureRowAnchor, resolveAnchoredScrollTop, type RowAnchor } from "./row-anchor";
 export { toReadonlyGeometry } from "./readonly-geometry";

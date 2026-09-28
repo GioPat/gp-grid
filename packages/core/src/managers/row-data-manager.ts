@@ -13,6 +13,7 @@ import type {
   WriteRejectionOperation,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
+import type { AxisBounds } from "../types/geometry";
 import { buildDataSourceRequest } from "../utils";
 import { PaginatedRowLoader } from "./paginated-row-loader";
 import { RowIdDiagnostics } from "./row-id-diagnostics";
@@ -98,6 +99,7 @@ export class RowDataManager<TData = unknown> {
         this.isDataLoading = loading;
       },
       onRowsLoaded: options.onRowsLoaded,
+      bumpDataRevision: () => this.bumpDataRevision(),
     });
   }
 
@@ -135,6 +137,15 @@ export class RowDataManager<TData = unknown> {
   findViewIndexById(rowId: RowId): number {
     return this.store.findViewIndexById(rowId);
   }
+  /** Whether the bound source exposes a stable row identity (D2). */
+  hasStableIdentity(): boolean { return this.store.hasStableIdentity(); }
+  /** View indices of the requested identities, within `range` when given. */
+  locateRowIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    return this.store.locateIds(ids, range);
+  }
+  /** Changes whenever row order or membership may have changed (D6). */
+  getDataRevision(): number { return this.store.getRevision(); }
+  bumpDataRevision(): void { this.store.bumpRevision(); }
 
   /** False when the bound source declares itself read-only. */
   isWritable(): boolean {
@@ -201,6 +212,7 @@ export class RowDataManager<TData = unknown> {
     });
 
     // Keep wrapper row counts in sync without showing a loading indicator.
+    this.bumpDataRevision();
     this.options.batcher.emit({
       type: "DATA_LOADED",
       totalRows: this.store.getTotalRows(),
@@ -213,6 +225,7 @@ export class RowDataManager<TData = unknown> {
     this.store.setRowAccess(null);
     this.loadGeneration += 1;
     this.store.setTotalRows(0);
+    this.bumpDataRevision();
   }
 
   destroy(): void {
@@ -259,6 +272,7 @@ export class RowDataManager<TData = unknown> {
    * and leaves the row cache empty; otherwise the materialized rows replace it.
    */
   private applyResponse(response: DataSourceResponse<TData>): void {
+    this.bumpDataRevision();
     if (response.access) {
       this.store.getCachedRows().clear();
       this.store.setRowAccess(response.access);

@@ -11,12 +11,14 @@ import { InputHandler } from "./input-handler";
 import type { HighlightManager, SortFilterManager } from "./managers";
 import { InstructionBatcher } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
+import { RowHeightOverrides, type LocateRowIds } from "./managers/row-height-overrides";
 import { type GridCoreConfig, resolveGridCoreConfig } from "./grid-core-config";
 import { buildGridManagers } from "./grid-core-managers";
 import { createCoreGeometry } from "./grid-core-geometry";
 import { ColumnModel } from "./column-model";
 import type { ViewSync } from "./grid-core-view-sync";
 import { FrozenRowsController, type GridFrozenRowsApi } from "./grid-core-frozen-rows";
+import { RowHeightsController, type GridRowHeightsApi } from "./grid-core-row-heights";
 import { ViewportController, type GridViewportApi } from "./grid-core-viewport";
 import { EditController, type GridEditApi } from "./grid-core-edit";
 import { CellsController, type GridCellsApi } from "./grid-core-cells";
@@ -36,6 +38,8 @@ export class GridCore<TData = unknown> {
   public readonly edit: GridEditApi;
   public readonly columns: GridColumnsApi;
   public readonly frozenRows: GridFrozenRowsApi;
+  /** Application-set row heights by identity (PRD 006). */
+  public readonly rowHeights: GridRowHeightsApi;
   public readonly rowDrag: GridRowDragApi;
   /** Scroll hooks for adapters driving a synthetic touch scroller. */
   public readonly viewport: GridViewportApi;
@@ -51,6 +55,9 @@ export class GridCore<TData = unknown> {
   private readonly geometryService: GridGeometryService;
   private readonly viewportController: ViewportController<TData>;
   private readonly frozenRowsController: FrozenRowsController<TData>;
+  private readonly rowHeightsController: RowHeightsController<TData>;
+  private readonly rowHeightOverrides: RowHeightOverrides;
+  private readonly scanRowIds: LocateRowIds = (ids) => this.rowData.locateRowIds(ids);
   private readonly rowData: RowDataManager<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
@@ -69,8 +76,16 @@ export class GridCore<TData = unknown> {
       getGeometry: () => this.geometryService,
       getFrozenRowsBaseline: () => this.frozenRowsController.getBaseline(),
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      onRowsLoaded: (totalRowsChanged) =>
+        this.rowHeightsController.onRowsLoaded(totalRowsChanged),
     });
     this.rowData = managers.rowData;
+    this.rowHeightOverrides = new RowHeightOverrides({
+      getRowHeight: () => this.config.rowHeight,
+      getRowCount: () => this.rowData.getTotalRows(),
+      hasStableIdentity: () => this.rowData.hasStableIdentity(),
+      getDataRevision: () => this.rowData.getDataRevision(),
+    });
     this.selection = managers.selection;
     this.highlight = managers.highlight;
     this.fill = managers.fill;
@@ -108,13 +123,32 @@ export class GridCore<TData = unknown> {
       scrollVirtualization: managers.scrollVirtualization,
       getDomScrollTop: () => this.viewportController.getDomScrollTop(),
       getFrozenRowsRequest: () => this.frozenRowsController.getRequest(),
+      getPlacedRowSizes: () =>
+        this.rowHeightOverrides.getPlaced({
+          revision: this.rowData.getDataRevision(),
+          rowCount: this.rowData.getTotalRows(),
+          defaultSize: this.config.rowHeight,
+          stableIdentity: this.rowData.hasStableIdentity(),
+          scan: this.scanRowIds,
+        }),
     });
     this.geometry = toReadonlyGeometry(this.geometryService);
     this.geometryService.refresh();
     this.frozenRowsController.captureBaseline();
+    this.rowHeightsController = new RowHeightsController<TData>({
+      batcher: this.batcher,
+      overrides: this.rowHeightOverrides,
+      getGeometry: () => this.geometryService,
+      getRowData: () => this.rowData,
+      getView: () => this.view,
+      refreshGeometry: () => this.viewportController.refreshGeometry(),
+      writeScrollTop: (domScrollTop) => this.viewportController.writeScrollTop(domScrollTop),
+      isDestroyed: () => this.isDestroyed,
+    });
 
     this.viewport = this.viewportController;
     this.frozenRows = this.frozenRowsController;
+    this.rowHeights = this.rowHeightsController;
     this.rows = new RowsController({ rowData: this.rowData, slotPool: this.slotPool });
     this.cells = new CellsController({ rowData: this.rowData, geometry: this.geometry });
     this.edit = new EditController({
@@ -145,6 +179,7 @@ export class GridCore<TData = unknown> {
       rowData: this.rowData,
       slotPool: this.slotPool,
       highlight: this.highlight,
+      onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
     });
     this.input = new InputHandler(this);
   }
@@ -213,6 +248,7 @@ export class GridCore<TData = unknown> {
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
+    this.rowHeightsController.clear();
     this.slotPool.destroy();
     this.highlight?.destroy();
     this.sortFilter.destroy();

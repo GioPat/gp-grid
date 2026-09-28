@@ -16,6 +16,7 @@ import type {
   FreezeRowsOptions,
   GridCore,
   RowDragEndEvent,
+  RowLoadingOptions,
 } from "@gp-grid/vue";
 import {
   createGeometryHooks,
@@ -33,6 +34,12 @@ import {
   FROZEN_ROW_HEIGHT,
   type FrozenMode,
 } from "./conformance-frozen";
+import {
+  createRowHeightsFixture,
+  ROW_HEIGHTS_HEADER_HEIGHT,
+  ROW_HEIGHTS_ROW_HEIGHT,
+  type RowHeightsMode,
+} from "./conformance-row-heights";
 
 interface ConformanceRow {
   id: number;
@@ -151,7 +158,9 @@ const columnarColumns = ref<ColumnDefinition[]>(createColumnarColumns());
 const fixture = createColumnarFixture();
 const largeColumnarSource = ref<ReturnType<typeof createLargeColumnarSource> | null>(null);
 const frozen = createFrozenFixture();
+const rowHeights = createRowHeightsFixture();
 const frozenMode = ref<FrozenMode>("off");
+const rowHeightsMode = ref<RowHeightsMode>("off");
 const mode = ref<"object" | "columnar">("object");
 const revision = ref(0);
 const mounted = ref(true);
@@ -213,10 +222,19 @@ const useLargeColumnar = (): void => {
 
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
+const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
 
 /** Arming swaps the data source and columns, so it remounts the grid. */
 const armFrozenRows = (next: FrozenMode): void => {
   frozenMode.value = next;
+  rowHeightsMode.value = "off";
+  generation.value += 1;
+};
+
+/** The row-height arms remount the same way, and clear the frozen arm. */
+const armRowHeights = (next: RowHeightsMode): void => {
+  rowHeightsMode.value = next;
+  frozenMode.value = "off";
   generation.value += 1;
 };
 
@@ -225,6 +243,10 @@ const clearFreezeRows = (): void => armFrozenRows("off");
 const useFrozenPaged = (): void => armFrozenRows("paged");
 const useFrozenPagedTight = (): void => armFrozenRows("paged-tight");
 const useFrozenObject = (): void => armFrozenRows("object");
+
+const useRowHeights = (): void => armRowHeights("object");
+const useRowHeightsLarge = (): void => armRowHeights("large");
+const useRowHeightsPaged = (): void => armRowHeights("paged");
 
 // In-place controls: the option stays reactive, so these never touch the
 // remount `generation`. `null` means "the armed mode's own option".
@@ -247,23 +269,44 @@ const toggleHostHeight = (): void => {
     : FROZEN_HOST_HEIGHT;
 };
 
-/** A frozen arm replaces the data source; otherwise the mode picks it. */
+/** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (rowHeightsActive.value) return rowHeights.sourceFor(rowHeightsMode.value);
   if (frozenActive.value) return frozen.sourceFor(frozenMode.value);
   if (mode.value === "columnar") return largeColumnarSource.value ?? fixture.source;
   return undefined;
 };
 
-/** The writable arm keeps the caller's object rows; every other one is sourced. */
+/** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
+  if (rowHeightsActive.value) return rowHeights.rowDataFor(rowHeightsMode.value);
   if (frozenActive.value) return frozenObject.value ? rows.value : undefined;
   return mode.value === "columnar" ? undefined : rows.value;
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  const heightColumns = rowHeightsActive.value ? rowHeights.columnsFor(rowHeightsMode.value) : undefined;
+  if (heightColumns !== undefined) return heightColumns;
   const frozenColumns = frozenActive.value ? frozen.columnsFor(frozenMode.value) : undefined;
   if (frozenColumns !== undefined) return frozenColumns;
   return mode.value === "columnar" ? columnarColumns.value : columns.value;
+};
+
+const activeRowLoading = (): RowLoadingOptions | undefined =>
+  rowHeightsActive.value
+    ? rowHeights.rowLoadingFor(rowHeightsMode.value)
+    : frozen.rowLoadingFor(frozenMode.value);
+
+const activeRowHeight = (): number => {
+  if (frozenActive.value) return FROZEN_ROW_HEIGHT;
+  if (rowHeightsActive.value) return ROW_HEIGHTS_ROW_HEIGHT;
+  return 32;
+};
+
+const activeHeaderHeight = (): number => {
+  if (frozenActive.value) return FROZEN_HEADER_HEIGHT;
+  if (rowHeightsActive.value) return ROW_HEIGHTS_HEADER_HEIGHT;
+  return 36;
 };
 
 const activeFreezeRows = (): FreezeRowsOptions | undefined =>
@@ -307,6 +350,7 @@ const hideColumn = (): void => {
 
 const reset = (): void => {
   frozenMode.value = "off";
+  rowHeightsMode.value = "off";
   rows.value = createRows();
   columns.value = createColumns();
   columnarColumns.value = createColumnarColumns();
@@ -403,6 +447,27 @@ const dragRow = (): void => {
   coreOf()?.rowDrag.commit(0, 1);
 };
 
+/** In-place height controls: the arm stays mounted (AC-006-01/03/04). */
+const setRowHeightControls = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.setControlHeights(core);
+};
+
+const growAboveViewport = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.growAboveViewport(core);
+};
+
+const growFrozenRow = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.growFrozenRow(core);
+};
+
+const resetRowHeights = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.resetHeights(core);
+};
+
 if (typeof window !== "undefined") {
   (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
     getCellValue: (row: number, col: number): CellValue => coreOf()?.cells.getValue(row, col) ?? null,
@@ -428,11 +493,15 @@ if (typeof window !== "undefined") {
     useWideColumns,
     setFreezeCount,
     ...createGeometryHooks(() => coreOf(), frozen),
+    // Each arm records its own requests; the frozen reader is the other arm's.
+    requestedRanges: () => (rowHeightsActive.value ? rowHeights.requestedRanges() : frozen.requestedRanges()),
   };
   // Arming remounts the grid, so the announcement reader follows each core.
   watch(generation, async () => {
     await nextTick();
-    frozen.track(coreOf() ?? null);
+    const core = coreOf();
+    frozen.track(core ?? null);
+    if (rowHeightsActive.value && core) rowHeights.applyPreset(core, rowHeightsMode.value);
   }, { immediate: true });
   onMounted(() => frozen.track(coreOf() ?? null));
 }
@@ -454,6 +523,13 @@ if (typeof window !== "undefined") {
       <button data-testid="freeze-through-5" @click="freezeThrough5">Freeze through 5</button>
       <button data-testid="unfreeze-in-place" @click="unfreezeInPlace">Unfreeze in place</button>
       <button data-testid="toggle-host-height" @click="toggleHostHeight">Toggle host height</button>
+      <button data-testid="use-row-heights" @click="useRowHeights">Row heights</button>
+      <button data-testid="use-row-heights-large" @click="useRowHeightsLarge">Heights large</button>
+      <button data-testid="use-row-heights-paged" @click="useRowHeightsPaged">Heights paged</button>
+      <button data-testid="set-row-heights" @click="setRowHeightControls">Set heights</button>
+      <button data-testid="grow-above-viewport" @click="growAboveViewport">Grow above</button>
+      <button data-testid="grow-frozen-row" @click="growFrozenRow">Grow frozen row</button>
+      <button data-testid="reset-row-heights" @click="resetRowHeights">Reset heights</button>
       <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
       <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
       <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
@@ -484,10 +560,10 @@ if (typeof window !== "undefined") {
         :column-layout="columnLayout"
         :data-source="activeDataSource()"
         :row-data="activeRowData()"
-        :row-height="frozenActive ? FROZEN_ROW_HEIGHT : 32"
-        :header-height="frozenActive ? FROZEN_HEADER_HEIGHT : 36"
+        :row-height="activeRowHeight()"
+        :header-height="activeHeaderHeight()"
         :freeze-rows="activeFreezeRows()"
-        :row-loading="frozen.rowLoadingFor(frozenMode)"
+        :row-loading="activeRowLoading()"
         :get-row-id="(row: unknown) => (row as ConformanceRow).id"
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"

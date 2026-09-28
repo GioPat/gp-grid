@@ -50,12 +50,13 @@ export class FlingAnimator<TData = unknown> {
     // Fling physics integrates in logical px. `getScrollRatio` is the same
     // mapping geometry exposes; the physics step is a deliberate audit
     // exception, not a competing scroll conversion.
-    const ratio = core.viewport.getScrollRatio();
     const governedCap = (): number =>
       computeAdaptiveVelocityCap(this.scroll.pipelineIntervalMs, maxFlingVelocity);
     const startCap = governedCap();
+    /** Override this fling set last; any other value is a correction. */
+    let ownOverride = core.viewport.getTopOverride();
     let state: FlingState = {
-      position: el.scrollTop / ratio,
+      position: el.scrollTop / core.viewport.getScrollRatio(),
       velocity: clamp(velocity, -startCap, startCap),
     };
     let lastTime: number | null = null;
@@ -66,7 +67,11 @@ export class FlingAnimator<TData = unknown> {
       this.frame = null;
       const dt = this.measureFrame(now, lastTime);
       lastTime = now;
-      state = stepFling(state, dt);
+      const ratio = core.viewport.getScrollRatio();
+      state = stepFling(
+        { ...state, position: this.adoptCorrection(core, state.position, ownOverride, ratio) },
+        dt,
+      );
       // Speed governor: if the measured render pace worsened mid-fling,
       // pull the velocity down to what the device can keep rendered.
       const cap = governedCap();
@@ -83,6 +88,7 @@ export class FlingAnimator<TData = unknown> {
       // runs; the stale override keeps the native scroll events cheap.
       if (done || this.isPipelineDue(now)) {
         this.scroll.apply(core, el, clamped, now);
+        ownOverride = clamped;
       } else {
         el.scrollTop = clamped;
       }
@@ -102,6 +108,22 @@ export class FlingAnimator<TData = unknown> {
     const dt = now - lastTime;
     this.frameIntervalEmaMs = updateRenderIntervalEma(this.frameIntervalEmaMs, dt);
     return dt;
+  }
+
+  /**
+   * A row size change corrects the top through the viewport override while a
+   * fling is in flight (D5). Adopting it keeps the motion from replaying the
+   * position the correction just replaced.
+   */
+  private adoptCorrection(
+    core: GridCore<TData>,
+    position: number,
+    ownOverride: number | null,
+    ratio: number,
+  ): number {
+    const override = core.viewport.getTopOverride();
+    if (override === null || override === ownOverride) return position;
+    return override / ratio;
   }
 
   /**

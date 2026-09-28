@@ -26,10 +26,6 @@ export interface RowRegionMappingInput {
   overscan?: number;
 }
 
-export interface RowRegionScrollInput extends RowRegionMappingInput {
-  rowHeight: number;
-}
-
 export interface RowRegionScrollCorrectionInput {
   mapper: RowMapper;
   frozenExtent: number;
@@ -125,11 +121,12 @@ export const getRowClip = (
 
 /** C6: a suffix row aligns inside the suffix clip; a frozen row never moves. */
 export const resolveRowRegionScrollTop = (
-  input: RowRegionScrollInput,
+  input: RowRegionMappingInput,
   rowIndex: number,
 ): number | undefined => {
   if (rowIndex < input.frozenCount || rowIndex >= input.axis.count) return undefined;
-  const { axis, mapper, rowHeight, frozenExtent } = input;
+  const { axis, mapper, frozenExtent } = input;
+  const rowHeight = axis.getSize(rowIndex);
   const suffixHeight = getSuffixViewportHeight(input);
   const rowLogical = mapper.toLogicalScrollTop(input.scrollTop);
   const logicalTop = axis.getOffset(rowIndex);

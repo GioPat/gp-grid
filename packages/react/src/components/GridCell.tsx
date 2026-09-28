@@ -27,7 +27,6 @@ export interface GridCellProps<TData = unknown> {
   column: ResolvedColumn;
   /** 0-based index in the displayed columns, for `aria-colindex`. */
   displayedIndex: number;
-  rowHeight: number;
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
@@ -55,7 +54,6 @@ export const GridCell = <TData = unknown>(
     rowData,
     column,
     displayedIndex,
-    rowHeight,
     activeCell,
     selectionRange,
     editingCell,
@@ -136,7 +134,6 @@ export const GridCell = <TData = unknown>(
         insetInlineStart: `${regionOffset}px`,
         top: 0,
         width: `${width}px`,
-        height: `${rowHeight}px`,
       }}
       onPointerDown={(e) => onCellMouseDown(rowIndex, layoutIndex, e)}
       onDoubleClick={() => onCellDoubleClick(rowIndex, layoutIndex)}

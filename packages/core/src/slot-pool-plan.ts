@@ -21,6 +21,8 @@ export interface SlotPlanInput {
   isRowAvailable: (rowIndex: number) => boolean;
   getRowData: (rowIndex: number) => unknown;
   getRowOffset: (rowIndex: number) => number;
+  /** Row height from the synced row axis (D8). */
+  getRowSize: (rowIndex: number) => number;
 }
 
 /** Recycle candidates by stored region, plus slots that left the axis. */
@@ -129,6 +131,7 @@ const assignSlot = (
 ): void => {
   const generation = input.nextGeneration();
   const translateY = input.getRowOffset(rowIndex);
+  const height = input.getRowSize(rowIndex);
   let slotId: string;
 
   if (recycledSlotId === undefined) {
@@ -139,6 +142,7 @@ const assignSlot = (
       rowData,
       generation,
       translateY,
+      height,
       region,
       loading,
     });
@@ -155,6 +159,7 @@ const assignSlot = (
     slot.rowData = rowData;
     slot.generation = generation;
     slot.translateY = translateY;
+    slot.height = height;
     slot.region = region;
     slot.loading = loading;
   }
@@ -169,17 +174,19 @@ const assignSlot = (
       generation,
       ...slotRegionFields(region, loading),
     },
-    { type: "MOVE_SLOT", slotId, translateY },
+    { type: "MOVE_SLOT", slotId, translateY, height },
   );
 };
 
-/** Push MOVE_SLOT instructions for slots whose position has drifted. */
+/** Push MOVE_SLOT instructions for slots whose position or height has drifted. */
 const updateSlotPositions = (input: SlotPlanInput, instructions: GridInstruction[]): void => {
   for (const [slotId, slot] of input.slots) {
     const expectedY = input.getRowOffset(slot.rowIndex);
-    if (slot.translateY !== expectedY) {
+    const expectedHeight = input.getRowSize(slot.rowIndex);
+    if (slot.translateY !== expectedY || slot.height !== expectedHeight) {
       slot.translateY = expectedY;
-      instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY });
+      slot.height = expectedHeight;
+      instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY, height: expectedHeight });
     }
   }
 };
@@ -232,6 +239,7 @@ export const planSlotRefresh = (input: SlotPlanInput): GridInstruction[] => {
     const loading = available === false;
 
     const translateY = input.getRowOffset(slot.rowIndex);
+    const height = input.getRowSize(slot.rowIndex);
     const generation = input.nextGeneration();
 
     slot.rowData = rowData;
@@ -239,6 +247,7 @@ export const planSlotRefresh = (input: SlotPlanInput): GridInstruction[] => {
     slot.region = region;
     slot.generation = generation;
     slot.translateY = translateY;
+    slot.height = height;
 
     instructions.push(
       {
@@ -249,7 +258,7 @@ export const planSlotRefresh = (input: SlotPlanInput): GridInstruction[] => {
         generation,
         ...slotRegionFields(region, loading),
       },
-      { type: "MOVE_SLOT", slotId, translateY },
+      { type: "MOVE_SLOT", slotId, translateY, height },
     );
   }
 

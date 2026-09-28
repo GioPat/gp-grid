@@ -6,6 +6,7 @@
 import type { AxisBounds } from "../types/geometry";
 import type { VirtualAxis } from "./virtual-axis";
 import { createFixedAxis } from "./fixed-axis";
+import { createOverrideAxis, type PlacedRowSize } from "./override-axis";
 import { createRowMapper, type RowMapper, type RowScrollMapping } from "./row-mapping";
 import type { FrozenRowsInput, RowRegionLayout } from "./row-regions";
 import { resolveRowRegionLayout } from "./row-regions";
@@ -29,6 +30,8 @@ export interface RowGeometryDeps {
   getSuffixViewportHeight(): number;
   getOverscan(): number;
   mapping: RowScrollMapping;
+  /** Application-set sizes; a stable empty array while there are none. */
+  getPlacedRowSizes?: () => readonly PlacedRowSize[];
   /** C2 input; absent or `null` resolves the zero-count layout. */
   resolveRegions?: () => FrozenRowsInput | null;
 }
@@ -75,19 +78,31 @@ export interface RowGeometry {
   getRegionInput(scrollTop?: number): RowRegionMappingInput;
 }
 
+/** Stable identity for the no-overrides case: the memo compares arrays. */
+const NO_PLACED: readonly PlacedRowSize[] = [];
+
 export const createRowGeometry = (deps: RowGeometryDeps): RowGeometry => {
   let count = -1;
   let height = -1;
+  let placed = NO_PLACED;
   let axis: VirtualAxis = createFixedAxis(0, deps.getRowHeight());
   let regionLayout: RowRegionLayout | null = null;
 
   const syncAxis = (): VirtualAxis => {
     const nextCount = Math.max(0, Math.trunc(deps.getRowCount()));
     const nextHeight = deps.getRowHeight();
-    if (nextCount === count && nextHeight === height) return axis;
+    const nextPlaced = deps.getPlacedRowSizes?.() ?? NO_PLACED;
+    // The placed array's identity is the change signal: it is immutable and
+    // rebuilt only when a placement changes, so its contents are not scanned.
+    if (nextCount === count && nextHeight === height && nextPlaced === placed) return axis;
     count = nextCount;
     height = nextHeight;
-    axis = createFixedAxis(count, nextHeight);
+    placed = nextPlaced;
+    // Until something is placed the flat path keeps exact arithmetic and O(1)
+    // space, which is what every memo keyed on the axis identity assumes.
+    axis = placed.length === 0
+      ? createFixedAxis(count, nextHeight)
+      : createOverrideAxis(count, nextHeight, placed);
     return axis;
   };
 

@@ -475,6 +475,25 @@ this.grid?.core?.sortFilter.setSort("name", "asc");
 
 For the common operations (sort, filter, edit), you'll usually drive them via `[columns]` / `[dataSource]` inputs and `output()` events instead of imperative calls.
 
+## Row heights
+
+Rows are `rowHeight` px tall unless you set a height by row identity through the
+exposed core — no resize gesture, and no remount:
+
+```ts
+this.grid?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+this.grid?.core?.rowHeights.reset([2]);   // or reset() for all of them
+this.grid?.core?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch, so the viewport does
+not jump. See [docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
 ## Highlighting
 
 ```ts

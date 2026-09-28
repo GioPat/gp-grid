@@ -45,9 +45,11 @@ export type {
   GridColumnsApi,
   GridFrozenRowsApi,
   GridRowDragApi,
+  GridRowHeightsApi,
   GridViewportApi,
   // Row virtualization and freezing
   RowRegion,
+  RowHeightUpdate,
   FrozenRowsState,
   RowRegionLayout,
   GeometrySpace,

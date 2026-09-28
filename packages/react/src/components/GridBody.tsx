@@ -20,7 +20,6 @@ import { GridFrozenRows } from "./GridFrozenRows";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
-  rowHeight: number;
   totalHeaderHeight: number;
   contentWidth: number;
   contentHeight: number;
@@ -58,7 +57,6 @@ const GridBodyInner = <TData = unknown>(
   ref: React.ForwardedRef<HTMLDivElement>,
 ): React.ReactNode => {
   const {
-    rowHeight,
     totalHeaderHeight,
     contentWidth,
     contentHeight,
@@ -97,7 +95,6 @@ const GridBodyInner = <TData = unknown>(
   const suffixSlots = slotsArray.filter((slot) => slot.region === "suffix");
 
   const cellContext: GridRowCellContext<TData> = {
-    rowHeight,
     activeCell,
     selectionRange,
     editingCell,
@@ -181,7 +178,6 @@ const GridBodyInner = <TData = unknown>(
           columnWindow={columnWindow}
           displayedIndexOf={displayedIndexOf}
           contentWidthPx={contentWidthPx}
-          rowHeight={rowHeight}
           cellContext={cellContext}
           fillHandlePosition={fillHandlePosition}
           fillHandle={fillHandle}
@@ -207,7 +203,6 @@ const GridBodyInner = <TData = unknown>(
                   columnWindow={columnWindow}
                   displayedIndexOf={displayedIndexOf}
                   width={contentWidthPx}
-                  rowHeight={rowHeight}
                   cellContext={cellContext}
                 />
               ),

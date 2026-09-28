@@ -130,6 +130,12 @@ export interface CellWriteRejectedEvent {
   operation: WriteRejectionOperation;
 }
 
+/** One application-set row height, keyed by row identity (D1). */
+export interface RowHeightUpdate {
+  rowId: RowId;
+  height: number;
+}
+
 /** The slot is the virtualized row, this represents the state of the slot */
 export interface SlotState {
   /** Slot ID */
@@ -146,6 +152,8 @@ export interface SlotState {
   generation: number;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
+  /** Row height from the row axis (D8). */
+  height: number;
   /** Region the slot's row renders in (C7). */
   region: RowRegion;
   /** A frozen slot with no row data yet renders as a placeholder. */

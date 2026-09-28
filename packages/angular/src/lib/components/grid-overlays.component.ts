@@ -72,9 +72,9 @@ const TEMPLATE = `
     <div
       class="gp-grid-row-drag-ghost"
       [style.left.px]="rd.currentX + 12"
-      [style.top.px]="rd.currentY - rowHeight() / 2"
+      [style.top.px]="rd.currentY - rd.sourceRowHeight / 2"
       [style.width.px]="rowDragGhostWidth()"
-      [style.height.px]="rowHeight()"></div>
+      [style.height.px]="rd.sourceRowHeight"></div>
   }
 `;
 
@@ -91,7 +91,6 @@ export class GridOverlaysComponent {
   errorMessage = input<string | null>(null);
   labels = input<GridLabels>(defaultGridLabels);
   headerHeight = input.required<number>();
-  rowHeight = input.required<number>();
   dragState = input.required<DragState>();
   scrollLeft = input.required<number>();
   effectiveColumns = input.required<ColumnDefinition[]>();

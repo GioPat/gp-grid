@@ -10,9 +10,10 @@ import type {
   FrozenRowsState,
   GridAnnouncement,
   GridCore,
+  RowHeightUpdate,
   RowId,
   RowRegionLayout,
-} from "@gp-grid/core";
+} from "@gp-grid/vue";
 
 /** Absolute row range a paginated fixture was asked for; `endRow` exclusive. */
 export interface RequestedRange {
@@ -134,6 +135,15 @@ export interface GeometryHooks {
   activateCell: (row: number, layoutIndex: number) => void;
   rowRegions: () => RowRegionLayout | null;
   frozenRows: () => FrozenRowsState | null;
+  /** Stored row heights, including the ones waiting for their row (PRD 006). */
+  rowHeightOverrides: () => readonly RowHeightUpdate[];
+  rowBounds: (
+    viewIndex: number,
+    space?: "content" | "viewport" | "rows",
+  ) => { start: number; end: number } | null;
+  contentSize: () => { width: number; height: number } | null;
+  /** First row that is visible, not the first one mounted by the overscan. */
+  firstVisibleRow: () => number;
   announcement: () => GridAnnouncement | null;
   requestedRanges: () => RequestedRange[];
   holdFrozenRows: () => void;
@@ -198,6 +208,16 @@ export const createGeometryHooks = (
   },
   rowRegions: () => getCore()?.geometry.getRowRegions() ?? null,
   frozenRows: () => getCore()?.frozenRows.get() ?? null,
+  rowHeightOverrides: () => getCore()?.rowHeights.getOverrides() ?? [],
+  rowBounds: (viewIndex, space = "viewport") => {
+    const bounds = getCore()?.geometry.getRowBounds(viewIndex, space);
+    return bounds === undefined ? null : { start: bounds.start, end: bounds.end };
+  },
+  contentSize: () => {
+    const size = getCore()?.geometry.getContentSize();
+    return size === undefined ? null : { width: size.width, height: size.height };
+  },
+  firstVisibleRow: () => getCore()?.geometry.getVisibleRowWindow().start ?? -1,
   announcement: () => frozen?.announcement() ?? null,
   requestedRanges: () => frozen?.requestedRanges() ?? [],
   holdFrozenRows: () => frozen?.holdFrozenRows(),

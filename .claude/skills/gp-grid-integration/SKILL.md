@@ -167,6 +167,34 @@ data changes. Invalid values throw a `RangeError` naming the field.
   page not loaded yet) renders a cell-less placeholder.
   See [docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
+### Row heights (`core.rowHeights`)
+
+Rows are `rowHeight` px tall unless the application sets a height by row
+identity. There is no resize gesture: this is a command surface, and it needs
+`getRowId` for heights that must survive sort, filter or paging.
+
+```ts
+grid.core.rowHeights.set([{ rowId: 2, height: 96 }, { rowId: 10, height: 64 }]);
+grid.core.rowHeights.reset([10]);        // or reset() for all of them
+grid.core.rowHeights.getOverrides();     // [{ rowId, height }] in insertion order
+```
+
+- `height` must be finite and `> 0`; `set` is all or nothing, so one bad entry
+  throws `RangeError('Invalid row height for row "<rowId>": <height>')` and
+  applies nothing. A value equal to `rowHeight` is stored but changes nothing.
+- Without `getRowId`, an integer `rowId` in `[0, rowCount)` addresses a view
+  index and is dropped at the next data revision (sort, filter, refresh, cache
+  reset, data-source swap, row move). An ID the source does not hold yet waits
+  for its row, including a page that has not loaded.
+- A height change is one atomic size change: the grid anchors the row at the
+  clip top, re-resolves the geometry and corrects the scroll position in the
+  same batch, so the viewport does not jump. A sort, filter, resize or user
+  scroll keeps its own anchoring.
+- Wrappers size each row box from `SlotData.height` and give cells no inline
+  height (`.gp-grid-cell { height: 100% }`); row drag ghosts use
+  `RowDragState.sourceRowHeight`. Nothing is measured — auto height is PRD 007.
+  See [docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
 ### Data sources — pick one
 
 | Use when… | Factory | Mutability |

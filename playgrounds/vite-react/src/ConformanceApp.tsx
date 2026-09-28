@@ -33,6 +33,13 @@ import {
   FROZEN_ROW_HEIGHT,
   type FrozenMode,
 } from "./conformance-frozen";
+import {
+  createRowHeightsFixture,
+  ROW_HEIGHTS_HEADER_HEIGHT,
+  ROW_HEIGHTS_ROW_HEIGHT,
+  type RowHeightsMode,
+  type RowHeightsRow,
+} from "./conformance-row-heights";
 
 interface ConformanceRow {
   id: number;
@@ -192,7 +199,9 @@ export const ConformanceApp = (): React.ReactNode => {
   const [largeColumnarSource, setLargeColumnarSource] = useState<ReturnType<typeof createLargeColumnarSource> | null>(null);
   const [fixture] = useState(createColumnarFixture);
   const [frozen] = useState(createFrozenFixture);
+  const [rowHeights] = useState(createRowHeightsFixture);
   const [frozenMode, setFrozenMode] = useState<FrozenMode>("off");
+  const [rowHeightsMode, setRowHeightsMode] = useState<RowHeightsMode>("off");
   const [mode, setMode] = useState<"object" | "columnar">("object");
   const [revision, setRevision] = useState(0);
   const [mounted, setMounted] = useState(true);
@@ -213,10 +222,19 @@ export const ConformanceApp = (): React.ReactNode => {
   const isColumnar = mode === "columnar";
   const frozenActive = frozenMode !== "off";
   const frozenObject = frozenMode === "object";
+  const rowHeightsActive = rowHeightsMode !== "off";
 
   /** Arming swaps the data source and columns, so it remounts the grid. */
   const armFrozenRows = useCallback((next: FrozenMode) => {
     setFrozenMode(next);
+    setRowHeightsMode("off");
+    setGeneration((value) => value + 1);
+  }, []);
+
+  /** The row-height arms remount the same way, and clear the frozen arm. */
+  const armRowHeights = useCallback((next: RowHeightsMode) => {
+    setRowHeightsMode(next);
+    setFrozenMode("off");
     setGeneration((value) => value + 1);
   }, []);
 
@@ -225,6 +243,10 @@ export const ConformanceApp = (): React.ReactNode => {
   const useFrozenPaged = useCallback(() => armFrozenRows("paged"), [armFrozenRows]);
   const useFrozenPagedTight = useCallback(() => armFrozenRows("paged-tight"), [armFrozenRows]);
   const useFrozenObject = useCallback(() => armFrozenRows("object"), [armFrozenRows]);
+
+  const useRowHeights = useCallback(() => armRowHeights("object"), [armRowHeights]);
+  const useRowHeightsLarge = useCallback(() => armRowHeights("large"), [armRowHeights]);
+  const useRowHeightsPaged = useCallback(() => armRowHeights("paged"), [armRowHeights]);
 
   // In-place controls: the option stays reactive, so these never touch the
   // remount `generation`. `null` means "the armed mode's own option".
@@ -247,22 +269,41 @@ export const ConformanceApp = (): React.ReactNode => {
   }, []);
 
   const activeColumns = (): ColumnDefinition[] => {
+    const heightColumns = rowHeightsActive ? rowHeights.columnsFor(rowHeightsMode) : undefined;
+    if (heightColumns !== undefined) return heightColumns;
     const frozenColumns = frozenActive ? frozen.columnsFor(frozenMode) : undefined;
     if (frozenColumns !== undefined) return frozenColumns;
     return isColumnar ? columnarColumns : columns;
   };
 
-  /** A frozen arm replaces the data source; otherwise the mode picks it. */
+  /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   const activeDataSource = (): DataSource<never> | undefined => {
+    if (rowHeightsActive) return rowHeights.sourceFor(rowHeightsMode);
     if (frozenActive) return frozen.sourceFor(frozenMode);
     if (isColumnar) return largeColumnarSource ?? fixture.source;
     return undefined;
   };
 
-  /** The writable arm keeps the caller's object rows; every other one is sourced. */
+  /** The writable arms keep the caller's object rows; every other one is sourced. */
   const activeRowData = (): ConformanceRow[] | undefined => {
+    if (rowHeightsActive) return rowHeights.rowDataFor(rowHeightsMode) as RowHeightsRow[] | undefined;
     if (frozenActive) return frozenObject ? rows : undefined;
     return isColumnar ? undefined : rows;
+  };
+
+  const activeRowLoading = () =>
+    rowHeightsActive ? rowHeights.rowLoadingFor(rowHeightsMode) : frozen.rowLoadingFor(frozenMode);
+
+  const activeRowHeight = (): number => {
+    if (frozenActive) return FROZEN_ROW_HEIGHT;
+    if (rowHeightsActive) return ROW_HEIGHTS_ROW_HEIGHT;
+    return 32;
+  };
+
+  const activeHeaderHeight = (): number => {
+    if (frozenActive) return FROZEN_HEADER_HEIGHT;
+    if (rowHeightsActive) return ROW_HEIGHTS_HEADER_HEIGHT;
+    return 36;
   };
 
   const activeFreezeRows = (): FreezeRowsOptions | undefined =>
@@ -336,6 +377,7 @@ const hideColumn = useCallback(() => {
     setFreezeOverride(null);
     setMode("object");
     setFrozenMode("off");
+    setRowHeightsMode("off");
     setMounted(true);
     setGeneration((value) => value + 1);
     setEditEvents(0);
@@ -436,6 +478,27 @@ const hideColumn = useCallback(() => {
     gridRef.current?.core?.rowDrag.commit(0, 1);
   }, []);
 
+  /** In-place height controls: the arm stays mounted (AC-006-01/03/04). */
+  const setRowHeightControls = useCallback(() => {
+    const core = gridRef.current?.core;
+    if (core) rowHeights.setControlHeights(core);
+  }, [rowHeights]);
+
+  const growAboveViewport = useCallback(() => {
+    const core = gridRef.current?.core;
+    if (core) rowHeights.growAboveViewport(core);
+  }, [rowHeights]);
+
+  const growFrozenRow = useCallback(() => {
+    const core = gridRef.current?.core;
+    if (core) rowHeights.growFrozenRow(core);
+  }, [rowHeights]);
+
+  const resetRowHeights = useCallback(() => {
+    const core = gridRef.current?.core;
+    if (core) rowHeights.resetHeights(core);
+  }, [rowHeights]);
+
   // Expose the wrapper's stripped built core for raw-value assertions and the
   // borrowed-source read counters for bounded-read assertions.
   useEffect(() => {
@@ -459,17 +522,26 @@ const hideColumn = useCallback(() => {
       useWideColumns,
       setFreezeCount,
       ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never, frozen),
+      // Each arm records its own requests; the frozen reader is the other arm's.
+      requestedRanges: () => (rowHeightsActive ? rowHeights.requestedRanges() : frozen.requestedRanges()),
     };
     (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance = hooks;
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [fixture, frozen, readCoreToken, setFreezeCount, useWideColumns]);
+  }, [fixture, frozen, readCoreToken, rowHeights, rowHeightsActive, setFreezeCount, useWideColumns]);
 
   // Arming remounts the grid, so the announcement reader follows each core.
   useEffect(() => {
     frozen.track((gridRef.current?.core ?? null) as never);
   }, [frozen, generation, mounted]);
+
+  // Arm presets run against the core the arm just created (D1, D2).
+  useEffect(() => {
+    if (rowHeightsActive === false) return;
+    const core = gridRef.current?.core;
+    if (core) rowHeights.applyPreset(core, rowHeightsMode);
+  }, [rowHeights, rowHeightsActive, rowHeightsMode, generation, mounted]);
 
   const metrics = useMemo(
     () => ({ generation, editEvents, writeRejected, mode, revision }),
@@ -513,6 +585,13 @@ const hideColumn = useCallback(() => {
         <button data-testid="freeze-through-5" onClick={freezeThrough5}>Freeze through 5</button>
         <button data-testid="unfreeze-in-place" onClick={unfreezeInPlace}>Unfreeze in place</button>
         <button data-testid="toggle-host-height" onClick={toggleHostHeight}>Toggle host height</button>
+        <button data-testid="use-row-heights" onClick={useRowHeights}>Row heights</button>
+        <button data-testid="use-row-heights-large" onClick={useRowHeightsLarge}>Heights large</button>
+        <button data-testid="use-row-heights-paged" onClick={useRowHeightsPaged}>Heights paged</button>
+        <button data-testid="set-row-heights" onClick={setRowHeightControls}>Set heights</button>
+        <button data-testid="grow-above-viewport" onClick={growAboveViewport}>Grow above</button>
+        <button data-testid="grow-frozen-row" onClick={growFrozenRow}>Grow frozen row</button>
+        <button data-testid="reset-row-heights" onClick={resetRowHeights}>Reset heights</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
       <div data-testid="grid-host" dir={rtl ? "rtl" : "ltr"} style={{ width: hostWidth, height: hostHeight }}>
@@ -525,10 +604,10 @@ const hideColumn = useCallback(() => {
             columnLayout={columnLayout}
             dataSource={activeDataSource()}
             rowData={activeRowData()}
-            rowHeight={frozenActive ? FROZEN_ROW_HEIGHT : 32}
-            headerHeight={frozenActive ? FROZEN_HEADER_HEIGHT : 36}
+            rowHeight={activeRowHeight()}
+            headerHeight={activeHeaderHeight()}
             freezeRows={activeFreezeRows()}
-            rowLoading={frozen.rowLoadingFor(frozenMode)}
+            rowLoading={activeRowLoading()}
             getRowId={(row) => row.id}
             onCellValueChanged={onCellValueChanged}
             onWriteRejected={onWriteRejected}

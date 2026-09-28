@@ -475,6 +475,29 @@ not recreated, the scroll position is corrected so the visible suffix stays
 anchored, and an equal-valued object is silent. See
 [docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
+## Row heights
+
+Rows are `rowHeight` px tall unless you set a height by row identity through the
+core handle — no resize gesture, and no remount:
+
+```tsx
+const gridRef = useRef<GridRef<Person> | null>(null);
+// <Grid gridRef={gridRef} getRowId={(row) => row.id} ... />
+gridRef.current?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+gridRef.current?.core?.rowHeights.reset([2]);   // or reset() for all of them
+gridRef.current?.core?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch, so the viewport does
+not jump. Cells carry no inline height — they fill the row through the shipped
+`.gp-grid-cell { height: 100% }` rule. See
+[docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |

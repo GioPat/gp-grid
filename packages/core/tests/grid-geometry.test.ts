@@ -507,13 +507,20 @@ describe("GridGeometry — revision", () => {
     expect(layout.totalWidth).toBe(800);
   });
 
-  it("keeps the revision stable while the row window is unchanged", () => {
+  it("advances on a new row axis even while the window stays put", () => {
+    // D4: the row axis is a committed dependency of every memo keyed on it, so
+    // a new axis is a real revision change whatever the window reports.
     const harness = createHarness({ rowCount: 1000, viewportWidth: 400, viewportHeight: 320 });
     harness.geometry.refresh();
     const before = harness.geometry.revision;
     harness.setRowCount(2000);
     harness.geometry.refresh();
-    expect(harness.geometry.revision).toBe(before);
+    const afterAxis = harness.geometry.revision;
+    expect(afterAxis).toBeGreaterThan(before);
+    expect(harness.geometry.getRowWindow()).toEqual({ start: 0, end: 13 });
+    // The same axis again is not a change.
+    harness.geometry.refresh();
+    expect(harness.geometry.revision).toBe(afterAxis);
   });
 
   it("advances when the row window changes through a shrink", () => {

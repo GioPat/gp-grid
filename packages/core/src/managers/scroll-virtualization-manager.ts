@@ -129,13 +129,15 @@ export class ScrollVirtualizationManager {
   }
 
   /**
-   * First row boundary at or after `logicalOffset`. This replaces the old
-   * `ceil(range / rowHeight) * rowHeight`; the axis owns the arithmetic.
+   * First row boundary at or after `logicalOffset`. The axis owns the
+   * arithmetic; the content end is never a rounding target, so a last row
+   * taller than the viewport keeps its full range instead of being scrolled
+   * out of view.
    */
   private roundUpToRowBoundary(logicalOffset: number): number {
     const axis = this.options.getAxis();
     const index = axis.indexAt(logicalOffset);
-    if (index >= axis.count) return axis.extent;
+    if (index >= axis.count - 1) return logicalOffset;
     const boundary = axis.getOffset(index);
     return boundary < logicalOffset ? axis.getOffset(index + 1) : boundary;
   }

@@ -75,7 +75,6 @@ export interface EditingCellState {
 })
 export class GridBodyComponent {
   @ViewChild("scrollContainer") scrollContainer!: ElementRef<HTMLDivElement>;
-  rowHeight = input.required<number>();
   totalHeaderHeight = input.required<number>();
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();

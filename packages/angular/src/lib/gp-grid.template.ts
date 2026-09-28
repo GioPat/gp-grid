@@ -33,7 +33,6 @@ export const GP_GRID_TEMPLATE = `
         (headerPin)="onHeaderPin($event)"
       />
       <gp-grid-body
-        [rowHeight]="rowHeight()"
         [totalHeaderHeight]="headerHeight()"
         [contentWidth]="vm.contentWidth()"
         [contentHeight]="vm.contentHeight()"
@@ -86,7 +85,6 @@ export const GP_GRID_TEMPLATE = `
         [isLoading]="vm.isLoading()"
         [errorMessage]="vm.errorMessage()"
         [headerHeight]="headerHeight()"
-        [rowHeight]="rowHeight()"
         [dragState]="vm.dragState()"
         [scrollLeft]="vm.scrollLeft()"
         [effectiveColumns]="vm.effectiveColumns()"

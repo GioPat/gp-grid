@@ -258,6 +258,7 @@ describe("synthetic-scroll direction", () => {
         getScrollRatio: () => 1,
         getMaxFlingVelocity: () => 5,
         getRowHeight: () => 32,
+        getTopOverride: () => null,
         setTopOverride: vi.fn(),
       },
       setViewport: vi.fn(),

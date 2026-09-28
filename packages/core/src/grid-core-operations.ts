@@ -116,13 +116,14 @@ export interface RowDragCommitDeps<TData> {
   highlight: HighlightManager<TData> | null;
 }
 
+/** False when the source cannot move rows, so nothing changed. */
 export const applyRowDragCommit = <TData>(
   sourceIndex: number,
   targetIndex: number,
   deps: RowDragCommitDeps<TData>,
-): void => {
+): boolean => {
   const ds = deps.dataSource as { moveRow?: (from: number, to: number) => void };
-  if (!ds.moveRow) return;
+  if (!ds.moveRow) return false;
 
   ds.moveRow(sourceIndex, targetIndex);
   reorderCachedRows(deps.cachedRows, sourceIndex, targetIndex);
@@ -131,6 +132,7 @@ export const applyRowDragCommit = <TData>(
   const lo = Math.min(sourceIndex, targetIndex);
   const hi = Math.max(sourceIndex, targetIndex);
   for (let i = lo; i <= hi; i++) deps.slotPool.updateSlot(i);
+  return true;
 };
 
 export interface RefreshTransactionDeps<TData> {

@@ -25,7 +25,6 @@ export interface GridRowProps<TData = unknown> {
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
   width: number;
-  rowHeight: number;
   cellContext: GridRowCellContext<TData>;
   /** Column regions this row renders: the frozen block renders `center` only. */
   regions?: readonly ColumnRegion[];
@@ -47,14 +46,14 @@ export interface GridRowPinsProps<TData = unknown> {
 export const rowBoxStyle = (
   translateY: number,
   width: number,
-  rowHeight: number,
+  height: number,
 ): React.CSSProperties => ({
   position: "absolute",
   top: 0,
   insetInlineStart: 0,
   transform: `translateY(${translateY}px)`,
   width: `${width}px`,
-  height: `${rowHeight}px`,
+  height: `${height}px`,
   display: "flex",
 });
 
@@ -122,7 +121,6 @@ export const GridRow = <TData = unknown>(
     columnWindow,
     displayedIndexOf,
     width,
-    rowHeight,
     cellContext,
     regions = ALL_REGIONS,
   } = props;
@@ -134,7 +132,7 @@ export const GridRow = <TData = unknown>(
         className="gp-grid-row gp-grid-row--loading"
         role="row"
         aria-rowindex={slot.rowIndex + 1}
-        style={rowBoxStyle(slot.translateY, width, rowHeight)}
+        style={rowBoxStyle(slot.translateY, width, slot.height)}
       />
     );
   }
@@ -150,7 +148,7 @@ export const GridRow = <TData = unknown>(
       className={rowClassName}
       role="row"
       aria-rowindex={slot.rowIndex + 1}
-      style={rowBoxStyle(slot.translateY, width, rowHeight)}
+      style={rowBoxStyle(slot.translateY, width, slot.height)}
     >
       {regions.includes("center") &&
         center.map((column) => renderColumn(slot, displayedIndexOf, cellContext, column))}

@@ -21,7 +21,6 @@ export const GRID_BODY_TEMPLATE = `<div
           style="position: absolute; top: 0;"
           [style.inset-inline-start.px]="entry.regionOffset"
           [style.width.px]="entry.width"
-          [style.height.px]="rowHeight()"
           (pointerdown)="cellPointerDown.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex, event: $event })"
           (mouseenter)="cellPointerEnter.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
           (mouseleave)="cellPointerLeave.emit()"
@@ -129,7 +128,7 @@ export const GRID_BODY_TEMPLATE = `<div
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
                   [style.width.px]="innerWidth()"
-                  [style.height.px]="rowHeight()">
+                  [style.height.px]="slot.height">
                 </div>
               } @else {
                 <div
@@ -139,7 +138,7 @@ export const GRID_BODY_TEMPLATE = `<div
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
                   [style.width.px]="innerWidth()"
-                  [style.height.px]="rowHeight()">
+                  [style.height.px]="slot.height">
                   @for (entry of centerColumns(); track entry.columnId) {
                     <ng-container
                       [ngTemplateOutlet]="cellTpl"
@@ -177,7 +176,7 @@ export const GRID_BODY_TEMPLATE = `<div
                 style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                 [style.transform]="'translateY(' + slot.translateY + 'px)'"
                 [style.width.px]="innerWidth()"
-                [style.height.px]="rowHeight()">
+                [style.height.px]="slot.height">
                 <ng-container
                   [ngTemplateOutlet]="rowPinsTpl"
                   [ngTemplateOutletContext]="{ slot: slot }">
@@ -214,7 +213,7 @@ export const GRID_BODY_TEMPLATE = `<div
               style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
               [style.transform]="'translateY(' + slot.translateY + 'px)'"
               [style.width.px]="innerWidth()"
-              [style.height.px]="rowHeight()">
+              [style.height.px]="slot.height">
               @for (entry of centerColumns(); track entry.columnId) {
                 <ng-container
                   [ngTemplateOutlet]="cellTpl"

@@ -100,8 +100,10 @@ export class RowDrag<TData = unknown> {
     const { geometry } = this.core;
     const frozenCount = geometry.getRowRegions().frozenCount;
     const dropIndicatorRegion = resolveDropIndicatorRegion(dropTargetIndex, frozenCount);
+    const bounds = geometry.getRowBounds(this.sourceRowIndex, "content");
     return {
       sourceRowIndex: this.sourceRowIndex,
+      sourceRowHeight: bounds === undefined ? 0 : bounds.end - bounds.start,
       currentX,
       currentY,
       dropTargetIndex,

@@ -14,6 +14,7 @@ const dragState: DragState = {
   columnMove: null,
   rowDrag: {
     sourceRowIndex: 1,
+    sourceRowHeight: 32,
     currentX: 10,
     currentY: 20,
     dropTargetIndex: null,
@@ -325,5 +326,16 @@ describe("row drag drop indicator under compression", () => {
       dropIndicatorRegion: "frozen",
       dropIndicatorY: ROW_HEIGHT,
     });
+  });
+});
+
+describe("row drag ghost height", () => {
+  it("reports the axis height of the dragged row", async () => {
+    const grid = await createDragGrid(0);
+    expect(dragTo(grid, 2 * ROW_HEIGHT + 16)?.sourceRowHeight).toBe(ROW_HEIGHT);
+
+    grid.rowHeights.set([{ rowId: 0, height: 96 }]);
+
+    expect(dragTo(grid, 2 * ROW_HEIGHT + 16)?.sourceRowHeight).toBe(96);
   });
 });

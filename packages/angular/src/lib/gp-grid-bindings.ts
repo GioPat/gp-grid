@@ -27,7 +27,6 @@ export interface GpGridBindingsDeps {
   isBrowser: boolean;
   getContainer: () => HTMLElement | null;
   getBody: () => HTMLElement | null;
-  getRowHeight: () => number;
   getHeaderHeight: () => number;
 }
 

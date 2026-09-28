@@ -18,6 +18,7 @@ import {
   toInlineX,
   toPhysicalX,
   TouchScrollController,
+  PendingScrollLatch,
   defaultPinIcon,
   resolveGridLabels,
 } from "@gp-grid/core";
@@ -98,6 +99,7 @@ export function Grid<TData = unknown>(
   const [rtl, setRtl] = useState(false);
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
   const hasInitializedRef = useRef(false);
+  const [pendingScroll] = useState(() => new PendingScrollLatch());
   const [state, dispatch] = useReducer(
     gridReducer,
     {
@@ -115,6 +117,11 @@ export function Grid<TData = unknown>(
   const stopTouchScroll = useCallback(() => {
     touchScrollRef.current?.stop();
   }, []);
+
+  const scrollByWheel = useCallback(
+    (domDy: number) => touchScrollRef.current?.scrollByWheel(domDy) ?? false,
+    [],
+  );
 
   /** Push the container's client box and inline-relative scroll into the core. */
   const syncViewport = useCallback((core: GridCore<TData>, container: HTMLElement): void => {
@@ -253,6 +260,7 @@ export function Grid<TData = unknown>(
     editingCell: state.editingCell,
     filterPopupOpen: state.filterPopup?.isOpen ?? false,
     onBeforeProgrammaticScroll: stopTouchScroll,
+    scrollByWheel,
   });
 
   // Initialize GridCore
@@ -260,6 +268,7 @@ export function Grid<TData = unknown>(
     // Reset state on re-initialization to clear stale slots from previous core
     // Skip on first initialization (nothing to reset)
     if (hasInitializedRef.current) {
+      pendingScroll.clear();
       dispatch({ type: "RESET", columns, columnLayout });
     }
     hasInitializedRef.current = true;
@@ -310,6 +319,7 @@ export function Grid<TData = unknown>(
 
     // Subscribe to batched instructions for efficient state updates
     const unsubscribe = core.onBatchInstruction((instructions) => {
+      pendingScroll.collect(instructions);
       dispatch({ type: "BATCH_INSTRUCTIONS", instructions });
     });
 
@@ -481,15 +491,15 @@ export function Grid<TData = unknown>(
   // filter/sort or a clamp correction). useLayoutEffect runs before paint, so
   // the container matches the core's expectation for the first frame.
   useLayoutEffect(() => {
+    const pending = pendingScroll.take();
     const container = containerRef.current;
-    if (!container) return;
-    if (state.pendingScrollTop === null && state.pendingScrollLeft === null) return;
+    if (pending === null || !container) return;
     touchScrollRef.current?.stop();
-    if (state.pendingScrollTop !== null) container.scrollTop = state.pendingScrollTop;
-    if (state.pendingScrollLeft !== null) {
-      container.scrollLeft = toPhysicalX(state.pendingScrollLeft, rtlRef.current);
+    if (pending.top !== null) container.scrollTop = pending.top;
+    if (pending.left !== null) {
+      container.scrollLeft = toPhysicalX(pending.left, rtlRef.current);
     }
-  }, [state.pendingScrollTop, state.pendingScrollLeft]);
+  }, [state, pendingScroll]);
 
   // Handle filter apply (from popup)
   const handleFilterApply = useCallback(
@@ -608,7 +618,6 @@ export function Grid<TData = unknown>(
 
       <GridBody
         ref={containerRef}
-        rowHeight={rowHeight}
         totalHeaderHeight={totalHeaderHeight}
         contentWidth={state.contentWidth}
         contentHeight={state.contentHeight}
@@ -764,9 +773,9 @@ export function Grid<TData = unknown>(
           className="gp-grid-row-drag-ghost"
           style={{
             left: dragState.rowDrag.currentX + 12,
-            top: dragState.rowDrag.currentY - rowHeight / 2,
+            top: dragState.rowDrag.currentY - dragState.rowDrag.sourceRowHeight / 2,
             width: Math.min(300, totalWidth),
-            height: rowHeight,
+            height: dragState.rowDrag.sourceRowHeight,
           }}
         />
       )}

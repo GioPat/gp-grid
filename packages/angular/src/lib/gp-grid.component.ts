@@ -123,7 +123,6 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected readonly vm = new GpGridViewModel({
     getRows: () => this.rows(),
-    getRowHeight: () => this.rowHeight(),
     getCore: () => this.boundCore.current,
   });
 
@@ -132,7 +131,6 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     isBrowser: this.isBrowser,
     getContainer: () => this.container?.nativeElement ?? null,
     getBody: () => this.body?.scrollContainer?.nativeElement ?? null,
-    getRowHeight: () => this.rowHeight(),
     getHeaderHeight: () => this.headerHeight(),
   });
 
@@ -339,7 +337,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     const dampened = this.bindings.input.wheel(event.deltaY, event.deltaX, this.wheelDampening());
     if (dampened) {
       event.preventDefault();
-      bodyEl.scrollTop += dampened.dy;
+      if (this.bindings.touchScroll.scrollByWheel(dampened.dy) === false) bodyEl.scrollTop += dampened.dy;
       // Wheel deltaX is physical, unlike the inline-relative deltas core emits.
       bodyEl.scrollLeft += dampened.dx;
     }

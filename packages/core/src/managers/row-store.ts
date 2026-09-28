@@ -8,12 +8,18 @@ import type {
   RowId,
   WriteRejectionOperation,
 } from "../types";
+import type { AxisBounds } from "../types/geometry";
 import {
   createWriteRejection,
   getFieldValue as readRowFieldValue,
   readCell,
   writeCell,
 } from "../utils";
+
+const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
+
+const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
+  Math.min(Math.trunc(range?.end ?? extent), extent);
 
 export interface RowStoreOptions<TData> {
   getColumns: () => ColumnDefinition[];
@@ -38,6 +44,7 @@ export class RowStore<TData = unknown> {
    */
   private rowAccess: RowAccess | null = null;
   private totalRows = 0;
+  private revision = 0;
 
   constructor(options: RowStoreOptions<TData>) {
     this.options = options;
@@ -57,6 +64,51 @@ export class RowStore<TData = unknown> {
 
   setTotalRows(count: number): void {
     this.totalRows = count;
+  }
+
+  /** Bumped whenever row order or membership may have changed (D6). */
+  getRevision(): number {
+    return this.revision;
+  }
+
+  bumpRevision(): void {
+    this.revision += 1;
+  }
+
+  /** Whether the bound source exposes a stable row identity (D2). */
+  hasStableIdentity(): boolean {
+    if (this.rowAccess) return this.rowAccess.getRowId !== undefined;
+    return this.options.getRowId !== undefined;
+  }
+
+  /**
+   * View indices of the requested identities, optionally within one range.
+   * Scans the resident rows, which is O(resident), and stops once every ID
+   * has been found.
+   */
+  locateIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    const found = new Map<RowId, number>();
+    const first = rangeStart(range);
+    if (this.rowAccess) {
+      const extent = this.rowAccess.rowCount;
+      const end = Math.min(rangeEnd(range, extent), extent);
+      for (let index = first; index < end; index += 1) {
+        if (found.size === ids.size) break;
+        this.collect(found, index, ids);
+      }
+      return found;
+    }
+    const end = rangeEnd(range, Number.MAX_SAFE_INTEGER);
+    for (const index of this.cachedRows.keys()) {
+      if (found.size === ids.size) break;
+      if (index >= first && index < end) this.collect(found, index, ids);
+    }
+    return found;
+  }
+
+  private collect(found: Map<RowId, number>, index: number, ids: ReadonlySet<RowId>): void {
+    const rowId = this.getRowId(index);
+    if (rowId !== undefined && ids.has(rowId)) found.set(rowId, index);
   }
 
   /** Scalar access for the current response, when the source provides one. */

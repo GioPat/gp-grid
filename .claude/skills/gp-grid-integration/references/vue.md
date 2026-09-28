@@ -406,6 +406,28 @@ not recreated, the scroll position is corrected so the visible suffix stays
 anchored, and an equal-valued object is silent. See
 [docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
 
+## Row heights
+
+Rows are `row-height` px tall unless you set a height by row identity through the
+exposed core — no resize gesture, and no remount:
+
+```ts
+const coreOf = () => (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+coreOf()?.rowHeights.set([{ rowId: 2, height: 96 }]);
+coreOf()?.rowHeights.reset([2]);          // or reset() for all of them
+coreOf()?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch. Rows render from
+`slot.height`, so `useGpGrid` consumers that build their own row markup must size
+the box from it rather than from the configured `row-height`. See
+[docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |

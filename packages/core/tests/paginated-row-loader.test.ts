@@ -39,6 +39,8 @@ interface LoaderHarness {
   cachedRows: Map<number, TestRow>;
   errors: unknown[];
   metrics: LoaderMetrics;
+  /** D6 revisions bumped by this loader, in order. */
+  bumps: () => number;
 }
 
 const createHarness = (options: {
@@ -60,6 +62,7 @@ const createHarness = (options: {
   const cachedRows = new Map<number, TestRow>();
   const errors: unknown[] = [];
   let totalRows = 0;
+  let bumpCount = 0;
 
   const dataSource: DataSource<TestRow> = {
     loadMode: "paginated",
@@ -129,9 +132,12 @@ const createHarness = (options: {
     emitDataError: (error) => errors.push(error),
     setDataLoading: () => undefined,
     onRowsLoaded: () => undefined,
+    bumpDataRevision: () => {
+      bumpCount += 1;
+    },
   });
 
-  return { loader, requests, cachedRows, errors, metrics };
+  return { loader, requests, cachedRows, errors, metrics, bumps: () => bumpCount };
 };
 
 describe("PaginatedRowLoader — ranges", () => {
@@ -218,7 +224,7 @@ describe("PaginatedRowLoader — C2 prefix predicate", () => {
     expect(admitsPrefix?.(100)).toBe(false);
   });
 
-  it("is undefined for a non-uniform row axis", () => {
+  it("answers for a non-uniform row axis with the conservative bound", () => {
     const sizes = [13, 12, 39, 6, 33, 16, 35, 26];
     const harness = createHarness({
       rowLoading: { mode: "paginated", cache: { pageSize: 2, prefetchPages: 0, maxPages: 3 } },
@@ -226,6 +232,10 @@ describe("PaginatedRowLoader — C2 prefix predicate", () => {
       metrics: { rowCount: sizes.length, rowHeight: 10 },
     });
 
-    expect(harness.loader.getPrefixAdmission()).toBeUndefined();
+    // The D4 bound replaces the old "undefined for a non-uniform axis": the
+    // predicate answers, and it reserves the suffix blocks before the prefix.
+    const admitsPrefix = harness.loader.getPrefixAdmission();
+    expect(admitsPrefix).toBeTypeOf("function");
+    expect(admitsPrefix?.(sizes.length)).toBe(false);
   });
 });

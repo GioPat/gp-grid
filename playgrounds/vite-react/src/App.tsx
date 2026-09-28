@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
@@ -11,6 +11,7 @@ import {
   type RowId,
   type CellValueChangedEvent,
   type GridLabels,
+  type GridRef,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
@@ -393,6 +394,7 @@ function MainDemo() {
   const [freezeCount, setFreezeCount] = useState<FreezeCount>(0);
   const [frozenStatus, setFrozenStatus] = useState("0 of 0 rows frozen");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
+  const gridRef = useRef<GridRef<Person> | null>(null);
   const showTouchDebug = shouldShowTouchDebug();
 
   const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
@@ -505,9 +507,56 @@ function MainDemo() {
         </span>
       </div>
 
+      {/* Row Heights (PRD 006): heights by identity, no remount */}
+      <div
+        style={{
+          marginBottom: "12px",
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>
+          Row heights:
+        </span>
+        <button
+          onClick={() =>
+            gridRef.current?.core?.rowHeights.set([
+              { rowId: 1, height: 48 },
+              { rowId: 2, height: 64 },
+              { rowId: 3, height: 96 },
+            ])
+          }
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Tall rows
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowHeights.reset()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Reset heights
+        </button>
+      </div>
+
       {showTouchDebug && <DebugOverlay totalRows={1500000} />}
       <div className="demo-grid-shell">
         <Grid
+          gridRef={gridRef}
           highlighting={highlighting}
           freezeRows={freezeRows}
           onFrozenRowsChanged={(state) =>

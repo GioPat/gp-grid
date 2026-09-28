@@ -42,6 +42,7 @@ describe("createInitialState — defaults", () => {
       rowData: undefined,
       generation: 1,
       translateY: 0,
+      height: 0,
       region: "suffix",
       loading: false,
     });

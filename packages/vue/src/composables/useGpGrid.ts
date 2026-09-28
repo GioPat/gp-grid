@@ -14,6 +14,7 @@ import {
   toInlineX,
   toPhysicalX,
   TouchScrollController,
+  PendingScrollLatch,
 } from "@gp-grid/core";
 import type {
   RowId,
@@ -92,6 +93,7 @@ export interface UseGpGridResult<TData = unknown> {
   state: ShallowRef<GridState>;
   /** Bumped once per core batch; cells read it so core-backed content updates. */
   renderToken: ShallowRef<number>;
+  /** Mounted slots: size each row box from `slot.height`; cells fill the row. */
   slotsArray: ComputedRef<SlotData[]>;
 
   // Computed
@@ -156,6 +158,7 @@ export function useGpGrid<TData = unknown>(
 
   // Seeded so the pre-mount/SSR render shows the definition layout before the
   // core publishes its first resolved snapshot.
+  const pendingScroll = new PendingScrollLatch();
   const { state, renderToken, applyInstructions } = useGridState({
     initialColumns: options.columns,
     initialColumnLayout: options.columnLayout ?? "fit",
@@ -190,6 +193,7 @@ export function useGpGrid<TData = unknown>(
       editingCell: computed(() => state.value.editingCell),
       filterPopupOpen: computed(() => state.value.filterPopup?.isOpen ?? false),
       onBeforeProgrammaticScroll: () => touchScroll.stop(),
+      scrollByWheel: (domDy) => touchScroll.scrollByWheel(domDy),
     },
   );
 
@@ -265,7 +269,9 @@ export function useGpGrid<TData = unknown>(
     touchScroll.syncCore();
 
     // Subscribe to batched instructions
+    pendingScroll.clear();
     const unsubscribe = core.onBatchInstruction((instructions) => {
+      pendingScroll.collect(instructions);
       applyInstructions(instructions);
     });
 
@@ -312,14 +318,14 @@ export function useGpGrid<TData = unknown>(
   // Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM
   // has been updated before the scroll positions are written.
   watch(
-    () => [state.value.pendingScrollTop, state.value.pendingScrollLeft] as const,
-    ([scrollTop, scrollLeft]) => {
+    renderToken,
+    () => {
+      const pending = pendingScroll.take();
       const container = containerRef.value;
-      if (container === null) return;
-      if (scrollTop === null && scrollLeft === null) return;
+      if (pending === null || container === null) return;
       touchScroll.stop();
-      if (scrollTop !== null) container.scrollTop = scrollTop;
-      if (scrollLeft !== null) container.scrollLeft = toPhysicalX(scrollLeft, rtlRef.value);
+      if (pending.top !== null) container.scrollTop = pending.top;
+      if (pending.left !== null) container.scrollLeft = toPhysicalX(pending.left, rtlRef.value);
     },
     { flush: "post" },
   );

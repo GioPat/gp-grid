@@ -18,6 +18,8 @@ export interface SlotPoolManagerOptions {
   getRowRegions: () => RowRegionLayout;
   /** `translateY` of a row inside the rows wrapper (rows space). */
   getRowOffset: (rowIndex: number) => number;
+  /** Row height from the row axis (D8). */
+  getRowSize: (rowIndex: number) => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
   /**
@@ -167,6 +169,7 @@ export class SlotPoolManager {
       isRowAvailable: (rowIndex) => options.isRowAvailable(rowIndex),
       getRowData: (rowIndex) => options.getRowData(rowIndex),
       getRowOffset: (rowIndex) => options.getRowOffset(rowIndex),
+      getRowSize: (rowIndex) => options.getRowSize(rowIndex),
     };
   }
 }

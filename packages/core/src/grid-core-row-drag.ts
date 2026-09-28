@@ -22,6 +22,8 @@ export interface RowDragControllerDeps<TData> {
   rowData: RowDataManager<TData>;
   slotPool: SlotPoolManager;
   highlight: HighlightManager<TData> | null;
+  /** The move changed row identity, so heights must be re-placed (D6). */
+  onRowsMoved: () => void;
 }
 
 export class RowDragController<TData> implements GridRowDragApi {
@@ -39,12 +41,13 @@ export class RowDragController<TData> implements GridRowDragApi {
     }
     // Read identity first: the commit reorders the cache under these indices.
     const rowId = rowData.getRowId(sourceIndex) ?? sourceIndex;
-    applyRowDragCommit(sourceIndex, targetIndex, {
+    const moved = applyRowDragCommit(sourceIndex, targetIndex, {
       dataSource: rowData.getDataSource(),
       cachedRows: rowData.getCachedRows(),
       slotPool: this.deps.slotPool,
       highlight: this.deps.highlight,
     });
+    if (moved) this.deps.onRowsMoved();
     this.deps.config.onRowDragEnd?.({
       rowId,
       fromViewIndex: sourceIndex,

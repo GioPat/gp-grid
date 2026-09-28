@@ -6,7 +6,7 @@ import type {
   SortModel,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
-import { createFrozenPrefixBudget, isUniformAxis } from "./page-capacity";
+import { createFrozenPrefixBudget } from "./page-capacity";
 import {
   RowWindowLoader,
   type RowLoadContext,
@@ -46,6 +46,8 @@ export interface PaginatedRowLoaderOptions<TData> {
   diagnostics: RowIdDiagnostics<TData>;
   emitDataError: (error: unknown) => void;
   setDataLoading: (loading: boolean) => void;
+  /** Changes whenever row order or membership may have changed (D6). */
+  bumpDataRevision: () => void;
   /**
    * A row window arrived from a fire-and-forget load (scroll-triggered), so
    * nobody is awaiting it: the view must be synced from here.
@@ -75,9 +77,7 @@ export class PaginatedRowLoader<TData = unknown> {
   /** C2's cache predicate; undefined while paging is inactive or unbounded. */
   getPrefixAdmission(): ((count: number) => boolean) | undefined {
     if (this.isPaginatedLoading() === false) return undefined;
-    const budget = this.rowWindowLoader.getPageBudget();
-    if (isUniformAxis(budget.axis) === false) return undefined;
-    return createFrozenPrefixBudget(budget);
+    return createFrozenPrefixBudget(this.rowWindowLoader.getPageBudget());
   }
 
   reset(): void {
@@ -164,11 +164,14 @@ export class PaginatedRowLoader<TData = unknown> {
     }
 
     try {
+      // A cache reset drops the pages and the identities the old query named.
+      if (options.resetCache) this.options.bumpDataRevision();
       const result = await this.rowWindowLoader.loadRange(
         options.range,
         options.resetCache,
       );
       if (result.applied === false) return;
+      if (options.resetCache) this.options.bumpDataRevision();
       if (result.loadedBlockCount > 0) {
         this.options.diagnostics.diagnoseLoadedRows();
         this.options.diagnostics.diagnoseWindowRows();
