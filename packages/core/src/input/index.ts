@@ -1,4 +1,14 @@
-export { ColumnResizeDrag } from "./column-resize-drag";
+export { ColumnResizeDrag, clampColumnWidth } from "./column-resize-drag";
+export { RowResizeDrag, MIN_ROW_RESIZE_HEIGHT, clampRowHeight } from "./row-resize-drag";
+export type { RowResizeCommands } from "./row-resize-drag";
+export {
+  COLUMN_RESIZE_STEP,
+  ROW_RESIZE_STEP,
+  resolveGridResizeKey,
+  resolveHandleFit,
+  applyGridResizeAction,
+} from "./resize-keys";
+export type { GridResizeAction } from "./resize-keys";
 export { ColumnMoveDrag } from "./column-move-drag";
 export { RowDrag } from "./row-drag";
 export { SelectionDrag } from "./selection-drag";

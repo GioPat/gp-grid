@@ -11,6 +11,7 @@ const dragState: DragState = {
   fillSourceRange: null,
   fillTarget: null,
   columnResize: null,
+  rowResize: null,
   columnMove: null,
   rowDrag: {
     sourceRowIndex: 1,

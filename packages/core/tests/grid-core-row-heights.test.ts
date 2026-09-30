@@ -328,6 +328,7 @@ describe("RowHeightsController — after destroy", () => {
       refreshGeometry: unreachable,
       writeScrollTop: unreachable,
       isDestroyed: () => true,
+      fitLimits: { min: ROW_HEIGHT, max: 10 * ROW_HEIGHT },
     });
     return { controller, batches };
   };

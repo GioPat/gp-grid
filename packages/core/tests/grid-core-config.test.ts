@@ -2,15 +2,20 @@
 // C1: freezeRows defaults and validation, and the core-resolved label set.
 
 import { describe, expect, it } from "vitest";
-import { resolveFreezeRowsOptions, resolveGridCoreConfig } from "../src/grid-core-config";
+import {
+  resolveAutoFitOptions,
+  resolveFreezeRowsOptions,
+  resolveGridCoreConfig,
+} from "../src/grid-core-config";
 import type { GridCoreConfig } from "../src/grid-core-config";
 import { createClientDataSource } from "../src/data-source";
+import { GridCore } from "../src/grid-core";
 import { defaultGridLabels } from "../src/i18n";
 import {
   DEFAULT_MAX_FROZEN_ROWS,
   DEFAULT_MIN_SUFFIX_HEIGHT,
 } from "../src/geometry";
-import type { FreezeRowsOptions, GridCoreOptions } from "../src/types";
+import type { AutoFitOptions, FreezeRowsOptions, GridCoreOptions } from "../src/types";
 
 interface Row {
   id: number;
@@ -69,6 +74,7 @@ describe("resolveGridCoreConfig — freezeRows defaults", () => {
     expect(withoutOption.maxFlingVelocity).toBe(640);
     expect(withoutOption.sortingEnabled).toBe(true);
     expect(withoutOption.rowDragEntireRow).toBe(false);
+    expect(withoutOption.rowResize).toBe(false);
     expect(withoutOption.columnLayout).toBe("fit");
     expect(withoutOption.columnOverscan).toBe(240);
   });
@@ -193,5 +199,70 @@ describe("resolveFreezeRowsOptions", () => {
       expect(() => resolveFreezeRowsOptions(value as FreezeRowsOptions)).toThrow(invalid(value));
     }
     expect(resolveFreezeRowsOptions({ count: 1, minSuffixHeight: 0 }).minSuffixHeight).toBe(0);
+  });
+});
+
+// PRD 007 D1: fit bounds, resolved against `rowHeight`.
+describe("resolveGridCoreConfig — autoFit", () => {
+  const withAutoFit = (autoFit: unknown, rowHeight = 32): GridCoreConfig<Row> =>
+    resolveGridCoreConfig<Row>({
+      ...baseOptions(),
+      rowHeight,
+      autoFit: autoFit as AutoFitOptions | undefined,
+    });
+
+  const invalidField = (field: string, value: unknown): RangeError =>
+    new RangeError(`Invalid autoFit.${field}: ${value}`);
+
+  it("resolves 600, rowHeight and 10 × rowHeight for an absent option", () => {
+    expect(withAutoFit(undefined).autoFit).toEqual({
+      maxColumnWidth: 600,
+      minRowHeight: 32,
+      maxRowHeight: 320,
+    });
+    expect(withAutoFit({}, 20).autoFit).toEqual({
+      maxColumnWidth: 600,
+      minRowHeight: 20,
+      maxRowHeight: 200,
+    });
+  });
+
+  it("keeps each supplied bound and the defaults of the rest", () => {
+    expect(withAutoFit({ maxColumnWidth: 250.5, maxRowHeight: 64 }).autoFit).toEqual({
+      maxColumnWidth: 250.5,
+      minRowHeight: 32,
+      maxRowHeight: 64,
+    });
+    expect(resolveAutoFitOptions({ minRowHeight: 40, maxRowHeight: 40 }, 32)).toEqual({
+      maxColumnWidth: 600,
+      minRowHeight: 40,
+      maxRowHeight: 40,
+    });
+  });
+
+  it("rejects a bound that is not finite and positive with the field message", () => {
+    for (const field of ["maxColumnWidth", "minRowHeight", "maxRowHeight"]) {
+      for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, "40"]) {
+        expect(() => withAutoFit({ [field]: value })).toThrow(invalidField(field, value));
+      }
+    }
+  });
+
+  it("rejects a maximum row height below the minimum", () => {
+    expect(() => withAutoFit({ minRowHeight: 50, maxRowHeight: 40 }))
+      .toThrow(invalidField("maxRowHeight", 40));
+    expect(() => withAutoFit({ minRowHeight: 400 })).toThrow(invalidField("maxRowHeight", 320));
+  });
+
+  it("keeps rowResize and passes it to the row heights controller", () => {
+    expect(resolveGridCoreConfig<Row>({ ...baseOptions(), rowResize: true }).rowResize).toBe(true);
+    expect(new GridCore<Row>(baseOptions()).rowHeights.isResizable()).toBe(false);
+    expect(new GridCore<Row>({ ...baseOptions(), rowResize: true }).rowHeights.isResizable()).toBe(true);
+  });
+
+  it("rejects a non-object autoFit", () => {
+    for (const value of [3, "fit", null]) {
+      expect(() => withAutoFit(value)).toThrow(new RangeError(`Invalid autoFit: ${value}`));
+    }
   });
 });

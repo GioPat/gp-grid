@@ -12,7 +12,8 @@ import type {
 
 /** Live per-column state, keyed by column id. */
 export interface ColumnState {
-  width?: number;
+  /** Pixel width override; `null` drops it. */
+  width?: number | null;
   hidden?: boolean;
   order?: number;
   /** `null` is an explicit unpin that beats a definition default. */
@@ -22,7 +23,8 @@ export interface ColumnState {
 /** A single explicit column-state command. Unset properties are untouched. */
 export interface ColumnStateUpdate {
   columnId: string;
-  width?: number;
+  /** Pixel width override; `null` drops it and restores the declared width. */
+  width?: number | null;
   hidden?: boolean;
   /** Target index in the resolved layout (0-based). */
   order?: number;

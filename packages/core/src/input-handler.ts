@@ -13,9 +13,11 @@ import type {
   KeyboardResult,
   DragMoveResult,
   DragState,
+  ResizeTarget,
 } from "./types/input";
 import {
   ColumnResizeDrag,
+  RowResizeDrag,
   ColumnMoveDrag,
   RowDrag,
   SelectionDrag,
@@ -24,6 +26,9 @@ import {
   PendingCellTapState,
   KeyboardHandler,
   computeCellTarget,
+  applyGridResizeAction,
+  resolveHandleFit,
+  type RowResizeCommands,
 } from "./input";
 
 // =============================================================================
@@ -46,6 +51,7 @@ export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
 
   readonly columnResize: ColumnResizeDrag<TData>;
+  readonly rowResize: RowResizeDrag<TData>;
   readonly columnMove: ColumnMoveDrag<TData>;
   readonly rowDrag: RowDrag<TData>;
   readonly selectionDrag: SelectionDrag<TData>;
@@ -53,15 +59,18 @@ export class InputHandler<TData = unknown> {
   private readonly pendingRowDrag = new PendingRowDragState();
   private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
+  private readonly commands: RowResizeCommands;
 
-  constructor(core: GridCore<TData>) {
+  constructor(core: GridCore<TData>, commands: RowResizeCommands) {
     this.core = core;
+    this.commands = commands;
     this.columnResize = new ColumnResizeDrag(core);
+    this.rowResize = new RowResizeDrag(core, commands);
     this.columnMove = new ColumnMoveDrag(core);
     this.rowDrag = new RowDrag(core);
     this.selectionDrag = new SelectionDrag(core);
     this.fillDrag = new FillDrag(core);
-    this.keyboard = new KeyboardHandler(core);
+    this.keyboard = new KeyboardHandler(core, commands);
   }
 
   // ---------------------------------------------------------------------------
@@ -77,6 +86,7 @@ export class InputHandler<TData = unknown> {
       fillSourceRange: fillSnapshot.sourceRange,
       fillTarget: fillSnapshot.target,
       columnResize: this.columnResize.getState(),
+      rowResize: this.rowResize.getState(),
       columnMove: this.columnMove.getState(),
       rowDrag: this.rowDrag.getState(),
     };
@@ -85,6 +95,7 @@ export class InputHandler<TData = unknown> {
   private getDragType(): DragState["dragType"] {
     if (this.fillDrag.isActive) return "fill";
     if (this.columnResize.isActive) return "column-resize";
+    if (this.rowResize.isActive) return "row-resize";
     if (this.columnMove.isDraggingForDisplay) return "column-move";
     if (this.rowDrag.isDraggingForDisplay) return "row-drag";
     if (this.selectionDrag.isActive) return "selection";
@@ -110,6 +121,21 @@ export class InputHandler<TData = unknown> {
     event: PointerEventData,
   ): InputResult {
     return this.columnResize.start(colIndex, colWidth, event);
+  }
+
+  handleRowResizeMouseDown(
+    rowIndex: number,
+    rowHeight: number,
+    event: PointerEventData,
+  ): InputResult {
+    if (this.core.rowHeights.isResizable() === false) return noopResult;
+    return this.rowResize.start(rowIndex, rowHeight, event);
+  }
+
+  /** A double-click on a column or row edge handle fits that target once. */
+  handleResizeDoubleClick(target: ResizeTarget): void {
+    const action = resolveHandleFit(this.core, target);
+    if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
 
   handleCellMouseDown(
@@ -283,6 +309,7 @@ export class InputHandler<TData = unknown> {
     bounds: ContainerBounds,
   ): DragMoveResult | null {
     if (this.columnResize.isActive) return this.columnResize.move(event, bounds);
+    if (this.rowResize.isActive) return this.rowResize.move(event);
     if (this.columnMove.isActive) return this.columnMove.move(event, bounds);
     if (this.rowDrag.isActive) return this.rowDrag.move(event, bounds);
     return this.selectionFillMove(event, bounds);
@@ -307,6 +334,7 @@ export class InputHandler<TData = unknown> {
 
   handleDragEnd(): void {
     if (this.columnResize.isActive) return this.columnResize.end();
+    if (this.rowResize.isActive) return this.rowResize.end();
     if (this.columnMove.isActive) return this.columnMove.end(cycleSortDirection);
     if (this.rowDrag.isActive) return this.rowDrag.end();
     this.selectionDrag.end();

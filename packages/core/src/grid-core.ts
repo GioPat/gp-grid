@@ -144,6 +144,10 @@ export class GridCore<TData = unknown> {
       refreshGeometry: () => this.viewportController.refreshGeometry(),
       writeScrollTop: (domScrollTop) => this.viewportController.writeScrollTop(domScrollTop),
       isDestroyed: () => this.isDestroyed,
+      measurementHost: this.config.measurementHost,
+      fitLimits: { min: this.config.autoFit.minRowHeight, max: this.config.autoFit.maxRowHeight },
+      onRowResized: this.config.onRowResized,
+      resizable: this.config.rowResize,
     });
 
     this.viewport = this.viewportController;
@@ -173,6 +177,7 @@ export class GridCore<TData = unknown> {
       refreshGeometry: () => this.viewportController.refreshGeometry(),
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       reloadAfterSchemaChange: () => this.refresh(),
+      isDestroyed: () => this.isDestroyed,
     });
     this.rowDrag = new RowDragController({
       config: this.config,
@@ -181,7 +186,10 @@ export class GridCore<TData = unknown> {
       highlight: this.highlight,
       onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
     });
-    this.input = new InputHandler(this);
+    this.input = new InputHandler(this, {
+      maxRowHeight: this.config.autoFit.maxRowHeight,
+      resizeRow: (viewIndex, height) => this.rowHeightsController.resize(viewIndex, height),
+    });
   }
 
   /**

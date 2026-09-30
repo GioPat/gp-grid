@@ -123,6 +123,20 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
+
+  /** One-shot measurement and fit results (PRD 007) */
+  MeasurementHost,
+  RowMeasurement,
+  ColumnMeasurement,
+  FitStatus,
+  FitClamp,
+  RowFitEntry,
+  RowFitSkip,
+  RowFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
+  ColumnFitResult,
 
   /** Cell Position coordinates: row and column, zero-based indices */
   CellPosition,
@@ -178,6 +192,7 @@ export type {
 
   /** Options */
   GridCoreOptions,
+  AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
@@ -238,6 +253,8 @@ export type {
   ColumnResizeDragState,
   ColumnMoveDragState,
   RowDragState,
+  RowResizeDragState,
+  ResizeTarget,
 } from "./types/input";
 
 // =============================================================================
@@ -335,6 +352,7 @@ export {
   PendingScrollLatch,
   DataSourceOwner,
   InputEventAdapter,
+  createDomMeasurementHost,
 } from "./adapter";
 export type {
   PendingRowDragDeps,

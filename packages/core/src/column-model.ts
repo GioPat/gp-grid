@@ -15,7 +15,6 @@ import type {
   ColumnDefinition,
   ColumnModelState,
   ColumnPin,
-  ColumnState,
   ColumnStateUpdate,
 } from "./types";
 
@@ -38,6 +37,12 @@ export interface ColumnMoveResult {
   toIndex: number;
   pinned: ColumnPin | null;
   pinChanged: boolean;
+}
+
+/** Stored user state; a dropped width override is deleted, never `null`. */
+interface StoredColumnState {
+  width?: number;
+  hidden?: boolean;
 }
 
 interface ColumnModelSnapshot {
@@ -84,7 +89,7 @@ const hasSameIds = (before: ReadonlySet<string>, after: ReadonlySet<string>): bo
 
 const applyColumnState = (
   definition: ColumnDefinition,
-  state: ColumnState | undefined,
+  state: StoredColumnState | undefined,
   pin: ColumnPin | null,
   normalizeWidth: (width: number) => number,
 ): ColumnDefinition => {
@@ -143,7 +148,7 @@ const normalizeDefinitions = (
 export class ColumnModel {
   private definitions: ColumnDefinition[] = [];
   private readonly definitionsById = new Map<string, ColumnDefinition>();
-  private readonly overrides = new Map<string, ColumnState>();
+  private readonly overrides = new Map<string, StoredColumnState>();
   /** Base order: the model's authoritative id sequence, independent of pins. */
   private orderIds: string[] = [];
   /** `orderIds` partitioned by requested pin; the index space of the layout. */
@@ -330,7 +335,8 @@ export class ColumnModel {
   private applyStateOverride(update: ColumnStateUpdate): void {
     if (update.width === undefined && update.hidden === undefined) return;
     const state = this.overrides.get(update.columnId) ?? {};
-    if (update.width !== undefined) state.width = this.diagnoseWidth(update.columnId, update.width);
+    if (update.width === null) delete state.width;
+    else if (update.width !== undefined) state.width = this.diagnoseWidth(update.columnId, update.width);
     if (update.hidden !== undefined) state.hidden = update.hidden;
     this.overrides.set(update.columnId, state);
   }

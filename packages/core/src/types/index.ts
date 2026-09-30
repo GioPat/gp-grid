@@ -27,7 +27,23 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 } from "./events";
+
+// One-shot measurement and fit results
+export type {
+  MeasurementHost,
+  RowMeasurement,
+  ColumnMeasurement,
+  FitStatus,
+  FitClamp,
+  RowFitEntry,
+  RowFitSkip,
+  RowFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
+  ColumnFitResult,
+} from "./measurement";
 
 // Highlighting types (must come before columns, which depends on these)
 export type {
@@ -153,6 +169,7 @@ export type {
 // Options types
 export type {
   GridCoreOptions,
+  AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
@@ -172,4 +189,6 @@ export type {
   ColumnResizeDragState,
   ColumnMoveDragState,
   RowDragState,
+  RowResizeDragState,
+  ResizeTarget,
 } from "./input";

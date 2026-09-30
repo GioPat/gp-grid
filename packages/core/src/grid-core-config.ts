@@ -3,7 +3,7 @@
 // and its managers read for the grid's lifetime. Defaults and option
 // cross-checks live here, once, instead of in the GridCore constructor.
 
-import type { FreezeRowsOptions, GridCoreOptions } from "./types";
+import type { AutoFitOptions, FreezeRowsOptions, GridCoreOptions } from "./types";
 import type { ColumnLayoutMode } from "./types/geometry";
 import {
   DEFAULT_MAX_FROZEN_ROWS,
@@ -18,15 +18,23 @@ const DEFAULT_FLING_ROWS_PER_SECOND = 20_000;
 /** CSS px of center window kept mounted past each clip edge by default. */
 export const DEFAULT_COLUMN_OVERSCAN = 240;
 
+/** Widest width a column fit sets by default. */
+export const DEFAULT_MAX_FIT_COLUMN_WIDTH = 600;
+
+/** Default tallest fitted or resized row, in multiples of `rowHeight`. */
+const DEFAULT_MAX_ROW_HEIGHT_FACTOR = 10;
+
 type DefaultedOption =
   | "headerHeight"
   | "overscan"
   | "maxFlingVelocity"
   | "sortingEnabled"
   | "rowDragEntireRow"
+  | "rowResize"
   | "columnLayout"
   | "columnOverscan"
   | "freezeRows"
+  | "autoFit"
   | "labels";
 
 const invalidFreezeRows = (value: unknown): RangeError =>
@@ -71,6 +79,40 @@ export const resolveFreezeRowsOptions = (
   };
 };
 
+const readFitSize = (value: unknown, field: string, fallback: number): number => {
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  throw new RangeError(`Invalid autoFit.${field}: ${value}`);
+};
+
+/** Validate `autoFit` into its full triple against the grid's `rowHeight`. */
+export const resolveAutoFitOptions = (
+  value: AutoFitOptions | undefined,
+  rowHeight: number,
+): Readonly<Required<AutoFitOptions>> => {
+  if (value !== undefined && (typeof value !== "object" || value === null)) {
+    throw new RangeError(`Invalid autoFit: ${value}`);
+  }
+  const minRowHeight = readFitSize(value?.minRowHeight, "minRowHeight", rowHeight);
+  const maxRowHeight = readFitSize(
+    value?.maxRowHeight,
+    "maxRowHeight",
+    DEFAULT_MAX_ROW_HEIGHT_FACTOR * rowHeight,
+  );
+  if (maxRowHeight < minRowHeight) {
+    throw new RangeError(`Invalid autoFit.maxRowHeight: ${maxRowHeight}`);
+  }
+  return {
+    maxColumnWidth: readFitSize(
+      value?.maxColumnWidth,
+      "maxColumnWidth",
+      DEFAULT_MAX_FIT_COLUMN_WIDTH,
+    ),
+    minRowHeight,
+    maxRowHeight,
+  };
+};
+
 /**
  * GridCoreOptions with defaults applied. `columns` is excluded: it is the
  * one option that changes after construction (see GridCore.setColumns).
@@ -82,9 +124,11 @@ export interface GridCoreConfig<TData>
   readonly maxFlingVelocity: number;
   readonly sortingEnabled: boolean;
   readonly rowDragEntireRow: boolean;
+  readonly rowResize: boolean;
   readonly columnLayout: ColumnLayoutMode;
   readonly columnOverscan: number;
   readonly freezeRows: Readonly<Required<FreezeRowsOptions>>;
+  readonly autoFit: Readonly<Required<AutoFitOptions>>;
   readonly labels: GridLabels;
 }
 
@@ -106,6 +150,7 @@ export const resolveGridCoreConfig = <TData>(
     throw new RangeError(`Invalid columnOverscan: ${columnOverscan}`);
   }
   const freezeRows = resolveFreezeRowsOptions(options.freezeRows);
+  const autoFit = resolveAutoFitOptions(options.autoFit, options.rowHeight);
   return {
     dataSource: options.dataSource,
     rowHeight: options.rowHeight,
@@ -116,6 +161,7 @@ export const resolveGridCoreConfig = <TData>(
     onWriteRejected: options.onWriteRejected,
     onRowDragEnd: options.onRowDragEnd,
     onColumnResized: options.onColumnResized,
+    onRowResized: options.onRowResized,
     onColumnMoved: options.onColumnMoved,
     onColumnPinned: options.onColumnPinned,
     onFrozenRowsChanged: options.onFrozenRowsChanged,
@@ -123,11 +169,14 @@ export const resolveGridCoreConfig = <TData>(
     overscan,
     columnOverscan,
     freezeRows,
+    autoFit,
+    measurementHost: options.measurementHost,
     labels: resolveGridLabels(options.labels),
     maxFlingVelocity: options.maxFlingVelocity ??
       (DEFAULT_FLING_ROWS_PER_SECOND * options.rowHeight) / 1000,
     sortingEnabled: options.sortingEnabled ?? true,
     rowDragEntireRow: options.rowDragEntireRow ?? false,
+    rowResize: options.rowResize ?? false,
     columnLayout: options.columnLayout ?? "fit",
   };
 };

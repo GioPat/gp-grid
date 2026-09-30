@@ -2,6 +2,8 @@ import type { GridCore } from "../grid-core";
 import type { CellPosition } from "../types/basic";
 import type { KeyEventData, KeyboardResult } from "../types/input";
 import type { Direction } from "../selection";
+import { applyGridResizeAction, resolveGridResizeKey } from "./resize-keys";
+import type { RowResizeCommands } from "./row-resize-drag";
 
 const ARROW_DIRECTIONS = new Map<string, Direction>([
   ["ArrowUp", "up"],
@@ -12,11 +14,15 @@ const ARROW_DIRECTIONS = new Map<string, Direction>([
 
 type EditingCell = { row: number; col: number } | null;
 
+const isResizeKey = (key: string): boolean => key === "Enter" || ARROW_DIRECTIONS.has(key);
+
 export class KeyboardHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
+  private readonly commands: RowResizeCommands;
 
-  constructor(core: GridCore<TData>) {
+  constructor(core: GridCore<TData>, commands: RowResizeCommands) {
     this.core = core;
+    this.commands = commands;
   }
 
   handle(
@@ -45,11 +51,29 @@ export class KeyboardHandler<TData = unknown> {
       event.key !== "Tab";
     if (editingAndNotSpecialKey) return { preventDefault: false };
 
+    // With an editor open, Alt+Enter commits like Enter.
+    const resizeKey = event.altKey === true && editingCell === null && isResizeKey(event.key);
+    if (resizeKey) return this.resizeFromKey(event, activeCell);
+
     const direction = ARROW_DIRECTIONS.get(event.key);
     if (direction) return this.moveFocus(direction, event.shiftKey);
 
     const isCtrl = event.ctrlKey || event.metaKey;
     return this.handleAction(event.key, activeCell, editingCell, event.shiftKey, isCtrl);
+  }
+
+  /**
+   * Alt+Arrow and Alt+Enter never move focus. Without a target they are left
+   * to the browser; a handled one prevents the browser's history navigation.
+   */
+  private resizeFromKey(event: KeyEventData, activeCell: CellPosition | null): KeyboardResult {
+    const action = resolveGridResizeKey(this.core, event, activeCell, this.commands.maxRowHeight);
+    if (action === null) return { preventDefault: false };
+    applyGridResizeAction(this.core, this.commands, action);
+    if (action.kind === "column-move") {
+      return { preventDefault: true, scrollToCell: this.core.selection.getActiveCell() ?? undefined };
+    }
+    return { preventDefault: true };
   }
 
   private moveFocus(direction: Direction, isShift: boolean): KeyboardResult {

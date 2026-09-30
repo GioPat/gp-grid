@@ -12,10 +12,12 @@ import type {
   ColumnPinnedEvent,
   ColumnResizedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 } from "./events";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
 import type { ColumnLayoutMode, FrozenRowsState } from "./geometry";
 import type { HighlightingOptions } from "./highlighting";
+import type { MeasurementHost } from "./measurement";
 import type { GridLabelOverrides } from "../i18n";
 
 /** Row loading mode used by GridCore. "auto" follows the data source preference. */
@@ -49,6 +51,19 @@ export interface FreezeRowsOptions {
   maxCount?: number;
   /** CSS px of suffix viewport kept below the prefix. Default: 64. */
   minSuffixHeight?: number;
+}
+
+/**
+ * Bounds of a one-shot fit. Each value is finite and `> 0`, and
+ * `maxRowHeight` is not below `minRowHeight`. Creation-only.
+ */
+export interface AutoFitOptions {
+  /** Widest width a column fit sets, in px. Default: 600. */
+  maxColumnWidth?: number;
+  /** Shortest height a row fit sets, in px. Default: `rowHeight`. */
+  minRowHeight?: number;
+  /** Tallest height a row fit or a row resize sets, in px. Default: `10 × rowHeight`. */
+  maxRowHeight?: number;
 }
 
 /** Grid row loading options. */
@@ -123,8 +138,24 @@ export interface GridCoreOptions<TData = unknown> {
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */
   onRowDragEnd?: (event: RowDragEndEvent) => void;
-  /** Called when a column is resized. */
+  /** Called per column a resize, a fit or a resize key changed. */
   onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: the row edge drag and double-click,
+   * Alt+ArrowUp/Down and Alt+Shift+Enter. Default: false. Changed at runtime
+   * through `rowHeights.setResizable`.
+   */
+  rowResize?: boolean;
+  /** Called per row a row resize, a fit or a resize key changed. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Bounds of `rowHeights.fit`, `columns.fit` and the row resize gestures. */
+  autoFit?: AutoFitOptions;
+  /**
+   * Reads rendered content for the fit commands. Wrappers pass
+   * `createDomMeasurementHost` in the browser; without one a fit is
+   * `"unsupported"`.
+   */
+  measurementHost?: MeasurementHost;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /**
