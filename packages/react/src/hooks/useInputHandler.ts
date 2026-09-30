@@ -8,6 +8,7 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
+  ResizeTarget,
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
@@ -43,6 +44,8 @@ export interface UseInputHandlerResult {
   handleHeaderClick: (colIndex: number, e: React.MouseEvent) => void;
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  handleRowResizeMouseDown: (rowIndex: number, rowHeight: number, e: React.PointerEvent) => void;
+  handleResizeDoubleClick: (target: ResizeTarget) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handlePaste: (e: React.ClipboardEvent) => void;
   handleWheel: (e: React.WheelEvent, wheelDampening: number) => void;
@@ -109,6 +112,7 @@ export function useInputHandler<TData>(
     fillSourceRange: null,
     fillTarget: null,
     columnResize: null,
+    rowResize: null,
     columnMove: null,
     rowDrag: null,
   });
@@ -421,6 +425,34 @@ export function useInputHandler<TData>(
     [coreRef, startGlobalDragListeners]
   );
 
+  const handleRowResizeMouseDown = useCallback(
+    (rowIndex: number, rowHeight: number, e: React.PointerEvent) => {
+      const core = coreRef.current;
+      if (!core?.input) return;
+
+      const result = core.input.handleRowResizeMouseDown(
+        rowIndex,
+        rowHeight,
+        toPointerEventData(e)
+      );
+
+      if (result.preventDefault) e.preventDefault();
+      if (result.stopPropagation) e.stopPropagation();
+      if (result.startDrag === "row-resize") {
+        setDragState(core.input.getDragState());
+        startGlobalDragListeners();
+      }
+    },
+    [coreRef, startGlobalDragListeners]
+  );
+
+  const handleResizeDoubleClick = useCallback(
+    (target: ResizeTarget) => {
+      coreRef.current?.input.handleResizeDoubleClick(target);
+    },
+    [coreRef]
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const core = coreRef.current;
@@ -435,6 +467,7 @@ export function useInputHandler<TData>(
           shiftKey: e.shiftKey,
           ctrlKey: e.ctrlKey,
           metaKey: e.metaKey,
+          altKey: e.altKey,
         },
         activeCell,
         editingCell,
@@ -513,6 +546,8 @@ export function useInputHandler<TData>(
     handleHeaderClick,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
+    handleRowResizeMouseDown,
+    handleResizeDoubleClick,
     handleKeyDown,
     handlePaste,
     handleWheel,

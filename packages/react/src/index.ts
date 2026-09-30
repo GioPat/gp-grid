@@ -50,6 +50,18 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
+
+  // Row resize and one-shot fit
+  AutoFitOptions,
+  FitStatus,
+  FitClamp,
+  RowFitResult,
+  RowFitEntry,
+  RowFitSkip,
+  ColumnFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
 
   // DataSource
   DataSource,

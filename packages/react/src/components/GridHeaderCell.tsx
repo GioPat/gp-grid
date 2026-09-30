@@ -10,6 +10,8 @@ import type {
 } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { ReactHeaderRenderer } from "../types";
+import { ResizeHandle } from "./ResizeHandle";
+import type { ResizeHandleActions } from "./ResizeHandle";
 
 export interface GridHeaderCellProps<TData = unknown> {
   column: ResolvedColumn;
@@ -26,7 +28,7 @@ export interface GridHeaderCellProps<TData = unknown> {
     colHeight: number,
     e: React.PointerEvent,
   ) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
@@ -47,7 +49,7 @@ export const GridHeaderCell = <TData = unknown>(
     rtl,
     labels,
     onHeaderMouseDown,
-    onHeaderResizeMouseDown,
+    resizeActions,
     coreRef,
     outerContainerRef,
     headerRenderers,
@@ -89,12 +91,11 @@ export const GridHeaderCell = <TData = unknown>(
         pinIcon,
       })}
       {definition.resizable !== false && (
-        <div
-          className="gp-grid-header-resize-handle"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onHeaderResizeMouseDown(layoutIndex, width, e);
-          }}
+        <ResizeHandle
+          axis="column"
+          index={layoutIndex}
+          size={width}
+          actions={resizeActions}
         />
       )}
     </div>

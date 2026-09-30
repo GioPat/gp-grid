@@ -13,6 +13,7 @@ import {
   GridCore,
   createClientDataSource,
   createDataSourceFromArray,
+  createDomMeasurementHost,
   calculateFillHandlePosition,
   readIsRtl,
   toInlineX,
@@ -24,6 +25,7 @@ import {
 } from "@gp-grid/core";
 import type { ColumnFilterModel, DataSource, GridLabels } from "@gp-grid/core";
 import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
+import type { ResizeHandleActions } from "./components/ResizeHandle";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
@@ -79,9 +81,12 @@ export function Grid<TData = unknown>(
     rowDragEntireRow = false,
     onRowDragEnd,
     onColumnResized,
+    onRowResized,
     onColumnMoved,
     onColumnPinned,
     onFrozenRowsChanged,
+    rowResize = false,
+    autoFit,
     labels,
   } = props;
 
@@ -213,6 +218,8 @@ export function Grid<TData = unknown>(
   onRowDragEndRef.current = onRowDragEnd;
   const onColumnResizedRef = useRef(onColumnResized);
   onColumnResizedRef.current = onColumnResized;
+  const onRowResizedRef = useRef(onRowResized);
+  onRowResizedRef.current = onRowResized;
   const onColumnMovedRef = useRef(onColumnMoved);
   onColumnMovedRef.current = onColumnMoved;
   const onColumnPinnedRef = useRef(onColumnPinned);
@@ -250,6 +257,8 @@ export function Grid<TData = unknown>(
     handleFillHandleMouseDown,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
+    handleRowResizeMouseDown,
+    handleResizeDoubleClick,
     handleKeyDown,
     handlePaste,
     handleWheel,
@@ -262,6 +271,15 @@ export function Grid<TData = unknown>(
     onBeforeProgrammaticScroll: stopTouchScroll,
     scrollByWheel,
   });
+
+  const resizeActions = useMemo<ResizeHandleActions>(
+    () => ({
+      onColumnPointerDown: handleHeaderResizeMouseDown,
+      onRowPointerDown: handleRowResizeMouseDown,
+      onDoubleClick: handleResizeDoubleClick,
+    }),
+    [handleHeaderResizeMouseDown, handleRowResizeMouseDown, handleResizeDoubleClick],
+  );
 
   // Initialize GridCore
   useEffect(() => {
@@ -295,6 +313,10 @@ export function Grid<TData = unknown>(
       rowDragEntireRow,
       onRowDragEnd: (event) => onRowDragEndRef.current?.(event),
       onColumnResized: (event) => onColumnResizedRef.current?.(event),
+      onRowResized: (event) => onRowResizedRef.current?.(event),
+      rowResize,
+      autoFit,
+      measurementHost: createDomMeasurementHost(() => outerContainerRef.current),
       onColumnMoved: (event) => onColumnMovedRef.current?.(event),
       onColumnPinned: (event) => onColumnPinnedRef.current?.(event),
       onFrozenRowsChanged: (state) => onFrozenRowsChangedRef.current?.(state),
@@ -347,8 +369,9 @@ export function Grid<TData = unknown>(
         gridRef.current = null;
       }
     };
-    // `labels` is creation-only and `freezeRows` has its own runtime effect
-    // below, so neither may rebuild the core and reset scroll.
+    // `labels` and `autoFit` are creation-only and `freezeRows` and
+    // `rowResize` have their own runtime effects below, so none may rebuild
+    // the core and reset scroll.
   }, [
     rowHeight,
     totalHeaderHeight,
@@ -387,6 +410,10 @@ export function Grid<TData = unknown>(
   useEffect(() => {
     coreRef.current?.frozenRows.set(freezeRows);
   }, [freezeRows]);
+
+  useEffect(() => {
+    coreRef.current?.rowHeights.setResizable(rowResize);
+  }, [rowResize]);
 
   // Handle reactive data source changes without re-creating core
   useEffect(() => {
@@ -583,6 +610,7 @@ export function Grid<TData = unknown>(
       role="grid"
       aria-colcount={displayedColumnCount}
       aria-rowcount={state.totalRows}
+      data-layout-revision={columnWindow?.layout.revision}
       style={{
         width: "100%",
         height: "100%",
@@ -608,7 +636,7 @@ export function Grid<TData = unknown>(
         rtl={rtl}
         labels={resolvedLabels}
         onHeaderMouseDown={handleHeaderMouseDown}
-        onHeaderResizeMouseDown={handleHeaderResizeMouseDown}
+        resizeActions={resizeActions}
         coreRef={coreRef}
         outerContainerRef={outerContainerRef}
         headerRenderers={headerRenderers}
@@ -642,6 +670,8 @@ export function Grid<TData = unknown>(
         onCellMouseEnter={handleCellMouseEnter}
         onCellMouseLeave={handleCellMouseLeave}
         onFillHandleMouseDown={handleFillHandleMouseDown}
+        resizeActions={resizeActions}
+        rowResize={rowResize}
         coreRef={coreRef}
         cellRenderers={cellRenderers}
         editRenderers={editRenderers}
@@ -731,6 +761,14 @@ export function Grid<TData = unknown>(
         <div
           className="gp-grid-column-resize-line"
           style={{ insetInlineStart: dragState.columnResize.lineX }}
+        />
+      )}
+
+      {/* Row resize line */}
+      {dragState.dragType === "row-resize" && dragState.rowResize && (
+        <div
+          className="gp-grid-row-resize-line"
+          style={{ top: totalHeaderHeight + dragState.rowResize.lineY }}
         />
       )}
 

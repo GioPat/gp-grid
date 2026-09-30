@@ -13,7 +13,7 @@ import type { GridCellProps } from "./GridCell";
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext<TData = unknown> = Omit<
   GridCellProps<TData>,
-  "rowIndex" | "rowData" | "column" | "displayedIndex"
+  "rowIndex" | "rowData" | "rowHeight" | "column" | "displayedIndex"
 >;
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -68,6 +68,7 @@ const renderColumn = <TData = unknown>(
     {...cellContext}
     rowIndex={slot.rowIndex}
     rowData={slot.rowData}
+    rowHeight={slot.height}
     column={column}
     displayedIndex={displayedIndexOf(column.columnId)}
   />

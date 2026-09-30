@@ -10,6 +10,7 @@ import type {
   ResolvedColumn,
 } from "@gp-grid/core";
 import { GridHeaderCell } from "./GridHeaderCell";
+import type { ResizeHandleActions } from "./ResizeHandle";
 import type { ReactHeaderRenderer } from "../types";
 
 export interface GridHeaderProps<TData = unknown> {
@@ -28,7 +29,7 @@ export interface GridHeaderProps<TData = unknown> {
   rtl: boolean;
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: Record<string, ReactHeaderRenderer>;
@@ -57,7 +58,7 @@ export const GridHeader = <TData = unknown>(
     rtl,
     labels,
     onHeaderMouseDown,
-    onHeaderResizeMouseDown,
+    resizeActions,
     coreRef,
     outerContainerRef,
     headerRenderers,
@@ -76,7 +77,7 @@ export const GridHeader = <TData = unknown>(
       rtl={rtl}
       labels={labels}
       onHeaderMouseDown={onHeaderMouseDown}
-      onHeaderResizeMouseDown={onHeaderResizeMouseDown}
+      resizeActions={resizeActions}
       coreRef={coreRef}
       outerContainerRef={outerContainerRef}
       headerRenderers={headerRenderers}

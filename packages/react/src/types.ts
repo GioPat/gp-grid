@@ -2,6 +2,7 @@
 
 import type {
   RowId,
+  AutoFitOptions,
   ColumnDefinition,
   ColumnLayoutMode,
   ColumnMovedEvent,
@@ -22,6 +23,7 @@ import type {
   HighlightingOptions,
   RowDragEndEvent,
   RowLoadingOptions,
+  RowResizedEvent,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -137,8 +139,18 @@ export interface GridProps<TData = unknown> {
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer handles data reordering. */
   onRowDragEnd?: (event: RowDragEndEvent) => void;
-  /** Called when a column is resized. */
+  /** Called per column a resize, a fit or a resize key changed. */
   onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   * Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row a row resize, a fit or a resize key changed. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Bounds of the fit commands and the row resize gestures. Creation-only. */
+  autoFit?: AutoFitOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */

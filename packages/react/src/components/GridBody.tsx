@@ -17,6 +17,7 @@ import { formatLabel } from "@gp-grid/core";
 import { GridRow } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
 import { GridFrozenRows } from "./GridFrozenRows";
+import type { ResizeHandleActions } from "./ResizeHandle";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
@@ -45,6 +46,9 @@ export interface GridBodyProps<TData = unknown> {
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   onCellMouseLeave: () => void;
   onFillHandleMouseDown: (e: React.PointerEvent) => void;
+  resizeActions: ResizeHandleActions;
+  /** Every non-editing cell renders the row edge handle. */
+  rowResize: boolean;
   coreRef: React.RefObject<GridCore<TData> | null>;
   cellRenderers: Record<string, ReactCellRenderer>;
   editRenderers: Record<string, ReactEditRenderer>;
@@ -81,6 +85,8 @@ const GridBodyInner = <TData = unknown>(
     onCellMouseEnter,
     onCellMouseLeave,
     onFillHandleMouseDown,
+    resizeActions,
+    rowResize,
     coreRef,
     cellRenderers,
     editRenderers,
@@ -99,6 +105,8 @@ const GridBodyInner = <TData = unknown>(
     selectionRange,
     editingCell,
     dragState,
+    resizeActions,
+    rowResize,
     coreRef,
     cellRenderers,
     editRenderers,
