@@ -571,6 +571,7 @@ function MainDemo() {
           overscan={12}
           dataSource={dataSource}
           rowHeight={36}
+          rowResize
           darkMode={true}
           headerHeight={40}
           cellRenderers={cellRenderers}
