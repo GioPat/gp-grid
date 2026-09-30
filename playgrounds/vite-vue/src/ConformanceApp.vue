@@ -17,8 +17,10 @@ import type {
   GridCore,
   RowDragEndEvent,
   RowLoadingOptions,
+  RowResizedEvent,
 } from "@gp-grid/vue";
 import {
+  createFitHooks,
   createGeometryHooks,
   createLargeColumnarColumns,
   createLargeColumnarSource,
@@ -40,6 +42,13 @@ import {
   ROW_HEIGHTS_ROW_HEIGHT,
   type RowHeightsMode,
 } from "./conformance-row-heights";
+import {
+  AUTO_FIT_COLUMN_LAYOUT,
+  AUTO_FIT_HEADER_HEIGHT,
+  AUTO_FIT_ROW_HEIGHT,
+  createAutoFitFixture,
+  type AutoFitMode,
+} from "./conformance-auto-fit";
 
 interface ConformanceRow {
   id: number;
@@ -159,8 +168,10 @@ const fixture = createColumnarFixture();
 const largeColumnarSource = ref<ReturnType<typeof createLargeColumnarSource> | null>(null);
 const frozen = createFrozenFixture();
 const rowHeights = createRowHeightsFixture();
+const autoFit = createAutoFitFixture();
 const frozenMode = ref<FrozenMode>("off");
 const rowHeightsMode = ref<RowHeightsMode>("off");
+const autoFitMode = ref<AutoFitMode>("off");
 const mode = ref<"object" | "columnar">("object");
 const revision = ref(0);
 const mounted = ref(true);
@@ -174,7 +185,7 @@ const hostWidth = ref(600);
 const hostHeight = ref(FROZEN_HOST_HEIGHT);
 const freezeOverride = ref<FreezeRowsOptions | undefined | null>(null);
 const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
-const eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0 };
+const eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0, rowResized: 0 };
 const coreTokens = new WeakMap<object, number>();
 let nextCoreToken = 1;
 
@@ -223,11 +234,13 @@ const useLargeColumnar = (): void => {
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
 const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
+const autoFitActive = computed(() => autoFitMode.value !== "off");
 
 /** Arming swaps the data source and columns, so it remounts the grid. */
 const armFrozenRows = (next: FrozenMode): void => {
   frozenMode.value = next;
   rowHeightsMode.value = "off";
+  autoFitMode.value = "off";
   generation.value += 1;
 };
 
@@ -235,6 +248,15 @@ const armFrozenRows = (next: FrozenMode): void => {
 const armRowHeights = (next: RowHeightsMode): void => {
   rowHeightsMode.value = next;
   frozenMode.value = "off";
+  autoFitMode.value = "off";
+  generation.value += 1;
+};
+
+/** The fit arms remount the same way, and clear the other arms. */
+const armAutoFit = (next: AutoFitMode): void => {
+  autoFitMode.value = next;
+  frozenMode.value = "off";
+  rowHeightsMode.value = "off";
   generation.value += 1;
 };
 
@@ -247,6 +269,8 @@ const useFrozenObject = (): void => armFrozenRows("object");
 const useRowHeights = (): void => armRowHeights("object");
 const useRowHeightsLarge = (): void => armRowHeights("large");
 const useRowHeightsPaged = (): void => armRowHeights("paged");
+const useAutoFit = (): void => armAutoFit("object");
+const useAutoFitPaged = (): void => armAutoFit("paged");
 
 // In-place controls: the option stays reactive, so these never touch the
 // remount `generation`. `null` means "the armed mode's own option".
@@ -271,6 +295,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (autoFitActive.value) return autoFit.sourceFor(autoFitMode.value);
   if (rowHeightsActive.value) return rowHeights.sourceFor(rowHeightsMode.value);
   if (frozenActive.value) return frozen.sourceFor(frozenMode.value);
   if (mode.value === "columnar") return largeColumnarSource.value ?? fixture.source;
@@ -279,12 +304,15 @@ const activeDataSource = (): DataSource<never> | undefined => {
 
 /** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
+  if (autoFitActive.value) return autoFit.rowDataFor(autoFitMode.value) as unknown as ConformanceRow[] | undefined;
   if (rowHeightsActive.value) return rowHeights.rowDataFor(rowHeightsMode.value);
   if (frozenActive.value) return frozenObject.value ? rows.value : undefined;
   return mode.value === "columnar" ? undefined : rows.value;
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  const fitColumns = autoFitActive.value ? autoFit.columnsFor(autoFitMode.value) : undefined;
+  if (fitColumns !== undefined) return fitColumns;
   const heightColumns = rowHeightsActive.value ? rowHeights.columnsFor(rowHeightsMode.value) : undefined;
   if (heightColumns !== undefined) return heightColumns;
   const frozenColumns = frozenActive.value ? frozen.columnsFor(frozenMode.value) : undefined;
@@ -292,20 +320,24 @@ const activeColumns = (): ColumnDefinition[] => {
   return mode.value === "columnar" ? columnarColumns.value : columns.value;
 };
 
-const activeRowLoading = (): RowLoadingOptions | undefined =>
-  rowHeightsActive.value
+const activeRowLoading = (): RowLoadingOptions | undefined => {
+  if (autoFitActive.value) return autoFit.rowLoadingFor(autoFitMode.value);
+  return rowHeightsActive.value
     ? rowHeights.rowLoadingFor(rowHeightsMode.value)
     : frozen.rowLoadingFor(frozenMode.value);
+};
 
 const activeRowHeight = (): number => {
   if (frozenActive.value) return FROZEN_ROW_HEIGHT;
   if (rowHeightsActive.value) return ROW_HEIGHTS_ROW_HEIGHT;
+  if (autoFitActive.value) return AUTO_FIT_ROW_HEIGHT;
   return 32;
 };
 
 const activeHeaderHeight = (): number => {
   if (frozenActive.value) return FROZEN_HEADER_HEIGHT;
   if (rowHeightsActive.value) return ROW_HEIGHTS_HEADER_HEIGHT;
+  if (autoFitActive.value) return AUTO_FIT_HEADER_HEIGHT;
   return 36;
 };
 
@@ -351,6 +383,7 @@ const hideColumn = (): void => {
 const reset = (): void => {
   frozenMode.value = "off";
   rowHeightsMode.value = "off";
+  autoFitMode.value = "off";
   rows.value = createRows();
   columns.value = createColumns();
   columnarColumns.value = createColumnarColumns();
@@ -369,6 +402,7 @@ const reset = (): void => {
   eventCounts.moved = 0;
   eventCounts.dragged = 0;
   eventCounts.pinned = 0;
+  eventCounts.rowResized = 0;
 };
 
 const remount = async (): Promise<void> => {
@@ -425,6 +459,9 @@ const onRowDragEnd = (_event: RowDragEndEvent): void => {
 };
 const onColumnPinned = (_event: ColumnPinnedEvent): void => {
   eventCounts.pinned += 1;
+};
+const onRowResized = (_event: RowResizedEvent): void => {
+  eventCounts.rowResized += 1;
 };
 
 const applyColumnState = (): void => {
@@ -489,12 +526,17 @@ if (typeof window !== "undefined") {
       eventCounts.moved = 0;
       eventCounts.dragged = 0;
       eventCounts.pinned = 0;
+      eventCounts.rowResized = 0;
     },
     useWideColumns,
     setFreezeCount,
     ...createGeometryHooks(() => coreOf(), frozen),
-    // Each arm records its own requests; the frozen reader is the other arm's.
-    requestedRanges: () => (rowHeightsActive.value ? rowHeights.requestedRanges() : frozen.requestedRanges()),
+    ...createFitHooks(() => coreOf()),
+    // Each arm records its own requests; the frozen reader is the other arms'.
+    requestedRanges: () => {
+      if (autoFitActive.value) return autoFit.requestedRanges();
+      return rowHeightsActive.value ? rowHeights.requestedRanges() : frozen.requestedRanges();
+    },
   };
   // Arming remounts the grid, so the announcement reader follows each core.
   watch(generation, async () => {
@@ -530,6 +572,9 @@ if (typeof window !== "undefined") {
       <button data-testid="grow-above-viewport" @click="growAboveViewport">Grow above</button>
       <button data-testid="grow-frozen-row" @click="growFrozenRow">Grow frozen row</button>
       <button data-testid="reset-row-heights" @click="resetRowHeights">Reset heights</button>
+      <button data-testid="use-auto-fit" @click="useAutoFit">Auto fit</button>
+      <button data-testid="use-auto-fit-paged" @click="useAutoFitPaged">Auto fit paged</button>
+      <button data-testid="freeze-two" @click="freezeCount(2)">Freeze 2</button>
       <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
       <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
       <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
@@ -557,12 +602,13 @@ if (typeof window !== "undefined") {
         :key="generation"
         :columns="activeColumns()"
         :column-state="frozenActive ? frozen.columnState : columnState"
-        :column-layout="columnLayout"
+        :column-layout="autoFitActive ? AUTO_FIT_COLUMN_LAYOUT : columnLayout"
         :data-source="activeDataSource()"
         :row-data="activeRowData()"
         :row-height="activeRowHeight()"
         :header-height="activeHeaderHeight()"
         :freeze-rows="activeFreezeRows()"
+        :row-resize="autoFitActive"
         :row-loading="activeRowLoading()"
         :get-row-id="(row: unknown) => (row as ConformanceRow).id"
         :on-cell-value-changed="onCellValueChanged"
@@ -571,6 +617,7 @@ if (typeof window !== "undefined") {
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"
         :on-column-pinned="onColumnPinned"
+        :on-row-resized="onRowResized"
         :on-frozen-rows-changed="frozen.recordFreezeEvent"
       />
     </div>
