@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { GridCore, GridIcon, GridLabels, HeaderData, ResolvedColumn } from "@gp-grid/core";
+import type { GridCore, GridIcon, GridLabels, HeaderData, ResizeTarget, ResolvedColumn } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
 import type { Row, VueHeaderRenderer } from "../types";
+import ResizeHandle from "./ResizeHandle.vue";
 
 const props = defineProps<{
   column: ResolvedColumn;
@@ -14,6 +15,7 @@ const props = defineProps<{
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
+  onResizeDoubleClick: (target: ResizeTarget) => void;
   coreRef: GridCore<Row> | null;
   outerContainerRef: HTMLDivElement | null;
   headerRenderers: Record<string, VueHeaderRenderer>;
@@ -57,10 +59,13 @@ const headerContent = () =>
     @pointerdown="(e) => props.onHeaderMouseDown(props.column.layoutIndex, props.column.width, props.headerHeight, e)"
   >
     <component :is="headerContent()" />
-    <div
+    <ResizeHandle
       v-if="props.column.column.resizable !== false"
-      class="gp-grid-header-resize-handle"
-      @pointerdown.stop="(e) => props.onHeaderResizeMouseDown(props.column.layoutIndex, props.column.width, e)"
+      axis="column"
+      :index="props.column.layoutIndex"
+      :size="props.column.width"
+      :on-pointer-down="props.onHeaderResizeMouseDown"
+      :on-double-click="props.onResizeDoubleClick"
     />
   </div>
 </template>

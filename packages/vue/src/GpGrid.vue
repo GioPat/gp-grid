@@ -18,9 +18,10 @@ import {
   PendingScrollLatch,
   defaultPinIcon,
   resolveGridLabels,
+  createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowId, RowResizedEvent, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -85,6 +86,16 @@ const props = withDefaults(
     onRowDragEnd?: (event: RowDragEndEvent) => void;
     /** Called when a column is resized. */
     onColumnResized?: (event: ColumnResizedEvent) => void;
+    /**
+     * Whether the user can resize rows: every cell renders the row edge handle,
+     * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+     * Default: false
+     */
+    rowResize?: boolean;
+    /** Called per row resized by a drag, a key or a fit. */
+    onRowResized?: (event: RowResizedEvent) => void;
+    /** Clamps for the fit commands and the row resize gesture. Read at creation. */
+    autoFit?: AutoFitOptions;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (event: ColumnMovedEvent) => void;
     /** Called when a column is pinned or unpinned. */
@@ -97,6 +108,7 @@ const props = withDefaults(
     sortingEnabled: true,
     darkMode: false,
     wheelDampening: 0.1,
+    rowResize: false,
     cellRenderers: () => ({}),
     editRenderers: () => ({}),
     headerRenderers: () => ({}),
@@ -169,6 +181,8 @@ const {
   handleHeaderClick,
   handleHeaderMouseDown,
   handleHeaderResizeMouseDown,
+  handleRowResizeMouseDown,
+  handleResizeDoubleClick,
   handleKeyDown,
   handlePaste,
   handleWheel,
@@ -293,6 +307,10 @@ function initializeCore(dataSource: DataSource<Row>): void {
     maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
     freezeRows: props.freezeRows,
+    rowResize: props.rowResize,
+    autoFit: props.autoFit,
+    // Created on mount only, so a server render never builds a host.
+    measurementHost: createDomMeasurementHost(() => outerContainerRef.value),
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
     getRowId: props.getRowId,
@@ -303,6 +321,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowDragEntireRow: props.rowDragEntireRow ?? false,
     onRowDragEnd: (event) => props.onRowDragEnd?.(event),
     onColumnResized: (event) => props.onColumnResized?.(event),
+    onRowResized: (event) => props.onRowResized?.(event),
     onColumnMoved: (event) => props.onColumnMoved?.(event),
     onColumnPinned: (event) => props.onColumnPinned?.(event),
     onFrozenRowsChanged: (state) => props.onFrozenRowsChanged?.(state),
@@ -464,6 +483,13 @@ watch(
   },
 );
 
+watch(
+  () => props.rowResize,
+  (enabled) => {
+    coreRef.value?.rowHeights.setResizable(enabled);
+  },
+);
+
 // Watch for highlighting prop changes
 watch(
   () => props.highlighting,
@@ -504,6 +530,7 @@ defineExpose({
     role="grid"
     :aria-colcount="displayedColumnCount"
     :aria-rowcount="state.totalRows"
+    :data-layout-revision="columnWindow?.layout.revision"
     tabindex="0"
     @keydown="handleKeyDown"
     @paste="handlePaste"
@@ -523,6 +550,7 @@ defineExpose({
       :labels="resolvedLabels"
       :on-header-mouse-down="handleHeaderMouseDown"
       :on-header-resize-mouse-down="handleHeaderResizeMouseDown"
+      :on-resize-double-click="handleResizeDoubleClick"
       :core-ref="coreRef"
       :outer-container-ref="outerContainerRef"
       :header-renderers="headerRenderers ?? {}"
@@ -561,6 +589,9 @@ defineExpose({
       :on-cell-mouse-enter="handleCellMouseEnter"
       :on-cell-mouse-leave="handleCellMouseLeave"
       :on-fill-handle-mouse-down="handleFillHandleMouseDown"
+      :on-row-resize-pointer-down="handleRowResizeMouseDown"
+      :on-resize-double-click="handleResizeDoubleClick"
+      :row-resize="rowResize"
       :core-ref="coreRef"
       :cell-renderers="cellRenderers ?? {}"
       :edit-renderers="editRenderers ?? {}"
@@ -627,6 +658,15 @@ defineExpose({
       class="gp-grid-column-resize-line"
       :style="{
         insetInlineStart: `${dragState.columnResize!.lineX}px`,
+      }"
+    />
+
+    <!-- Row resize line: lineY is body-viewport space, so it sits below the header. -->
+    <div
+      v-if="dragState.dragType === 'row-resize' && dragState.rowResize"
+      class="gp-grid-row-resize-line"
+      :style="{
+        top: `${totalHeaderHeight + dragState.rowResize!.lineY}px`,
       }"
     />
 

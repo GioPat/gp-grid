@@ -2,6 +2,7 @@
 
 import type { VNode, Component } from "vue";
 import type {
+  AutoFitOptions,
   RowId,
   ColumnDefinition as CoreColumnDefinition,
   CellRendererParams,
@@ -22,6 +23,7 @@ import type {
   DataSource,
   RowDragEndEvent,
   RowLoadingOptions,
+  RowResizedEvent,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -133,6 +135,16 @@ export interface GpGridProps<TData = unknown> {
   onRowDragEnd?: (event: RowDragEndEvent) => void;
   /** Called when a column is resized. */
   onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   * Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row resized by a drag, a key or a fit. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Clamps for the fit commands and the row resize gesture. Read at creation. */
+  autoFit?: AutoFitOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */

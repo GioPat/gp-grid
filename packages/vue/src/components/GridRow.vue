@@ -44,6 +44,7 @@ const cellProps = (column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: props.slot.rowIndex,
   rowData: props.slot.rowData,
+  rowHeight: props.slot.height,
   generation: props.slot.generation,
   column,
   displayedIndex: props.displayedIndexOf(column.columnId),

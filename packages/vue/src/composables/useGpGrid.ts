@@ -15,9 +15,12 @@ import {
   toPhysicalX,
   TouchScrollController,
   PendingScrollLatch,
+  createDomMeasurementHost,
 } from "@gp-grid/core";
 import type {
+  AutoFitOptions,
   RowId,
+  RowResizedEvent,
   ColumnDefinition,
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
@@ -76,6 +79,15 @@ export interface UseGpGridOptions<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Called when a column is pinned or unpinned. */
   onColumnPinned?: (event: ColumnPinnedEvent) => void;
+  /**
+   * Whether the user can resize rows: the row edge handle, Alt+ArrowUp/Down
+   * and Alt+Shift+Enter. Changeable at runtime. Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row resized by a key or a fit. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Clamps for the fit commands and the row resize keys. Read at creation. */
+  autoFit?: AutoFitOptions;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   headerRenderers?: Record<string, VueHeaderRenderer>;
@@ -86,6 +98,11 @@ export interface UseGpGridOptions<TData = unknown> {
 
 export interface UseGpGridResult<TData = unknown> {
   // Refs
+  /**
+   * Scroll container and measurement root of the fit commands: render
+   * `data-layout-revision` from `state.columnWindow.layout.revision` on it,
+   * or every fit is `"stale"`.
+   */
   containerRef: Ref<HTMLDivElement | null>;
   coreRef: ShallowRef<GridCore<TData> | null>;
 
@@ -255,6 +272,10 @@ export function useGpGrid<TData = unknown>(
       maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
       freezeRows: options.freezeRows,
+      rowResize: options.rowResize,
+      autoFit: options.autoFit,
+      // Created on mount only, so a server render never builds a host.
+      measurementHost: createDomMeasurementHost(() => containerRef.value),
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,
       getRowId: options.getRowId,
@@ -262,6 +283,7 @@ export function useGpGrid<TData = unknown>(
         ? (event) => options.onCellValueChanged?.(event)
         : undefined,
       onColumnPinned: (event) => options.onColumnPinned?.(event),
+      onRowResized: (event) => options.onRowResized?.(event),
       onFrozenRowsChanged: (state) => options.onFrozenRowsChanged?.(state),
     });
 
@@ -363,6 +385,13 @@ export function useGpGrid<TData = unknown>(
     () => options.freezeRows,
     (config) => {
       coreRef.value?.frozenRows.set(config);
+    },
+  );
+
+  watch(
+    () => options.rowResize,
+    (enabled) => {
+      coreRef.value?.rowHeights.setResizable(enabled ?? false);
     },
   );
 

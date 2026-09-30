@@ -115,6 +115,7 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
   // Column identity and state
   ColumnState,
   ColumnStateUpdate,
@@ -199,9 +200,17 @@ export type {
   ScrollTarget,
   ContentSize,
   GridGeometry,
+  // Fit and row resize
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
   // Input handler types
   PointerEventData,
   KeyEventData,
   ContainerBounds,
   DragState,
+  ResizeTarget,
+  RowResizeDragState,
 } from "@gp-grid/core";

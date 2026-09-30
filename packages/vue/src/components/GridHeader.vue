@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ColumnWindowSnapshot, GridCore, GridIcon, GridLabels, HeaderData, ResolvedColumn } from "@gp-grid/core";
+import type { ColumnWindowSnapshot, GridCore, GridIcon, GridLabels, HeaderData, ResizeTarget, ResolvedColumn } from "@gp-grid/core";
 import GridHeaderCell from "./GridHeaderCell.vue";
 import type { Row, VueHeaderRenderer } from "../types";
 
@@ -20,6 +20,7 @@ const props = defineProps<{
   labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
+  onResizeDoubleClick: (target: ResizeTarget) => void;
   coreRef: GridCore<Row> | null;
   outerContainerRef: HTMLDivElement | null;
   headerRenderers: Record<string, VueHeaderRenderer>;
@@ -42,6 +43,7 @@ const cellProps = (column: ResolvedColumn) => ({
   labels: props.labels,
   onHeaderMouseDown: props.onHeaderMouseDown,
   onHeaderResizeMouseDown: props.onHeaderResizeMouseDown,
+  onResizeDoubleClick: props.onResizeDoubleClick,
   coreRef: props.coreRef,
   outerContainerRef: props.outerContainerRef,
   headerRenderers: props.headerRenderers,

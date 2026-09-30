@@ -56,6 +56,7 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: slot.rowIndex,
   rowData: slot.rowData,
+  rowHeight: slot.height,
   generation: slot.generation,
   column,
   displayedIndex: props.displayedIndexOf(column.columnId),
