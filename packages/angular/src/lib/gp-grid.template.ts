@@ -5,6 +5,7 @@ export const GP_GRID_TEMPLATE = `
       role="grid"
       [attr.aria-colcount]="vm.displayedColumnCount()"
       [attr.aria-rowcount]="vm.totalRows()"
+      [attr.data-layout-revision]="layoutRevision()"
       tabindex="0"
       (keydown)="onKeyDown($event)"
       (paste)="onPaste($event)"
@@ -29,6 +30,7 @@ export const GP_GRID_TEMPLATE = `
         (headerPointerDown)="onHeaderPointerDown($event)"
         (filterPointerDown)="onFilterPointerDown($event)"
         (resizePointerDown)="onResizePointerDown($event)"
+        (resizeDoubleClick)="onResizeDoubleClick($event)"
         (headerSort)="onHeaderSort($event)"
         (headerPin)="onHeaderPin($event)"
       />
@@ -61,6 +63,7 @@ export const GP_GRID_TEMPLATE = `
         [readRowId]="readRowIdFn"
         [fillHandlePosition]="vm.fillHandlePosition()"
         [dragState]="vm.dragState()"
+        [rowResize]="rowResize()"
         [labels]="resolvedLabels()"
         (scrolled)="onBodyScroll($event)"
         (cellPointerDown)="onCellPointerDown($event)"
@@ -71,6 +74,8 @@ export const GP_GRID_TEMPLATE = `
         (editCommit)="onEditCommit()"
         (editCancel)="onEditCancel()"
         (fillHandlePointerDown)="onFillHandlePointerDown($event)"
+        (rowResizePointerDown)="onRowResizePointerDown($event)"
+        (resizeDoubleClick)="onResizeDoubleClick($event)"
       />
       <!-- C13 live region: the track key remounts it so each message is read once. -->
       @for (announcement of vm.announcements(); track announcement.revision) {

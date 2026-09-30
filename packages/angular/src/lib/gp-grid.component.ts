@@ -17,6 +17,7 @@ import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate
 import type { AngularColumnDefinition } from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
+  AutoFitOptions,
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
@@ -38,6 +39,8 @@ import type {
   RowDragEndEvent,
   RowLoadingOptions,
   RowId,
+  RowResizedEvent,
+  ResizeTarget,
 } from '@gp-grid/core';
 import { defaultPinIcon, resolveGridLabels, toInlineX } from '@gp-grid/core';
 import {
@@ -54,6 +57,7 @@ import type {
   CellPointerEnterEvent,
   CellDoubleClickEvent,
   FillHandlePointerDownEvent,
+  RowResizePointerDownEvent,
 } from './components';
 import { GP_GRID_TEMPLATE } from './gp-grid.template';
 import { GpGridViewModel } from './gp-grid-view-model';
@@ -105,10 +109,18 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   rowLoading = input<RowLoadingOptions | null>(null);
   sortingEnabled = input<boolean>(true);
   wheelDampening = input<number>(0.1);
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   */
+  rowResize = input<boolean>(false);
+  /** Bounds of the fit commands and the row resize gestures; read at creation. */
+  autoFit = input<AutoFitOptions | undefined>(undefined);
   onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onWriteRejected = output<CellWriteRejectedEvent>();
   onColumnResized = output<ColumnResizedEvent>();
+  onRowResized = output<RowResizedEvent>();
   onColumnMoved = output<ColumnMovedEvent>();
   onColumnPinned = output<ColumnPinnedEvent>();
   /** C9: fires on a published change of the effective frozen count or its limit. */
@@ -116,6 +128,9 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
+
+  /** Rendered on the root; a fit measured under another revision is stale. */
+  protected readonly layoutRevision = computed(() => this.vm.columnWindow()?.layout.revision ?? null);
 
   // Assigned once `bindings` exists; the view model must not reference it
   // directly or the two initializers would form a type cycle.
@@ -142,6 +157,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
     effect(() => this.bindings.syncFreezeRows(this.freezeRows()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncRowResize(this.rowResize()));
   }
 
   ngOnInit(): void {
@@ -162,12 +178,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         getRowId: this.getRowId() ?? undefined,
         rowDragEntireRow: this.rowDragEntireRow(),
         labels: this.labels(),
+        rowResize: this.rowResize(),
+        autoFit: this.autoFit(),
+        measureRoot: this.isBrowser ? () => this.container?.nativeElement ?? null : null,
       },
       {
         onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
         onWriteRejected: (event) => this.onWriteRejected.emit(event),
         onColumnResized: (event) => this.onColumnResized.emit(event),
+        onRowResized: (event) => this.onRowResized.emit(event),
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
         onColumnPinned: (event) => this.onColumnPinned.emit(event),
         onFrozenRowsChanged: (state) => this.onFrozenRowsChanged.emit(state),
@@ -369,6 +389,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.bindings.input.resizePointerDown(evt.colIndex, evt.colWidth, evt.event)) {
       evt.event.preventDefault();
     }
+  }
+
+  protected onRowResizePointerDown(evt: RowResizePointerDownEvent): void {
+    if (this.bindings.input.rowResizePointerDown(evt.rowIndex, evt.rowHeight, evt.event)) {
+      evt.event.preventDefault();
+    }
+  }
+
+  protected onResizeDoubleClick(target: ResizeTarget): void {
+    this.bindings.input.resizeDoubleClick(target);
   }
 
   protected onFilterApply(event: { colId: string; filter: ColumnFilterModel | null }): void {

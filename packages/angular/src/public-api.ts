@@ -47,6 +47,14 @@ export type {
   GridRowDragApi,
   GridRowHeightsApi,
   GridViewportApi,
+  // Row resize and one-shot fit
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
+  ResizeTarget,
+  RowResizeDragState,
   // Row virtualization and freezing
   RowRegion,
   RowHeightUpdate,
@@ -77,6 +85,7 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 
   // DataSource
   DataSource,

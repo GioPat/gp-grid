@@ -16,9 +16,12 @@ import type {
   GridLabels,
   GridIcon,
   HeaderRendererParams,
+  ResizeTarget,
   SortDirection,
 } from '@gp-grid/core';
 import { defaultGridLabels, defaultPinIcon } from '@gp-grid/core';
+import { ResizeHandleComponent } from './resize-handle.component';
+import type { ResizeHandlePointerDownEvent } from './resize-handle.component';
 
 export type HeaderRendererTemplate = TemplateRef<{ $implicit: HeaderRendererParams }>;
 
@@ -123,8 +126,12 @@ const TEMPLATE = `
         </span>
         @if (entry.column.resizable !== false) {
           <div
-            class="gp-grid-header-resize-handle"
-            (pointerdown)="onResizePointerDown($event, entry.layoutIndex, colW)">
+            gpGridResizeHandle
+            [axis]="'column'"
+            [index]="entry.layoutIndex"
+            [size]="colW"
+            (resizePointerDown)="onResizePointerDown($event)"
+            (resizeDoubleClick)="resizeDoubleClick.emit($event)">
           </div>
         }
       </div>
@@ -188,7 +195,7 @@ const TEMPLATE = `
 @Component({
   selector: 'gp-grid-header',
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, ResizeHandleComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: TEMPLATE,
 })
@@ -214,6 +221,7 @@ export class GridHeaderComponent {
   headerPointerDown = output<HeaderPointerDownEvent>();
   filterPointerDown = output<FilterPointerDownEvent>();
   resizePointerDown = output<ResizePointerDownEvent>();
+  resizeDoubleClick = output<ResizeTarget>();
   headerSort = output<HeaderSortEvent>();
   headerPin = output<{ columnId: string; pinned: ColumnPin | null }>();
   headerFilterOpen = output<{ colIndex: number; anchorEl: HTMLElement }>();
@@ -276,9 +284,8 @@ export class GridHeaderComponent {
     }
   }
 
-  protected onResizePointerDown(event: PointerEvent, colIndex: number, colWidth: number): void {
-    event.stopPropagation();
-    this.resizePointerDown.emit({ colIndex, colWidth, event });
+  protected onResizePointerDown(evt: ResizeHandlePointerDownEvent): void {
+    this.resizePointerDown.emit({ colIndex: evt.index, colWidth: evt.size, event: evt.event });
   }
 
   protected headerTemplate(column: ColumnDefinition): HeaderRendererTemplate | null {

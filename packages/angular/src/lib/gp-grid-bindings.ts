@@ -197,6 +197,10 @@ export class GpGridBindings<TData = unknown> {
     this.coreRef?.frozenRows.set(config);
   }
 
+  syncRowResize(enabled: boolean): void {
+    this.coreRef?.rowHeights.setResizable(enabled);
+  }
+
   scrollToCell(cell: { row: number; col: number }): void {
     const core = this.coreRef;
     const body = this.deps.getBody();

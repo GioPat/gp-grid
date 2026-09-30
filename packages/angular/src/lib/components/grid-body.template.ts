@@ -55,6 +55,17 @@ export const GRID_BODY_TEMPLATE = `<div
             } @else {
               <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }}</span>
             }
+            @if (rowResize()) {
+              <div
+                gpGridResizeHandle
+                [axis]="'row'"
+                [index]="slot.rowIndex"
+                [size]="slot.height"
+                [resizing]="resizingRow() === slot.rowIndex"
+                (resizePointerDown)="onRowResizePointerDown($event)"
+                (resizeDoubleClick)="resizeDoubleClick.emit($event)">
+              </div>
+            }
           }
         </div>
       </ng-template>

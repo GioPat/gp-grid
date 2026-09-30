@@ -39,6 +39,9 @@ const TEMPLATE = `
   @if (isResizing()) {
     <div class="gp-grid-column-resize-line" [style.inset-inline-start.px]="resizeLineLeft()"></div>
   }
+  @if (rowResizeLineTop() !== null) {
+    <div class="gp-grid-row-resize-line" [style.top.px]="rowResizeLineTop()"></div>
+  }
   @if (isLoading()) {
     <div
       style="position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; pointer-events: none;"
@@ -109,6 +112,13 @@ export class GridOverlaysComponent {
     const cr = this.dragState().columnResize;
     if (cr === null) return 0;
     return cr.lineX;
+  });
+
+  /** `lineY` is body-viewport space; the line sits below the header. */
+  protected rowResizeLineTop = computed<number | null>(() => {
+    const rr = this.dragState().rowResize;
+    if (this.dragState().dragType !== 'row-resize' || rr === null) return null;
+    return this.headerHeight() + rr.lineY;
   });
 
   protected columnMove = computed(() => {

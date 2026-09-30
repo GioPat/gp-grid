@@ -41,6 +41,7 @@ const INITIAL_DRAG_STATE: DragState = {
   fillSourceRange: null,
   fillTarget: null,
   columnResize: null,
+  rowResize: null,
   columnMove: null,
   rowDrag: null,
 };
