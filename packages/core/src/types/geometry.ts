@@ -3,6 +3,7 @@
 // service and the framework adapters. Nothing here exposes DOM types.
 
 import type { ColumnDefinition } from "./columns";
+import type { HeaderFragments } from "./column-groups";
 import type { RowRegion } from "../geometry/row-regions-mapping";
 import type { RowRegionLayout } from "../geometry/row-regions";
 
@@ -53,6 +54,8 @@ export interface DisplayedColumn {
   readonly offset: number;
   /** Displayed width in CSS px. */
   readonly width: number;
+  /** First header band of the leaf header, which spans to the last band; 0 while flat. */
+  readonly headerBand: number;
 }
 
 /** A displayed column with its effective region and region-local offset. */
@@ -90,6 +93,8 @@ export interface ColumnLayoutSnapshot {
   readonly columns: readonly ResolvedColumn[];
   readonly totalWidth: number;
   readonly regions: ColumnRegionLayout;
+  /** One more than the deepest displayed leaf's `headerBand`; 1 while flat. */
+  readonly bandCount: number;
 }
 
 /** A resolved layout plus the layouts its region mapping is derived from. */
@@ -117,6 +122,19 @@ export interface ResolvedColumnGeometry {
   clip(layoutIndex: number): AxisBounds | undefined;
 }
 
+/**
+ * Header rows shared by every pin region (D8). Band `b` is
+ * `headerBandHeights[b]`, else `headerHeight`; the object is reused while
+ * the band count and every height are unchanged.
+ */
+export interface HeaderBandLayout {
+  readonly count: number;
+  readonly heights: readonly number[];
+  /** Top of each band inside the header. */
+  readonly offsets: readonly number[];
+  readonly totalHeight: number;
+}
+
 /** A half-open displayed-index range over the center columns. */
 export interface ColumnWindowSnapshot {
   readonly layout: ColumnLayoutSnapshot;
@@ -127,6 +145,8 @@ export interface ColumnWindowSnapshot {
   readonly center: readonly ResolvedColumn[];
   /** Displayed columns mounted as end pins. */
   readonly end: readonly ResolvedColumn[];
+  /** Group header fragments; empty and shared while the grid is flat. */
+  readonly groups: HeaderFragments;
 }
 
 export interface CellBounds {

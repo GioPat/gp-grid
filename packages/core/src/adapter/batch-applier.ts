@@ -4,6 +4,7 @@ import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
+  HeaderBandLayout,
   RowRegionLayout,
 } from "../types/geometry";
 import type { GridInstruction } from "../types/instructions";
@@ -45,6 +46,8 @@ export interface BatchChangeSetters {
   setColumnLayout?: (v: ColumnLayoutMode) => void;
   /** C3 frozen/suffix layout at the committed geometry revision. */
   setRowRegions?: (v: RowRegionLayout) => void;
+  /** D8 header bands at the committed geometry revision. */
+  setHeaderBands?: (v: HeaderBandLayout) => void;
   /** Live-region text the core decided to announce, or `null` to clear it. */
   setAnnouncement?: (v: GridAnnouncement | null) => void;
   /** Committed geometry revision, for wrapper-side change detection. */
@@ -116,6 +119,9 @@ const applyPartialState = (
   }
   if (changes.rowRegions !== undefined) {
     setters.setRowRegions?.(changes.rowRegions);
+  }
+  if (changes.headerBands !== undefined) {
+    setters.setHeaderBands?.(changes.headerBands);
   }
   if (changes.announcement !== undefined) {
     setters.setAnnouncement?.(changes.announcement);

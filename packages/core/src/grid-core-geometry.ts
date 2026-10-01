@@ -7,6 +7,7 @@ import type { ColumnModel } from "./column-model";
 import type { ScrollVirtualizationManager, ViewportState } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
 import type { GridCoreConfig } from "./grid-core-config";
+import type { ColumnGroupState } from "./grid-core-column-guard";
 
 export interface CoreGeometryDeps<TData> {
   config: GridCoreConfig<TData>;
@@ -19,6 +20,7 @@ export interface CoreGeometryDeps<TData> {
   getFrozenRowsRequest: () => FrozenRowsRequest | null;
   /** Application-set row sizes at their view indices (D2/D3). */
   getPlacedRowSizes: () => readonly PlacedRowSize[];
+  columnGroups: ColumnGroupState;
 }
 
 export const createCoreGeometry = <TData>(deps: CoreGeometryDeps<TData>): GridGeometryService => {
@@ -31,6 +33,8 @@ export const createCoreGeometry = <TData>(deps: CoreGeometryDeps<TData>): GridGe
       getColumnOverscan: () => config.columnOverscan,
       getColumns: () => columnModel.getLayout(),
       isWidthOverridden: (layoutIndex) => columnModel.isWidthOverriddenAt(layoutIndex),
+      getGroupIndex: () => deps.columnGroups.index,
+      maxFragments: config.columnGroupLimits.maxFragments,
       getViewport: () => ({
         width: viewport.getViewportWidth(),
         height: viewport.getViewportHeight(),

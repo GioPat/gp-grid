@@ -51,6 +51,16 @@ interface ColumnModelSnapshot {
   widthOverrides: ReadonlySet<string>;
 }
 
+/** Everything `restore` needs to return the model to a `snapshot()`. */
+export interface ColumnModelMemento {
+  readonly definitions: readonly ColumnDefinition[];
+  readonly order: readonly string[];
+  readonly overrides: ReadonlyMap<string, Readonly<StoredColumnState>>;
+  readonly pins: ReadonlyMap<string, ColumnPin | null>;
+  readonly moved: ReadonlySet<string>;
+  readonly layout: ColumnDefinition[];
+}
+
 const NO_CHANGE: ColumnModelChange = {
   orderChanged: false,
   widthChanged: false,
@@ -255,6 +265,42 @@ export class ColumnModel {
     const definitionIds = this.definitionIds();
     this.orderIds = insertByDefinitionOrder(retained, definitionIds, resetSet);
     return this.publishStateChange(before);
+  }
+
+  /** Copy the definitions, order, overrides, pins and moved ids. */
+  snapshot(): ColumnModelMemento {
+    const overrides = new Map<string, StoredColumnState>();
+    for (const [columnId, state] of this.overrides) overrides.set(columnId, { ...state });
+    return {
+      definitions: this.definitions,
+      order: [...this.orderIds],
+      overrides,
+      pins: new Map(this.pins),
+      moved: new Set(this.orderOverridden),
+      layout: this.layout,
+    };
+  }
+
+  /**
+   * Return to a `snapshot()`. The resolved layout gets its previous identity
+   * back, so geometry that cached it sees no change.
+   */
+  restore(memento: ColumnModelMemento): void {
+    this.definitions = [...memento.definitions];
+    this.definitionsById.clear();
+    for (const definition of this.definitions) {
+      this.definitionsById.set(getColumnId(definition), definition);
+    }
+    this.idSet = new Set(this.definitionsById.keys());
+    this.orderIds = [...memento.order];
+    this.overrides.clear();
+    for (const [columnId, state] of memento.overrides) this.overrides.set(columnId, { ...state });
+    this.pins.clear();
+    for (const [columnId, pin] of memento.pins) this.pins.set(columnId, pin);
+    this.orderOverridden.clear();
+    for (const columnId of memento.moved) this.orderOverridden.add(columnId);
+    this.repartition();
+    this.layout = memento.layout;
   }
 
   /** Resolved layout: ordered caller definitions with effective width/hidden. */

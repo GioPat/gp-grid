@@ -61,6 +61,20 @@ export type {
   ColumnModelState,
 } from "./columns";
 
+// Nested column-group descriptors and schema results
+export type {
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaError,
+  ColumnSchemaResult,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+} from "./column-groups";
+
 // Filter types
 export type {
   TextFilterOperator,
@@ -129,6 +143,7 @@ export type {
   ColumnsChangedInstruction,
   SetColumnWindowInstruction,
   SetRowRegionsInstruction,
+  SetHeaderBandsInstruction,
   SetAnnouncementInstruction,
   GridInstruction,
   InstructionListener,
@@ -152,6 +167,7 @@ export type {
   ColumnWindowSnapshot,
   DisplayedColumn,
   ResolvedColumn,
+  HeaderBandLayout,
   GeometrySpace,
   AxisBounds,
   CellBounds,

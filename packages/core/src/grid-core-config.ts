@@ -3,7 +3,12 @@
 // and its managers read for the grid's lifetime. Defaults and option
 // cross-checks live here, once, instead of in the GridCore constructor.
 
-import type { AutoFitOptions, FreezeRowsOptions, GridCoreOptions } from "./types";
+import type {
+  AutoFitOptions,
+  ColumnGroupLimits,
+  FreezeRowsOptions,
+  GridCoreOptions,
+} from "./types";
 import type { ColumnLayoutMode } from "./types/geometry";
 import {
   DEFAULT_MAX_FROZEN_ROWS,
@@ -24,6 +29,15 @@ export const DEFAULT_MAX_FIT_COLUMN_WIDTH = 600;
 /** Default tallest fitted or resized row, in multiples of `rowHeight`. */
 const DEFAULT_MAX_ROW_HEIGHT_FACTOR = 10;
 
+/** Budgets of a column-group hierarchy when `columnGroupLimits` omits them. */
+export const DEFAULT_COLUMN_GROUP_LIMITS: Readonly<Required<ColumnGroupLimits>> = {
+  maxDepth: 64,
+  maxNodes: 100_000,
+  maxFragments: 100_000,
+};
+
+const NO_BAND_HEIGHTS: readonly number[] = [];
+
 type DefaultedOption =
   | "headerHeight"
   | "overscan"
@@ -35,6 +49,8 @@ type DefaultedOption =
   | "columnOverscan"
   | "freezeRows"
   | "autoFit"
+  | "columnGroupLimits"
+  | "headerBandHeights"
   | "labels";
 
 const invalidFreezeRows = (value: unknown): RangeError =>
@@ -113,6 +129,45 @@ export const resolveAutoFitOptions = (
   };
 };
 
+const readGroupLimit = (value: unknown, field: keyof ColumnGroupLimits): number => {
+  if (value === undefined) return DEFAULT_COLUMN_GROUP_LIMITS[field];
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+  throw new RangeError(`Invalid columnGroupLimits.${field}: ${value}`);
+};
+
+/** Validate `columnGroupLimits` into its full triple. */
+export const resolveColumnGroupLimits = (
+  value: ColumnGroupLimits | undefined,
+): Readonly<Required<ColumnGroupLimits>> => {
+  if (value !== undefined && (typeof value !== "object" || value === null)) {
+    throw new RangeError(`Invalid columnGroupLimits: ${value}`);
+  }
+  return {
+    maxDepth: readGroupLimit(value?.maxDepth, "maxDepth"),
+    maxNodes: readGroupLimit(value?.maxNodes, "maxNodes"),
+    maxFragments: readGroupLimit(value?.maxFragments, "maxFragments"),
+  };
+};
+
+const readBandHeight = (value: unknown, band: number): number => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  throw new RangeError(`Invalid headerBandHeights[${band}]: ${value}`);
+};
+
+/**
+ * Validate `headerBandHeights` into a copy the caller cannot mutate, so the
+ * runtime setter shares the option's exact errors.
+ */
+export const resolveHeaderBandHeights = (
+  value: readonly number[] | undefined,
+): readonly number[] => {
+  if (value === undefined) return NO_BAND_HEIGHTS;
+  if (Array.isArray(value)) {
+    return Array.from(value, (height: unknown, band) => readBandHeight(height, band));
+  }
+  throw new RangeError(`Invalid headerBandHeights: ${value}`);
+};
+
 /**
  * GridCoreOptions with defaults applied. `columns` is excluded: it is the
  * one option that changes after construction (see GridCore.setColumns).
@@ -129,6 +184,8 @@ export interface GridCoreConfig<TData>
   readonly columnOverscan: number;
   readonly freezeRows: Readonly<Required<FreezeRowsOptions>>;
   readonly autoFit: Readonly<Required<AutoFitOptions>>;
+  readonly columnGroupLimits: Readonly<Required<ColumnGroupLimits>>;
+  readonly headerBandHeights: readonly number[];
   readonly labels: GridLabels;
 }
 
@@ -165,7 +222,11 @@ export const resolveGridCoreConfig = <TData>(
     onColumnMoved: options.onColumnMoved,
     onColumnPinned: options.onColumnPinned,
     onFrozenRowsChanged: options.onFrozenRowsChanged,
+    onColumnSchemaRejected: options.onColumnSchemaRejected,
     headerHeight: options.headerHeight ?? options.rowHeight,
+    headerBandHeights: resolveHeaderBandHeights(options.headerBandHeights),
+    columnGroups: options.columnGroups,
+    columnGroupLimits: resolveColumnGroupLimits(options.columnGroupLimits),
     overscan,
     columnOverscan,
     freezeRows,

@@ -12,6 +12,7 @@ import type { ColumnFilterModel } from "./filters";
 import type {
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
+  HeaderBandLayout,
   RowRegion,
   RowRegionLayout,
 } from "./geometry";
@@ -301,6 +302,14 @@ export interface SetRowRegionsInstruction {
   revision: number;
 }
 
+/** The header bands changed (D8), in the batch that carries their extent. */
+export interface SetHeaderBandsInstruction {
+  type: "SET_HEADER_BANDS";
+  bands: HeaderBandLayout;
+  /** Committed geometry revision the bands were published at. */
+  revision: number;
+}
+
 /** Live-region announcement (C13). Inert until the label ships in 2c. */
 export interface SetAnnouncementInstruction {
   type: "SET_ANNOUNCEMENT";
@@ -356,6 +365,7 @@ export type GridInstruction =
   | SetColumnWindowInstruction
   /** Row regions */
   | SetRowRegionsInstruction
+  | SetHeaderBandsInstruction
   | SetAnnouncementInstruction;
 
 // =============================================================================

@@ -8,6 +8,11 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type {
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaError,
+} from "./column-groups";
+import type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
@@ -92,6 +97,21 @@ export interface GridCoreOptions<TData = unknown> {
   columnLayout?: ColumnLayoutMode;
   /** Header height: Default to row height */
   headerHeight?: number;
+  /**
+   * Height of each header band, in px, indexed by band; a band without an
+   * entry is `headerHeight`. Each value is finite and `> 0`.
+   */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids. Every column, hidden ones
+   * included, is referenced exactly once, ungrouped ones at the root. A
+   * hierarchy rejected at creation leaves the grid flat.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Creation-only. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
   /**

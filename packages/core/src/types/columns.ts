@@ -110,6 +110,11 @@ export interface ColumnDefinition {
    * renderer, not custom `cellRenderer` output. Default: false.
    */
   wrapText?: boolean;
+  /**
+   * Whether the header text wraps onto additional lines. A header taller
+   * than its band is clipped. Default: false.
+   */
+  wrapHeaderText?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);

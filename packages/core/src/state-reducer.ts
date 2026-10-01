@@ -168,6 +168,12 @@ export const applyInstruction = <TData = unknown>(
         geometryRevision: instruction.revision,
       };
 
+    case "SET_HEADER_BANDS":
+      return {
+        headerBands: instruction.bands,
+        geometryRevision: instruction.revision,
+      };
+
     case "SET_ANNOUNCEMENT":
       return { announcement: instruction.announcement };
 

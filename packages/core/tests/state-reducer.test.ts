@@ -558,6 +558,15 @@ describe("applyInstruction", () => {
       )).toEqual({ rowRegions, geometryRevision: 11 });
     });
 
+    it("SET_HEADER_BANDS publishes the bands with the committed revision", () => {
+      const bands = { count: 2, heights: [36, 48], offsets: [0, 36], totalHeight: 84 };
+      expect(applyInstruction<Row>(
+        { type: "SET_HEADER_BANDS", bands, revision: 12 },
+        slots,
+        headers,
+      )).toEqual({ headerBands: bands, geometryRevision: 12 });
+    });
+
     it("SET_ANNOUNCEMENT publishes the message and its clear", () => {
       const announcement = { message: "3 of 5 rows frozen", revision: 11 };
       expect(applyInstruction<Row>(

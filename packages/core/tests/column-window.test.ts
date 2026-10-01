@@ -11,6 +11,7 @@ import {
   UNMEASURED_CENTER_EXTENT,
   type ColumnWindowResolver,
 } from "../src/geometry/column-window";
+import { EMPTY_HEADER_FRAGMENTS } from "../src/column-groups";
 import type { ColumnLayoutSnapshot, DisplayedColumn, ResolvedColumn } from "../src/types/geometry";
 
 /** Small deterministic LCG so seed failures are reproducible. */
@@ -36,6 +37,7 @@ const columnsOf = (widths: readonly number[]): DisplayedColumn[] => {
       column: { field: `c${layoutIndex}`, cellDataType: "text", width },
       offset,
       width,
+      headerBand: 0,
     };
     offset += width;
     return displayed;
@@ -173,6 +175,7 @@ describe("column-window retention", () => {
         endOffset: 0,
         centerViewportWidth: 400,
       },
+      bandCount: 1,
     };
   };
   const resolver = (): ColumnWindowResolver =>
@@ -184,6 +187,10 @@ describe("column-window retention", () => {
     });
   const ids = (retained: ColumnWindowResolver): string[] =>
     retained.get().center.map((column) => column.columnId);
+
+  it("gives a flat layout the shared empty fragment lists", () => {
+    expect(resolver().get().groups).toBe(EMPTY_HEADER_FRAGMENTS);
+  });
 
   it("reads the edit key first even when it was registered last", () => {
     const window = resolver();

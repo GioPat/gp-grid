@@ -22,6 +22,7 @@ import type {
 import { ViewSync } from "./grid-core-view-sync";
 import type { GridGeometryService } from "./geometry/grid-geometry";
 import type { FrozenRowsState } from "./geometry";
+import type { HeaderBandLayout } from "./types/geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import type { CellValue, ColumnDefinition } from "./types";
 
@@ -34,6 +35,8 @@ export interface GridManagersDeps<TData> {
   getGeometry: () => GridGeometryService;
   /** C9 baseline: the core's first frozen-rows resolution. */
   getFrozenRowsBaseline: () => FrozenRowsState;
+  /** D8 header bands; bound lazily to the header controller. */
+  getHeaderBands: () => HeaderBandLayout;
   /** Bounded keep-alive for the edited column (B7). */
   retainEditColumn: (columnId: string | null) => void;
   /**
@@ -62,7 +65,7 @@ export const buildGridManagers = <TData>(
 ): GridManagers<TData> => {
   const { batcher, config, getColumns } = deps;
   const getRowGeometry = () => deps.getGeometry().getRowGeometry();
-  const getHeaderHeight = (): number => config.headerHeight;
+  const getHeaderHeight = (): number => deps.getHeaderBands().totalHeight;
 
   // Managers cross-reference each other through lazy arrow-fn getters.
   // Forward-declare the late ones so callbacks resolve at call time, not at
@@ -196,6 +199,7 @@ export const buildGridManagers = <TData>(
     labels: config.labels,
     getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
     onFrozenRowsChanged: config.onFrozenRowsChanged,
+    getHeaderBands: deps.getHeaderBands,
   });
 
   // C8 paging context. The budget input deliberately reads no region layout:

@@ -1,22 +1,45 @@
 // packages/core/src/grid-core-column-api.ts
-// `GridCore.columns`: definitions, per-column state, width, order, pinning,
-// the one-shot column fit and the displayed-width policy. Each command emits
-// one instruction batch.
+// `GridCore.columns`: definitions, the group hierarchy, per-column state,
+// width, order, pinning, the one-shot column fit and the displayed-width
+// policy. Each command emits one instruction batch; the schema commands run
+// inside the header-band applier, under the column-change guard while groups
+// are active.
 
-import type { ColumnDefinition, ColumnStateSnapshot, ColumnStateUpdate } from "./types";
+import type {
+  ColumnDefinition,
+  ColumnGroupChild,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
+} from "./types";
 import type { ColumnFitResult } from "./types/measurement";
 import type { ColumnLayoutMode, ColumnPin } from "./types/geometry";
 import type { GridGeometryService } from "./geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import {
-  type ColumnCoreDeps,
   applyColumnPin,
   applyColumnStateReset,
   applyColumnStateUpdates,
-  applySetColumns,
   readColumnState,
 } from "./grid-core-columns";
-import { type ColumnOperationDeps, applyColumnMove, applyColumnResize } from "./grid-core-operations";
+import {
+  type ColumnOperationDeps,
+  type ColumnOperationResult,
+  applyColumnMove,
+  applyColumnResize,
+} from "./grid-core-operations";
+import {
+  guardColumnChange,
+  type AdmitColumnChange,
+  type ColumnGroupState,
+  type GuardedColumnChange,
+} from "./grid-core-column-guard";
+import {
+  applyColumnGroups,
+  applyColumnSchema,
+  type ColumnSchemaDeps,
+} from "./grid-core-column-groups";
 import {
   resolveColumnFit,
   resolveColumnFitTargets,
@@ -28,26 +51,35 @@ export interface GridColumnsApi {
   get(): ColumnDefinition[];
   /**
    * Replace the definitions, reconciled by column id: retained ids keep user
-   * state, sort and filter; new ids take definition defaults.
+   * state, sort and filter; new ids take definition defaults. `groups`
+   * replaces the hierarchy with them, `null` makes the grid flat and
+   * `undefined` keeps the active one, validated against the new ids.
    */
-  set(columns: ColumnDefinition[]): void;
+  set(
+    columns: ColumnDefinition[],
+    groups?: readonly ColumnGroupChild[] | null,
+  ): ColumnSchemaResult;
+  /** Replace the hierarchy over the current columns; `null` makes the grid flat. */
+  setGroups(groups: readonly ColumnGroupChild[] | null): ColumnSchemaResult;
+  /** The active hierarchy as the caller passed it; `null` while flat. */
+  getGroups(): readonly ColumnGroupChild[] | null;
   /** Set a displayed width in px; the stored override is back-solved to match. */
   setWidth(colIndex: number, width: number): void;
-  move(fromIndex: number, toIndex: number): void;
+  move(fromIndex: number, toIndex: number): ColumnSchemaResult;
   /**
    * Pin against the inline start or end edge, or unpin with `null`; the base
    * order is untouched, so unpinning returns the column to its slot.
    */
-  setPinned(columnId: string, pinned: ColumnPin | null): void;
+  setPinned(columnId: string, pinned: ColumnPin | null): ColumnSchemaResult;
   /** Effective per-column width, visibility and order, in layout order. */
   getState(): ColumnStateSnapshot[];
   /**
    * Explicit values win over retained user state and definition defaults;
    * `width: null` drops the pixel override.
    */
-  setState(updates: ColumnStateUpdate[]): void;
+  setState(updates: ColumnStateUpdate[]): ColumnSchemaResult;
   /** Drop user state for the given columns, or for all when omitted. */
-  resetState(columnIds?: string[]): void;
+  resetState(columnIds?: string[]): ColumnSchemaResult;
   /** Switch the displayed-width policy; a no-op switch emits nothing. */
   setLayout(mode: ColumnLayoutMode): void;
   /**
@@ -58,10 +90,13 @@ export interface GridColumnsApi {
   fit(columnIds?: readonly string[]): ColumnFitResult;
 }
 
-export interface ColumnsControllerDeps<TData> extends ColumnCoreDeps<TData> {
+export interface ColumnsControllerDeps<TData> extends ColumnSchemaDeps<TData> {
   config: GridCoreConfig<TData>;
   getGeometry: () => GridGeometryService;
+  groups: ColumnGroupState;
   isDestroyed: () => boolean;
+  /** The header-band applier (D8), around every command that can change the band count. */
+  applyBandChange: <T>(change: () => T) => T;
 }
 
 export class ColumnsController<TData> implements GridColumnsApi {
@@ -75,8 +110,19 @@ export class ColumnsController<TData> implements GridColumnsApi {
     return this.deps.columnModel.getLayout();
   }
 
-  set(columns: ColumnDefinition[]): void {
-    applySetColumns(this.deps, columns);
+  set(
+    columns: ColumnDefinition[],
+    groups?: readonly ColumnGroupChild[] | null,
+  ): ColumnSchemaResult {
+    return this.deps.applyBandChange(() => applyColumnSchema(this.deps, columns, groups));
+  }
+
+  setGroups(groups: readonly ColumnGroupChild[] | null): ColumnSchemaResult {
+    return this.deps.applyBandChange(() => applyColumnGroups(this.deps, groups));
+  }
+
+  getGroups(): readonly ColumnGroupChild[] | null {
+    return this.deps.groups.index?.roots ?? null;
   }
 
   setWidth(colIndex: number, width: number): void {
@@ -89,35 +135,34 @@ export class ColumnsController<TData> implements GridColumnsApi {
     });
   }
 
-  move(fromIndex: number, toIndex: number): void {
-    const applied = applyColumnMove(fromIndex, toIndex, this.operationDeps());
-    if (applied === null) return;
-    const { config } = this.deps;
-    if (applied.pinChanged) {
-      config.onColumnPinned?.({ columnId: applied.columnId, pinned: applied.pinned ?? null });
-    }
-    config.onColumnMoved?.({
-      columnId: applied.columnId,
-      fromViewIndex: applied.fromViewIndex,
-      toViewIndex: applied.toViewIndex,
-    });
+  move(fromIndex: number, toIndex: number): ColumnSchemaResult {
+    const { result, value } = this.guard("move", (admit) =>
+      applyColumnMove(fromIndex, toIndex, this.operationDeps(), admit),
+    );
+    if (value !== null) this.reportMove(value);
+    return result;
   }
 
-  setPinned(columnId: string, pinned: ColumnPin | null): void {
-    if (applyColumnPin(this.deps, columnId, pinned) === false) return;
-    this.deps.config.onColumnPinned?.({ columnId, pinned });
+  setPinned(columnId: string, pinned: ColumnPin | null): ColumnSchemaResult {
+    const { result } = this.guard("pin", (admit) =>
+      applyColumnPin(this.deps, columnId, pinned, admit),
+    );
+    if (result.status === "applied") this.deps.config.onColumnPinned?.({ columnId, pinned });
+    return result;
   }
 
   getState(): ColumnStateSnapshot[] {
     return readColumnState(this.deps);
   }
 
-  setState(updates: ColumnStateUpdate[]): void {
-    applyColumnStateUpdates(this.deps, updates);
+  setState(updates: ColumnStateUpdate[]): ColumnSchemaResult {
+    return this.guard("state", (admit) => applyColumnStateUpdates(this.deps, updates, admit))
+      .result;
   }
 
-  resetState(columnIds?: string[]): void {
-    applyColumnStateReset(this.deps, columnIds);
+  resetState(columnIds?: string[]): ColumnSchemaResult {
+    return this.guard("state", (admit) => applyColumnStateReset(this.deps, columnIds, admit))
+      .result;
   }
 
   setLayout(mode: ColumnLayoutMode): void {
@@ -162,6 +207,25 @@ export class ColumnsController<TData> implements GridColumnsApi {
       config.onColumnResized?.({ columnId, width, viewIndex: layoutIndex });
     }
     return result;
+  }
+
+  private guard<T>(
+    source: ColumnSchemaErrorSource,
+    run: (admit: AdmitColumnChange) => T,
+  ): GuardedColumnChange<T> {
+    return this.deps.applyBandChange(() => guardColumnChange(this.deps, source, run));
+  }
+
+  private reportMove(applied: ColumnOperationResult): void {
+    const { config } = this.deps;
+    if (applied.pinChanged) {
+      config.onColumnPinned?.({ columnId: applied.columnId, pinned: applied.pinned ?? null });
+    }
+    config.onColumnMoved?.({
+      columnId: applied.columnId,
+      fromViewIndex: applied.fromViewIndex,
+      toViewIndex: applied.toViewIndex,
+    });
   }
 
   private operationDeps(): ColumnOperationDeps<TData> {

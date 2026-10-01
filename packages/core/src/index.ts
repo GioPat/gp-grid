@@ -10,6 +10,7 @@ export type { GridRowsApi } from "./grid-core-rows";
 export type { GridCellsApi } from "./grid-core-cells";
 export type { GridEditApi } from "./grid-core-edit";
 export type { GridColumnsApi } from "./grid-core-column-api";
+export type { GridHeaderApi } from "./grid-core-header";
 export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
 export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
@@ -115,6 +116,18 @@ export type {
   ColumnStateUpdate,
   ColumnStateSnapshot,
 
+  /** Nested column groups, schema results and header fragments (PRD 007) */
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaError,
+  ColumnSchemaResult,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
   /** View row identity */
   ViewRow,
 
@@ -188,6 +201,7 @@ export type {
   DataErrorInstruction,
   ColumnsChangedInstruction,
   SetRowRegionsInstruction,
+  SetHeaderBandsInstruction,
   SetAnnouncementInstruction,
 
   /** Options */
@@ -227,6 +241,7 @@ export type {
   ColumnWindowSnapshot,
   DisplayedColumn,
   ResolvedColumn,
+  HeaderBandLayout,
   GeometrySpace,
   AxisBounds,
   CellBounds,
@@ -326,6 +341,7 @@ export type {
   GridLabels,
   GridLabelOverrides,
   GridFilterOperatorLabels,
+  GridColumnSchemaErrorLabels,
   FilterOperatorOption,
 } from "./i18n";
 

@@ -5,6 +5,7 @@
 // injected callbacks.
 
 import type { ColumnDefinition } from "../types/columns";
+import type { ColumnGroupIndex } from "../column-groups/group-index";
 import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
@@ -34,6 +35,10 @@ export interface GridGeometryDeps {
   getColumns(): readonly ColumnDefinition[];
   /** Width-override membership per resolved-layout index. */
   isWidthOverridden(layoutIndex: number): boolean;
+  /** Active column-group hierarchy; absent or `null` while the grid is flat. */
+  getGroupIndex?: () => ColumnGroupIndex | null;
+  /** `columnGroupLimits.maxFragments`; unbounded when absent. */
+  maxFragments?: number;
   getViewport(): GridViewportSample;
   getScrollMapping(): RowScrollMapping;
   /** C2 request; absent or `null` resolves the zero-count layout. */
@@ -56,6 +61,8 @@ export interface GridGeometryService extends GridGeometry {
   syncColumnWindow(): boolean;
   setColumnLayoutMode(mode: ColumnLayoutMode): void;
   getColumnLayoutMode(): ColumnLayoutMode;
+  /** The column layout the current inputs give under `index`, not committed. */
+  previewColumnLayout(index: ColumnGroupIndex | null): ColumnLayoutSnapshot;
   getRowGeometry(): RowGeometry;
   /** Resolve the C3 region layout against the current axis and viewport. */
   syncRowRegions(): RowRegionLayout;
@@ -87,6 +94,8 @@ export const createGridGeometry = (
       getViewport: getViewportSample,
       getColumnOverscan: () => deps.getColumnOverscan(),
       onLayoutChange: () => revision.bump(),
+      getGroupIndex: () => deps.getGroupIndex?.() ?? null,
+      maxFragments: deps.maxFragments ?? Number.POSITIVE_INFINITY,
     },
     initialMode,
   );
@@ -177,6 +186,7 @@ export const createGridGeometry = (
       columns.setMode(mode);
     },
     getColumnLayoutMode: () => columns.getMode(),
+    previewColumnLayout: (index) => columns.previewLayout(index),
     getColumnLayout: () => columns.getLayout(),
     getColumnWindow: () => columns.window(),
     getRowWindow: () => {

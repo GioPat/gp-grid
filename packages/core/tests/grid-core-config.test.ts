@@ -77,6 +77,8 @@ describe("resolveGridCoreConfig — freezeRows defaults", () => {
     expect(withoutOption.rowResize).toBe(false);
     expect(withoutOption.columnLayout).toBe("fit");
     expect(withoutOption.columnOverscan).toBe(240);
+    expect(withoutOption.headerBandHeights).toEqual([]);
+    expect(withoutOption.columnGroups).toBeUndefined();
   });
 
   it("keeps both limits' defaults for a partial count", () => {
@@ -264,5 +266,19 @@ describe("resolveGridCoreConfig — autoFit", () => {
     for (const value of [3, "fit", null]) {
       expect(() => withAutoFit(value)).toThrow(new RangeError(`Invalid autoFit: ${value}`));
     }
+  });
+});
+
+// PRD 007 D8: the resolved header options reach the header controller.
+describe("resolveGridCoreConfig — header bands", () => {
+  it("passes headerHeight and headerBandHeights to the header controller", () => {
+    expect(new GridCore<Row>(baseOptions()).header.getBands()).toEqual({
+      count: 1,
+      heights: [32],
+      offsets: [0],
+      totalHeight: 32,
+    });
+    const grid = new GridCore<Row>({ ...baseOptions(), headerHeight: 40, headerBandHeights: [50, 60] });
+    expect(grid.header.getBands().heights).toEqual([50]);
   });
 });
