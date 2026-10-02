@@ -133,6 +133,7 @@ test("AC-007-01 a frozen row edge drag grows the band and keeps the suffix below
   await page.mouse.up();
 
   await waitForHeight(page, 0, ROW_HEIGHT + DRAG);
+  await expect.poll(async () => (await boxAt(page, 0))?.height).toBe(ROW_HEIGHT + DRAG);
   await expect.poll(async () => (await rowRegions(page))?.frozenExtent).toBe(2 * ROW_HEIGHT + DRAG);
   expect((await fitEventCounts(page)).rowResized).toBe(1);
   const rows = await expectContiguousRows(page);
@@ -201,12 +202,14 @@ test("AC-007-01 the row edge follows the row from a center cell and from the end
     await expect(active).toHaveCount(await rowCells.count());
     await expect(rowCells.locator(".gp-grid-row-resize-handle--active")).toHaveCount(await rowCells.count());
     await page.mouse.up();
-    await waitForHeight(page, row, ROW_HEIGHT + (step + 1) * DRAG);
+    const height = ROW_HEIGHT + (step + 1) * DRAG;
+    await waitForHeight(page, row, height);
+    // The core commits on release but Angular renders on its next frame, and the next press aims at the rendered handle.
+    await expect.poll(async () => (await boxAt(page, row))?.height).toBe(height);
   }
 
   expect((await fitEventCounts(page)).rowResized).toBe(2);
   expect(await rowHeightOverrides(page)).toEqual([{ rowId: row, height: ROW_HEIGHT + 2 * DRAG }]);
-  await expect.poll(async () => (await boxAt(page, row))?.height).toBe(ROW_HEIGHT + 2 * DRAG);
   const gaps = await rowEdgeGaps(page, row);
   expect(gaps.map((entry) => entry.col)).toEqual(expect.arrayContaining([ID, NAME, SUMMARY]));
   for (const { col, gap } of gaps) {
