@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { GridCore, HeaderFragment, ResolvedColumn } from "@gp-grid/core";
+import type { ColumnGroupLookup, GridCore, HeaderFragment, ResolvedColumn } from "@gp-grid/core";
 import { renderGroupHeader } from "../renderers/headerRenderer";
 import type { Row, VueHeaderRendererRegistry } from "../types";
 
@@ -16,11 +16,17 @@ const props = defineProps<{
   /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
   layoutColumns: readonly ResolvedColumn[];
   coreRef: GridCore<Row> | null;
+  /** Resolves the group from the `columnGroups` prop while the core is null. */
+  lookupGroup: ColumnGroupLookup;
   headerRenderers: VueHeaderRendererRegistry;
 }>();
 
 // A new hierarchy rebuilds every fragment, so the lookup follows `fragment`.
-const group = computed(() => props.coreRef?.columns.getGroup(props.fragment.groupId));
+const group = computed(() =>
+  props.coreRef === null
+    ? props.lookupGroup(props.fragment.groupId)
+    : props.coreRef.columns.getGroup(props.fragment.groupId),
+);
 
 const content = () =>
   renderGroupHeader({

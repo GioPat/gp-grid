@@ -571,6 +571,7 @@ defineExpose({
       :on-header-resize-mouse-down="handleHeaderResizeMouseDown"
       :on-resize-double-click="handleResizeDoubleClick"
       :core-ref="coreRef"
+      :column-groups="columnGroups"
       :outer-container-ref="outerContainerRef"
       :header-renderers="headerRenderers ?? {}"
       :global-header-renderer="headerRenderer"

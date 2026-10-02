@@ -246,7 +246,7 @@ export function renderHeader(
 
 export interface RenderGroupHeaderOptions {
   fragment: HeaderFragment;
-  /** The active definition; absent before the core mounts. */
+  /** The definition: from the core, or from the `columnGroups` prop before the core exists. */
   group: ColumnGroupDefinition | undefined;
   /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
   layoutColumns: readonly ResolvedColumn[];

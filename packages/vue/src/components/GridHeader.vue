@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from "vue";
 import {
+  createColumnGroupLookup,
   fragmentHeaderBox,
   fragmentHeaderId,
   leafHeaderBox,
@@ -8,6 +9,7 @@ import {
   resolveHeaderAssociations,
 } from "@gp-grid/core";
 import type {
+  ColumnGroupChild,
   ColumnWindowSnapshot,
   GridCore,
   GridIcon,
@@ -47,6 +49,8 @@ const props = defineProps<{
   onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
   onResizeDoubleClick: (target: ResizeTarget) => void;
   coreRef: GridCore<Row> | null;
+  /** The `columnGroups` prop: fragments resolve their group here while the core is null. */
+  columnGroups?: readonly ColumnGroupChild[];
   outerContainerRef: HTMLDivElement | null;
   headerRenderers: VueHeaderRendererRegistry;
   globalHeaderRenderer?: VueHeaderRenderer;
@@ -54,6 +58,7 @@ const props = defineProps<{
 }>();
 
 const instance = useId();
+const lookupGroup = computed(() => createColumnGroupLookup(props.columnGroups));
 
 const associations = computed<HeaderAssociations | null>(() => {
   const { columnWindow, headerBands, displayedIndexOf } = props;
@@ -116,6 +121,7 @@ const fragmentProps = (fragment: HeaderFragment) => {
     height: box.height,
     layoutColumns: props.columnWindow?.layout.columns ?? [],
     coreRef: props.coreRef,
+    lookupGroup: lookupGroup.value,
     headerRenderers: props.headerRenderers,
   };
 };
