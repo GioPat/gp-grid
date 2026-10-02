@@ -54,7 +54,7 @@ export { useGridState, createInitialState } from "./gridState";
 
 export { renderCell, getCellValue } from "./renderers/cellRenderer";
 export { renderEditCell } from "./renderers/editRenderer";
-export { renderHeader } from "./renderers/headerRenderer";
+export { renderHeader, renderGroupHeader } from "./renderers/headerRenderer";
 
 // =============================================================================
 // Types
@@ -64,6 +64,8 @@ export type {
   VueCellRenderer,
   VueEditRenderer,
   VueHeaderRenderer,
+  VueGroupHeaderRenderer,
+  VueHeaderRendererRegistry,
   GpGridProps,
   ColumnDefinition,
 } from "./types";
@@ -115,10 +117,24 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
   // Column identity and state
   ColumnState,
   ColumnStateUpdate,
   ColumnStateSnapshot,
+  // Column groups and header bands
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
   // Selection
   SelectionState,
   // Data source
@@ -184,6 +200,7 @@ export type {
   GridEditApi,
   GridColumnsApi,
   GridFrozenRowsApi,
+  GridHeaderApi,
   GridRowDragApi,
   GridRowHeightsApi,
   GridViewportApi,
@@ -199,9 +216,17 @@ export type {
   ScrollTarget,
   ContentSize,
   GridGeometry,
+  // Fit and row resize
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
   // Input handler types
   PointerEventData,
   KeyEventData,
   ContainerBounds,
   DragState,
+  ResizeTarget,
+  RowResizeDragState,
 } from "@gp-grid/core";

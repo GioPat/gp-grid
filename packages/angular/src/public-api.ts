@@ -28,6 +28,20 @@ export type {
   ColumnStateSnapshot,
   GridIcon,
 
+  // Column groups and header bands
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
   // Geometry
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
@@ -44,9 +58,18 @@ export type {
   GridEditApi,
   GridColumnsApi,
   GridFrozenRowsApi,
+  GridHeaderApi,
   GridRowDragApi,
   GridRowHeightsApi,
   GridViewportApi,
+  // Row resize and one-shot fit
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
+  ResizeTarget,
+  RowResizeDragState,
   // Row virtualization and freezing
   RowRegion,
   RowHeightUpdate,
@@ -77,6 +100,7 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 
   // DataSource
   DataSource,

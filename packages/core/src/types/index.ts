@@ -27,7 +27,23 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 } from "./events";
+
+// One-shot measurement and fit results
+export type {
+  MeasurementHost,
+  RowMeasurement,
+  ColumnMeasurement,
+  FitStatus,
+  FitClamp,
+  RowFitEntry,
+  RowFitSkip,
+  RowFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
+  ColumnFitResult,
+} from "./measurement";
 
 // Highlighting types (must come before columns, which depends on these)
 export type {
@@ -44,6 +60,20 @@ export type {
   ColumnStateSnapshot,
   ColumnModelState,
 } from "./columns";
+
+// Nested column-group descriptors and schema results
+export type {
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaError,
+  ColumnSchemaResult,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+} from "./column-groups";
 
 // Filter types
 export type {
@@ -113,6 +143,7 @@ export type {
   ColumnsChangedInstruction,
   SetColumnWindowInstruction,
   SetRowRegionsInstruction,
+  SetHeaderBandsInstruction,
   SetAnnouncementInstruction,
   GridInstruction,
   InstructionListener,
@@ -124,6 +155,7 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  ColumnGroupHeaderParams,
 } from "./renderers";
 
 // Geometry types
@@ -136,6 +168,7 @@ export type {
   ColumnWindowSnapshot,
   DisplayedColumn,
   ResolvedColumn,
+  HeaderBandLayout,
   GeometrySpace,
   AxisBounds,
   CellBounds,
@@ -153,6 +186,7 @@ export type {
 // Options types
 export type {
   GridCoreOptions,
+  AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
@@ -172,4 +206,6 @@ export type {
   ColumnResizeDragState,
   ColumnMoveDragState,
   RowDragState,
+  RowResizeDragState,
+  ResizeTarget,
 } from "./input";

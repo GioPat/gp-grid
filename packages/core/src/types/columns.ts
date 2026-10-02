@@ -12,7 +12,8 @@ import type {
 
 /** Live per-column state, keyed by column id. */
 export interface ColumnState {
-  width?: number;
+  /** Pixel width override; `null` drops it. */
+  width?: number | null;
   hidden?: boolean;
   order?: number;
   /** `null` is an explicit unpin that beats a definition default. */
@@ -22,7 +23,8 @@ export interface ColumnState {
 /** A single explicit column-state command. Unset properties are untouched. */
 export interface ColumnStateUpdate {
   columnId: string;
-  width?: number;
+  /** Pixel width override; `null` drops it and restores the declared width. */
+  width?: number | null;
   hidden?: boolean;
   /** Target index in the resolved layout (0-based). */
   order?: number;
@@ -108,6 +110,11 @@ export interface ColumnDefinition {
    * renderer, not custom `cellRenderer` output. Default: false.
    */
   wrapText?: boolean;
+  /**
+   * Whether the header text wraps onto additional lines. A header taller
+   * than its band is clipped. Default: false.
+   */
+  wrapHeaderText?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);

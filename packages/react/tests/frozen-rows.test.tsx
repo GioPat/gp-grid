@@ -7,6 +7,7 @@ import { createClientDataSource, createServerDataSource } from "@gp-grid/core";
 import type { ColumnDefinition, FreezeRowsOptions, FrozenRowsState, GridInstruction } from "@gp-grid/core";
 import { Grid } from "../src/Grid";
 import type { GridProps, GridRef } from "../src/types";
+import { bodyAriaRowIndex } from "./aria-rows";
 
 interface TestRow {
   id: number;
@@ -175,13 +176,14 @@ describe("frozen rows", () => {
       "translateY(32px)",
       "translateY(64px)",
     ]);
-    expect(frozenRows.map((row) => row.getAttribute("aria-rowindex"))).toEqual(["1", "2", "3"]);
+    expect(frozenRows.map((row) => row.getAttribute("aria-rowindex")))
+      .toEqual([0, 1, 2].map((viewIndex) => String(bodyAriaRowIndex(viewIndex))));
 
     // The suffix wrapper mounts rows from `frozenCount` on.
     const suffixRows = Array.from(wrapper.querySelectorAll<HTMLElement>(".gp-grid-row"));
     expect(suffixRows.length).toBeGreaterThan(0);
     for (const row of suffixRows) {
-      expect(Number(row.getAttribute("aria-rowindex"))).toBeGreaterThan(3);
+      expect(Number(row.getAttribute("aria-rowindex"))).toBeGreaterThan(bodyAriaRowIndex(2));
     }
   });
 
@@ -213,7 +215,7 @@ describe("frozen rows", () => {
         const selector = `[data-cell-row="${row}"][data-cell-col="${col}"]`;
         expect(document.querySelectorAll(selector).length, `${selector} count`).toBe(1);
       }
-      const ariaRow = `[aria-rowindex="${row + 1}"]`;
+      const ariaRow = `[aria-rowindex="${bodyAriaRowIndex(row)}"]`;
       expect(document.querySelectorAll(`.gp-grid-frozen-rows [role="row"]${ariaRow}`).length).toBe(1);
       expect(document.querySelectorAll(`${ariaRow}[role="row"]`).length).toBe(1);
     }
@@ -235,7 +237,7 @@ describe("frozen rows", () => {
     const placeholders = Array.from(block.querySelectorAll<HTMLElement>(".gp-grid-row--loading"));
     expect(placeholders.length).toBe(3);
     expect(placeholders[0]?.getAttribute("role")).toBe("row");
-    expect(placeholders[0]?.getAttribute("aria-rowindex")).toBe("1");
+    expect(placeholders[0]?.getAttribute("aria-rowindex")).toBe(String(bodyAriaRowIndex(0)));
     expect(placeholders[0]?.style.transform).toBe("translateY(0px)");
     expect(placeholders[0]?.style.height).toBe("32px");
     expect(block.querySelectorAll(".gp-grid-cell").length).toBe(0);
@@ -340,7 +342,7 @@ describe("frozen rows", () => {
     const suffixRows = Array.from(wrapper.querySelectorAll<HTMLElement>(".gp-grid-row"));
     expect(suffixRows.length).toBeGreaterThan(0);
     expect(suffixRows.map((row) => row.getAttribute("aria-rowindex"))).toEqual(
-      suffixRows.map((_, index) => String(index + 1)),
+      suffixRows.map((_, index) => String(bodyAriaRowIndex(index))),
     );
     expect(wrapper.querySelectorAll(".gp-grid-cell").length).toBe(
       document.querySelectorAll(".gp-grid-cell").length,

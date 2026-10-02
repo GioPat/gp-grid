@@ -18,13 +18,15 @@ import {
   PendingScrollLatch,
   defaultPinIcon,
   resolveGridLabels,
+  createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { RowId, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
-import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./types";
+import { useColumnSchemaSync } from "./composables/useColumnSchemaSync";
+import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
@@ -38,7 +40,19 @@ const props = withDefaults(
     dataSource?: DataSource<Row>;
     rowData?: Row[];
     rowHeight: number;
+    /** Header height in pixels, the default height of every band. Default: rowHeight */
     headerHeight?: number;
+    /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+    headerBandHeights?: readonly number[];
+    /**
+     * Nested header groups over the column ids; every column is referenced
+     * once, ungrouped ones at the root. Applied together with `columns`.
+     */
+    columnGroups?: readonly ColumnGroupChild[];
+    /** Budgets of `columnGroups`. Read at creation. */
+    columnGroupLimits?: ColumnGroupLimits;
+    /** Called when a column change is rejected; the previous schema stays. */
+    onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
     overscan?: number;
     /** Column overscan in CSS px per side for the mounted center window. */
     columnOverscan?: number;
@@ -59,7 +73,8 @@ const props = withDefaults(
     maxFlingVelocity?: number;
     cellRenderers?: Record<string, VueCellRenderer>;
     editRenderers?: Record<string, VueEditRenderer>;
-    headerRenderers?: Record<string, VueHeaderRenderer>;
+    /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+    headerRenderers?: VueHeaderRendererRegistry;
     cellRenderer?: VueCellRenderer;
     editRenderer?: VueEditRenderer;
     headerRenderer?: VueHeaderRenderer;
@@ -85,6 +100,16 @@ const props = withDefaults(
     onRowDragEnd?: (event: RowDragEndEvent) => void;
     /** Called when a column is resized. */
     onColumnResized?: (event: ColumnResizedEvent) => void;
+    /**
+     * Whether the user can resize rows: every cell renders the row edge handle,
+     * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+     * Default: false
+     */
+    rowResize?: boolean;
+    /** Called per row resized by a drag, a key or a fit. */
+    onRowResized?: (event: RowResizedEvent) => void;
+    /** Clamps for the fit commands and the row resize gesture. Read at creation. */
+    autoFit?: AutoFitOptions;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (event: ColumnMovedEvent) => void;
     /** Called when a column is pinned or unpinned. */
@@ -97,6 +122,7 @@ const props = withDefaults(
     sortingEnabled: true,
     darkMode: false,
     wheelDampening: 0.1,
+    rowResize: false,
     cellRenderers: () => ({}),
     editRenderers: () => ({}),
     headerRenderers: () => ({}),
@@ -134,10 +160,13 @@ const { state, renderToken, contentToken, applyInstructions, reset: resetState }
   initialHeight: props.initialHeight,
   initialColumns: props.columns as unknown as CoreColumnDefinition[],
   initialColumnLayout: props.columnLayout ?? "fit",
+  initialHeaderHeight: props.headerHeight ?? props.rowHeight,
+  initialHeaderBandHeights: props.headerBandHeights,
+  initialColumnGroups: props.columnGroups,
 });
 
 // Computed values
-const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
+const totalHeaderHeight = computed(() => state.value.headerBands.totalHeight);
 const resolvedLabels = computed(() => resolveGridLabels(props.labels));
 
 // Resolved layout owned by the core. The `columns` prop is schema input only;
@@ -169,6 +198,8 @@ const {
   handleHeaderClick,
   handleHeaderMouseDown,
   handleHeaderResizeMouseDown,
+  handleRowResizeMouseDown,
+  handleResizeDoubleClick,
   handleKeyDown,
   handlePaste,
   handleWheel,
@@ -284,15 +315,23 @@ function initializeCore(dataSource: DataSource<Row>): void {
   // stores the renderer and never invokes it — the Vue layer handles dispatch.
   const core = new GridCore<Row>({
     columns: props.columns as unknown as CoreColumnDefinition[],
+    columnGroups: props.columnGroups,
+    columnGroupLimits: props.columnGroupLimits,
+    onColumnSchemaRejected: (error) => props.onColumnSchemaRejected?.(error),
     dataSource,
     rowHeight: props.rowHeight,
-    headerHeight: totalHeaderHeight.value,
+    headerHeight: props.headerHeight ?? props.rowHeight,
+    headerBandHeights: props.headerBandHeights,
     overscan: props.overscan,
     columnOverscan: props.columnOverscan,
     columnLayout: props.columnLayout ?? "fit",
     maxFlingVelocity: props.maxFlingVelocity,
     rowLoading: props.rowLoading,
     freezeRows: props.freezeRows,
+    rowResize: props.rowResize,
+    autoFit: props.autoFit,
+    // Created on mount only, so a server render never builds a host.
+    measurementHost: createDomMeasurementHost(() => outerContainerRef.value),
     sortingEnabled: props.sortingEnabled,
     highlighting: props.highlighting,
     getRowId: props.getRowId,
@@ -303,6 +342,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     rowDragEntireRow: props.rowDragEntireRow ?? false,
     onRowDragEnd: (event) => props.onRowDragEnd?.(event),
     onColumnResized: (event) => props.onColumnResized?.(event),
+    onRowResized: (event) => props.onRowResized?.(event),
     onColumnMoved: (event) => props.onColumnMoved?.(event),
     onColumnPinned: (event) => props.onColumnPinned?.(event),
     onFrozenRowsChanged: (state) => props.onFrozenRowsChanged?.(state),
@@ -464,6 +504,13 @@ watch(
   },
 );
 
+watch(
+  () => props.rowResize,
+  (enabled) => {
+    coreRef.value?.rowHeights.setResizable(enabled);
+  },
+);
+
 // Watch for highlighting prop changes
 watch(
   () => props.highlighting,
@@ -474,13 +521,11 @@ watch(
   },
 );
 
-// Reconcile a replacement `columns` array without recreating the core.
-watch(
-  () => props.columns,
-  (columns) => {
-    coreRef.value?.columns.set(columns as unknown as CoreColumnDefinition[]);
-  },
-);
+useColumnSchemaSync(coreRef, {
+  columns: () => props.columns as unknown as CoreColumnDefinition[],
+  columnGroups: () => props.columnGroups,
+  headerBandHeights: () => props.headerBandHeights,
+});
 
 // Apply a controlled column-state input whenever it changes.
 watch(
@@ -503,13 +548,14 @@ defineExpose({
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
     role="grid"
     :aria-colcount="displayedColumnCount"
-    :aria-rowcount="state.totalRows"
+    :aria-rowcount="state.totalRows + state.headerBands.count"
+    :data-layout-revision="columnWindow?.layout.revision"
     tabindex="0"
     @keydown="handleKeyDown"
     @paste="handlePaste"
   >
     <GridHeader
-      :header-height="totalHeaderHeight"
+      :header-bands="state.headerBands"
       :scroll-left="scrollLeft"
       :content-width="state.contentWidth"
       :total-width="totalWidth"
@@ -523,7 +569,9 @@ defineExpose({
       :labels="resolvedLabels"
       :on-header-mouse-down="handleHeaderMouseDown"
       :on-header-resize-mouse-down="handleHeaderResizeMouseDown"
+      :on-resize-double-click="handleResizeDoubleClick"
       :core-ref="coreRef"
+      :column-groups="columnGroups"
       :outer-container-ref="outerContainerRef"
       :header-renderers="headerRenderers ?? {}"
       :global-header-renderer="headerRenderer"
@@ -533,6 +581,7 @@ defineExpose({
     <GridBody
       ref="gridBodyComp"
       :total-header-height="totalHeaderHeight"
+      :header-row-count="state.headerBands.count"
       :content-width="state.contentWidth"
       :content-height="state.contentHeight"
       :total-width="totalWidth"
@@ -561,6 +610,9 @@ defineExpose({
       :on-cell-mouse-enter="handleCellMouseEnter"
       :on-cell-mouse-leave="handleCellMouseLeave"
       :on-fill-handle-mouse-down="handleFillHandleMouseDown"
+      :on-row-resize-pointer-down="handleRowResizeMouseDown"
+      :on-resize-double-click="handleResizeDoubleClick"
+      :row-resize="rowResize"
       :core-ref="coreRef"
       :cell-renderers="cellRenderers ?? {}"
       :edit-renderers="editRenderers ?? {}"
@@ -627,6 +679,15 @@ defineExpose({
       class="gp-grid-column-resize-line"
       :style="{
         insetInlineStart: `${dragState.columnResize!.lineX}px`,
+      }"
+    />
+
+    <!-- Row resize line: lineY is body-viewport space, so it sits below the header. -->
+    <div
+      v-if="dragState.dragType === 'row-resize' && dragState.rowResize"
+      class="gp-grid-row-resize-line"
+      :style="{
+        top: `${totalHeaderHeight + dragState.rowResize!.lineY}px`,
       }"
     />
 

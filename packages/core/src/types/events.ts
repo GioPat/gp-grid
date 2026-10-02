@@ -12,6 +12,17 @@ export interface ColumnResizedEvent {
   viewIndex: number;
 }
 
+/**
+ * Emitted per row whose height a drag, a key or a fit changed; `rowHeights.set`
+ * stays silent. `viewIndex` is the row's view index.
+ */
+export interface RowResizedEvent {
+  rowId: RowId;
+  /** Height after the change, in pixels. */
+  height: number;
+  viewIndex: number;
+}
+
 /** Emitted after a column move command. Indices are resolved-layout positions. */
 export interface ColumnMovedEvent {
   columnId: string;

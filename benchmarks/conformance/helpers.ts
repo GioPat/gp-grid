@@ -7,6 +7,15 @@ import { expect, type Locator, type Page } from "@playwright/test";
 /** Tolerance for every cross-surface comparison in the conformance suites. */
 export const TOLERANCE = 1;
 
+/**
+ * ARIA rows the header takes ahead of the body rows (PRD 007 D9): the flat
+ * header row, or one row per band. A body row's `aria-rowindex` is its view
+ * index plus this count plus 1.
+ */
+export const headerRowCount = (page: Page): Promise<number> =>
+  page.locator(".gp-grid-container").first().evaluate((container) =>
+    container.querySelectorAll('.gp-grid-header[role="row"], .gp-grid-header > [role="row"]').length);
+
 export const bodyScroller = (page: Page): Locator =>
   page.locator(".gp-grid-rows-wrapper").locator("xpath=../..");
 

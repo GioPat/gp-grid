@@ -1,7 +1,7 @@
 // packages/core/src/types/input.ts
 // Framework-agnostic input types for InputHandler
 
-import type { CellPosition, CellRange } from "./basic";
+import type { CellPosition, CellRange, RowId } from "./basic";
 import type { RowRegion } from "./geometry";
 
 // =============================================================================
@@ -38,7 +38,14 @@ export interface KeyEventData {
   ctrlKey: boolean;
   /** Whether Meta/Command key is pressed */
   metaKey: boolean;
+  /** Whether Alt/Option is pressed; Alt+Arrow resizes or moves, Alt+Enter fits (PRD 007). */
+  altKey?: boolean;
 }
+
+/** The edge handle a double-click acts on. */
+export type ResizeTarget =
+  | { axis: "column"; colIndex: number }
+  | { axis: "row"; rowIndex: number };
 
 /**
  * Container bounds and scroll position.
@@ -79,7 +86,14 @@ export interface InputResult {
   /** Whether framework should focus the container element */
   focusContainer?: boolean;
   /** Type of drag operation to start (framework manages global listeners) */
-  startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | "row-drag-pending";
+  startDrag?:
+    | "selection"
+    | "fill"
+    | "column-resize"
+    | "row-resize"
+    | "column-move"
+    | "row-drag"
+    | "row-drag-pending";
   /**
    * Whether the framework should track a pending cell tap (touch only).
    * Selection is deferred until the tap is confirmed on pointerup within
@@ -119,6 +133,17 @@ export interface ColumnResizeDragState {
   lineX: number;
 }
 
+/** Row resize drag state */
+export interface RowResizeDragState {
+  rowIndex: number;
+  rowId: RowId;
+  initialHeight: number;
+  currentHeight: number;
+  /** Viewport-space y of the preview edge; wrappers draw it below the header. */
+  lineY: number;
+  region: RowRegion;
+}
+
 /** Column move drag state */
 export interface ColumnMoveDragState {
   sourceColIndex: number;
@@ -153,13 +178,22 @@ export interface DragState {
   /** Whether any drag operation is active */
   isDragging: boolean;
   /** Type of active drag operation */
-  dragType: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | null;
+  dragType:
+    | "selection"
+    | "fill"
+    | "column-resize"
+    | "row-resize"
+    | "column-move"
+    | "row-drag"
+    | null;
   /** Source range for fill operations */
   fillSourceRange: CellRange | null;
   /** Current fill target position */
   fillTarget: { row: number; col: number } | null;
   /** Column resize state (when dragType is "column-resize") */
   columnResize: ColumnResizeDragState | null;
+  /** Row resize state (when dragType is "row-resize") */
+  rowResize: RowResizeDragState | null;
   /** Column move state (when dragType is "column-move") */
   columnMove: ColumnMoveDragState | null;
   /** Row drag state (when dragType is "row-drag") */

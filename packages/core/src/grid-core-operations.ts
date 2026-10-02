@@ -23,7 +23,8 @@ import {
   syncEditRetention,
   type ColumnTargetDeps,
   type EditRetentionDeps,
-} from "./grid-core-columns";
+} from "./grid-core-column-targets";
+import { admitEveryChange, type AdmitColumnChange } from "./grid-core-column-guard";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
 export interface ColumnOperationDeps<TData> extends ColumnTargetDeps, EditRetentionDeps {
@@ -81,6 +82,7 @@ export const applyColumnMove = <TData>(
   fromIndex: number,
   toIndex: number,
   deps: ColumnOperationDeps<TData>,
+  admit: AdmitColumnChange = admitEveryChange,
 ): ColumnOperationResult | null => {
   const column = deps.getLayout()[fromIndex];
   if (column === undefined) return null;
@@ -91,7 +93,7 @@ export const applyColumnMove = <TData>(
   deps.batcher.start();
   try {
     applied = deps.moveColumn(fromIndex, toIndex);
-    if (applied === null) return null;
+    if (applied === null || admit() === false) return null;
     deps.refreshGeometry();
     deps.view.syncColumnLayout("order");
     deps.selection.clearSelectionRange();

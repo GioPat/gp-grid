@@ -23,7 +23,11 @@ import { ViewportController, type GridViewportApi } from "./grid-core-viewport";
 import { EditController, type GridEditApi } from "./grid-core-edit";
 import { CellsController, type GridCellsApi } from "./grid-core-cells";
 import { RowsController, type GridRowsApi } from "./grid-core-rows";
-import { ColumnsController, type GridColumnsApi } from "./grid-core-column-api";
+import type { GridColumnsApi } from "./grid-core-column-api";
+import type { GridHeaderApi } from "./grid-core-header";
+import { buildColumnControllers } from "./grid-core-controllers";
+import { adoptInitialColumnGroups } from "./grid-core-column-groups";
+import type { ColumnGroupState } from "./grid-core-column-guard";
 import { RowDragController, type GridRowDragApi } from "./grid-core-row-drag";
 
 /**
@@ -37,6 +41,8 @@ export class GridCore<TData = unknown> {
   public readonly cells: GridCellsApi;
   public readonly edit: GridEditApi;
   public readonly columns: GridColumnsApi;
+  /** Header bands, shared by every pin region (PRD 007). */
+  public readonly header: GridHeaderApi;
   public readonly frozenRows: GridFrozenRowsApi;
   /** Application-set row heights by identity (PRD 006). */
   public readonly rowHeights: GridRowHeightsApi;
@@ -52,6 +58,7 @@ export class GridCore<TData = unknown> {
   private readonly config: GridCoreConfig<TData>;
   private readonly batcher = new InstructionBatcher();
   private readonly columnModel: ColumnModel;
+  private readonly columnGroups: ColumnGroupState;
   private readonly geometryService: GridGeometryService;
   private readonly viewportController: ViewportController<TData>;
   private readonly frozenRowsController: FrozenRowsController<TData>;
@@ -67,7 +74,9 @@ export class GridCore<TData = unknown> {
 
   constructor(options: GridCoreOptions<TData>) {
     this.config = resolveGridCoreConfig(options);
-    this.columnModel = new ColumnModel(options.columns);
+    const adopted = adoptInitialColumnGroups(options.columns, this.config);
+    this.columnGroups = adopted.state;
+    this.columnModel = new ColumnModel(adopted.columns);
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
@@ -75,6 +84,7 @@ export class GridCore<TData = unknown> {
       getColumns: () => this.columnModel.getLayout(),
       getGeometry: () => this.geometryService,
       getFrozenRowsBaseline: () => this.frozenRowsController.getBaseline(),
+      getHeaderBands: () => this.header.getBands(),
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       onRowsLoaded: (totalRowsChanged) =>
         this.rowHeightsController.onRowsLoaded(totalRowsChanged),
@@ -123,6 +133,7 @@ export class GridCore<TData = unknown> {
       scrollVirtualization: managers.scrollVirtualization,
       getDomScrollTop: () => this.viewportController.getDomScrollTop(),
       getFrozenRowsRequest: () => this.frozenRowsController.getRequest(),
+      columnGroups: this.columnGroups,
       getPlacedRowSizes: () =>
         this.rowHeightOverrides.getPlaced({
           revision: this.rowData.getDataRevision(),
@@ -133,6 +144,21 @@ export class GridCore<TData = unknown> {
         }),
     });
     this.geometry = toReadonlyGeometry(this.geometryService);
+    // Before the first refresh: the scroll mapping reads the header height.
+    const controllers = buildColumnControllers<TData>({
+      config: this.config,
+      batcher: this.batcher,
+      columnModel: this.columnModel,
+      groups: this.columnGroups,
+      managers,
+      viewportController: this.viewportController,
+      getGeometry: () => this.geometryService,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      reloadAfterSchemaChange: () => this.refresh(),
+      isDestroyed: () => this.isDestroyed,
+    });
+    this.header = controllers.header;
+    this.columns = controllers.columns;
     this.geometryService.refresh();
     this.frozenRowsController.captureBaseline();
     this.rowHeightsController = new RowHeightsController<TData>({
@@ -144,6 +170,10 @@ export class GridCore<TData = unknown> {
       refreshGeometry: () => this.viewportController.refreshGeometry(),
       writeScrollTop: (domScrollTop) => this.viewportController.writeScrollTop(domScrollTop),
       isDestroyed: () => this.isDestroyed,
+      measurementHost: this.config.measurementHost,
+      fitLimits: { min: this.config.autoFit.minRowHeight, max: this.config.autoFit.maxRowHeight },
+      onRowResized: this.config.onRowResized,
+      resizable: this.config.rowResize,
     });
 
     this.viewport = this.viewportController;
@@ -159,21 +189,6 @@ export class GridCore<TData = unknown> {
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       refreshSlotData: () => this.slotPool.refreshAllSlots(),
     });
-    this.columns = new ColumnsController({
-      config: this.config,
-      batcher: this.batcher,
-      columnModel: this.columnModel,
-      selection: this.selection,
-      editManager: this.editManager,
-      sortFilter: this.sortFilter,
-      rowData: this.rowData,
-      view: this.view,
-      getGeometry: () => this.geometryService,
-      getColumnLayout: () => this.geometry.getColumnLayout(),
-      refreshGeometry: () => this.viewportController.refreshGeometry(),
-      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
-      reloadAfterSchemaChange: () => this.refresh(),
-    });
     this.rowDrag = new RowDragController({
       config: this.config,
       rowData: this.rowData,
@@ -181,7 +196,10 @@ export class GridCore<TData = unknown> {
       highlight: this.highlight,
       onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
     });
-    this.input = new InputHandler(this);
+    this.input = new InputHandler(this, {
+      maxRowHeight: this.config.autoFit.maxRowHeight,
+      resizeRow: (viewIndex, height) => this.rowHeightsController.resize(viewIndex, height),
+    });
   }
 
   /**

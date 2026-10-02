@@ -308,6 +308,8 @@ const headerRenderers = {
 
 `HeaderRendererParams` exposes `column`, `colIndex`, `sortDirection`, `sortIndex`, and `onSort(direction, addToExisting)` if you want to drive sorting from the custom header.
 
+A column group's `headerRenderer` is a `ReactGroupHeaderRenderer` (inline, or a key of the same `headerRenderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `headerRenderer` does not apply to groups.
+
 ## Listening to changes
 
 ```tsx
@@ -478,7 +480,7 @@ anchored, and an equal-valued object is silent. See
 ## Row heights
 
 Rows are `rowHeight` px tall unless you set a height by row identity through the
-core handle — no resize gesture, and no remount:
+core handle (no remount), or the user resizes or fits a row (next section):
 
 ```tsx
 const gridRef = useRef<GridRef<Person> | null>(null);
@@ -498,6 +500,58 @@ not jump. Cells carry no inline height — they fill the row through the shipped
 `.gp-grid-cell { height: 100% }` rule. See
 [docs/features/row-heights.md](../../../docs/features/row-heights.md).
 
+## Row resize and auto-fit
+
+```tsx
+<Grid
+  gridRef={gridRef}
+  columns={columns}
+  rowData={rows}
+  rowHeight={32}
+  getRowId={(row) => row.id}
+  rowResize                                   // row edge drag; runtime-changeable
+  autoFit={{ maxColumnWidth: 400 }}           // creation-only clamps
+  onRowResized={({ rowId, height }) => saveHeight(rowId, height)}
+  onColumnResized={({ columnId, width }) => saveWidth(columnId, width)}
+/>
+
+// Commands: fit the mounted cells once. Call them after the render that follows a
+// column change — in the same task they return "stale" and apply nothing.
+requestAnimationFrame(() => gridRef.current?.core?.columns.fit());
+gridRef.current?.core?.rowHeights.fit([2, 3]);
+gridRef.current?.core?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. See
+[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```tsx
+import type { ColumnGroupChild } from "@gp-grid/react";
+
+const columnGroups: ColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+
+<Grid
+  columns={columns}
+  columnGroups={columnGroups}       // every column referenced once; reactive
+  headerBandHeights={[40]}          // band 0 is 40 px, the rest headerHeight; reactive
+  onColumnSchemaRejected={(error) => setSchemaError(error.message)}
+/>;
+```
+
+Keep `columnGroups` referentially stable (module constant or `useMemo`). A
+rejected hierarchy leaves the previous one on screen; the prop is re-applied with
+every later `columns` change, so put a valid one back. See
+[docs/features/column-groups.md](../../../docs/features/column-groups.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
@@ -509,7 +563,12 @@ not jump. Cells carry no inline height — they fill the row through the shipped
 | `dataSource` | `DataSource<TData>` | — | mutually exclusive with `rowData`; takes precedence |
 | `rowData` | `TData[]` | — | wrapped in a client data source by the wrapper |
 | `rowHeight` | `number` | required | px |
-| `headerHeight` | `number` | `rowHeight` | px |
+| `headerHeight` | `number` | `rowHeight` | px; default height of every header band |
+| `headerBandHeights` | `readonly number[]` | — | px per band; reactive |
+| `columnGroups` | `ColumnGroupChild[]` | — | nested header groups; applied with `columns` |
+| `columnGroupLimits` | `ColumnGroupLimits` | `64` / `100,000` / `100,000` | `{ maxDepth?, maxNodes?, maxFragments? }`; creation-only |
+| `rowResize` | `boolean` | `false` | row edge drag, Alt+ArrowUp/Down, Alt+Shift+Enter; reactive |
+| `autoFit` | `AutoFitOptions` | `600` / `rowHeight` / `10 × rowHeight` | fit and row-drag clamps; creation-only |
 | `overscan` | `number` | `3` | rows rendered above/below viewport |
 | `rowLoading` | `RowLoadingOptions` | — | server cache tuning |
 | `sortingEnabled` | `boolean` | `true` | global kill switch |
@@ -525,7 +584,7 @@ not jump. Cells carry no inline height — they fill the row through the shipped
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn` and `frozenRowsLimited` |
+| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn`, `frozenRowsLimited` and the nested `columnSchemaErrors` |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
@@ -536,6 +595,8 @@ not jump. Cells carry no inline height — they fill the row through the shipped
 | `onColumnMoved` | `(e: ColumnMovedEvent) => void` | — | persist user state |
 | `onColumnPinned` | `(e: ColumnPinnedEvent) => void` | — | `{ columnId, pinned }`; fired by the pin command, header toggle or cross-region drag |
 | `onFrozenRowsChanged` | `(s: FrozenRowsState) => void` | — | `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution |
+| `onRowResized` | `(e: RowResizedEvent) => void` | — | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
+| `onColumnSchemaRejected` | `(e: ColumnSchemaError) => void` | — | `{ code, source, id?, limit?, message }`; the previous schema stays |
 
 ## React-specific gotchas
 

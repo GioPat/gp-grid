@@ -7,10 +7,12 @@ import type {
   CellPosition,
   CellRange,
   ColumnDefinition,
+  ColumnFitResult,
   FrozenRowsState,
   GridAnnouncement,
   GridCore,
   RowHeightUpdate,
+  RowFitResult,
   RowId,
   RowRegionLayout,
 } from "@gp-grid/react";
@@ -222,3 +224,30 @@ export const createGeometryHooks = (
   holdFrozenRows: () => frozen?.holdFrozenRows(),
   freezeEvents: () => frozen?.freezeEvents() ?? [],
 });
+
+/** One-shot fits through the core (PRD 007); the last result stays readable. */
+export interface FitHooks {
+  fitColumns: (columnIds?: readonly string[]) => ColumnFitResult | null;
+  fitRows: (rowIds?: readonly RowId[]) => RowFitResult | null;
+  lastFitResult: () => ColumnFitResult | RowFitResult | null;
+  /** `null` drops the column's pixel override. */
+  setColumnWidth: (columnId: string, width: number | null) => void;
+}
+
+export const createFitHooks = (getCore: () => GridCore<unknown> | null): FitHooks => {
+  let last: ColumnFitResult | RowFitResult | null = null;
+  return {
+    fitColumns: (columnIds) => {
+      const result = getCore()?.columns.fit(columnIds) ?? null;
+      last = result;
+      return result;
+    },
+    fitRows: (rowIds) => {
+      const result = getCore()?.rowHeights.fit(rowIds) ?? null;
+      last = result;
+      return result;
+    },
+    lastFitResult: () => last,
+    setColumnWidth: (columnId, width) => getCore()?.columns.setState([{ columnId, width }]),
+  };
+};

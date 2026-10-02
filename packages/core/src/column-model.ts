@@ -15,7 +15,6 @@ import type {
   ColumnDefinition,
   ColumnModelState,
   ColumnPin,
-  ColumnState,
   ColumnStateUpdate,
 } from "./types";
 
@@ -40,10 +39,26 @@ export interface ColumnMoveResult {
   pinChanged: boolean;
 }
 
+/** Stored user state; a dropped width override is deleted, never `null`. */
+interface StoredColumnState {
+  width?: number;
+  hidden?: boolean;
+}
+
 interface ColumnModelSnapshot {
   order: readonly string[];
   layout: readonly ColumnDefinition[];
   widthOverrides: ReadonlySet<string>;
+}
+
+/** Everything `restore` needs to return the model to a `snapshot()`. */
+export interface ColumnModelMemento {
+  readonly definitions: readonly ColumnDefinition[];
+  readonly order: readonly string[];
+  readonly overrides: ReadonlyMap<string, Readonly<StoredColumnState>>;
+  readonly pins: ReadonlyMap<string, ColumnPin | null>;
+  readonly moved: ReadonlySet<string>;
+  readonly layout: ColumnDefinition[];
 }
 
 const NO_CHANGE: ColumnModelChange = {
@@ -84,7 +99,7 @@ const hasSameIds = (before: ReadonlySet<string>, after: ReadonlySet<string>): bo
 
 const applyColumnState = (
   definition: ColumnDefinition,
-  state: ColumnState | undefined,
+  state: StoredColumnState | undefined,
   pin: ColumnPin | null,
   normalizeWidth: (width: number) => number,
 ): ColumnDefinition => {
@@ -143,7 +158,7 @@ const normalizeDefinitions = (
 export class ColumnModel {
   private definitions: ColumnDefinition[] = [];
   private readonly definitionsById = new Map<string, ColumnDefinition>();
-  private readonly overrides = new Map<string, ColumnState>();
+  private readonly overrides = new Map<string, StoredColumnState>();
   /** Base order: the model's authoritative id sequence, independent of pins. */
   private orderIds: string[] = [];
   /** `orderIds` partitioned by requested pin; the index space of the layout. */
@@ -252,6 +267,42 @@ export class ColumnModel {
     return this.publishStateChange(before);
   }
 
+  /** Copy the definitions, order, overrides, pins and moved ids. */
+  snapshot(): ColumnModelMemento {
+    const overrides = new Map<string, StoredColumnState>();
+    for (const [columnId, state] of this.overrides) overrides.set(columnId, { ...state });
+    return {
+      definitions: this.definitions,
+      order: [...this.orderIds],
+      overrides,
+      pins: new Map(this.pins),
+      moved: new Set(this.orderOverridden),
+      layout: this.layout,
+    };
+  }
+
+  /**
+   * Return to a `snapshot()`. The resolved layout gets its previous identity
+   * back, so geometry that cached it sees no change.
+   */
+  restore(memento: ColumnModelMemento): void {
+    this.definitions = [...memento.definitions];
+    this.definitionsById.clear();
+    for (const definition of this.definitions) {
+      this.definitionsById.set(getColumnId(definition), definition);
+    }
+    this.idSet = new Set(this.definitionsById.keys());
+    this.orderIds = [...memento.order];
+    this.overrides.clear();
+    for (const [columnId, state] of memento.overrides) this.overrides.set(columnId, { ...state });
+    this.pins.clear();
+    for (const [columnId, pin] of memento.pins) this.pins.set(columnId, pin);
+    this.orderOverridden.clear();
+    for (const columnId of memento.moved) this.orderOverridden.add(columnId);
+    this.repartition();
+    this.layout = memento.layout;
+  }
+
   /** Resolved layout: ordered caller definitions with effective width/hidden. */
   getLayout(): ColumnDefinition[] {
     return this.layout;
@@ -330,7 +381,8 @@ export class ColumnModel {
   private applyStateOverride(update: ColumnStateUpdate): void {
     if (update.width === undefined && update.hidden === undefined) return;
     const state = this.overrides.get(update.columnId) ?? {};
-    if (update.width !== undefined) state.width = this.diagnoseWidth(update.columnId, update.width);
+    if (update.width === null) delete state.width;
+    else if (update.width !== undefined) state.width = this.diagnoseWidth(update.columnId, update.width);
     if (update.hidden !== undefined) state.hidden = update.hidden;
     this.overrides.set(update.columnId, state);
   }

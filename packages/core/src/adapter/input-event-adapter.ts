@@ -4,6 +4,7 @@ import type {
   DragState,
   InputResult,
   KeyboardResult,
+  ResizeTarget,
 } from "../types/input";
 import { toPointerEventData } from "./pointer-event";
 import { normalizeHorizontalKey, readContainerBounds, readIsRtl } from "./inline-axis";
@@ -81,6 +82,21 @@ export class InputEventAdapter<TData = unknown> {
       toPointerEventData(event),
     );
     return result.preventDefault;
+  }
+
+  rowResizePointerDown(rowIndex: number, rowHeight: number, event: PointerEvent): boolean {
+    const core = this.deps.getCore();
+    if (core === null) return false;
+    const result = core.input.handleRowResizeMouseDown(
+      rowIndex,
+      rowHeight,
+      toPointerEventData(event),
+    );
+    return result.preventDefault;
+  }
+
+  resizeDoubleClick(target: ResizeTarget): void {
+    this.deps.getCore()?.input.handleResizeDoubleClick(target);
   }
 
   cellPointerDown(rowIndex: number, colIndex: number, event: PointerEvent): CellPointerAction {
@@ -184,6 +200,7 @@ export class InputEventAdapter<TData = unknown> {
         shiftKey: event.shiftKey,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
+        altKey: event.altKey,
       },
       activeCell,
       editingCell,

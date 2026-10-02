@@ -16,6 +16,8 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
+  InputResult,
+  ResizeTarget,
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
@@ -50,6 +52,8 @@ export interface UseInputHandlerResult {
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
+  handleRowResizeMouseDown: (rowIndex: number, rowHeight: number, e: PointerEvent) => void;
+  handleResizeDoubleClick: (target: ResizeTarget) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handlePaste: (e: ClipboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
@@ -83,6 +87,7 @@ export function useInputHandler<TData = unknown>(
     fillSourceRange: null,
     fillTarget: null,
     columnResize: null,
+    rowResize: null,
     columnMove: null,
     rowDrag: null,
   });
@@ -185,7 +190,7 @@ export function useInputHandler<TData = unknown>(
         const core = coreRef.value;
         const newState = core?.input
           ? core.input.getDragState()
-          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, columnMove: null, rowDrag: null };
+          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, rowResize: null, columnMove: null, rowDrag: null };
         dragState.value = newState;
         lastMouseEvent = null;
         stopAutoScroll();
@@ -386,6 +391,15 @@ export function useInputHandler<TData = unknown>(
     }
   }
 
+  function startResizeDrag(core: GridCore<TData>, result: InputResult, e: PointerEvent): void {
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-resize" || result.startDrag === "row-resize") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
+  }
+
   function handleHeaderResizeMouseDown(
     colIndex: number,
     colWidth: number,
@@ -393,19 +407,19 @@ export function useInputHandler<TData = unknown>(
   ): void {
     const core = coreRef.value;
     if (!core?.input) return;
+    const result = core.input.handleHeaderResizeMouseDown(colIndex, colWidth, toPointerEventData(e));
+    startResizeDrag(core, result, e);
+  }
 
-    const result = core.input.handleHeaderResizeMouseDown(
-      colIndex,
-      colWidth,
-      toPointerEventData(e),
-    );
+  function handleRowResizeMouseDown(rowIndex: number, rowHeight: number, e: PointerEvent): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+    const result = core.input.handleRowResizeMouseDown(rowIndex, rowHeight, toPointerEventData(e));
+    startResizeDrag(core, result, e);
+  }
 
-    if (result.preventDefault) e.preventDefault();
-    if (result.stopPropagation) e.stopPropagation();
-    if (result.startDrag === "column-resize") {
-      dragState.value = core.input.getDragState();
-      startGlobalDragListeners();
-    }
+  function handleResizeDoubleClick(target: ResizeTarget): void {
+    coreRef.value?.input?.handleResizeDoubleClick(target);
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
@@ -421,6 +435,7 @@ export function useInputHandler<TData = unknown>(
         shiftKey: e.shiftKey,
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
+        altKey: e.altKey,
       },
       activeCell.value,
       editingCell.value,
@@ -484,6 +499,8 @@ export function useInputHandler<TData = unknown>(
     handleHeaderClick,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
+    handleRowResizeMouseDown,
+    handleResizeDoubleClick,
     handleKeyDown,
     handlePaste,
     handleWheel,

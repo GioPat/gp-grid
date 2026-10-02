@@ -33,8 +33,8 @@ to `50` px (`DEFAULT_MIN_COLUMN_WIDTH`) and is diagnosed once per column id.
 
 ### Overrides are exact
 
-Manual resize and `columns.setState([{ columnId, width }])` store a pixel
-override. In `fit` mode an override keeps that exact width and the slack is
+A manual resize, an Alt+ArrowLeft/Right step, a [fit](./auto-fit.md) and
+`columns.setState([{ columnId, width }])` store a pixel override. In `fit` mode an override keeps that exact width and the slack is
 shared by the columns that have no override:
 
 ```
@@ -43,9 +43,16 @@ override the first to 100      ->  100 / 200
 reset the first                ->  150 / 150
 ```
 
-When every displayed column is overridden the slack stays empty. `columns.resetState`
-removes the override; a definition width is never back-solved from a displayed
-width.
+When every displayed column is overridden the slack stays empty.
+`columns.setState([{ columnId, width: null }])` drops the override alone and
+restores the declared width (and its `fit` share), keeping the column's order,
+visibility and pin; `columns.resetState` drops the column's whole state. A
+definition width is never back-solved from a displayed width.
+
+```ts
+core.columns.setState([{ columnId: "name", width: 240 }]); // override
+core.columns.setState([{ columnId: "name", width: null }]); // back to the declared width
+```
 
 `GridCore.columns.getState()` reports an optional `width` (present only while an
 override exists) plus `resolvedWidth`, the displayed CSS px (`0` while hidden).

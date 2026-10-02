@@ -2,6 +2,7 @@
 
 import type {
   ColumnDefinition,
+  ColumnGroupChild,
   CellPosition,
   CellRange,
   CellValue,
@@ -11,11 +12,23 @@ import type {
 import { createSeedColumnLayout } from "../geometry/column-layout";
 import { buildCenterOffsets, resolveCenterRange } from "../geometry/column-range";
 import { resolveColumnWindow } from "../geometry/column-window";
-import { DEFAULT_COLUMN_OVERSCAN } from "../grid-core-config";
+import {
+  leafDepthOf,
+  resolveHeaderRuns,
+  type ColumnGroupIndex,
+} from "../column-groups";
+import {
+  DEFAULT_COLUMN_GROUP_LIMITS,
+  DEFAULT_COLUMN_OVERSCAN,
+  resolveHeaderBandHeights,
+} from "../grid-core-config";
+import { resolveInitialColumnGroups } from "../grid-core-column-groups";
+import { resolveHeaderBands } from "../grid-core-header";
 import type {
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
+  HeaderBandLayout,
   RowRegion,
   RowRegionLayout,
 } from "./geometry";
@@ -79,6 +92,12 @@ export interface InitialStateArgs {
   initialLayout?: ColumnLayoutSnapshot;
   /** Layout mode seeded alongside `initialLayout`. Default: "fit". */
   initialColumnLayout?: ColumnLayoutMode;
+  /** The `headerHeight` the core resolves; bands without a height seed at 0. */
+  initialHeaderHeight?: number;
+  /** The `headerBandHeights` option. */
+  initialHeaderBandHeights?: readonly number[];
+  /** The `columnGroups` option, adopted as the core adopts it, under the default budgets. */
+  initialColumnGroups?: readonly ColumnGroupChild[];
 }
 
 /** Live-region text the core decided to announce (C13). */
@@ -86,6 +105,24 @@ export interface GridAnnouncement {
   message: string;
   revision: number;
 }
+
+interface SeededColumns {
+  readonly columns: ColumnDefinition[];
+  readonly index: ColumnGroupIndex | null;
+}
+
+/** Depth-first leaves under an adopted hierarchy; a rejected one seeds flat. */
+const seedColumns = (args: InitialStateArgs | undefined): SeededColumns => {
+  const columns = args?.initialColumns ?? [];
+  const roots = args?.initialColumnGroups;
+  if (roots === undefined) return { columns, index: null };
+  const mode = args?.initialColumnLayout ?? "fit";
+  const adopted = resolveInitialColumnGroups(columns, roots, DEFAULT_COLUMN_GROUP_LIMITS, mode);
+  if (adopted.ok === false) return { columns, index: null };
+  // A core-resolved `initialLayout` indexes the columns as the caller passed them.
+  if (args?.initialLayout !== undefined) return { columns, index: adopted.index };
+  return { columns: adopted.columns, index: adopted.index };
+};
 
 /**
  * The deterministic first render (SSR or the frame before the core mounts)
@@ -95,14 +132,15 @@ export interface GridAnnouncement {
  */
 const seedLayout = (
   args: InitialStateArgs | undefined,
+  { columns, index }: SeededColumns,
 ): ColumnLayoutSnapshot | null => {
   if (args?.initialLayout !== undefined) return args.initialLayout;
-  const columns = args?.initialColumns ?? [];
   if (columns.length === 0) return null;
   return createSeedColumnLayout(
     columns,
     args?.initialColumnLayout ?? "fit",
     args?.initialWidth ?? 0,
+    leafDepthOf(index),
   );
 };
 
@@ -116,6 +154,7 @@ const seedLayout = (
 const seedColumnWindow = (
   layout: ColumnLayoutSnapshot | null,
   viewportWidth: number,
+  index: ColumnGroupIndex | null,
 ): ColumnWindowSnapshot | null => {
   if (layout?.regions === undefined) return null;
   const { centerStart, centerEnd, centerViewportWidth } = layout.regions;
@@ -135,8 +174,21 @@ const seedColumnWindow = (
     { start: range.start + centerStart, end: range.end + centerStart },
     [],
     (columnId) => displayIndex.get(columnId),
+    // Runs over the budget seed no fragments while the bands stay, as the live window does.
+    resolveHeaderRuns(layout, index, DEFAULT_COLUMN_GROUP_LIMITS.maxFragments),
   );
 };
+
+/** D8 seed: the band count of the seeded layout at the configured heights. */
+const seedHeaderBands = (
+  args: InitialStateArgs | undefined,
+  layout: ColumnLayoutSnapshot | null,
+): HeaderBandLayout =>
+  resolveHeaderBands(
+    layout?.bandCount ?? 1,
+    args?.initialHeaderHeight ?? 0,
+    resolveHeaderBandHeights(args?.initialHeaderBandHeights),
+  );
 
 /**
  * Pre-mount region layout: no frozen rows, no resolved extents. The core
@@ -150,7 +202,8 @@ const seedRowRegions = (): RowRegionLayout => ({
 });
 
 export const createInitialState = <TData = unknown>(args?: InitialStateArgs): GridState<TData> => {
-  const layout = seedLayout(args);
+  const seeded = seedColumns(args);
+  const layout = seedLayout(args, seeded);
   return {
     slots: new Map(),
     activeCell: null,
@@ -169,11 +222,12 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
     totalRows: 0,
     visibleRowRange: null,
     hoverPosition: null,
-    columns: args?.initialColumns ?? [],
+    columns: seeded.columns,
     layout,
-    columnWindow: seedColumnWindow(layout, args?.initialWidth ?? 0),
+    columnWindow: seedColumnWindow(layout, args?.initialWidth ?? 0, seeded.index),
     columnLayout: args?.initialColumnLayout ?? "fit",
     rowRegions: seedRowRegions(),
+    headerBands: seedHeaderBands(args, layout),
     announcement: null,
     geometryRevision: 0,
     pendingScrollTop: null,
@@ -223,6 +277,8 @@ export interface GridState<TData = unknown> {
   columnLayout: ColumnLayoutMode;
   /** C3 frozen/suffix layout; the zero layout until the core publishes one. */
   rowRegions: RowRegionLayout;
+  /** D8 header bands; the seed until the core publishes them. */
+  headerBands: HeaderBandLayout;
   /** Live-region announcement, or `null` when there is nothing to announce. */
   announcement: GridAnnouncement | null;
   /** Last committed geometry revision, for change detection. */

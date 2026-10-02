@@ -5,17 +5,32 @@ import type {
   GridCore,
   GridIcon,
   GridLabels,
+  HeaderBox,
   HeaderData,
   ResolvedColumn,
 } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
-import type { ReactHeaderRenderer } from "../types";
+import type { ReactHeaderRenderer, ReactHeaderRendererRegistry } from "../types";
+import { ResizeHandle } from "./ResizeHandle";
+import type { ResizeHandleActions } from "./ResizeHandle";
+
+/** Band placement of a leaf in a grouped header (D9); absent while flat. */
+export interface LeafHeaderBands {
+  /** 1-based first band. */
+  rowIndex: number;
+  /** Bands the leaf spans. */
+  rowSpan: number;
+  /** Ids of its mounted ancestor fragments, outermost first. */
+  describedBy: string | undefined;
+}
 
 export interface GridHeaderCellProps<TData = unknown> {
   column: ResolvedColumn;
   /** 0-based index in the displayed columns, for `aria-colindex`. */
   displayedIndex: number;
-  headerHeight: number;
+  id: string;
+  box: HeaderBox;
+  bands?: LeafHeaderBands;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   rtl: boolean;
@@ -26,28 +41,30 @@ export interface GridHeaderCellProps<TData = unknown> {
     colHeight: number,
     e: React.PointerEvent,
   ) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
-  headerRenderers: Record<string, ReactHeaderRenderer>;
+  headerRenderers: ReactHeaderRendererRegistry;
   globalHeaderRenderer?: ReactHeaderRenderer;
   pinIcon: GridIcon;
 }
 
-/** One header cell: region-local `insetInlineStart`, renderer and resize handle. */
+/** One leaf header cell: region-local `insetInlineStart`, renderer and resize handle. */
 export const GridHeaderCell = <TData = unknown>(
   props: GridHeaderCellProps<TData>,
 ): React.ReactNode => {
   const {
     column,
     displayedIndex,
-    headerHeight,
+    id,
+    box,
+    bands,
     headers,
     sortingEnabled,
     rtl,
     labels,
     onHeaderMouseDown,
-    onHeaderResizeMouseDown,
+    resizeActions,
     coreRef,
     outerContainerRef,
     headerRenderers,
@@ -57,20 +74,28 @@ export const GridHeaderCell = <TData = unknown>(
 
   const { column: definition, layoutIndex, width, regionOffset } = column;
   const headerInfo = headers.get(column.columnId);
+  const className = definition.wrapHeaderText === true
+    ? "gp-grid-header-cell gp-grid-header-cell--wrap"
+    : "gp-grid-header-cell";
 
   return (
     <div
-      className="gp-grid-header-cell"
+      id={id}
+      className={className}
       role="columnheader"
       aria-colindex={displayedIndex + 1}
+      aria-rowindex={bands?.rowIndex}
+      aria-rowspan={bands?.rowSpan}
+      aria-describedby={bands?.describedBy}
       data-col-index={layoutIndex}
       data-cell-region={column.region}
       style={{
         insetInlineStart: `${regionOffset}px`,
         width: `${width}px`,
-        height: `${headerHeight}px`,
+        height: `${box.height}px`,
+        top: `${box.top}px`,
       }}
-      onPointerDown={(e) => onHeaderMouseDown(layoutIndex, width, headerHeight, e)}
+      onPointerDown={(e) => onHeaderMouseDown(layoutIndex, width, box.height, e)}
     >
       {renderHeader({
         column: definition,
@@ -89,12 +114,11 @@ export const GridHeaderCell = <TData = unknown>(
         pinIcon,
       })}
       {definition.resizable !== false && (
-        <div
-          className="gp-grid-header-resize-handle"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onHeaderResizeMouseDown(layoutIndex, width, e);
-          }}
+        <ResizeHandle
+          axis="column"
+          index={layoutIndex}
+          size={width}
+          actions={resizeActions}
         />
       )}
     </div>

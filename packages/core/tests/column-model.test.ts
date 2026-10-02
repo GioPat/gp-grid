@@ -187,6 +187,25 @@ describe("ColumnModel", () => {
     });
   });
 
+  it("drops a width override on width: null and reports a width change", () => {
+    const model = new ColumnModel([def("a", { width: 100 }), def("b", { width: 100, hidden: true })]);
+    model.setState([{ columnId: "a", width: 240 }, { columnId: "b", hidden: false }]);
+    expect(model.getState()[0]?.width).toBe(240);
+
+    expect(model.setState([{ columnId: "a", width: null }])).toEqual({
+      orderChanged: false,
+      widthChanged: true,
+      hiddenChanged: false,
+      pinChanged: false,
+    });
+    expect(model.isWidthOverridden("a")).toBe(false);
+    expect(model.getLayout()[0]?.width).toBe(100);
+    expect(model.getState()[0]).not.toHaveProperty("width");
+    // Other retained state survives, and a second reset changes nothing.
+    expect(model.getLayout()[1]?.hidden).toBe(false);
+    expect(model.setState([{ columnId: "a", width: null }]).widthChanged).toBe(false);
+  });
+
   it("publishes replacement definitions while retaining user state", () => {
     const model = new ColumnModel([def("a", { headerName: "Before" }), def("b")]);
     model.setState([{ columnId: "a", width: 180 }]);

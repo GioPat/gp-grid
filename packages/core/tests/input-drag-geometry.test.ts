@@ -203,3 +203,39 @@ describe("scroll corrections", () => {
     expect(scrollTo).toStrictEqual({ type: "SCROLL_TO", scrollTop: undefined, scrollLeft: 100 });
   });
 });
+
+describe("resize presses without movement", () => {
+  it("commit nothing and fire no event on either axis", async () => {
+    const resized: unknown[] = [];
+    const grid = new GridCore<Row>({
+      columns: columns(),
+      dataSource: createClientDataSource(rows(100)),
+      rowHeight: ROW_HEIGHT,
+      columnLayout: "fixed",
+      rowResize: true,
+      getRowId: (row) => row.id,
+      onColumnResized: (event) => resized.push(event),
+      onRowResized: (event) => resized.push(event),
+    });
+    await grid.initialize();
+    grid.setViewport(0, 0, bounds.width, bounds.height);
+    const batches: GridInstruction[][] = [];
+    grid.onBatchInstruction((batch) => batches.push(batch));
+
+    grid.input.handleHeaderResizeMouseDown(1, 100, pointerAt(200, -10));
+    grid.input.handleDragEnd();
+    const press = grid.input.handleRowResizeMouseDown(3, ROW_HEIGHT, pointerAt(10, 4 * ROW_HEIGHT));
+    expect(press.startDrag).toBe("row-resize");
+    grid.input.handleDragEnd();
+
+    expect(batches).toEqual([]);
+    expect(resized).toEqual([]);
+    expect(grid.columns.getState()[1]).not.toHaveProperty("width");
+    expect(grid.rowHeights.getOverrides()).toEqual([]);
+
+    grid.input.handleHeaderResizeMouseDown(1, 100, pointerAt(200, -10));
+    grid.input.handleDragMove(pointerAt(230, -10), bounds);
+    grid.input.handleDragEnd();
+    expect(resized).toEqual([{ columnId: "b", width: 130, viewIndex: 1 }]);
+  });
+});

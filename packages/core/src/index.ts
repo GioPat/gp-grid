@@ -10,6 +10,7 @@ export type { GridRowsApi } from "./grid-core-rows";
 export type { GridCellsApi } from "./grid-core-cells";
 export type { GridEditApi } from "./grid-core-edit";
 export type { GridColumnsApi } from "./grid-core-column-api";
+export type { GridHeaderApi } from "./grid-core-header";
 export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
 export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
@@ -115,6 +116,18 @@ export type {
   ColumnStateUpdate,
   ColumnStateSnapshot,
 
+  /** Nested column groups, schema results and header fragments (PRD 007) */
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaError,
+  ColumnSchemaResult,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
   /** View row identity */
   ViewRow,
 
@@ -123,6 +136,20 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
+
+  /** One-shot measurement and fit results (PRD 007) */
+  MeasurementHost,
+  RowMeasurement,
+  ColumnMeasurement,
+  FitStatus,
+  FitClamp,
+  RowFitEntry,
+  RowFitSkip,
+  RowFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
+  ColumnFitResult,
 
   /** Cell Position coordinates: row and column, zero-based indices */
   CellPosition,
@@ -174,10 +201,12 @@ export type {
   DataErrorInstruction,
   ColumnsChangedInstruction,
   SetRowRegionsInstruction,
+  SetHeaderBandsInstruction,
   SetAnnouncementInstruction,
 
   /** Options */
   GridCoreOptions,
+  AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
@@ -188,6 +217,7 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  ColumnGroupHeaderParams,
 
   // Listener types
   InstructionListener,
@@ -212,6 +242,7 @@ export type {
   ColumnWindowSnapshot,
   DisplayedColumn,
   ResolvedColumn,
+  HeaderBandLayout,
   GeometrySpace,
   AxisBounds,
   CellBounds,
@@ -238,6 +269,8 @@ export type {
   ColumnResizeDragState,
   ColumnMoveDragState,
   RowDragState,
+  RowResizeDragState,
+  ResizeTarget,
 } from "./types/input";
 
 // =============================================================================
@@ -296,6 +329,25 @@ export type { PopupPosition } from "./utils/popup-position";
 /** Peek overlay Ctrl/Cmd+A scoping helper. */
 export { bindPeekSelectAll } from "./utils/peek-select-all";
 
+/** Header band placement, escaped DOM ids and ARIA associations (PRD 007 D9). */
+export {
+  escapeDomIdPart,
+  fragmentHeaderBox,
+  fragmentHeaderId,
+  leafHeaderBox,
+  leafHeaderId,
+  resolveHeaderAssociations,
+} from "./header-layout";
+export type {
+  HeaderAssociationInput,
+  HeaderAssociations,
+  HeaderBox,
+} from "./header-layout";
+
+/** Group definitions by id before a core exists (PRD 007 D9). */
+export { createColumnGroupLookup } from "./column-groups/group-lookup";
+export type { ColumnGroupLookup } from "./column-groups/group-lookup";
+
 /** Localization: shared label model and helpers */
 export {
   defaultGridLabels,
@@ -309,6 +361,7 @@ export type {
   GridLabels,
   GridLabelOverrides,
   GridFilterOperatorLabels,
+  GridColumnSchemaErrorLabels,
   FilterOperatorOption,
 } from "./i18n";
 
@@ -335,6 +388,7 @@ export {
   PendingScrollLatch,
   DataSourceOwner,
   InputEventAdapter,
+  createDomMeasurementHost,
 } from "./adapter";
 export type {
   PendingRowDragDeps,

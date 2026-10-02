@@ -5,12 +5,20 @@ import type {
   GridCore,
   GridIcon,
   ColumnDefinition,
+  ColumnGroupDefinition,
+  ColumnGroupHeaderParams,
   ColumnPin,
   GridLabels,
+  HeaderFragment,
+  ResolvedColumn,
   SortDirection,
   HeaderRendererParams,
 } from "@gp-grid/core";
-import type { ReactHeaderRenderer } from "../types";
+import type {
+  ReactGroupHeaderRenderer,
+  ReactHeaderRenderer,
+  ReactHeaderRendererRegistry,
+} from "../types";
 
 const needsDistinctValues = (column: ColumnDefinition): boolean => {
   const dataType = column.cellDataType;
@@ -35,7 +43,7 @@ export interface RenderHeaderOptions<TData> {
   pinIcon: GridIcon;
   coreRef: React.RefObject<GridCore<TData> | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
-  headerRenderers: Record<string, ReactHeaderRenderer>;
+  headerRenderers: ReactHeaderRendererRegistry;
   globalHeaderRenderer?: ReactHeaderRenderer;
 }
 
@@ -132,7 +140,7 @@ export function renderHeader<TData>(
     if (typeof column.headerRenderer === "function") {
       return column.headerRenderer(params) as React.ReactNode;
     }
-    const renderer = headerRenderers[column.headerRenderer];
+    const renderer = headerRenderers[column.headerRenderer] as ReactHeaderRenderer | undefined;
     if (renderer) {
       return renderer(params);
     }
@@ -217,5 +225,54 @@ export function renderHeader<TData>(
         )}
       </span>
     </>
+  );
+}
+
+export interface RenderGroupHeaderOptions {
+  fragment: HeaderFragment;
+  /** The definition: from the core, or from the `columnGroups` prop before the core exists. */
+  group: ColumnGroupDefinition | undefined;
+  /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
+  layoutColumns: readonly ResolvedColumn[];
+  headerRenderers: ReactHeaderRendererRegistry;
+}
+
+const resolveGroupRenderer = (
+  group: ColumnGroupDefinition,
+  headerRenderers: ReactHeaderRendererRegistry,
+): ReactGroupHeaderRenderer | undefined => {
+  const { headerRenderer } = group;
+  if (typeof headerRenderer === "function") {
+    return (params) => headerRenderer(params) as React.ReactNode;
+  }
+  if (headerRenderer === undefined) return undefined;
+  return headerRenderers[headerRenderer] as ReactGroupHeaderRenderer | undefined;
+};
+
+const groupHeaderParams = (
+  fragment: HeaderFragment,
+  group: ColumnGroupDefinition,
+  layoutColumns: readonly ResolvedColumn[],
+): ColumnGroupHeaderParams => ({
+  group,
+  groupId: fragment.groupId,
+  band: fragment.band,
+  region: fragment.region,
+  leafCount: fragment.leafCount,
+  columnIds: layoutColumns
+    .slice(fragment.firstDisplayIndex, fragment.firstDisplayIndex + fragment.leafCount)
+    .map((column) => column.columnId),
+});
+
+/**
+ * Render a group fragment through the group's renderer, resolved like a
+ * column's, or as its `headerName ?? groupId` text.
+ */
+export function renderGroupHeader(options: RenderGroupHeaderOptions): React.ReactNode {
+  const { fragment, group, layoutColumns, headerRenderers } = options;
+  const renderer = group && resolveGroupRenderer(group, headerRenderers);
+  if (group && renderer) return renderer(groupHeaderParams(fragment, group, layoutColumns));
+  return (
+    <span className="gp-grid-header-text">{group?.headerName ?? fragment.groupId}</span>
   );
 }

@@ -3,7 +3,7 @@
 // and the row-box sampler.
 
 import { expect, type Page } from "@playwright/test";
-import { openFixture, readHook } from "./helpers";
+import { headerRowCount, openFixture, readHook } from "./helpers";
 import {
   bodyMetrics,
   rowRegions,
@@ -65,14 +65,14 @@ export const armRowHeights = async (
 };
 
 /** Every mounted row box, with the heights of the cells it holds. */
-export const mountedRows = (page: Page): Promise<RowBoxSample[]> =>
-  scroller(page).evaluate((element) => {
+export const mountedRows = async (page: Page): Promise<RowBoxSample[]> =>
+  scroller(page).evaluate((element, headerRows) => {
     const origin = element.getBoundingClientRect().top + element.clientTop;
     const block = element.querySelector(".gp-grid-frozen-rows");
     return Array.from(element.querySelectorAll<HTMLElement>(".gp-grid-row")).map((row) => {
       const box = row.getBoundingClientRect();
       return {
-        index: Number(row.getAttribute("aria-rowindex")) - 1,
+        index: Number(row.getAttribute("aria-rowindex")) - headerRows - 1,
         frozen: block !== null && block.contains(row),
         top: box.top - origin,
         height: box.height,
@@ -81,7 +81,7 @@ export const mountedRows = (page: Page): Promise<RowBoxSample[]> =>
         ),
       };
     });
-  });
+  }, await headerRowCount(page));
 
 export const boxAt = async (page: Page, viewIndex: number): Promise<RowBoxSample | null> =>
   (await mountedRows(page)).find((row) => row.index === viewIndex) ?? null;

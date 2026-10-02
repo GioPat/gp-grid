@@ -1,8 +1,20 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
 import { h, Fragment, type VNode } from "vue";
-import type { GridCore, GridIcon, ColumnDefinition, ColumnPin, SortDirection, HeaderRendererParams, GridLabels } from "@gp-grid/core";
-import type { VueHeaderRenderer } from "../types";
+import type {
+  GridCore,
+  GridIcon,
+  ColumnDefinition,
+  ColumnGroupDefinition,
+  ColumnGroupHeaderParams,
+  ColumnPin,
+  HeaderFragment,
+  ResolvedColumn,
+  SortDirection,
+  HeaderRendererParams,
+  GridLabels,
+} from "@gp-grid/core";
+import type { VueGroupHeaderRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
 import { invokeRenderer } from "./utils";
 
 const needsDistinctValues = (column: ColumnDefinition): boolean => {
@@ -27,7 +39,7 @@ export interface RenderHeaderOptions {
   pinIcon: GridIcon;
   core: GridCore | null;
   container: HTMLDivElement | null;
-  headerRenderers: Record<string, VueHeaderRenderer>;
+  headerRenderers: VueHeaderRendererRegistry;
   globalHeaderRenderer?: VueHeaderRenderer;
 }
 
@@ -115,7 +127,7 @@ export function renderHeader(
   // Check for column-specific renderer
   if (column.headerRenderer != null) {
     if (typeof column.headerRenderer === "string") {
-      const renderer = headerRenderers[column.headerRenderer];
+      const renderer = headerRenderers[column.headerRenderer] as VueHeaderRenderer | undefined;
       if (renderer) {
         return invokeRenderer(renderer, params);
       }
@@ -230,4 +242,53 @@ export function renderHeader(
   }
 
   return h(Fragment, children);
+}
+
+export interface RenderGroupHeaderOptions {
+  fragment: HeaderFragment;
+  /** The definition: from the core, or from the `columnGroups` prop before the core exists. */
+  group: ColumnGroupDefinition | undefined;
+  /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
+  layoutColumns: readonly ResolvedColumn[];
+  headerRenderers: VueHeaderRendererRegistry;
+}
+
+const resolveGroupRenderer = (
+  group: ColumnGroupDefinition,
+  headerRenderers: VueHeaderRendererRegistry,
+): VueGroupHeaderRenderer | undefined => {
+  const { headerRenderer } = group;
+  if (typeof headerRenderer === "function") {
+    return (params) => headerRenderer(params) as VNode | string | null;
+  }
+  if (headerRenderer === undefined) return undefined;
+  return headerRenderers[headerRenderer] as VueGroupHeaderRenderer | undefined;
+};
+
+const groupHeaderParams = (
+  fragment: HeaderFragment,
+  group: ColumnGroupDefinition,
+  layoutColumns: readonly ResolvedColumn[],
+): ColumnGroupHeaderParams => ({
+  group,
+  groupId: fragment.groupId,
+  band: fragment.band,
+  region: fragment.region,
+  leafCount: fragment.leafCount,
+  columnIds: layoutColumns
+    .slice(fragment.firstDisplayIndex, fragment.firstDisplayIndex + fragment.leafCount)
+    .map((column) => column.columnId),
+});
+
+/**
+ * Render a group fragment through the group's renderer, resolved like a
+ * column's, or as its `headerName ?? groupId` text.
+ */
+export function renderGroupHeader(options: RenderGroupHeaderOptions): VNode {
+  const { fragment, group, layoutColumns, headerRenderers } = options;
+  const renderer = group && resolveGroupRenderer(group, headerRenderers);
+  if (group && renderer) {
+    return invokeRenderer(renderer, groupHeaderParams(fragment, group, layoutColumns));
+  }
+  return h("span", { class: "gp-grid-header-text" }, group?.headerName ?? fragment.groupId);
 }

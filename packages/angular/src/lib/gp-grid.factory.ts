@@ -1,12 +1,16 @@
-import { GridCore } from '@gp-grid/core';
+import { GridCore, createDomMeasurementHost } from '@gp-grid/core';
 import type {
+  AutoFitOptions,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
   ColumnLayoutMode,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
+  ColumnSchemaError,
   DataSource,
   FreezeRowsOptions,
   FrozenRowsState,
@@ -15,13 +19,17 @@ import type {
   RowDragEndEvent,
   RowLoadingOptions,
   RowId,
+  RowResizedEvent,
 } from '@gp-grid/core';
 
 export interface BuildGridCoreInputs<TData> {
   columns: ColumnDefinition[];
+  columnGroups: readonly ColumnGroupChild[] | undefined;
+  columnGroupLimits: ColumnGroupLimits | undefined;
   dataSource: DataSource<TData>;
   rowHeight: number;
   headerHeight: number;
+  headerBandHeights: readonly number[] | undefined;
   overscan: number;
   columnOverscan: number | undefined;
   freezeRows: FreezeRowsOptions | undefined;
@@ -33,6 +41,10 @@ export interface BuildGridCoreInputs<TData> {
   getRowId: ((row: TData) => RowId) | undefined;
   rowDragEntireRow: boolean;
   labels: GridLabelOverrides | undefined;
+  rowResize: boolean;
+  autoFit: AutoFitOptions | undefined;
+  /** Grid root the fit commands measure; `null` on the server, where no host is built. */
+  measureRoot: (() => HTMLElement | null) | null;
 }
 
 export interface BuildGridCoreEmitters<TData> {
@@ -40,9 +52,11 @@ export interface BuildGridCoreEmitters<TData> {
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
   onWriteRejected: (event: CellWriteRejectedEvent) => void;
   onColumnResized: (event: ColumnResizedEvent) => void;
+  onRowResized: (event: RowResizedEvent) => void;
   onColumnMoved: (event: ColumnMovedEvent) => void;
   onColumnPinned: (event: ColumnPinnedEvent) => void;
   onFrozenRowsChanged: (state: FrozenRowsState) => void;
+  onColumnSchemaRejected: (error: ColumnSchemaError) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -52,12 +66,18 @@ export const buildGridCore = <TData>(
   const cellValueChanged = inputs.getRowId === undefined
     ? undefined
     : emitters.onCellValueChanged;
+  const measurementHost = inputs.measureRoot === null
+    ? undefined
+    : createDomMeasurementHost(inputs.measureRoot);
 
   return new GridCore<TData>({
     columns: inputs.columns,
+    columnGroups: inputs.columnGroups,
+    columnGroupLimits: inputs.columnGroupLimits,
     dataSource: inputs.dataSource,
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
+    headerBandHeights: inputs.headerBandHeights,
     overscan: inputs.overscan,
     columnOverscan: inputs.columnOverscan,
     freezeRows: inputs.freezeRows,
@@ -69,12 +89,17 @@ export const buildGridCore = <TData>(
     getRowId: inputs.getRowId,
     rowDragEntireRow: inputs.rowDragEntireRow,
     labels: inputs.labels,
+    rowResize: inputs.rowResize,
+    autoFit: inputs.autoFit,
+    measurementHost,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
     onWriteRejected: emitters.onWriteRejected,
     onColumnResized: emitters.onColumnResized,
+    onRowResized: emitters.onRowResized,
     onColumnMoved: emitters.onColumnMoved,
     onColumnPinned: emitters.onColumnPinned,
     onFrozenRowsChanged: emitters.onFrozenRowsChanged,
+    onColumnSchemaRejected: emitters.onColumnSchemaRejected,
   });
 };

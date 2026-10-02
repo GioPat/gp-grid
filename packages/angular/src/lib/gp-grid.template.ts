@@ -4,14 +4,15 @@ export const GP_GRID_TEMPLATE = `
       style="width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; outline: none;"
       role="grid"
       [attr.aria-colcount]="vm.displayedColumnCount()"
-      [attr.aria-rowcount]="vm.totalRows()"
+      [attr.aria-rowcount]="vm.totalRows() + vm.headerRowCount()"
+      [attr.data-layout-revision]="layoutRevision()"
       tabindex="0"
       (keydown)="onKeyDown($event)"
       (paste)="onPaste($event)"
       (wheel)="onWheel($event)"
     >
       <gp-grid-header
-        [headerHeight]="headerHeight()"
+        [headerBands]="vm.headerBands()"
         [scrollLeft]="vm.scrollLeft()"
         [contentWidth]="vm.contentWidth()"
         [totalWidth]="vm.totalWidth()"
@@ -26,14 +27,17 @@ export const GP_GRID_TEMPLATE = `
         [headerRenderers]="headerRenderers()"
         [globalHeaderRenderer]="headerRenderer()"
         [pinIcon]="pinIcon()"
+        [core]="core"
         (headerPointerDown)="onHeaderPointerDown($event)"
         (filterPointerDown)="onFilterPointerDown($event)"
         (resizePointerDown)="onResizePointerDown($event)"
+        (resizeDoubleClick)="onResizeDoubleClick($event)"
         (headerSort)="onHeaderSort($event)"
         (headerPin)="onHeaderPin($event)"
       />
       <gp-grid-body
-        [totalHeaderHeight]="headerHeight()"
+        [totalHeaderHeight]="vm.headerBands().totalHeight"
+        [headerRowCount]="vm.headerRowCount()"
         [contentWidth]="vm.contentWidth()"
         [contentHeight]="vm.contentHeight()"
         [totalWidth]="vm.totalWidth()"
@@ -61,6 +65,7 @@ export const GP_GRID_TEMPLATE = `
         [readRowId]="readRowIdFn"
         [fillHandlePosition]="vm.fillHandlePosition()"
         [dragState]="vm.dragState()"
+        [rowResize]="rowResize()"
         [labels]="resolvedLabels()"
         (scrolled)="onBodyScroll($event)"
         (cellPointerDown)="onCellPointerDown($event)"
@@ -71,6 +76,8 @@ export const GP_GRID_TEMPLATE = `
         (editCommit)="onEditCommit()"
         (editCancel)="onEditCancel()"
         (fillHandlePointerDown)="onFillHandlePointerDown($event)"
+        (rowResizePointerDown)="onRowResizePointerDown($event)"
+        (resizeDoubleClick)="onResizeDoubleClick($event)"
       />
       <!-- C13 live region: the track key remounts it so each message is read once. -->
       @for (announcement of vm.announcements(); track announcement.revision) {
@@ -84,7 +91,7 @@ export const GP_GRID_TEMPLATE = `
         [labels]="resolvedLabels()"
         [isLoading]="vm.isLoading()"
         [errorMessage]="vm.errorMessage()"
-        [headerHeight]="headerHeight()"
+        [totalHeaderHeight]="vm.headerBands().totalHeight"
         [dragState]="vm.dragState()"
         [scrollLeft]="vm.scrollLeft()"
         [effectiveColumns]="vm.effectiveColumns()"

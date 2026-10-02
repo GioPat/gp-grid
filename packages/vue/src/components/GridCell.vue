@@ -11,6 +11,7 @@ import {
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
 import { HOVER_POSITION, type GridCellProps } from "./cell-props";
+import ResizeHandle from "./ResizeHandle.vue";
 
 const props = defineProps<GridCellProps>();
 const hoverPosition = inject(HOVER_POSITION, null);
@@ -64,6 +65,8 @@ const cellStyle = computed(() =>
 
 const isEditing = (): boolean =>
   isCellEditing(props.rowIndex, props.column.layoutIndex, props.editingCell);
+
+const hasRowHandle = computed(() => props.rowResize && isEditing() === false);
 
 // Read raw values through the core so a record-less (columnar) row renders
 // exactly like an object row.
@@ -138,5 +141,14 @@ const cellContent = () => {
     @mouseleave="props.onCellMouseLeave"
   >
     <component :is="cellContent()" />
+    <ResizeHandle
+      v-if="hasRowHandle"
+      axis="row"
+      :index="props.rowIndex"
+      :size="props.rowHeight"
+      :active="props.dragState.rowResize?.rowIndex === props.rowIndex"
+      :on-pointer-down="props.onRowResizePointerDown"
+      :on-double-click="props.onResizeDoubleClick"
+    />
   </div>
 </template>

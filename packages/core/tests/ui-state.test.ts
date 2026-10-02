@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applyInstruction } from "../src/state-reducer";
 import { createInitialState } from "../src/types/ui-state";
-import type { ColumnDefinition } from "../src/types";
+import { EMPTY_HEADER_FRAGMENTS } from "../src/column-groups";
+import type { ColumnDefinition, ColumnGroupChild } from "../src/types";
 import type { ColumnLayoutSnapshot } from "../src/types/geometry";
 
 const column = (field: string, width: number, extra: Partial<ColumnDefinition> = {}): ColumnDefinition =>
@@ -20,6 +21,7 @@ describe("createInitialState — defaults", () => {
     expect(state.peekCell).toBeNull();
     expect(state.pendingScrollTop).toBeNull();
     expect(state.pendingScrollLeft).toBeNull();
+    expect(state.headerBands).toEqual({ count: 1, heights: [0], offsets: [0], totalHeight: 0 });
   });
 
   it("seeds the zero-count region layout and no announcement", () => {
@@ -181,5 +183,75 @@ describe("seeded state is replaced by the first core batch", () => {
     expect(state.geometryRevision).toBe(3);
     expect(state.contentWidth).toBe(900);
     expect(state.viewportWidth).toBe(900);
+  });
+});
+
+describe("createInitialState — header bands (D8)", () => {
+  /** `Region{ North{ Q1{a, b}, c }, d }`, `Totals{ e, f }` and the ungrouped `x`. */
+  const prdFixture = (): ColumnGroupChild[] => [
+    { groupId: "Region", children: [
+      { groupId: "North", children: [{ groupId: "Q1", children: ["a", "b"] }, "c"] },
+      "d",
+    ] },
+    { groupId: "Totals", children: ["e", "f"] },
+    "x",
+  ];
+  const reversed = (): ColumnDefinition[] =>
+    ["x", "f", "e", "d", "c", "b", "a"].map((field) => column(field, 100));
+
+  it("seeds one band of the header height while flat and ignores heights past it", () => {
+    const state = createInitialState({
+      initialColumns: twoColumns(),
+      initialHeaderHeight: 36,
+      initialHeaderBandHeights: [40, 99],
+    });
+    expect(state.headerBands).toEqual({ count: 1, heights: [40], offsets: [0], totalHeight: 40 });
+    expect(createInitialState({ initialHeaderHeight: 36 }).headerBands.heights).toEqual([36]);
+  });
+
+  it("adopts the hierarchy as the core does: depth-first leaves, bands and fragments", () => {
+    const state = createInitialState({
+      initialColumns: reversed(),
+      initialColumnGroups: prdFixture(),
+      initialColumnLayout: "fixed",
+      initialWidth: 2_000,
+      initialHeaderHeight: 36,
+      initialHeaderBandHeights: [24],
+    });
+    expect(state.columns.map((definition) => definition.field))
+      .toEqual(["a", "b", "c", "d", "e", "f", "x"]);
+    expect(state.layout?.bandCount).toBe(4);
+    expect(state.layout?.columns.map((displayed) => displayed.headerBand))
+      .toEqual([3, 3, 2, 1, 1, 1, 0]);
+    expect(state.headerBands).toEqual({
+      count: 4,
+      heights: [24, 36, 36, 36],
+      offsets: [0, 24, 60, 96],
+      totalHeight: 132,
+    });
+    expect(state.columnWindow?.groups.center.map((fragment) => fragment.fragmentId)).toEqual([
+      "Region:center:0",
+      "Totals:center:0",
+      "North:center:0",
+      "Q1:center:0",
+    ]);
+  });
+
+  it("seeds a rejected hierarchy flat", () => {
+    const columns = reversed();
+    const state = createInitialState({
+      initialColumns: columns,
+      initialColumnGroups: [{ groupId: "G", children: ["a", "b"] }],
+      initialHeaderHeight: 36,
+    });
+    expect(state.columns).toBe(columns);
+    expect(state.layout?.bandCount).toBe(1);
+    expect(state.headerBands.count).toBe(1);
+    expect(state.columnWindow?.groups).toBe(EMPTY_HEADER_FRAGMENTS);
+  });
+
+  it("rejects an invalid band height with the option's message", () => {
+    expect(() => createInitialState({ initialHeaderBandHeights: [36, 0] }))
+      .toThrow(new RangeError("Invalid headerBandHeights[1]: 0"));
   });
 });

@@ -13,8 +13,14 @@ import type {
   ResolvedColumn,
   ResolvedColumnGeometry,
 } from "../types/geometry";
+import type { ColumnGroupIndex } from "../column-groups/group-index";
+import { createHeaderRunsCache, leafDepthOf } from "../column-groups/header-runs";
 import { createColumnGeometry } from "./column-geometry";
-import { createColumnLayoutResolver, type ColumnLayoutResolver } from "./column-layout";
+import {
+  createColumnLayoutResolver,
+  resolveColumnLayout,
+  type ColumnLayoutResolver,
+} from "./column-layout";
 import { createColumnWindowResolver } from "./column-window";
 import type { GridViewportSample } from "./viewport-sample";
 
@@ -26,6 +32,10 @@ export interface GridColumnViewDeps {
   getColumnOverscan(): number;
   /** Report a committed layout change; the caller owns the revision value. */
   onLayoutChange(): number;
+  /** Active column-group hierarchy; `null` while the grid is flat. */
+  getGroupIndex(): ColumnGroupIndex | null;
+  /** `columnGroupLimits.maxFragments`. */
+  readonly maxFragments: number;
 }
 
 export interface GridColumnView {
@@ -33,6 +43,8 @@ export interface GridColumnView {
   getMode(): ColumnLayoutMode;
   /** Committed layout snapshot; the previous object is reused while it matches. */
   getLayout(): ColumnLayoutSnapshot;
+  /** The layout the current inputs give under `index`, resolved without committing it. */
+  previewLayout(index: ColumnGroupIndex | null): ColumnLayoutSnapshot;
   getGeometry(): ResolvedColumnGeometry;
   /** Displayed column at a layout index; `undefined` when hidden or invalid. */
   getDisplayed(layoutIndex: number): ResolvedColumn | undefined;
@@ -64,12 +76,25 @@ export const createGridColumnView = (
   // Region mapping and center prefixes are rebuilt only when the layout or the
   // viewport width changes, never per scroll sample.
   let cache: { layout: ColumnLayoutSnapshot; geometry: ResolvedColumnGeometry } | null = null;
+  // One `depthOf` per hierarchy: its identity is the layout's change signal.
+  let depths: { index: ColumnGroupIndex | null; depthOf: (columnId: string) => number } = {
+    index: null,
+    depthOf: leafDepthOf(null),
+  };
+  const headerRuns = createHeaderRunsCache(deps.maxFragments);
+
+  const depthOf = (): ((columnId: string) => number) => {
+    const index = deps.getGroupIndex();
+    if (depths.index !== index) depths = { index, depthOf: leafDepthOf(index) };
+    return depths.depthOf;
+  };
 
   const windowResolver = createColumnWindowResolver({
     getLayout: () => view.getLayout(),
     getScrollLeft: () => deps.getViewport().scrollLeft,
     getViewportWidth: () => deps.getViewport().width,
     getOverscan: () => deps.getColumnOverscan(),
+    getHeaderRuns: (layout) => headerRuns.get(layout, deps.getGroupIndex()),
   });
 
   const view: GridColumnView = {
@@ -87,7 +112,20 @@ export const createGridColumnView = (
         mode: layoutResolver.getMode(),
         width: deps.getViewport().width,
         isOverridden: (layoutIndex) => deps.isWidthOverridden(layoutIndex),
+        depthOf: depthOf(),
       }),
+    previewLayout: (index) =>
+      resolveColumnLayout(
+        {
+          columns: deps.getColumns(),
+          mode: layoutResolver.getMode(),
+          width: deps.getViewport().width,
+          isOverridden: (layoutIndex) => deps.isWidthOverridden(layoutIndex),
+          depthOf: leafDepthOf(index),
+        },
+        null,
+        0,
+      ),
     getGeometry: () => {
       const layout = view.getLayout();
       if (cache?.layout !== layout) {

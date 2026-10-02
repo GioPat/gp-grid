@@ -11,12 +11,7 @@ export { createInitialState } from "@gp-grid/core";
 // =============================================================================
 
 export function gridReducer<TData = unknown>(state: GridState<TData>, action: GridAction): GridState<TData> {
-  if (action.type === "RESET") {
-    return createInitialState<TData>({
-      initialColumns: action.columns,
-      initialColumnLayout: action.columnLayout,
-    });
-  }
+  if (action.type === "RESET") return createInitialState<TData>(action.seed);
 
   // Process batch of instructions in one state update
   const { instructions } = action;

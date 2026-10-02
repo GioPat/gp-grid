@@ -23,9 +23,12 @@ import {
   GridCore,
   GridLabels,
   RowRegionLayout,
+  ResizeTarget,
   defaultGridLabels,
 } from "@gp-grid/core";
 import { GRID_BODY_TEMPLATE } from "./grid-body.template";
+import { ResizeHandleComponent } from "./resize-handle.component";
+import type { ResizeHandlePointerDownEvent } from "./resize-handle.component";
 
 export type RowClassFn = (rowIndex: number, rowData: unknown) => string[];
 export type CellClassFn = (
@@ -45,6 +48,12 @@ export interface FillHandlePointerDownEvent {
 export interface CellPointerDownEvent {
   rowIndex: number;
   colIndex: number;
+  event: PointerEvent;
+}
+
+export interface RowResizePointerDownEvent {
+  rowIndex: number;
+  rowHeight: number;
   event: PointerEvent;
 }
 
@@ -68,7 +77,7 @@ export interface EditingCellState {
 @Component({
   selector: "gp-grid-body",
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, ResizeHandleComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`:host { display: flex; flex: 1; min-height: 0; overflow: hidden; }`],
   template: GRID_BODY_TEMPLATE,
@@ -76,6 +85,8 @@ export interface EditingCellState {
 export class GridBodyComponent {
   @ViewChild("scrollContainer") scrollContainer!: ElementRef<HTMLDivElement>;
   totalHeaderHeight = input.required<number>();
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount = input<number>(1);
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();
   rowsWrapperOffset = input.required<number>();
@@ -104,6 +115,8 @@ export class GridBodyComponent {
   computeCellClasses = input<CellClassFn | null>(null);
   fillHandlePosition = input<FillHandlePosition | null>(null);
   dragState = input<DragState | null>(null);
+  /** Every non-editing cell renders the row edge handle. */
+  rowResize = input<boolean>(false);
   labels = input<GridLabels>(defaultGridLabels);
   /** Raw value reader from the bound core (record-less rows). */
   readCellValue = input<((rowIndex: number, colIndex: number) => CellValue) | null>(null);
@@ -121,6 +134,8 @@ export class GridBodyComponent {
   editCommit = output<void>();
   editCancel = output<void>();
   fillHandlePointerDown = output<FillHandlePointerDownEvent>();
+  rowResizePointerDown = output<RowResizePointerDownEvent>();
+  resizeDoubleClick = output<ResizeTarget>();
 
   protected innerWidth = computed(() =>
     Math.max(this.contentWidth(), this.totalWidth()),
@@ -178,6 +193,13 @@ export class GridBodyComponent {
     if (handle === null) return null;
     return handle.rowRegion === 'frozen' ? null : handle;
   });
+
+  /** View index of the row whose edge is being dragged. */
+  protected resizingRow = computed(() => this.dragState()?.rowResize?.rowIndex ?? null);
+
+  protected onRowResizePointerDown(evt: ResizeHandlePointerDownEvent): void {
+    this.rowResizePointerDown.emit({ rowIndex: evt.index, rowHeight: evt.size, event: evt.event });
+  }
 
   protected rowDropIndicatorWidth = computed(() =>
     Math.max(this.contentWidth(), this.totalWidth()),

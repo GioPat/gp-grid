@@ -9,6 +9,8 @@ const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
 
 const props = defineProps<{
   slot: SlotData<Row>;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   columnWindow: ColumnWindowSnapshot;
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
@@ -19,6 +21,7 @@ const props = defineProps<{
 }>();
 
 const renderedRegions = computed(() => props.regions ?? ALL_REGIONS);
+const ariaRowIndex = computed(() => props.slot.rowIndex + props.headerRowCount + 1);
 const centerColumns = computed(() =>
   renderedRegions.value.includes("center") ? props.columnWindow.center : []);
 const startColumns = computed(() =>
@@ -44,6 +47,7 @@ const cellProps = (column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: props.slot.rowIndex,
   rowData: props.slot.rowData,
+  rowHeight: props.slot.height,
   generation: props.slot.generation,
   column,
   displayedIndex: props.displayedIndexOf(column.columnId),
@@ -56,14 +60,14 @@ const cellProps = (column: ResolvedColumn) => ({
     v-if="props.slot.loading"
     class="gp-grid-row gp-grid-row--loading"
     role="row"
-    :aria-rowindex="props.slot.rowIndex + 1"
+    :aria-rowindex="ariaRowIndex"
     :style="rowStyle"
   />
   <div
     v-else
     :class="rowClasses"
     role="row"
-    :aria-rowindex="props.slot.rowIndex + 1"
+    :aria-rowindex="ariaRowIndex"
     :style="rowStyle"
   >
     <GridCell

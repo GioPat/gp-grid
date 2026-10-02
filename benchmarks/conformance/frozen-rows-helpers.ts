@@ -3,7 +3,7 @@
 // specs stay within their budget.
 
 import { expect, type Locator, type Page } from "@playwright/test";
-import { openFixture, readHook, TOLERANCE } from "./helpers";
+import { headerRowCount, openFixture, readHook, TOLERANCE } from "./helpers";
 
 /** Slice 1 recipe: 8 x 100 px columns, 32 px rows, 36 px header, 1M rows. */
 export const FROZEN_COUNT = 3;
@@ -152,22 +152,22 @@ export const blockBox = async (
 };
 
 /** One snapshot of every mounted row box, relative to the scroller's client area. */
-export const mountedRows = (page: Page): Promise<RowBox[]> =>
-  scroller(page).evaluate((element) => {
+export const mountedRows = async (page: Page): Promise<RowBox[]> =>
+  scroller(page).evaluate((element, headerRows) => {
     const origin = element.getBoundingClientRect().top + element.clientTop;
     const block = element.querySelector(".gp-grid-frozen-rows");
     return Array.from(element.querySelectorAll<HTMLElement>(".gp-grid-row")).map((row) => {
       const box = row.getBoundingClientRect();
       return {
-        // Rows carry the logical index as a 1-based `aria-rowindex`; the
-        // `data-cell-row` attribute lives on the cells.
-        index: Number(row.getAttribute("aria-rowindex")) - 1,
+        // Rows carry the logical index in `aria-rowindex`, after the header's
+        // rows; the `data-cell-row` attribute lives on the cells.
+        index: Number(row.getAttribute("aria-rowindex")) - headerRows - 1,
         frozen: block !== null && block.contains(row),
         top: box.top - origin,
         height: box.height,
       };
     });
-  });
+  }, await headerRowCount(page));
 
 export const waitForScroll = async (page: Page, top: number, left: number): Promise<void> => {
   await expect.poll(async () => (await bodyMetrics(page)).maxScroll).toBeGreaterThanOrEqual(

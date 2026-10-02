@@ -4,6 +4,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { GpGridComponent, provideGridData, injectGridData } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
+  AngularColumnGroupChild,
   CellRendererTemplate,
   EditRendererParams,
   EditRendererTemplate,
@@ -42,6 +43,31 @@ const DATES: Date[] = Array.from(
   { length: 60 },
   (_, i) => new Date(Date.now() - i * 86400000 * 5),
 );
+
+// Three group levels over the demo columns: `id` stays ungrouped and `bio`
+// sits one level shallower than `name` and `age`.
+const demoColumnGroups: AngularColumnGroupChild[] = [
+  'id',
+  {
+    groupId: 'person',
+    headerName: 'Person',
+    children: [
+      {
+        groupId: 'profile',
+        headerName: 'Profile',
+        children: [
+          { groupId: 'basics', headerName: 'Basics', children: ['name', 'age'] },
+          'bio',
+        ],
+      },
+    ],
+  },
+  { groupId: 'record', headerName: 'Record', children: ['city', 'createdAt'] },
+];
+
+const DEMO_HEADER_HEIGHT = 40;
+const tallBandHeights: readonly number[] = [DEMO_HEADER_HEIGHT * 2];
+const NO_BAND_HEIGHTS: readonly number[] = [];
 
 const generateRows = (count: number): Person[] =>
   Array.from({ length: count }, (_, i) => ({
@@ -93,6 +119,38 @@ export class App implements AfterViewInit {
 
   protected resetRowHeights(): void {
     this.gridComponent?.core?.rowHeights.reset();
+  }
+
+  /** Auto-fit (PRD 007): one-shot fits of the mounted cells. */
+  protected fitColumns(): void {
+    this.gridComponent?.core?.columns.fit();
+  }
+
+  protected fitRows(): void {
+    this.gridComponent?.core?.rowHeights.fit();
+  }
+
+  /** Column groups (PRD 007): hierarchy and band heights, no remount. */
+  protected readonly headerHeight = DEMO_HEADER_HEIGHT;
+
+  protected readonly grouped = signal(false);
+
+  protected readonly tallBand = signal(false);
+
+  // The published input typings drop `| undefined` (ng-packagr declares them
+  // without strictNullChecks), while the input takes it at runtime.
+  protected readonly columnGroups = computed(
+    () => (this.grouped() ? demoColumnGroups : undefined) as readonly AngularColumnGroupChild[],
+  );
+
+  protected readonly headerBandHeights = computed(() => (this.tallBand() ? tallBandHeights : NO_BAND_HEIGHTS));
+
+  protected toggleGrouped(): void {
+    this.grouped.update((value) => !value);
+  }
+
+  protected toggleTallBand(): void {
+    this.tallBand.update((value) => !value);
   }
 
   protected readonly freezeCounts = [0, 1, 3, 5] as const;

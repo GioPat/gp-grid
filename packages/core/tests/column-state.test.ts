@@ -152,6 +152,22 @@ describe("GridCore column state", () => {
     });
   });
 
+  it("restores the fit distribution when width: null drops an override", () => {
+    const grid = createGrid([def("a"), def("b")]);
+    grid.setViewport(0, 0, 300, 200);
+    const resolved = (): number[] => grid.columns.getState().map((state) => state.resolvedWidth);
+    expect(resolved()).toEqual([150, 150]);
+    grid.columns.setWidth(0, 100);
+    expect(resolved()).toEqual([100, 200]);
+    const instructions = collect(grid);
+
+    grid.columns.setState([{ columnId: "a", width: null }]);
+
+    expect(resolved()).toEqual([150, 150]);
+    expect(grid.columns.getState()[0]).not.toHaveProperty("width");
+    expect(instructions.some((instruction) => instruction.type === "COLUMNS_CHANGED")).toBe(true);
+  });
+
   it("lets an explicit state command beat retained user state", () => {
     const grid = createGrid([def("a")]);
     grid.columns.setWidth(0, 150);

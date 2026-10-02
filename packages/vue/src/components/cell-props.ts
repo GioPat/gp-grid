@@ -8,6 +8,7 @@ import type {
   CellValue,
   DragState,
   GridCore,
+  ResizeTarget,
   ResolvedColumn,
 } from "@gp-grid/core";
 import type { InjectionKey, Ref } from "vue";
@@ -24,6 +25,8 @@ export const HOVER_POSITION: InjectionKey<Readonly<Ref<CellPosition | null>>> =
 export interface GridCellProps {
   rowIndex: number;
   rowData: Row | undefined;
+  /** The row's height, where a row handle drag starts. */
+  rowHeight: number;
   /** Region-local geometry: `regionOffset` is the inset inside its region. */
   column: ResolvedColumn;
   /** 0-based index in the displayed columns, for `aria-colindex`. */
@@ -48,10 +51,14 @@ export interface GridCellProps {
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   onCellMouseLeave: () => void;
+  onRowResizePointerDown: (rowIndex: number, rowHeight: number, e: PointerEvent) => void;
+  onResizeDoubleClick: (target: ResizeTarget) => void;
+  /** Render the row edge handle while not editing. */
+  rowResize: boolean;
 }
 
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext = Omit<
   GridCellProps,
-  "rowIndex" | "rowData" | "column" | "displayedIndex" | "generation"
+  "rowIndex" | "rowData" | "rowHeight" | "column" | "displayedIndex" | "generation"
 >;
