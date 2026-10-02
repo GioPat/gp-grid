@@ -136,10 +136,14 @@ describe("column groups — replacement", () => {
 
     expect(batches).toHaveLength(1);
     const [changed] = ofType(batches, "COLUMNS_CHANGED");
-    const [window] = ofType(batches, "SET_COLUMN_WINDOW");
     const bands = ofType(batches, "SET_HEADER_BANDS");
-    expect(changed?.layout).toBe(window?.window.layout);
-    expect(changed?.revision).toBe(window?.revision);
+    // The band applier's re-sync replaces the command's own size and window.
+    const sizes = ofType(batches, "SET_CONTENT_SIZE");
+    const windows = ofType(batches, "SET_COLUMN_WINDOW");
+    expect(sizes).toHaveLength(1);
+    expect(windows).toHaveLength(1);
+    expect(changed?.layout).toBe(windows[0]?.window.layout);
+    expect(windows[0]?.revision).toBe(sizes[0]?.revision);
     expect(bands.map((instruction) => [instruction.bands.count, instruction.revision]))
       .toEqual([[3, changed?.revision]]);
     expect(bands[0]?.bands).toBe(grid.header.getBands());
@@ -149,7 +153,7 @@ describe("column groups — replacement", () => {
     expect(state.find((entry) => entry.columnId === "c")?.width).toBe(150);
     expect(state.find((entry) => entry.columnId === "x")?.pinned).toBe("start");
     expect(state.some((entry) => entry.columnId === "f")).toBe(false);
-    expect(window?.window.groups).toBe(grid.geometry.getColumnWindow().groups);
+    expect(windows[0]?.window.groups).toBe(grid.geometry.getColumnWindow().groups);
     expect(fragmentIds(grid)).toEqual([
       "North:center:0",
       "Totals:center:0",
@@ -157,6 +161,18 @@ describe("column groups — replacement", () => {
       "Q1:center:0",
     ]);
     expect(grid.columns.getGroups()).toBe(groups);
+  });
+
+  it("looks an active group up by id", () => {
+    const groups = prdFixture();
+    const { grid } = createGrid({ columnGroups: groups });
+    const region = groups[0] as ColumnGroupDefinition;
+    const north = region.children[0] as ColumnGroupDefinition;
+    expect(grid.columns.getGroup("Region")).toBe(region);
+    expect(grid.columns.getGroup("Q1")).toBe(north.children[0]);
+    expect([grid.columns.getGroup("Nope"), grid.columns.getGroup("a")]).toEqual([undefined, undefined]);
+    grid.columns.setGroups(null);
+    expect(grid.columns.getGroup("Region")).toBeUndefined();
   });
 
   it("restores the descriptor order on resetState", () => {

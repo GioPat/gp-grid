@@ -4,6 +4,7 @@
 // one applier that gives the body what the header no longer takes and keeps
 // the suffix row at the clip top where it was.
 
+import type { GridInstruction } from "./types";
 import type { HeaderBandLayout } from "./types/geometry";
 import {
   captureRowAnchor,
@@ -42,6 +43,12 @@ export interface HeaderControllerDeps<TData> {
   writeScrollTop: (domScrollTop: number) => void;
   isDestroyed: () => boolean;
 }
+
+/** Published by the command and again by the re-sync; a batch keeps the re-sync's. */
+const RESYNC_REPLACES: ReadonlySet<GridInstruction["type"]> = new Set([
+  "SET_CONTENT_SIZE",
+  "SET_COLUMN_WINDOW",
+]);
 
 const isSameHeights = (a: readonly number[], b: readonly number[]): boolean =>
   a.length === b.length && a.every((height, band) => height === b[band]);
@@ -128,13 +135,15 @@ export class HeaderController<TData> implements GridHeaderApi {
   }
 
   private adoptBands(growth: number, anchor: RowAnchor | null): void {
-    // The body is what a fixed container leaves below the header.
-    const { viewport } = this.deps;
-    viewport.setViewportHeight(normalizeSize(viewport.getViewportHeight() - growth));
-    this.deps.refreshGeometry();
-    this.applyAnchorCorrection(anchor);
-    this.deps.getRowData().requestVisibleRows();
-    this.deps.getView().syncVisibleRows(true);
+    const { viewport, batcher } = this.deps;
+    batcher.replacing(RESYNC_REPLACES, () => {
+      // The body is what a fixed container leaves below the header.
+      viewport.setViewportHeight(normalizeSize(viewport.getViewportHeight() - growth));
+      this.deps.refreshGeometry();
+      this.applyAnchorCorrection(anchor);
+      this.deps.getRowData().requestVisibleRows();
+      this.deps.getView().syncVisibleRows(true);
+    });
   }
 
   private applyAnchorCorrection(anchor: RowAnchor | null): void {

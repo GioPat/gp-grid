@@ -155,6 +155,7 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  ColumnGroupHeaderParams,
 } from "./renderers";
 
 // Geometry types

@@ -4,6 +4,7 @@
 // and the header runs a layout gives it.
 
 import type { ColumnRegion } from "./geometry";
+import type { ColumnGroupHeaderParams } from "./renderers";
 
 /** A header group over its ordered children. The grid never mutates it. */
 export interface ColumnGroupDefinition {
@@ -14,7 +15,7 @@ export interface ColumnGroupDefinition {
   /** Whether the header text wraps inside its band. Default: false. */
   wrapHeaderText?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function. */
-  headerRenderer?: string | ((params: unknown) => unknown);
+  headerRenderer?: string | ((params: ColumnGroupHeaderParams) => unknown);
   children: readonly ColumnGroupChild[];
 }
 

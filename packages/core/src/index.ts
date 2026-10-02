@@ -217,6 +217,7 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  ColumnGroupHeaderParams,
 
   // Listener types
   InstructionListener,
@@ -327,6 +328,21 @@ export type { PopupPosition } from "./utils/popup-position";
 
 /** Peek overlay Ctrl/Cmd+A scoping helper. */
 export { bindPeekSelectAll } from "./utils/peek-select-all";
+
+/** Header band placement, escaped DOM ids and ARIA associations (PRD 007 D9). */
+export {
+  escapeDomIdPart,
+  fragmentHeaderBox,
+  fragmentHeaderId,
+  leafHeaderBox,
+  leafHeaderId,
+  resolveHeaderAssociations,
+} from "./header-layout";
+export type {
+  HeaderAssociationInput,
+  HeaderAssociations,
+  HeaderBox,
+} from "./header-layout";
 
 /** Localization: shared label model and helpers */
 export {

@@ -8,6 +8,7 @@
 import type {
   ColumnDefinition,
   ColumnGroupChild,
+  ColumnGroupDefinition,
   ColumnSchemaErrorSource,
   ColumnSchemaResult,
   ColumnStateSnapshot,
@@ -63,6 +64,8 @@ export interface GridColumnsApi {
   setGroups(groups: readonly ColumnGroupChild[] | null): ColumnSchemaResult;
   /** The active hierarchy as the caller passed it; `null` while flat. */
   getGroups(): readonly ColumnGroupChild[] | null;
+  /** The active group with `groupId`, as the caller passed it; `undefined` while flat or unknown. */
+  getGroup(groupId: string): ColumnGroupDefinition | undefined;
   /** Set a displayed width in px; the stored override is back-solved to match. */
   setWidth(colIndex: number, width: number): void;
   move(fromIndex: number, toIndex: number): ColumnSchemaResult;
@@ -123,6 +126,13 @@ export class ColumnsController<TData> implements GridColumnsApi {
 
   getGroups(): readonly ColumnGroupChild[] | null {
     return this.deps.groups.index?.roots ?? null;
+  }
+
+  getGroup(groupId: string): ColumnGroupDefinition | undefined {
+    const { index } = this.deps.groups;
+    const position = index?.nodeIndex.get(groupId);
+    if (position === undefined) return undefined;
+    return index?.nodes[position]?.group;
   }
 
   setWidth(colIndex: number, width: number): void {
