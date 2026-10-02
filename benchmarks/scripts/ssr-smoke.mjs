@@ -3,6 +3,21 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { collectArtifactProvenance, REPOSITORY_ROOT } from "./artifact-resolution.js";
+import {
+  BAND_HEIGHTS,
+  DISPLAY_ORDER,
+  GROUP_RENDERER_CLASS,
+  HEADER_HEIGHT,
+  columnGroups,
+  expectCoreBands,
+  expectCoreFragments,
+  expectGroupedHeader,
+  expectHeaderClipRules,
+  expectList,
+  groupColumns,
+  groupRendererText,
+  groupRows,
+} from "./ssr-column-groups.mjs";
 
 const importFrom = async (specifier, packageFile) => {
   const requireFromPackage = createRequire(packageFile);
@@ -174,6 +189,117 @@ await check("core row heights resolve after the first load", async () => {
   return `rowId 1 is 64px, extent ${before.height} -> ${after}`;
 });
 
+const expectNoBrowserGlobals = () => {
+  if (typeof window !== "undefined" || typeof document !== "undefined") {
+    throw new Error("The core check must run without browser globals.");
+  }
+};
+
+/** The PRD 007 fixture on a server core: no measurement host, as every wrapper builds on the server. */
+const createGroupCore = (overrides = {}) =>
+  new coreArtifact.GridCore({
+    columns: groupColumns,
+    dataSource: coreArtifact.createClientDataSource(groupRows),
+    rowHeight: 32,
+    getRowId: (row) => row.id,
+    columnLayout: "fixed",
+    headerHeight: HEADER_HEIGHT,
+    headerBandHeights: BAND_HEIGHTS,
+    columnGroups,
+    ...overrides,
+  });
+
+const lastHeaderBands = (batches) =>
+  batches.flat().filter((instruction) => instruction.type === "SET_HEADER_BANDS").at(-1)?.bands;
+
+await check("core fit commands are unsupported without a host", async () => {
+  expectNoBrowserGlobals();
+  const core = createGroupCore();
+  const statuses = () => [
+    core.rowHeights.fit().status,
+    core.rowHeights.fit([1]).status,
+    core.columns.fit().status,
+    core.columns.fit(["a"]).status,
+  ];
+  const phases = [["before load", statuses()]];
+  await core.initialize();
+  phases.push(["after load", statuses()]);
+  core.destroy();
+  phases.push(["after destroy", statuses()]);
+  for (const [phase, list] of phases) {
+    expectList(list, ["unsupported", "unsupported", "unsupported", "unsupported"], `fit ${phase}`);
+  }
+  return "rowHeights.fit and columns.fit, with and without ids: unsupported before load, after load and after destroy";
+});
+
+await check("core grouped header publishes its configured bands", async () => {
+  expectNoBrowserGlobals();
+  const core = createGroupCore();
+  const batches = [];
+  core.onBatchInstruction((batch) => batches.push(batch));
+  await core.initialize();
+  const published = lastHeaderBands(batches);
+  if (published === undefined) throw new Error("The first load published no SET_HEADER_BANDS.");
+  expectCoreBands(published, "SET_HEADER_BANDS");
+  expectCoreBands(core.header.getBands(), "header.getBands()");
+  const columnWindow = core.geometry.getColumnWindow();
+  expectList(columnWindow.layout.columns.map((column) => column.columnId), DISPLAY_ORDER, "display order");
+  const fragments = expectCoreFragments(columnWindow.groups, "getColumnWindow().groups");
+
+  // A band past the configured list takes headerHeight.
+  batches.length = 0;
+  core.header.setBandHeights(BAND_HEIGHTS.slice(0, 2));
+  const fallback = [...BAND_HEIGHTS.slice(0, 2), HEADER_HEIGHT, HEADER_HEIGHT];
+  expectList(lastHeaderBands(batches)?.heights ?? [], fallback, "setBandHeights batch");
+  expectList([batches.length], [1], "setBandHeights batch count");
+
+  core.destroy();
+  core.header.setBandHeights(BAND_HEIGHTS);
+  expectList(core.header.getBands().heights, fallback, "setBandHeights after destroy");
+  return `bands ${BAND_HEIGHTS.join("/")}px, fragments ${fragments}; [40, 28] -> ${fallback.join("/")}px in one batch; no-op after destroy`;
+});
+
+await check("core rejected column groups stay flat", async () => {
+  expectNoBrowserGlobals();
+  // `x` is never referenced: missingLeaf.
+  const rejected = columnGroups.filter((child) => child !== "x");
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  let core;
+  try {
+    core = createGroupCore({ columnGroups: rejected });
+  } finally {
+    console.warn = warn;
+  }
+  expectList([warnings.length], [1], "construction warnings");
+  if (core.columns.getGroups() !== null) throw new Error("The rejected hierarchy was adopted.");
+  const definitionOrder = groupColumns.map((column) => column.colId);
+  // A flat grid has one band; the configured entries past it are ignored.
+  const flatBands = { count: 1, heights: [BAND_HEIGHTS[0]], totalHeight: BAND_HEIGHTS[0] };
+  const columnWindow = core.geometry.getColumnWindow();
+  const seed = coreArtifact.createInitialState({
+    initialColumns: groupColumns,
+    initialColumnLayout: "fixed",
+    initialHeaderHeight: HEADER_HEIGHT,
+    initialHeaderBandHeights: BAND_HEIGHTS,
+    initialColumnGroups: rejected,
+  });
+  const views = [
+    ["core", core.header.getBands(), columnWindow],
+    ["seed", seed.headerBands, seed.columnWindow],
+  ];
+  for (const [label, bands, flatWindow] of views) {
+    expectFields(bands, { count: flatBands.count, totalHeight: flatBands.totalHeight }, `${label} bands`);
+    expectList(bands.heights, flatBands.heights, `${label} band heights`);
+    expectList(flatWindow.layout.columns.map((column) => column.columnId), definitionOrder, `${label} order`);
+    const { start, center, end } = flatWindow.groups;
+    expectList([...start, ...center, ...end], [], `${label} fragments`);
+  }
+  core.destroy();
+  return `warned once (${warnings[0]}); core and seed flat in definition order, one ${BAND_HEIGHTS[0]}px band`;
+});
+
 await check("React native server render", async () => {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
@@ -310,6 +436,66 @@ await check("React pinned header cells with initialWidth", () =>
 await check("React pinned header cells without initialWidth", () =>
   checkPinnedHeader("unmeasured", undefined));
 
+const groupProps = {
+  columns: groupColumns,
+  rowHeight: 32,
+  columnLayout: "fixed",
+  headerHeight: HEADER_HEIGHT,
+  headerBandHeights: BAND_HEIGHTS,
+  columnGroups,
+};
+
+const readStylesheet = (relativePath) => fs.readFileSync(path.join(REPOSITORY_ROOT, relativePath), "utf8");
+
+/**
+ * Leaves of the window React and Vue seed before their core exists. The width
+ * leaves the `totals` leaves outside it, so the render must follow the seed
+ * rather than list every run.
+ */
+const SEEDED_WINDOW_WIDTH = 240;
+const seededWindowLeaves = () => {
+  const { columnWindow } = coreArtifact.createInitialState({
+    initialColumns: groupColumns,
+    initialWidth: SEEDED_WINDOW_WIDTH,
+    initialColumnLayout: "fixed",
+    initialHeaderHeight: HEADER_HEIGHT,
+    initialHeaderBandHeights: BAND_HEIGHTS,
+    initialColumnGroups: columnGroups,
+  });
+  const { start, center, end } = columnWindow;
+  const mounted = [...start, ...center, ...end].map((column) => column.columnId);
+  if (mounted.length >= DISPLAY_ORDER.length) {
+    throw new Error(`The ${SEEDED_WINDOW_WIDTH}px seed mounts every leaf; the check would prove nothing.`);
+  }
+  return mounted;
+};
+
+const renderReactGroups = async (extraProps) => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const totals = (params) => React.createElement("span", { className: GROUP_RENDERER_CLASS }, groupRendererText(params));
+  return renderToString(React.createElement(Grid, {
+    ...groupProps,
+    rowData: groupRows,
+    getRowId: (row) => row.id,
+    headerRenderers: { totals },
+    ...extraProps,
+  }));
+};
+
+// React and Vue render before their core exists: a fragment resolves its group from the columnGroups prop.
+await check("React grouped header server render", async () => {
+  const html = await renderReactGroups({});
+  const detail = expectGroupedHeader(html, { label: "React" });
+  return `${detail}; ${expectHeaderClipRules(readStylesheet("packages/react/dist/styles.css"), "React")}`;
+});
+
+await check("React grouped header follows the seeded window", async () => {
+  const html = await renderReactGroups({ initialWidth: SEEDED_WINDOW_WIDTH });
+  return expectGroupedHeader(html, { label: "React", mounted: seededWindowLeaves() });
+});
+
 const vuePackage = path.join(REPOSITORY_ROOT, "playgrounds/vite-vue/package.json");
 
 /** Vue pins are declared on the columns, so the same shell rules apply. */
@@ -400,6 +586,29 @@ await check("Vue frozen rows server render", async () => {
     }),
   });
   return expectShellWithoutBand(await renderToString(app), "Vue");
+});
+
+const renderVueGroups = async (extraProps) => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const totals = (params) => h("span", { class: GROUP_RENDERER_CLASS }, groupRendererText(params));
+  const app = createSSRApp({
+    render: () => h(GpGrid, { ...groupProps, rowData: groupRows, headerRenderers: { totals }, ...extraProps }),
+  });
+  return renderToString(app);
+};
+
+await check("Vue grouped header server render", async () => {
+  const html = await renderVueGroups({});
+  const detail = expectGroupedHeader(html, { label: "Vue" });
+  return `${detail}; ${expectHeaderClipRules(readStylesheet("packages/vue/dist/styles.css"), "Vue")}`;
+});
+
+await check("Vue grouped header follows the seeded window", async () => {
+  const html = await renderVueGroups({ initialWidth: SEEDED_WINDOW_WIDTH });
+  return expectGroupedHeader(html, { label: "Vue", mounted: seededWindowLeaves() });
 });
 
 const angularPackage = path.join(REPOSITORY_ROOT, "playgrounds/angular/package.json");
@@ -535,6 +744,41 @@ await check("Angular pinned header cells", async () => {
   );
   // No initialWidth input: the first render is unmeasured, so every pin is admitted.
   return expectPinnedShell(html, "unmeasured");
+});
+
+await check("Angular grouped header server render", async () => {
+  await importFrom("@angular/compiler", angularPackage);
+  const { Component } = await importFrom("@angular/core", angularPackage);
+  const { bootstrapApplication } = await importFrom("@angular/platform-browser", angularPackage);
+  const { provideServerRendering, renderApplication } = await importFrom("@angular/platform-server", angularPackage);
+  const angularArtifact = path.join(REPOSITORY_ROOT, "packages/angular/dist/angular/fesm2022/gp-grid-angular.mjs");
+  const { GpGridComponent } = await import(pathToFileURL(angularArtifact).href);
+  class SsrGroupsComponent {}
+  Component({
+    selector: "app-root",
+    standalone: true,
+    imports: [GpGridComponent],
+    template: `<ng-template #totalsTpl let-params>
+        <span class="${GROUP_RENDERER_CLASS}">{{ params.group.headerName }}: {{ params.columnIds.join("+") }}</span>
+      </ng-template>
+      <gp-grid [columns]="columns" [rows]="rows" [rowHeight]="32" columnLayout="fixed"
+        [headerHeight]="headerHeight" [headerBandHeights]="bandHeights" [columnGroups]="groups"
+        [headerRenderers]="{ totals: totalsTpl }" />`,
+  })(SsrGroupsComponent);
+  Object.assign(SsrGroupsComponent.prototype, {
+    columns: groupColumns,
+    rows: groupRows,
+    headerHeight: HEADER_HEIGHT,
+    bandHeights: BAND_HEIGHTS,
+    groups: columnGroups,
+  });
+  const html = await renderApplication(
+    (context) => bootstrapApplication(SsrGroupsComponent, { providers: [provideServerRendering()] }, context),
+    { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
+  );
+  const detail = expectGroupedHeader(html, { label: "Angular" });
+  const css = readStylesheet("packages/angular/dist/angular/dist/styles.css");
+  return `${detail}; ${expectHeaderClipRules(css, "Angular")}`;
 });
 
 const report = {
