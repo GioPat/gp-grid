@@ -122,11 +122,9 @@ export const resolveHeaderAssociations = (input: HeaderAssociationInput): Header
       owned[column.headerBand]?.push({ displayIndex: displayedIndexOf(column.columnId), id });
     }
   }
-  const owns = owned.map((headers) =>
-    headers
-      .sort((a, b) => a.displayIndex - b.displayIndex)
-      .map((header) => header.id)
-      .join(" "),
-  );
+  const owns = owned.map((headers) => {
+    headers.sort((a, b) => a.displayIndex - b.displayIndex);
+    return headers.map((header) => header.id).join(" ");
+  });
   return { describedBy, owns };
 };
