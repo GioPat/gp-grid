@@ -5,14 +5,18 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
+  ColumnSchemaError,
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ColumnLayoutMode,
   DataSource,
   FreezeRowsOptions,
+  GridCore,
   GridRef,
   RowDragEndEvent,
   RowResizedEvent,
@@ -50,6 +54,17 @@ import {
   createAutoFitFixture,
   type AutoFitMode,
 } from "./conformance-auto-fit";
+import {
+  COLUMN_GROUPS_COLUMN_LAYOUT,
+  COLUMN_GROUPS_HEADER_HEIGHT,
+  COLUMN_GROUPS_HOST_HEIGHT,
+  COLUMN_GROUPS_ROW_HEIGHT,
+  createColumnGroupHooks,
+  createColumnGroupsFixture,
+  type ColumnGroupHooks,
+  type ColumnGroupsMode,
+  type ColumnGroupsSchema,
+} from "./conformance-column-groups";
 
 interface ConformanceRow {
   id: number;
@@ -176,7 +191,17 @@ const createColumnarFixture = (): ColumnarFixture => {
   };
 };
 
-interface ConformanceHooks extends GeometryHooks, FitHooks {
+/** One fixture arm at a time; `none` keeps the fixture's own grid. */
+type FixtureArm =
+  | { fixture: "none" }
+  | { fixture: "frozen"; mode: FrozenMode }
+  | { fixture: "rowHeights"; mode: RowHeightsMode }
+  | { fixture: "autoFit"; mode: AutoFitMode }
+  | { fixture: "columnGroups"; mode: ColumnGroupsMode };
+
+const NO_ARM: FixtureArm = { fixture: "none" };
+
+interface ConformanceHooks extends GeometryHooks, FitHooks, ColumnGroupHooks {
   getCellValue: (row: number, col: number) => CellValue;
   getFieldValue: (row: number, field: string) => CellValue;
   revision: () => number;
@@ -215,9 +240,11 @@ export const ConformanceApp = (): React.ReactNode => {
   const [frozen] = useState(createFrozenFixture);
   const [rowHeights] = useState(createRowHeightsFixture);
   const [autoFit] = useState(createAutoFitFixture);
-  const [frozenMode, setFrozenMode] = useState<FrozenMode>("off");
-  const [rowHeightsMode, setRowHeightsMode] = useState<RowHeightsMode>("off");
-  const [autoFitMode, setAutoFitMode] = useState<AutoFitMode>("off");
+  const [columnGroups] = useState(createColumnGroupsFixture);
+  const [arm, setArm] = useState<FixtureArm>(NO_ARM);
+  const [groupsSchema, setGroupsSchema] = useState<ColumnGroupsSchema>(() => columnGroups.schemaFor("off"));
+  const [bandHeights, setBandHeights] = useState<readonly number[] | undefined>(undefined);
+  const [groupLimits, setGroupLimits] = useState<ColumnGroupLimits | undefined>(undefined);
   const [mode, setMode] = useState<"object" | "columnar">("object");
   const [revision, setRevision] = useState(0);
   const [mounted, setMounted] = useState(true);
@@ -236,46 +263,44 @@ export const ConformanceApp = (): React.ReactNode => {
   const nextCoreToken = useRef(1);
 
   const isColumnar = mode === "columnar";
+  const frozenMode: FrozenMode = arm.fixture === "frozen" ? arm.mode : "off";
+  const rowHeightsMode: RowHeightsMode = arm.fixture === "rowHeights" ? arm.mode : "off";
+  const autoFitMode: AutoFitMode = arm.fixture === "autoFit" ? arm.mode : "off";
+  const columnGroupsMode: ColumnGroupsMode = arm.fixture === "columnGroups" ? arm.mode : "off";
   const frozenActive = frozenMode !== "off";
   const frozenObject = frozenMode === "object";
   const rowHeightsActive = rowHeightsMode !== "off";
   const autoFitActive = autoFitMode !== "off";
+  const columnGroupsActive = columnGroupsMode !== "off";
 
   /** Arming swaps the data source and columns, so it remounts the grid. */
-  const armFrozenRows = useCallback((next: FrozenMode) => {
-    setFrozenMode(next);
-    setRowHeightsMode("off");
-    setAutoFitMode("off");
+  const armFixture = useCallback((next: FixtureArm) => {
+    setArm(next);
     setGeneration((value) => value + 1);
   }, []);
 
-  /** The row-height arms remount the same way, and clear the frozen arm. */
-  const armRowHeights = useCallback((next: RowHeightsMode) => {
-    setRowHeightsMode(next);
-    setFrozenMode("off");
-    setAutoFitMode("off");
-    setGeneration((value) => value + 1);
-  }, []);
+  const useFreezeRows = useCallback(() => armFixture({ fixture: "frozen", mode: "columnar" }), [armFixture]);
+  const clearFreezeRows = useCallback(() => armFixture(NO_ARM), [armFixture]);
+  const useFrozenPaged = useCallback(() => armFixture({ fixture: "frozen", mode: "paged" }), [armFixture]);
+  const useFrozenPagedTight = useCallback(() => armFixture({ fixture: "frozen", mode: "paged-tight" }), [armFixture]);
+  const useFrozenObject = useCallback(() => armFixture({ fixture: "frozen", mode: "object" }), [armFixture]);
 
-  /** The fit arms remount the same way, and clear the other arms. */
-  const armAutoFit = useCallback((next: AutoFitMode) => {
-    setAutoFitMode(next);
-    setFrozenMode("off");
-    setRowHeightsMode("off");
-    setGeneration((value) => value + 1);
-  }, []);
+  const useRowHeights = useCallback(() => armFixture({ fixture: "rowHeights", mode: "object" }), [armFixture]);
+  const useRowHeightsLarge = useCallback(() => armFixture({ fixture: "rowHeights", mode: "large" }), [armFixture]);
+  const useRowHeightsPaged = useCallback(() => armFixture({ fixture: "rowHeights", mode: "paged" }), [armFixture]);
+  const useAutoFit = useCallback(() => armFixture({ fixture: "autoFit", mode: "object" }), [armFixture]);
+  const useAutoFitPaged = useCallback(() => armFixture({ fixture: "autoFit", mode: "paged" }), [armFixture]);
 
-  const useFreezeRows = useCallback(() => armFrozenRows("columnar"), [armFrozenRows]);
-  const clearFreezeRows = useCallback(() => armFrozenRows("off"), [armFrozenRows]);
-  const useFrozenPaged = useCallback(() => armFrozenRows("paged"), [armFrozenRows]);
-  const useFrozenPagedTight = useCallback(() => armFrozenRows("paged-tight"), [armFrozenRows]);
-  const useFrozenObject = useCallback(() => armFrozenRows("object"), [armFrozenRows]);
-
-  const useRowHeights = useCallback(() => armRowHeights("object"), [armRowHeights]);
-  const useRowHeightsLarge = useCallback(() => armRowHeights("large"), [armRowHeights]);
-  const useRowHeightsPaged = useCallback(() => armRowHeights("paged"), [armRowHeights]);
-  const useAutoFit = useCallback(() => armAutoFit("object"), [armAutoFit]);
-  const useAutoFitPaged = useCallback(() => armAutoFit("paged"), [armAutoFit]);
+  /** The group arms also reset the hierarchy, the band heights and the budgets. */
+  const armColumnGroups = useCallback((next: ColumnGroupsMode) => {
+    setGroupsSchema(columnGroups.schemaFor(next));
+    setBandHeights(undefined);
+    setGroupLimits(undefined);
+    columnGroups.clearResult();
+    armFixture({ fixture: "columnGroups", mode: next });
+  }, [armFixture, columnGroups]);
+  const useColumnGroups = useCallback(() => armColumnGroups("groups"), [armColumnGroups]);
+  const useWideGroups = useCallback(() => armColumnGroups("wide"), [armColumnGroups]);
 
   // In-place controls: the option stays reactive, so these never touch the
   // remount `generation`. `null` means "the armed mode's own option".
@@ -298,6 +323,7 @@ export const ConformanceApp = (): React.ReactNode => {
   }, []);
 
   const activeColumns = (): ColumnDefinition[] => {
+    if (columnGroupsActive) return groupsSchema.columns;
     const fitColumns = autoFitActive ? autoFit.columnsFor(autoFitMode) : undefined;
     if (fitColumns !== undefined) return fitColumns;
     const heightColumns = rowHeightsActive ? rowHeights.columnsFor(rowHeightsMode) : undefined;
@@ -309,6 +335,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   const activeDataSource = (): DataSource<never> | undefined => {
+    if (columnGroupsActive) return undefined;
     if (autoFitActive) return autoFit.sourceFor(autoFitMode);
     if (rowHeightsActive) return rowHeights.sourceFor(rowHeightsMode);
     if (frozenActive) return frozen.sourceFor(frozenMode);
@@ -318,6 +345,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** The writable arms keep the caller's object rows; every other one is sourced. */
   const activeRowData = (): ConformanceRow[] | undefined => {
+    if (columnGroupsActive) return columnGroups.rowDataFor(columnGroupsMode) as unknown as ConformanceRow[] | undefined;
     if (autoFitActive) return autoFit.rowDataFor(autoFitMode) as unknown as ConformanceRow[] | undefined;
     if (rowHeightsActive) return rowHeights.rowDataFor(rowHeightsMode) as RowHeightsRow[] | undefined;
     if (frozenActive) return frozenObject ? rows : undefined;
@@ -333,6 +361,7 @@ export const ConformanceApp = (): React.ReactNode => {
     if (frozenActive) return FROZEN_ROW_HEIGHT;
     if (rowHeightsActive) return ROW_HEIGHTS_ROW_HEIGHT;
     if (autoFitActive) return AUTO_FIT_ROW_HEIGHT;
+    if (columnGroupsActive) return COLUMN_GROUPS_ROW_HEIGHT;
     return 32;
   };
 
@@ -340,7 +369,13 @@ export const ConformanceApp = (): React.ReactNode => {
     if (frozenActive) return FROZEN_HEADER_HEIGHT;
     if (rowHeightsActive) return ROW_HEIGHTS_HEADER_HEIGHT;
     if (autoFitActive) return AUTO_FIT_HEADER_HEIGHT;
+    if (columnGroupsActive) return COLUMN_GROUPS_HEADER_HEIGHT;
     return 36;
+  };
+
+  const activeColumnLayout = (): ColumnLayoutMode => {
+    if (autoFitActive) return AUTO_FIT_COLUMN_LAYOUT;
+    return columnGroupsActive ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout;
   };
 
   const activeFreezeRows = (): FreezeRowsOptions | undefined =>
@@ -413,9 +448,7 @@ const hideColumn = useCallback(() => {
     setHostHeight(FROZEN_HOST_HEIGHT);
     setFreezeOverride(null);
     setMode("object");
-    setFrozenMode("off");
-    setRowHeightsMode("off");
-    setAutoFitMode("off");
+    setArm(NO_ARM);
     setMounted(true);
     setGeneration((value) => value + 1);
     setEditEvents(0);
@@ -481,6 +514,9 @@ const hideColumn = useCallback(() => {
   const onRowResized = useCallback((_event: RowResizedEvent) => {
     eventCounts.current.rowResized += 1;
   }, []);
+  const onColumnSchemaRejected = useCallback((error: ColumnSchemaError) => {
+    columnGroups.recordRejection(error);
+  }, [columnGroups]);
 
   const readCoreToken = useCallback((): number => {
     const core = gridRef.current?.core;
@@ -540,6 +576,34 @@ const hideColumn = useCallback(() => {
     if (core) rowHeights.resetHeights(core);
   }, [rowHeights]);
 
+  /** Group controls: commands go through the core, the schema through the props (PRD 007). */
+  const groupCore = useCallback(
+    (): GridCore<unknown> | null => (gridRef.current?.core ?? null) as never,
+    [],
+  );
+  const withCore = useCallback((run: (core: GridCore<unknown>) => void) => () => {
+    const core = groupCore();
+    if (core) run(core);
+  }, [groupCore]);
+  const replaceSchema = useCallback((next: (schema: ColumnGroupsSchema) => ColumnGroupsSchema) => () => {
+    columnGroups.clearResult();
+    setGroupsSchema(next);
+  }, [columnGroups]);
+  const setColumnGroups = useCallback((groups: readonly ColumnGroupChild[] | undefined) => {
+    setGroupsSchema((schema) => ({ columns: schema.columns, groups }));
+  }, []);
+  const tallBand = useCallback(() => {
+    const core = groupCore();
+    if (core) setBandHeights(columnGroups.tallBandHeights(core));
+  }, [columnGroups, groupCore]);
+  /** Budgets are creation-only, so arming one remounts the grid. */
+  const overBudgetMove = useCallback(() => {
+    const core = groupCore();
+    if (core === null) return;
+    setGroupLimits(columnGroups.overBudgetLimits(core));
+    setGeneration((value) => value + 1);
+  }, [columnGroups, groupCore]);
+
   // Expose the wrapper's stripped built core for raw-value assertions and the
   // borrowed-source read counters for bounded-read assertions.
   useEffect(() => {
@@ -564,6 +628,10 @@ const hideColumn = useCallback(() => {
       setFreezeCount,
       ...createGeometryHooks(() => (gridRef.current?.core ?? null) as never, frozen),
       ...createFitHooks(() => (gridRef.current?.core ?? null) as never),
+      ...createColumnGroupHooks(groupCore, columnGroups, {
+        setGroups: setColumnGroups,
+        setBandHeights,
+      }),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: () => {
         if (autoFitActive) return autoFit.requestedRanges();
@@ -574,7 +642,7 @@ const hideColumn = useCallback(() => {
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [autoFit, autoFitActive, fixture, frozen, readCoreToken, rowHeights, rowHeightsActive, setFreezeCount, useWideColumns]);
+  }, [autoFit, autoFitActive, columnGroups, fixture, frozen, groupCore, readCoreToken, rowHeights, rowHeightsActive, setColumnGroups, setFreezeCount, useWideColumns]);
 
   // Arming remounts the grid, so the announcement reader follows each core.
   useEffect(() => {
@@ -640,20 +708,41 @@ const hideColumn = useCallback(() => {
         <button data-testid="use-auto-fit" onClick={useAutoFit}>Auto fit</button>
         <button data-testid="use-auto-fit-paged" onClick={useAutoFitPaged}>Auto fit paged</button>
         <button data-testid="freeze-two" onClick={() => freezeCount(2)}>Freeze 2</button>
+        <button data-testid="use-column-groups" onClick={useColumnGroups}>Column groups</button>
+        <button data-testid="use-wide-groups" onClick={useWideGroups}>Wide groups</button>
+        <button data-testid="move-x-between" onClick={withCore((core) => columnGroups.moveXBetween(core))}>X between</button>
+        <button data-testid="move-x-back" onClick={withCore((core) => columnGroups.moveXBack(core))}>X back</button>
+        <button data-testid="hide-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", true))}>Hide B</button>
+        <button data-testid="show-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", false))}>Show B</button>
+        <button data-testid="pin-a" onClick={withCore((core) => columnGroups.pin(core, "a", "start"))}>Pin A</button>
+        <button data-testid="reset-order" onClick={withCore((core) => columnGroups.resetOrder(core))}>Reset order</button>
+        <button data-testid="replace-groups" onClick={replaceSchema(columnGroups.replacement)}>Replace groups</button>
+        <button data-testid="reject-cycle" onClick={replaceSchema(columnGroups.cyclic)}>Reject cycle</button>
+        <button data-testid="reject-missing" onClick={replaceSchema(columnGroups.missing)}>Reject missing</button>
+        <button data-testid="over-budget-move" onClick={overBudgetMove}>Over budget</button>
+        <button data-testid="tall-band" onClick={tallBand}>Tall band</button>
+        <button data-testid="freeze-three" onClick={() => freezeCount(3)}>Freeze 3 rows</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
-      <div data-testid="grid-host" dir={rtl ? "rtl" : "ltr"} style={{ width: hostWidth, height: hostHeight }}>
+      <div
+        data-testid="grid-host"
+        dir={rtl ? "rtl" : "ltr"}
+        style={{ width: hostWidth, height: columnGroupsActive ? COLUMN_GROUPS_HOST_HEIGHT : hostHeight }}
+      >
         {mounted && (
           <Grid
             key={generation}
             gridRef={gridRef}
             columns={activeColumns()}
             columnState={frozenActive ? frozen.columnState : columnState}
-            columnLayout={autoFitActive ? AUTO_FIT_COLUMN_LAYOUT : columnLayout}
+            columnLayout={activeColumnLayout()}
             dataSource={activeDataSource()}
             rowData={activeRowData()}
             rowHeight={activeRowHeight()}
             headerHeight={activeHeaderHeight()}
+            columnGroups={columnGroupsActive ? groupsSchema.groups : undefined}
+            headerBandHeights={columnGroupsActive ? bandHeights : undefined}
+            columnGroupLimits={columnGroupsActive ? groupLimits : undefined}
             freezeRows={activeFreezeRows()}
             rowResize={autoFitActive}
             rowLoading={activeRowLoading()}
@@ -665,6 +754,7 @@ const hideColumn = useCallback(() => {
             onRowDragEnd={onRowDragEnd}
             onColumnPinned={onColumnPinned}
             onRowResized={onRowResized}
+            onColumnSchemaRejected={onColumnSchemaRejected}
             onFrozenRowsChanged={frozen.recordFreezeEvent}
           />
         )}

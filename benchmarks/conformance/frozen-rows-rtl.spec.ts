@@ -23,7 +23,7 @@ import {
   frozenAriaRowIndices,
   frozenCenterColumns,
 } from "./frozen-rows-runtime-helpers";
-import { openFixture, TOLERANCE } from "./helpers";
+import { headerRowCount, openFixture, TOLERANCE } from "./helpers";
 
 interface RtlRange {
   tops: number[];
@@ -65,7 +65,8 @@ test("keeps the band under the header in RTL", async ({ page }, testInfo) => {
   const pageErrors = await armFreezeRows(page, testInfo.project.name);
   await useRtl(page);
   const { tops, endLeft } = await rtlRange(page);
-  const ariaIndices = Array.from({ length: FROZEN_COUNT }, (_, index) => index + 1);
+  const headerRows = await headerRowCount(page);
+  const ariaIndices = Array.from({ length: FROZEN_COUNT }, (_, index) => index + headerRows + 1);
 
   for (const top of tops) {
     for (const left of [0, endLeft]) {

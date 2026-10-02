@@ -32,7 +32,7 @@ import {
   waitForScroll,
 } from "./frozen-rows-helpers";
 import { gridAria, headerControlTokens } from "./frozen-rows-runtime-helpers";
-import { openFixture, TOLERANCE } from "./helpers";
+import { headerRowCount, openFixture, TOLERANCE } from "./helpers";
 
 /** The fixture's 8 x 100 px columns, all displayed. */
 const DISPLAYED_COLUMNS = 8;
@@ -131,13 +131,14 @@ test("renders one element per frozen and pinned intersection", async ({ page }, 
   await expect(page.locator(".gp-grid-frozen-rows .gp-grid-pin")).toHaveCount(0);
   await expect(page.locator(".gp-grid-frozen-pins .gp-grid-frozen-pin-row")).toHaveCount(FROZEN_COUNT);
 
+  const headerRows = await headerRowCount(page);
   for (let row = 0; row < FROZEN_COUNT; row += 1) {
     for (const column of [0, 1, 4, 7]) {
       await expect(frozenCell(page, row, column), `row ${row} column ${column}`).toHaveCount(1);
     }
     // One semantic row per frozen row: the pin layer is presentational only.
     await expect(
-      page.locator(`.gp-grid-frozen-rows [aria-rowindex="${row + 1}"][role="row"]`),
+      page.locator(`.gp-grid-frozen-rows [aria-rowindex="${row + headerRows + 1}"][role="row"]`),
     ).toHaveCount(1);
   }
 
@@ -208,15 +209,17 @@ test("keeps an unarmed fixture free of frozen DOM", async ({ page }, testInfo) =
 test("qualifies the band's ARIA surface and ships no freeze control", async ({ page }, testInfo) => {
   const pageErrors = await armFreezeRows(page, testInfo.project.name);
   await expect.poll(async () => (await gridAria(page)).colCount).toBe(DISPLAYED_COLUMNS);
-  await expect.poll(async () => (await gridAria(page)).rowCount).toBe(SAMPLE_ROW_COUNT);
+  const headerRows = await headerRowCount(page);
+  await expect.poll(async () => (await gridAria(page)).rowCount).toBe(SAMPLE_ROW_COUNT + headerRows);
   const aria = await gridAria(page);
   expect(aria.role, "the grid role").toBe("grid");
 
-  // One semantic row per frozen logical row, 1-based, and never a second one
-  // in the presentational pin layer.
+  // One semantic row per frozen logical row, after the header's rows, and
+  // never a second one in the presentational pin layer.
   for (let row = 0; row < FROZEN_COUNT; row += 1) {
-    expect(aria.rows.find((group) => group.rowIndex === row + 1), `frozen row ${row}`)
-      .toEqual({ rowIndex: row + 1, elements: 1, pinned: 0 });
+    const rowIndex = row + headerRows + 1;
+    expect(aria.rows.find((group) => group.rowIndex === rowIndex), `frozen row ${row}`)
+      .toEqual({ rowIndex, elements: 1, pinned: 0 });
 
     const cells = aria.cells.filter((cell) => cell.rowIndex === row);
     expect(cells.length, `frozen row ${row} cells`).toBeGreaterThan(0);
@@ -241,18 +244,18 @@ test("qualifies the band's ARIA surface and ships no freeze control", async ({ p
   // The suffix continues the same sequence and renders the same column window,
   // so the band's split adds no semantic divergence from the shipped pattern.
   const suffix = aria.rows
-    .filter((group) => group.rowIndex > FROZEN_COUNT)
+    .filter((group) => group.rowIndex > FROZEN_COUNT + headerRows)
     .sort((left, right) => left.rowIndex - right.rowIndex);
   expect(suffix.length, "mounted suffix rows").toBeGreaterThan(0);
   for (const [offset, group] of suffix.entries()) {
-    expect(group.rowIndex, `suffix row ${offset}`).toBe(FROZEN_COUNT + 1 + offset);
+    expect(group.rowIndex, `suffix row ${offset}`).toBe(FROZEN_COUNT + headerRows + 1 + offset);
   }
   const columnsOf = (rowIndex: number): number[] =>
     aria.cells.filter((cell) => cell.rowIndex === rowIndex)
       .map((cell) => cell.colIndex)
       .sort((left, right) => left - right);
   expect(columnsOf(0), "the band renders the suffix row's columns")
-    .toEqual(columnsOf(suffix[0]!.rowIndex - 1));
+    .toEqual(columnsOf(suffix[0]!.rowIndex - headerRows - 1));
 
   const live = page.locator('.gp-grid-visually-hidden[role="status"][aria-live="polite"]');
   await expect(live, "an unlimited prefix announces nothing").toHaveCount(0);

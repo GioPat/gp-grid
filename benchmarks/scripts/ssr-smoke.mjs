@@ -452,9 +452,20 @@ await check("Angular columnar server render (shell only)", async () => {
 });
 
 /**
+ * ARIA rows the serialized header takes ahead of the body rows (PRD 007 D9):
+ * the flat header row, or one row per band.
+ */
+const headerRowCount = (html) => {
+  const headerAt = html.indexOf("gp-grid-header");
+  const bodyAt = html.indexOf("gp-grid-body", headerAt);
+  return [...html.slice(headerAt, bodyAt).matchAll(/role="row"/g)].length;
+};
+
+/**
  * Angular creates its core in `ngOnInit`, so its first page can arrive before
  * serialization: the band is optional, but serialized suffix rows without it
- * would be wrong, and the band's rows keep their logical 1-based indices.
+ * would be wrong, and the band's rows keep their logical indices after the
+ * header's rows.
  */
 const expectAngularFrozenBand = (html) => {
   if (html.includes("gp-grid-container") === false) throw new Error("Angular grid shell was not rendered.");
@@ -470,7 +481,8 @@ const expectAngularFrozenBand = (html) => {
   const pinsAt = html.indexOf("gp-grid-frozen-pins", blockAt);
   const band = html.slice(blockAt, pinsAt === -1 ? html.length : pinsAt);
   const indices = [...band.matchAll(/aria-rowindex="(\d+)"/g)].map((match) => Number(match[1]));
-  const expected = Array.from({ length: freezeRows.count }, (_value, index) => index + 1);
+  const headerRows = headerRowCount(html);
+  const expected = Array.from({ length: freezeRows.count }, (_value, index) => index + headerRows + 1);
   if (indices.join(",") !== expected.join(",")) {
     throw new Error(`Angular frozen band rows: expected ${expected.join(",")}, got ${indices.join(",")}`);
   }
