@@ -34,6 +34,11 @@ describe("header band boxes", () => {
     expect(leafHeaderBox(bands, 2)).toEqual({ top: 102, height: 30 });
     expect(fragmentHeaderBox(bands, 1)).toEqual({ top: 30, height: 72 });
   });
+
+  it.each([-1, 3])("spans a leaf over the header and collapses a fragment at band %i, outside the layout", (band) => {
+    expect(leafHeaderBox(bands, band)).toEqual({ top: 0, height: 132 });
+    expect(fragmentHeaderBox(bands, band)).toEqual({ top: 0, height: 0 });
+  });
 });
 
 describe("header DOM ids", () => {
@@ -73,6 +78,19 @@ describe("header DOM ids", () => {
 });
 
 describe("header associations", () => {
+  const fragment = (fragmentId: string) => fragmentHeaderId("g", fragmentId);
+  const leaf = (columnId: string) => leafHeaderId("g", columnId);
+
+  const windowOf = (grid: GridCore<Record<string, unknown>>) => {
+    const columnWindow = grid.geometry.getColumnWindow();
+    const displayed = columnWindow.layout.columns.map((column) => column.columnId);
+    return {
+      columnWindow,
+      bandCount: grid.header.getBands().count,
+      displayedIndexOf: (columnId: string) => displayed.indexOf(columnId),
+    };
+  };
+
   /** `Region{ North{ Q1{a, b}, c }, d }`, `Totals{ e, f }` and `x`, with `a` pinned to the start. */
   const createWindow = () => {
     const grid = new GridCore<Record<string, unknown>>({
@@ -88,20 +106,34 @@ describe("header associations", () => {
     });
     grid.setViewport(0, 0, 2_000, 300);
     grid.columns.setPinned("a", "start");
-    const columnWindow = grid.geometry.getColumnWindow();
-    const displayed = columnWindow.layout.columns.map((column) => column.columnId);
-    return {
-      columnWindow,
-      bandCount: grid.header.getBands().count,
-      displayedIndexOf: (columnId: string) => displayed.indexOf(columnId),
-    };
+    return windowOf(grid);
+  };
+
+  /**
+   * `G0{c0, c1}` to `G5{c10, c11}`, 100 px each in a 300 px body scrolled to
+   * `scrollLeft`, with an open edit keeping `edited` mounted outside the range.
+   */
+  const createRetainedWindow = (edited: string, scrollLeft: number) => {
+    const ids = Array.from({ length: 12 }, (_, index) => `c${index}`);
+    const grid = new GridCore<Record<string, unknown>>({
+      columns: ids.map((field) => ({ field, cellDataType: "text", width: 100, editable: true })),
+      columnGroups: Array.from({ length: 6 }, (_, index) =>
+        group(`G${index}`, ...ids.slice(2 * index, 2 * index + 2)),
+      ),
+      dataSource: createClientDataSource([{ c0: 1 }]),
+      rowHeight: 32,
+      columnLayout: "fixed",
+      columnOverscan: 0,
+    });
+    grid.setViewport(0, 0, 300, 300);
+    grid.edit.start(0, ids.indexOf(edited));
+    grid.setViewport(0, scrollLeft, 300, 300);
+    return windowOf(grid);
   };
 
   it("describes each leaf by its mounted ancestors and gives each band its headers", () => {
     const input = { instance: "g", ...createWindow() };
     const { describedBy, owns } = resolveHeaderAssociations(input);
-    const fragment = (fragmentId: string) => fragmentHeaderId("g", fragmentId);
-    const leaf = (columnId: string) => leafHeaderId("g", columnId);
 
     expect(input.bandCount).toBe(4);
     expect(describedBy.get("a"))
@@ -115,6 +147,44 @@ describe("header associations", () => {
       [fragment("North:start:0"), fragment("North:center:0"), leaf("d"), leaf("e"), leaf("f")].join(" "),
       [fragment("Q1:start:0"), fragment("Q1:center:0"), leaf("c")].join(" "),
       [leaf("a"), leaf("b")].join(" "),
+    ]);
+  });
+
+  it.each([
+    {
+      edited: "c0",
+      scrollLeft: 900,
+      ancestors: { c9: "G4", c10: "G5", c11: "G5" },
+      leaves: ["c0", "c9", "c10", "c11"],
+    },
+    {
+      edited: "c11",
+      scrollLeft: 0,
+      ancestors: { c0: "G0", c1: "G0", c2: "G1" },
+      leaves: ["c0", "c1", "c2", "c11"],
+    },
+  ])("leaves $edited undescribed while its ancestor is outside the mounted range", (scenario) => {
+    const input = { instance: "g", ...createRetainedWindow(scenario.edited, scenario.scrollLeft) };
+    const { describedBy, owns } = resolveHeaderAssociations(input);
+    const expected = Object.entries(scenario.ancestors).map(([columnId, groupId]) => [
+      columnId,
+      fragment(`${groupId}:center:0`),
+    ]);
+
+    expect(input.columnWindow.center.map((column) => column.columnId)).toEqual(scenario.leaves);
+    expect(Object.fromEntries(describedBy)).toEqual(Object.fromEntries(expected));
+    expect(owns[1]).toBe(scenario.leaves.map(leaf).join(" "));
+  });
+
+  it("leaves out the headers and ancestors of bands past bandCount", () => {
+    const input = { instance: "g", ...createWindow(), bandCount: 2 };
+    const { describedBy, owns } = resolveHeaderAssociations(input);
+
+    expect(describedBy.get("a")).toBe([fragment("Region:start:0"), fragment("North:start:0")].join(" "));
+    expect(describedBy.get("c")).toBe([fragment("Region:center:0"), fragment("North:center:0")].join(" "));
+    expect(owns).toEqual([
+      [fragment("Region:start:0"), fragment("Region:center:0"), fragment("Totals:center:0"), leaf("x")].join(" "),
+      [fragment("North:start:0"), fragment("North:center:0"), leaf("d"), leaf("e"), leaf("f")].join(" "),
     ]);
   });
 });

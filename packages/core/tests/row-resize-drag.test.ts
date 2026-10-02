@@ -6,9 +6,8 @@ import { GridCore } from "../src/grid-core";
 import { createClientDataSource } from "../src/data-source";
 import { MIN_ROW_RESIZE_HEIGHT, clampRowHeight } from "../src/input";
 import type {
-  AutoFitOptions,
   ColumnDefinition,
-  FreezeRowsOptions,
+  GridCoreOptions,
   GridInstruction,
   RowResizedEvent,
 } from "../src/types";
@@ -36,17 +35,18 @@ const pointer = (dy: number, button = 0): PointerEventData => ({
 
 const bounds = { top: 0, left: 0, width: 400, height: 320, scrollTop: 0, scrollLeft: 0 };
 
-const createGrid = async (options: { freezeRows?: FreezeRowsOptions; autoFit?: AutoFitOptions } = {}) => {
+const rowsOf = (count: number): Row[] => Array.from({ length: count }, (_, id) => ({ id: id + 1_000 }));
+
+const createGrid = async (options: Partial<GridCoreOptions<Row>> = {}) => {
   const events: RowResizedEvent[] = [];
   const grid = new GridCore<Row>({
     columns,
-    dataSource: createClientDataSource(Array.from({ length: 200 }, (_, id) => ({ id: id + 1_000 }))),
+    dataSource: createClientDataSource(rowsOf(200)),
     rowHeight: ROW_HEIGHT,
     getRowId: (row) => row.id,
-    freezeRows: options.freezeRows,
-    autoFit: options.autoFit,
     rowResize: true,
     onRowResized: (event) => events.push(event),
+    ...options,
   });
   await grid.initialize();
   grid.setViewport(0, 0, 400, 320);
@@ -160,5 +160,64 @@ describe("RowResizeDrag", () => {
     expect(grid.input.handleRowResizeMouseDown(2, ROW_HEIGHT, pointer(0, 2))).toEqual(ignored);
     expect(grid.input.handleRowResizeMouseDown(5_000, ROW_HEIGHT, pointer(0))).toEqual(ignored);
     expect(grid.input.getDragState().isDragging).toBe(false);
+  });
+});
+
+describe("RowResizeDrag release", () => {
+  const dragEdge = (grid: GridCore<Row>, rowIndex: number, pressHeight: number, dy: number) => {
+    grid.input.handleRowResizeMouseDown(rowIndex, pressHeight, pointer(0));
+    grid.input.handleDragMove(pointer(dy), bounds);
+    grid.input.handleDragEnd();
+  };
+
+  it("reports the view index as the row id when the source exposes none", async () => {
+    const { grid, events } = await createGrid({ getRowId: undefined });
+
+    dragEdge(grid, 2, ROW_HEIGHT, 40);
+
+    expect(heightAt(grid, 2)).toBe(72);
+    expect(events).toEqual([{ rowId: 2, height: 72, viewIndex: 2 }]);
+    expect(grid.rowHeights.getOverrides()).toEqual([{ rowId: 2, height: 72 }]);
+  });
+
+  it("applies the height without an onRowResized listener", async () => {
+    const { grid } = await createGrid({ onRowResized: undefined });
+
+    dragEdge(grid, 2, ROW_HEIGHT, 40);
+
+    expect(heightAt(grid, 2)).toBe(72);
+    expect(grid.rowHeights.getOverrides()).toEqual([{ rowId: 1_002, height: 72 }]);
+  });
+
+  it("fires nothing when a press from a stale height lands on the current one", async () => {
+    const { grid, events } = await createGrid();
+    dragEdge(grid, 2, ROW_HEIGHT, 40);
+    const batches = record(grid);
+
+    // The press still reports the height rendered before the first commit.
+    dragEdge(grid, 2, ROW_HEIGHT, 40);
+
+    expect(batches).toEqual([]);
+    expect(heightAt(grid, 2)).toBe(72);
+    expect(events).toEqual([{ rowId: 1_002, height: 72, viewIndex: 2 }]);
+  });
+
+  it.each([
+    { before: "the grid is destroyed", interrupt: (grid: GridCore<Row>) => grid.destroy() },
+    {
+      before: "its row is no longer loaded",
+      interrupt: (grid: GridCore<Row>) => grid.setDataSource(createClientDataSource(rowsOf(10))),
+    },
+  ])("commits nothing when $before at release", async ({ interrupt }) => {
+    const { grid, events } = await createGrid();
+    grid.input.handleRowResizeMouseDown(150, ROW_HEIGHT, pointer(0));
+    grid.input.handleDragMove(pointer(40), bounds);
+
+    await interrupt(grid);
+    grid.input.handleDragEnd();
+
+    expect(events).toEqual([]);
+    expect(grid.rowHeights.getOverrides()).toEqual([]);
+    expect(grid.input.getDragState().rowResize).toBeNull();
   });
 });
