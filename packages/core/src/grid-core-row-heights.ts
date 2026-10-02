@@ -6,17 +6,12 @@
 import type { RowHeightUpdate, RowId, RowResizedEvent } from "./types";
 import type { MeasurementHost, RowFitResult, RowFitSkip } from "./types/measurement";
 import type { AxisBounds } from "./types/geometry";
-import {
-  captureRowAnchor,
-  resolveAnchoredScrollTop,
-  type GridGeometryService,
-  type RowAnchor,
-  type RowRegionMappingInput,
-} from "./geometry";
-import type { InstructionBatcher } from "./managers";
 import type { LocateRowIds, RowHeightOverrides } from "./managers/row-height-overrides";
-import type { RowDataManager } from "./managers/row-data-manager";
-import type { ViewSync } from "./grid-core-view-sync";
+import {
+  captureSizeAnchor,
+  resyncAfterSizeChange,
+  type SizeChangeDeps,
+} from "./grid-core-size-change";
 import {
   resolveRowFit,
   unsupportedRowFit,
@@ -53,16 +48,8 @@ export interface GridRowHeightsApi {
   isResizable(): boolean;
 }
 
-export interface RowHeightsControllerDeps<TData> {
-  batcher: InstructionBatcher;
+export interface RowHeightsControllerDeps<TData> extends SizeChangeDeps<TData> {
   overrides: RowHeightOverrides;
-  getGeometry: () => GridGeometryService;
-  getRowData: () => RowDataManager<TData>;
-  getView: () => ViewSync<TData>;
-  /** Commits geometry and emits any clamp correction inside the open batch. */
-  refreshGeometry: () => void;
-  /** Writes a corrected DOM scroll top to whichever sample is in charge. */
-  writeScrollTop: (domScrollTop: number) => void;
   isDestroyed: () => boolean;
   measurementHost?: MeasurementHost;
   /** `[minRowHeight, maxRowHeight]` of the `autoFit` option. */
@@ -196,26 +183,15 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
   /** One atomic size change: anchor, geometry, scroll correction, rows (D5). */
   private applySizeChange(mutate: () => boolean): boolean {
     const { batcher } = this.deps;
-    const anchor = captureRowAnchor(this.frame());
+    const anchor = captureSizeAnchor(this.deps);
     if (mutate() === false) return false;
     batcher.start();
     try {
-      this.deps.refreshGeometry();
-      this.applyAnchorCorrection(anchor);
-      this.deps.getRowData().requestVisibleRows();
-      this.deps.getView().syncVisibleRows(true);
+      resyncAfterSizeChange(this.deps, anchor);
     } finally {
       batcher.flush();
     }
     return true;
-  }
-
-  private applyAnchorCorrection(anchor: RowAnchor | null): void {
-    if (anchor === null) return;
-    const corrected = resolveAnchoredScrollTop(anchor, this.frame());
-    if (corrected === null) return;
-    this.deps.writeScrollTop(corrected);
-    this.deps.batcher.emit({ type: "SCROLL_TO", scrollTop: corrected });
   }
 
   /** The named rows that are mounted, or every mounted row. */
@@ -264,11 +240,6 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
   private heightAt(viewIndex: number): number {
     const bounds = this.deps.getGeometry().getRowBounds(viewIndex, "content");
     return bounds === undefined ? 0 : bounds.end - bounds.start;
-  }
-
-  /** C5 frame at the live sample: hits, clips and the anchor all read it. */
-  private frame(): RowRegionMappingInput {
-    return this.deps.getGeometry().getRowGeometry().getRegionInput();
   }
 
   private collect(

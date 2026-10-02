@@ -8,6 +8,7 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
+  InputResult,
   ResizeTarget,
 } from "@gp-grid/core";
 import {
@@ -404,46 +405,41 @@ export function useInputHandler<TData>(
     [coreRef, startGlobalDragListeners]
   );
 
-  const handleHeaderResizeMouseDown = useCallback(
-    (colIndex: number, colWidth: number, e: React.PointerEvent) => {
-      const core = coreRef.current;
-      if (!core?.input) return;
-
-      const result = core.input.handleHeaderResizeMouseDown(
-        colIndex,
-        colWidth,
-        toPointerEventData(e)
-      );
-
+  const applyResizeResult = useCallback(
+    (
+      core: GridCore<TData>,
+      result: InputResult,
+      dragType: "column-resize" | "row-resize",
+      e: React.PointerEvent,
+    ) => {
       if (result.preventDefault) e.preventDefault();
       if (result.stopPropagation) e.stopPropagation();
-      if (result.startDrag === "column-resize") {
+      if (result.startDrag === dragType) {
         setDragState(core.input.getDragState());
         startGlobalDragListeners();
       }
     },
-    [coreRef, startGlobalDragListeners]
+    [startGlobalDragListeners]
+  );
+
+  const handleHeaderResizeMouseDown = useCallback(
+    (colIndex: number, colWidth: number, e: React.PointerEvent) => {
+      const core = coreRef.current;
+      if (!core?.input) return;
+      const result = core.input.handleHeaderResizeMouseDown(colIndex, colWidth, toPointerEventData(e));
+      applyResizeResult(core, result, "column-resize", e);
+    },
+    [coreRef, applyResizeResult]
   );
 
   const handleRowResizeMouseDown = useCallback(
     (rowIndex: number, rowHeight: number, e: React.PointerEvent) => {
       const core = coreRef.current;
       if (!core?.input) return;
-
-      const result = core.input.handleRowResizeMouseDown(
-        rowIndex,
-        rowHeight,
-        toPointerEventData(e)
-      );
-
-      if (result.preventDefault) e.preventDefault();
-      if (result.stopPropagation) e.stopPropagation();
-      if (result.startDrag === "row-resize") {
-        setDragState(core.input.getDragState());
-        startGlobalDragListeners();
-      }
+      const result = core.input.handleRowResizeMouseDown(rowIndex, rowHeight, toPointerEventData(e));
+      applyResizeResult(core, result, "row-resize", e);
     },
-    [coreRef, startGlobalDragListeners]
+    [coreRef, applyResizeResult]
   );
 
   const handleResizeDoubleClick = useCallback(

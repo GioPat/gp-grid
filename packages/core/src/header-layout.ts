@@ -10,6 +10,7 @@ import type {
   HeaderBandLayout,
   ResolvedColumn,
 } from "./types/geometry";
+import { firstRunEndingAfter } from "./column-groups/header-fragments";
 
 export interface HeaderBox {
   readonly top: number;
@@ -64,20 +65,12 @@ const fragmentsByBand = (
   return byBand;
 };
 
-/** The fragment of a band whose run holds `displayIndex`, by binary search. */
+/** The fragment of a band whose run holds `displayIndex`. */
 const fragmentAt = (
   runs: readonly HeaderFragment[],
   displayIndex: number,
 ): HeaderFragment | undefined => {
-  let low = 0;
-  let high = runs.length;
-  while (low < high) {
-    const middle = (low + high) >>> 1;
-    const run = runs[middle]!;
-    if (run.firstDisplayIndex + run.leafCount <= displayIndex) low = middle + 1;
-    else high = middle;
-  }
-  const run = runs[low];
+  const run = runs[firstRunEndingAfter(runs, displayIndex)];
   return run !== undefined && run.firstDisplayIndex <= displayIndex ? run : undefined;
 };
 

@@ -64,14 +64,19 @@ export interface AdoptedColumnGroups {
   readonly state: ColumnGroupState;
 }
 
-const adoptFlat = <TData>(
+const adoptFlat = (columns: readonly ColumnDefinition[]): AdoptedColumnGroups => ({
+  columns: [...columns],
+  state: { index: null, columns: [...columns] },
+});
+
+const rejectInitialGroups = <TData>(
   columns: readonly ColumnDefinition[],
   config: GridCoreConfig<TData>,
   fault: ColumnSchemaFault,
 ): AdoptedColumnGroups => {
   const { message } = toColumnSchemaError(fault, "groups", config.labels);
   console.warn(`[gp-grid] columnGroups rejected, the grid stays flat: ${message}`);
-  return { columns: [...columns], state: { index: null, columns: [...columns] } };
+  return adoptFlat(columns);
 };
 
 export type InitialColumnGroups =
@@ -104,12 +109,10 @@ export const adoptInitialColumnGroups = <TData>(
   config: GridCoreConfig<TData>,
 ): AdoptedColumnGroups => {
   const roots = config.columnGroups;
-  if (roots === undefined) {
-    return { columns: [...columns], state: { index: null, columns: [...columns] } };
-  }
+  if (roots === undefined) return adoptFlat(columns);
   const { columnGroupLimits, columnLayout } = config;
   const adopted = resolveInitialColumnGroups(columns, roots, columnGroupLimits, columnLayout);
-  if (adopted.ok === false) return adoptFlat(columns, config, adopted.error);
+  if (adopted.ok === false) return rejectInitialGroups(columns, config, adopted.error);
   return { columns: adopted.columns, state: { index: adopted.index, columns: [...columns] } };
 };
 

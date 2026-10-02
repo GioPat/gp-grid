@@ -26,6 +26,7 @@ import {
   type ColumnTargets,
 } from "./grid-core-column-targets";
 import { admitEveryChange, type AdmitColumnChange } from "./grid-core-column-guard";
+import { isSameArray } from "./utils/arrays";
 
 export interface ColumnCoreDeps<TData> {
   batcher: InstructionBatcher;
@@ -146,7 +147,7 @@ export const applySetColumns = <TData>(
       new Set(deps.columnModel.ids()),
     );
     reconcileColumnTargets(deps, targets);
-    if (hasSameOrder(previousIds, deps.columnModel.ids()) === false) {
+    if (isSameArray(previousIds, deps.columnModel.ids()) === false) {
       deps.selection.clearSelectionRange();
     }
     deps.view.reconcile();
@@ -175,9 +176,6 @@ const restoreActiveRow = <TData>(
   }
   deps.selection.setActiveCell(nextRow, activeCell.col);
 };
-
-const hasSameOrder = (before: readonly string[], after: readonly string[]): boolean =>
-  before.length === after.length && before.every((id, index) => id === after[index]);
 
 const applyColumnStateChange = <TData>(
   deps: ColumnCoreDeps<TData>,

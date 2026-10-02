@@ -24,7 +24,7 @@ import { EditController, type GridEditApi } from "./grid-core-edit";
 import { CellsController, type GridCellsApi } from "./grid-core-cells";
 import { RowsController, type GridRowsApi } from "./grid-core-rows";
 import type { GridColumnsApi } from "./grid-core-column-api";
-import type { GridHeaderApi, HeaderController } from "./grid-core-header";
+import type { GridHeaderApi } from "./grid-core-header";
 import { buildColumnControllers } from "./grid-core-controllers";
 import { adoptInitialColumnGroups } from "./grid-core-column-groups";
 import type { ColumnGroupState } from "./grid-core-column-guard";
@@ -64,7 +64,6 @@ export class GridCore<TData = unknown> {
   private readonly frozenRowsController: FrozenRowsController<TData>;
   private readonly rowHeightsController: RowHeightsController<TData>;
   private readonly rowHeightOverrides: RowHeightOverrides;
-  private readonly headerController: HeaderController<TData>;
   private readonly scanRowIds: LocateRowIds = (ids) => this.rowData.locateRowIds(ids);
   private readonly rowData: RowDataManager<TData>;
   private readonly slotPool: SlotPoolManager;
@@ -85,7 +84,7 @@ export class GridCore<TData = unknown> {
       getColumns: () => this.columnModel.getLayout(),
       getGeometry: () => this.geometryService,
       getFrozenRowsBaseline: () => this.frozenRowsController.getBaseline(),
-      getHeaderBands: () => this.headerController.getBands(),
+      getHeaderBands: () => this.header.getBands(),
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       onRowsLoaded: (totalRowsChanged) =>
         this.rowHeightsController.onRowsLoaded(totalRowsChanged),
@@ -158,7 +157,6 @@ export class GridCore<TData = unknown> {
       reloadAfterSchemaChange: () => this.refresh(),
       isDestroyed: () => this.isDestroyed,
     });
-    this.headerController = controllers.header;
     this.header = controllers.header;
     this.columns = controllers.columns;
     this.geometryService.refresh();

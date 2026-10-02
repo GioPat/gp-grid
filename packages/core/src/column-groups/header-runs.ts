@@ -190,6 +190,17 @@ export const buildHeaderRuns = (
   return { ok: true, runs };
 };
 
+/** Runs of `layout` under `index`; `null` while flat or over the budget. */
+export const resolveHeaderRuns = (
+  layout: ColumnLayoutSnapshot,
+  index: ColumnGroupIndex | null,
+  maxFragments: number,
+): HeaderRunSet | null => {
+  if (index === null) return null;
+  const result = buildHeaderRuns(layout, index, maxFragments);
+  return result.ok ? result.runs : null;
+};
+
 export interface HeaderRunsCache {
   /** Runs of `layout` under `index`; `null` while flat or over the budget. */
   get(layout: ColumnLayoutSnapshot, index: ColumnGroupIndex | null): HeaderRunSet | null;
@@ -206,8 +217,7 @@ export const createHeaderRunsCache = (maxFragments: number): HeaderRunsCache => 
     get: (layout, index) => {
       if (index === null) return null;
       if (cache?.layout === layout && cache.index === index) return cache.runs;
-      const result = buildHeaderRuns(layout, index, maxFragments);
-      cache = { layout, index, runs: result.ok ? result.runs : null };
+      cache = { layout, index, runs: resolveHeaderRuns(layout, index, maxFragments) };
       return cache.runs;
     },
   };

@@ -17,7 +17,7 @@ export const EMPTY_HEADER_FRAGMENTS: HeaderFragments = Object.freeze({
 });
 
 /** First run of a band whose leaves reach past `displayIndex`. */
-const firstRunEndingAfter = (runs: readonly HeaderFragment[], displayIndex: number): number => {
+export const firstRunEndingAfter = (runs: readonly HeaderFragment[], displayIndex: number): number => {
   let low = 0;
   let high = runs.length;
   while (low < high) {

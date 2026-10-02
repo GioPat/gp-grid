@@ -13,10 +13,9 @@ import { createSeedColumnLayout } from "../geometry/column-layout";
 import { buildCenterOffsets, resolveCenterRange } from "../geometry/column-range";
 import { resolveColumnWindow } from "../geometry/column-window";
 import {
-  buildHeaderRuns,
   leafDepthOf,
+  resolveHeaderRuns,
   type ColumnGroupIndex,
-  type HeaderRunSet,
 } from "../column-groups";
 import {
   DEFAULT_COLUMN_GROUP_LIMITS,
@@ -145,13 +144,6 @@ const seedLayout = (
   );
 };
 
-/** Runs over the budget seed no fragments while the bands stay, as the live window does. */
-const seedRuns = (layout: ColumnLayoutSnapshot, index: ColumnGroupIndex | null): HeaderRunSet | null => {
-  if (index === null) return null;
-  const built = buildHeaderRuns(layout, index, DEFAULT_COLUMN_GROUP_LIMITS.maxFragments);
-  return built.ok ? built.runs : null;
-};
-
 /**
  * The seed window runs the live center-window derivation so the pre-mount
  * frame mounts the same bounded range the first measurement will. The region
@@ -182,7 +174,8 @@ const seedColumnWindow = (
     { start: range.start + centerStart, end: range.end + centerStart },
     [],
     (columnId) => displayIndex.get(columnId),
-    seedRuns(layout, index),
+    // Runs over the budget seed no fragments while the bands stay, as the live window does.
+    resolveHeaderRuns(layout, index, DEFAULT_COLUMN_GROUP_LIMITS.maxFragments),
   );
 };
 

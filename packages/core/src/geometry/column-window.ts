@@ -13,6 +13,7 @@ import type { HeaderRunSet } from "../column-groups/header-runs";
 import { selectHeaderFragments } from "../column-groups/header-fragments";
 import { buildCenterOffsets, resolveCenterRange } from "./column-range";
 import { clampScroll } from "./viewport-sample";
+import { isSameArray } from "../utils/arrays";
 
 export {
   buildCenterOffsets,
@@ -128,9 +129,6 @@ export interface ColumnWindowResolver {
   retain(key: string, columnIds: readonly string[]): void;
 }
 
-const isSameIds = (a: readonly string[], b: readonly string[]): boolean =>
-  a.length === b.length && a.every((id, index) => id === b[index]);
-
 const isSameWindow = (a: AxisBounds, b: AxisBounds): boolean =>
   a.start === b.start && a.end === b.end;
 
@@ -240,7 +238,7 @@ export const createColumnWindowResolver = (
       previous.layout === layout &&
       previous.runs === runs &&
       isSameWindow(previous.range, range) &&
-      isSameIds(previous.retained, retained)
+      isSameArray(previous.retained, retained)
     ) {
       return previous.window;
     }
@@ -273,7 +271,7 @@ export const createColumnWindowResolver = (
         if (previous === undefined) return;
         retainedKeys.delete(key);
       } else {
-        if (previous !== undefined && isSameIds(previous, columnIds)) return;
+        if (previous !== undefined && isSameArray(previous, columnIds)) return;
         retainedKeys.set(key, columnIds.slice(0, MAX_RETAINED_COLUMNS));
       }
       // Identity is the change contract: force the next resolve to rebuild.

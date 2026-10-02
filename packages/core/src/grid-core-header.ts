@@ -6,17 +6,15 @@
 
 import type { GridInstruction } from "./types";
 import type { HeaderBandLayout } from "./types/geometry";
-import {
-  captureRowAnchor,
-  resolveAnchoredScrollTop,
-  type GridGeometryService,
-  type RowAnchor,
-  type RowRegionMappingInput,
-} from "./geometry";
-import type { InstructionBatcher, ViewportState } from "./managers";
-import type { RowDataManager } from "./managers/row-data-manager";
-import type { ViewSync } from "./grid-core-view-sync";
+import type { RowAnchor } from "./geometry";
+import type { ViewportState } from "./managers";
 import { resolveHeaderBandHeights, type GridCoreConfig } from "./grid-core-config";
+import {
+  captureSizeAnchor,
+  resyncAfterSizeChange,
+  type SizeChangeDeps,
+} from "./grid-core-size-change";
+import { isSameArray } from "./utils/arrays";
 import { normalizeSize } from "./utils/number-guards";
 
 export interface GridHeaderApi {
@@ -30,17 +28,9 @@ export interface GridHeaderApi {
   setBandHeights(heights: readonly number[]): void;
 }
 
-export interface HeaderControllerDeps<TData> {
-  batcher: InstructionBatcher;
+export interface HeaderControllerDeps<TData> extends SizeChangeDeps<TData> {
   config: Pick<GridCoreConfig<TData>, "headerHeight" | "headerBandHeights">;
   viewport: ViewportState;
-  getGeometry: () => GridGeometryService;
-  getRowData: () => RowDataManager<TData>;
-  getView: () => ViewSync<TData>;
-  /** Commits geometry and emits any clamp correction inside the open batch. */
-  refreshGeometry: () => void;
-  /** Writes a corrected DOM scroll top to whichever sample is in charge. */
-  writeScrollTop: (domScrollTop: number) => void;
   isDestroyed: () => boolean;
 }
 
@@ -49,9 +39,6 @@ const RESYNC_REPLACES: ReadonlySet<GridInstruction["type"]> = new Set([
   "SET_CONTENT_SIZE",
   "SET_COLUMN_WINDOW",
 ]);
-
-const isSameHeights = (a: readonly number[], b: readonly number[]): boolean =>
-  a.length === b.length && a.every((height, band) => height === b[band]);
 
 /**
  * The layout of `count` bands. `configured` entries past the count are
@@ -64,7 +51,7 @@ export const resolveHeaderBands = (
   previous: HeaderBandLayout | null = null,
 ): HeaderBandLayout => {
   const heights = Array.from({ length: count }, (_, band) => configured[band] ?? headerHeight);
-  if (previous !== null && isSameHeights(previous.heights, heights)) return previous;
+  if (previous !== null && isSameArray(previous.heights, heights)) return previous;
   const offsets: number[] = [];
   let totalHeight = 0;
   for (const height of heights) {
@@ -106,7 +93,7 @@ export class HeaderController<TData> implements GridHeaderApi {
   setBandHeights(heights: readonly number[]): void {
     if (this.deps.isDestroyed()) return;
     const next = resolveHeaderBandHeights(heights);
-    if (isSameHeights(next, this.heights)) return;
+    if (isSameArray(next, this.heights)) return;
     this.applyBandChange(() => {
       this.heights = next;
     });
@@ -122,7 +109,7 @@ export class HeaderController<TData> implements GridHeaderApi {
   applyBandChange<T>(change: () => T): T {
     const { batcher } = this.deps;
     const previous = this.getBands();
-    const anchor = captureRowAnchor(this.frame());
+    const anchor = captureSizeAnchor(this.deps);
     batcher.start();
     try {
       const value = change();
@@ -135,27 +122,11 @@ export class HeaderController<TData> implements GridHeaderApi {
   }
 
   private adoptBands(growth: number, anchor: RowAnchor | null): void {
-    const { viewport, batcher } = this.deps;
-    batcher.replacing(RESYNC_REPLACES, () => {
+    const { deps } = this;
+    deps.batcher.replacing(RESYNC_REPLACES, () => {
       // The body is what a fixed container leaves below the header.
-      viewport.setViewportHeight(normalizeSize(viewport.getViewportHeight() - growth));
-      this.deps.refreshGeometry();
-      this.applyAnchorCorrection(anchor);
-      this.deps.getRowData().requestVisibleRows();
-      this.deps.getView().syncVisibleRows(true);
+      deps.viewport.setViewportHeight(normalizeSize(deps.viewport.getViewportHeight() - growth));
+      resyncAfterSizeChange(deps, anchor);
     });
-  }
-
-  private applyAnchorCorrection(anchor: RowAnchor | null): void {
-    if (anchor === null) return;
-    const corrected = resolveAnchoredScrollTop(anchor, this.frame());
-    if (corrected === null) return;
-    this.deps.writeScrollTop(corrected);
-    this.deps.batcher.emit({ type: "SCROLL_TO", scrollTop: corrected });
-  }
-
-  /** C5 frame at the live sample, as the row-heights applier reads it. */
-  private frame(): RowRegionMappingInput {
-    return this.deps.getGeometry().getRowGeometry().getRegionInput();
   }
 }
