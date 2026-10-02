@@ -6,8 +6,10 @@ wherever it moves.
 
 `@gp-grid/core` owns the heights, the axis they feed, the scroll correction a
 change implies and the placement that survives sort, filter and paging; a
-wrapper renders `SlotData.height` and computes nothing. The command surface is
-state only — this feature has no resize gesture (that is PRD 007).
+wrapper renders `SlotData.height` and computes nothing. The row edge drag, the
+row shortcuts and the one-shot fit are in
+[Auto-fit and row resize](./auto-fit.md); each stores its result as a height
+here.
 
 ## Default height
 
@@ -36,6 +38,8 @@ core handle:
 | `set(updates)` | Store `{ rowId, height }` pairs and place the ones the source holds. Later entries win over earlier ones for the same `rowId`. |
 | `reset(rowIds?)` | Drop the named heights, or every height when `rowIds` is omitted. |
 | `getOverrides()` | Every stored height in insertion order, including the ones still waiting for their row, so an application can persist and restore them. |
+| `fit(rowIds?)` | Fit mounted rows to their tallest rendered cell once and store the heights like `set`. See [Auto-fit](./auto-fit.md#commands). |
+| `setResizable(enabled)` / `isResizable()` | Turn the user's row resize (the `rowResize` option) on or off, and read it. |
 
 ```tsx
 // React
@@ -74,8 +78,9 @@ or the identity a columnar source publishes through its row access.
   data-source swap or a row move — drops it. Use `getRowId` if a height must
   outlive one.
 
-Nothing is inferred: an override sets a height, never measures one, and a row
-without an override is exactly `rowHeight` tall.
+Nothing is inferred: `set` never measures, and a row without an override is
+exactly `rowHeight` tall. A [fit](./auto-fit.md) measures once and stores what
+it read as an override.
 
 ## Scrolling and anchoring
 
@@ -130,7 +135,7 @@ The core publishes the height with the row it belongs to:
 |---|---|
 | `SlotData.height` | Height of that mounted row, in CSS px. It changes in the same `MOVE_SLOT` instruction as `slot.translateY`. |
 | `core.geometry.getRowBounds(viewIndex, space)` | `{ start, end }` in the named space; `end - start` is the row's height. |
-| `core.geometry.getContentSize().height` | Row extent alone. The `SET_CONTENT_SIZE.height` instruction carries the header band as well. |
+| `core.geometry.getContentSize().height` | Row extent alone. The `SET_CONTENT_SIZE.height` instruction adds the header's total height (`headerBands.totalHeight`). |
 | `RowDragState.sourceRowHeight` | Height of the row a row drag started on, for the drag ghost. |
 
 A wrapper renders each row box with `slot.height` and leaves the cells without
@@ -145,7 +150,8 @@ else.
   input are all sized by the overrides, never by the row count. A height update
   over 10,000 overrides and 10,000,000 rows stays under a millisecond, and every
   axis lookup stays under a microsecond.
-- Nothing is measured or inferred. Auto height and auto fit are PRD 007.
+- Nothing is measured continuously: a row takes its content's height only
+  through a one-shot [fit](./auto-fit.md).
 - Re-resolving placements after a data revision is O(resident rows), once per
   revision (see [Scrolling and anchoring](#scrolling-and-anchoring)).
 - Compression trades precision for reach: a row can be finer than the DOM's

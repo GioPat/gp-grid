@@ -253,6 +253,8 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
 
 `VueHeaderRenderer = (params: HeaderRendererParams) => VNode | string | null` or a Vue component. `HeaderRendererParams` exposes `column`, `colIndex`, `sortDirection`, `sortIndex`, `onSort(direction, addToExisting)`.
 
+A column group's `headerRenderer` is a `VueGroupHeaderRenderer` (render function or component, inline or a key of the same `header-renderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `header-renderer` does not apply to groups.
+
 ## Listening to changes
 
 ```vue
@@ -409,7 +411,7 @@ anchored, and an equal-valued object is silent. See
 ## Row heights
 
 Rows are `row-height` px tall unless you set a height by row identity through the
-exposed core — no resize gesture, and no remount:
+exposed core (no remount), or the user resizes or fits a row (next section):
 
 ```ts
 const coreOf = () => (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
@@ -428,6 +430,65 @@ at the clip top and corrects the scroll in the same batch. Rows render from
 the box from it rather than from the configured `row-height`. See
 [docs/features/row-heights.md](../../../docs/features/row-heights.md).
 
+## Row resize and auto-fit
+
+```vue
+<GpGrid
+  ref="gridRef"
+  :columns="columns"
+  :row-data="rows"
+  :row-height="32"
+  :get-row-id="(row) => row.id"
+  :row-resize="true"
+  :auto-fit="{ maxColumnWidth: 400 }"
+  :on-row-resized="({ rowId, height }) => saveHeight(rowId, height)"
+/>
+```
+
+```ts
+// Fit the mounted cells once. Call it after the render that follows a column
+// change — in the same task it returns "stale" and applies nothing.
+requestAnimationFrame(() => coreOf()?.columns.fit());
+coreOf()?.rowHeights.fit([2, 3]);
+coreOf()?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. `useGpGrid` takes
+`rowResize`, `autoFit` and `onRowResized` as well. See
+[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```vue
+<script setup lang="ts">
+import type { ColumnGroupChild } from "@gp-grid/vue";
+
+const columnGroups: ColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+</script>
+
+<template>
+  <GpGrid
+    :columns="columns"
+    :column-groups="columnGroups"
+    :header-band-heights="[40]"
+    :on-column-schema-rejected="(error) => (schemaError = error.message)"
+  />
+</template>
+```
+
+Every column is referenced once, ungrouped ones at the root. `column-groups` and
+`header-band-heights` apply at runtime. A rejected hierarchy leaves the previous
+one on screen; the prop is re-applied with every later `columns` change, so put
+a valid one back. See
+[docs/features/column-groups.md](../../../docs/features/column-groups.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |
@@ -440,6 +501,11 @@ the box from it rather than from the configured `row-height`. See
 | `:row-data` | `TData[]` | — |
 | `:row-height` | `number` | required |
 | `:header-height` | `number` | `rowHeight` |
+| `:header-band-heights` | `readonly number[]` | — |
+| `:column-groups` | `ColumnGroupChild[]` | — |
+| `:column-group-limits` | `ColumnGroupLimits` | `64` / `100,000` / `100,000` (creation-only) |
+| `:row-resize` | `boolean` | `false` |
+| `:auto-fit` | `AutoFitOptions` | `600` / `rowHeight` / `10 × rowHeight` (creation-only) |
 | `:overscan` | `number` | `3` |
 | `:row-loading` | `RowLoadingOptions` | — |
 | `:sorting-enabled` | `boolean` | `true` |
@@ -465,8 +531,12 @@ the box from it rather than from the configured `row-height`. See
 | `:on-column-moved` | `(e: ColumnMovedEvent) => void` | — |
 | `:on-column-pinned` | `(e: ColumnPinnedEvent) => void` | — |
 | `:on-frozen-rows-changed` | `(s: FrozenRowsState) => void` | — |
+| `:on-row-resized` | `(e: RowResizedEvent) => void` | — |
+| `:on-column-schema-rejected` | `(e: ColumnSchemaError) => void` | — |
 
 ## Vue-specific gotchas
+
+- **Vue 3.5+ required**: the header ids use `useId`, so `@gp-grid/vue` peers on `vue@^3.5.0`.
 
 - **Highlight CSS in `<style scoped>`**: won't apply. Move it to an unscoped block or a global stylesheet.
 - **Server-data ds without `computed` / stable ref**: every render recreates the data source and resets the grid. Wrap in `computed` or initialize once with `shallowRef`.

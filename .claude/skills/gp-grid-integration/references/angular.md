@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onRowResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)`, `(onColumnSchemaRejected)` outputs:
 
 ```html
 <gp-grid
@@ -478,7 +478,7 @@ For the common operations (sort, filter, edit), you'll usually drive them via `[
 ## Row heights
 
 Rows are `rowHeight` px tall unless you set a height by row identity through the
-exposed core — no resize gesture, and no remount:
+exposed core (no remount), or the user resizes or fits a row (next section):
 
 ```ts
 this.grid?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
@@ -493,6 +493,64 @@ has not loaded waits for its row; without it, an integer `rowId` addresses a vie
 index and is dropped at the next data revision. Applying a height anchors the row
 at the clip top and corrects the scroll in the same batch, so the viewport does
 not jump. See [docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
+## Row resize and auto-fit
+
+```html
+<gp-grid
+  [columns]="columns"
+  [dataSource]="grid.dataSource"
+  [rowHeight]="32"
+  [getRowId]="getRowId"
+  [rowResize]="true"
+  [autoFit]="{ maxColumnWidth: 400 }"
+  (onRowResized)="saveHeight($event.rowId, $event.height)"
+/>
+```
+
+```ts
+// Fit the mounted cells once. Call it after the render that follows a column
+// change — in the same task it returns "stale" and applies nothing.
+requestAnimationFrame(() => this.grid?.core?.columns.fit());
+this.grid?.core?.rowHeights.fit([2, 3]);
+this.grid?.core?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. `[rowResize]` is
+reactive, `[autoFit]` is read at creation. See
+[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```ts
+import type { AngularColumnGroupChild } from "@gp-grid/angular";
+
+protected readonly columnGroups: AngularColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+```
+
+```html
+<gp-grid
+  [columns]="columns"
+  [columnGroups]="columnGroups"
+  [headerBandHeights]="[40]"
+  (onColumnSchemaRejected)="schemaError.set($event.message)"
+/>
+```
+
+Every column is referenced once, ungrouped ones at the root. `[columnGroups]` and
+`[headerBandHeights]` apply at runtime. A group's `headerRenderer` is a
+`TemplateRef` (`GroupHeaderRendererTemplate`, `$implicit: ColumnGroupHeaderParams`)
+or a key of `[headerRenderers]`; a function renderer is ignored. A rejected
+hierarchy leaves the previous one on screen; the input is re-applied with every
+later `columns` change, so put a valid one back. See
+[docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
 ## Highlighting
 
@@ -535,9 +593,14 @@ Inputs:
 | `[getRowId]` | `((row: unknown) => RowId) \| null` | `null` |
 | `[rowHeight]` | `number` | `32` |
 | `[headerHeight]` | `number` | `32` |
+| `[headerBandHeights]` | `readonly number[]` | `undefined` |
+| `[columnGroups]` | `readonly AngularColumnGroupChild[]` | `undefined` |
+| `[columnGroupLimits]` | `ColumnGroupLimits` | `undefined` (64 / 100,000 / 100,000), creation-only |
+| `[rowResize]` | `boolean` | `false` |
+| `[autoFit]` | `AutoFitOptions` | `undefined` (600 / `rowHeight` / `10 × rowHeight`), creation-only |
 | `[darkMode]` | `boolean` | `false` |
 | `[cellRenderers]` | `Record<string, CellRendererTemplate>` | `{}` |
-| `[headerRenderers]` | `Record<string, HeaderRendererTemplate>` | `{}` |
+| `[headerRenderers]` | `HeaderRendererRegistry` (column and group templates) | `{}` |
 | `[editRenderers]` | `Record<string, EditRendererTemplate>` | `{}` |
 | `[cellRenderer]` | `CellRendererTemplate \| null` | `null` |
 | `[headerRenderer]` | `HeaderRendererTemplate \| null` | `null` |
@@ -562,6 +625,8 @@ Outputs:
 | `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
 | `(onColumnPinned)` | `{ columnId: string; pinned: "start" \| "end" \| null }` |
 | `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
+| `(onRowResized)` | `{ rowId: RowId; height: number; viewIndex: number }` |
+| `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
 
 ## Angular-specific gotchas
 
@@ -570,6 +635,7 @@ Outputs:
 - **Highlight CSS in component-scoped stylesheet with default encapsulation** → won't apply to grid cells. Move to a global stylesheet or set `encapsulation: ViewEncapsulation.None` on the component.
 - **`provideGridData` registered at the root injector** → all `<gp-grid>` instances share one data source. Register it on each consuming component instead.
 - **SSR (Angular Universal)**: the wrapper checks `isPlatformBrowser` before touching `document` and `ResizeObserver`. Just don't try to use the imperative `core` API during SSR.
+- **Strict templates and optional inputs**: the published input typings drop `undefined` (ng-packagr builds them without `strictNullChecks`). Cast an absent `columnGroups` (`undefined as unknown as AngularColumnGroupChild[]`) and bind `[]` for no `headerBandHeights` — an empty `columnGroups` array is a hierarchy that misses every column and is rejected.
 - **OnPush change detection**: the component uses `ChangeDetectionStrategy.OnPush` and signals internally. Mutating an array passed to `[columns]` won't trigger CD — replace it (`this.columns = [...this.columns, newCol]`) or use a signal.
 
 ## Working playground

@@ -1,6 +1,6 @@
 ---
 name: gp-grid-integration
-description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
+description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
 ---
 
 # gp-grid integration
@@ -10,7 +10,7 @@ This skill helps users integrate the **gp-grid** data grid library (https://www.
 The library ships as a framework-agnostic core plus thin official wrappers:
 
 - `@gp-grid/react` — React 18+
-- `@gp-grid/vue` — Vue 3
+- `@gp-grid/vue` — Vue 3.5+
 - `@gp-grid/angular` — Angular 18+
 - `@gp-grid/core` — vanilla / custom adapter
 
@@ -63,13 +63,14 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | `filterable` | `true` | Filter dropdown available on header. |
 | `hidden` | `false` | Hide column without removing it from the array. |
 | `pinned` | none | Initial pin: `"start"` or `"end"` abuts that viewport edge while the center columns scroll. An explicit `pinned: null` command unpins. |
-| `resizable` | `true` | Drag right edge of header to resize. |
+| `resizable` | `true` | Drag the header's inline-end edge to resize, double-click it to fit; Alt+ArrowLeft/Right and Alt+Enter on the active cell do the same. |
 | `movable` | `true` | Drag header body to reorder columns. |
 | `minWidth` / `maxWidth` | `50` / unlimited | Resize bounds. |
 | `rowDrag` | `false` | This column acts as the row drag handle. |
 | `cellRenderer` / `editRenderer` / `headerRenderer` | none | Custom rendering — exact type **differs per framework**, see references. This takes the value formatted data from the `valueFormatter` field. |
 | `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. |
-| `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the fixed row height (rows do **not** auto-grow). Only affects the default text renderer, not custom `cellRenderer` output. |
+| `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the row height (rows do **not** auto-grow; a row fit grows one once). Only affects the default text renderer, not custom `cellRenderer` output. |
+| `wrapHeaderText` | `false` | Wrap the header text inside its band; a header taller than its band is clipped. |
 | `computeRowClasses` / `computeColumnClasses` / `computeCellClasses` | none | Per-column/row/cell highlighting overrides — see Highlighting below. |
 
 ### Column layout (`columnLayout`)
@@ -170,8 +171,8 @@ data changes. Invalid values throw a `RangeError` naming the field.
 ### Row heights (`core.rowHeights`)
 
 Rows are `rowHeight` px tall unless the application sets a height by row
-identity. There is no resize gesture: this is a command surface, and it needs
-`getRowId` for heights that must survive sort, filter or paging.
+identity, or the user resizes or fits a row (next section). It needs `getRowId`
+for heights that must survive sort, filter or paging.
 
 ```ts
 grid.core.rowHeights.set([{ rowId: 2, height: 96 }, { rowId: 10, height: 64 }]);
@@ -192,8 +193,83 @@ grid.core.rowHeights.getOverrides();     // [{ rowId, height }] in insertion ord
   scroll keeps its own anchoring.
 - Wrappers size each row box from `SlotData.height` and give cells no inline
   height (`.gp-grid-cell { height: 100% }`); row drag ghosts use
-  `RowDragState.sourceRowHeight`. Nothing is measured — auto height is PRD 007.
+  `RowDragState.sourceRowHeight`. Nothing is measured continuously.
   See [docs/features/row-heights.md](../../../docs/features/row-heights.md).
+
+### Row resize and auto-fit (`rowResize`, `rowHeights.fit`, `columns.fit`)
+
+`rowResize` (default `false`, changeable at runtime) lets the user drag a row
+edge. A double-click on a row or column edge fits it to its rendered content
+once; the same fits are commands on the core:
+
+```ts
+grid.core.columns.fit(["name"]);   // omit ids for every mounted displayed column
+grid.core.rowHeights.fit();        // every mounted row; works while rowResize is off
+grid.core.columns.setState([{ columnId: "name", width: null }]); // drop a width override
+grid.core.rowHeights.reset([2]);   // drop a fitted or resized height
+```
+
+- A fit returns `{ status, ... }` with `status` `"applied"`, `"unchanged"`,
+  `"unsupported"` (server render, no host, after `destroy()`) or `"stale"`.
+  **Fit after the render:** a fit in the same task as a column change (width,
+  move, pin, hide, `columns.set`, `setGroups`) returns `"stale"` and applies
+  nothing — call it from a later frame.
+- It reads mounted cells only (no data request). Rows clamp into
+  `autoFit.minRowHeight`–`maxRowHeight` (defaults `rowHeight`, `10 × rowHeight`)
+  and become row heights; columns clamp into `minWidth ?? 50`–`min(maxWidth,
+  autoFit.maxColumnWidth)` (default 600) and become width overrides. `autoFit` is
+  creation-only. A `wrapText` column fit lands on `maxColumnWidth`; a row fit can
+  store a fractional height.
+- `onRowResized({ rowId, height, viewIndex })` and `onColumnResized` fire per
+  changed row or column; `rowHeights.set` and `columns.setState` stay silent.
+- The edge handles are pointer-only (`aria-hidden`, not focusable). Keyboard
+  equivalents on the active cell: Alt+ArrowLeft/Right (column ±8 px),
+  Alt+ArrowUp/Down (row ±4 px, `rowResize` only), Alt+Shift+ArrowLeft/Right (move
+  the column), Alt+Enter (fit the column), Alt+Shift+Enter (fit the row,
+  `rowResize` only). There is no reset key.
+  See [docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+
+### Column groups (`columnGroups`, `headerBandHeights`)
+
+```ts
+const columnGroups: ColumnGroupChild[] = [
+  "id",                                                    // ungrouped column at the root
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+// columnGroups={columnGroups} headerBandHeights={[40]} onColumnSchemaRejected={(e) => ...}
+```
+
+- Every column, hidden ones included, is referenced **exactly once**; a group id
+  must differ from every column id and every other group id. Any depth works
+  within `columnGroupLimits` (`maxDepth` 64, `maxNodes` 100,000, `maxFragments`
+  100,000; creation-only).
+- An invalid hierarchy (`cycle`, `duplicateGroup`, `repeatedLeaf`, `unknownLeaf`,
+  `missingLeaf`, `multipleParents`, `idCollision`, `malformed`, `limit`) is
+  rejected: the grid keeps the previous one and calls `onColumnSchemaRejected`
+  with `{ code, source, id?, limit?, message }`. The wrapper re-applies the
+  rejected prop with every later `columns` change, so restore a valid one. At
+  creation a rejected hierarchy leaves the grid flat and warns once.
+- Wrappers apply `columns` and `columnGroups` together through
+  `columns.set(columns, columnGroups ?? null)`. Core: `columns.setGroups(groups)`,
+  `getGroups()`, `getGroup(id)`; `columns.set`, `move`, `setPinned`, `setState`
+  and `resetState` return a `ColumnSchemaResult`.
+- Leaf order defaults to the descriptors' depth-first order; `columns.resetState()`
+  restores it (and drops widths and pins). Moves, pins and hides never change a
+  leaf's group: moving a leaf between two leaves of a group splits that group into
+  two header fragments.
+- Bands: `1 +` the deepest visible leaf's depth; band `b` is
+  `headerBandHeights[b] ?? headerHeight`. `headerBandHeights` is reactive
+  (`core.header.setBandHeights`). Header text never sizes a band: it is clipped,
+  and `wrapHeaderText` wraps it.
+- A group's `headerRenderer` gets `ColumnGroupHeaderParams` (`group`, `groupId`,
+  `band`, `region`, `leafCount`, `columnIds`) — a function or a `headerRenderers`
+  key in React/Vue, a `TemplateRef` or key in Angular.
+- ARIA rows number the header bands first: body `aria-rowindex` and the root's
+  `aria-rowcount` are offset by the band count.
+  See [docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
 ### Data sources — pick one
 
@@ -378,16 +454,16 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Fill handle (Excel-style):** automatic on editable columns when a single cell is active or a range is selected. Drag the small square at the bottom-right of the active cell.
 - **Copy / paste:** Ctrl+C copies the selected range to clipboard as TSV; Ctrl+V pastes clipboard values across the active selection. Works automatically.
 - **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })` — **the consumer must reorder the underlying data**, the grid does not mutate it.
-- **Column resize / move:** on by default. Drag the right edge of a header to resize, drag the header body to reorder. Listen with `onColumnResized({ columnId, width, viewIndex })` and `onColumnMoved({ columnId, fromViewIndex, toViewIndex })` to persist user state.
+- **Column resize / move:** on by default. Drag the inline-end edge of a header to resize (double-click it to fit), drag the header body to reorder. Listen with `onColumnResized({ columnId, width, viewIndex })` and `onColumnMoved({ columnId, fromViewIndex, toViewIndex })` to persist user state.
 - **Column hide:** set `hidden: true` as the column's initial default (keeps it in the definition array); after mount, toggle visibility through `columns.setState` or the wrapper's `columnState` input.
 - **Column pin:** `pinned: "start"` / `"end"` on the column, or `columns.setPinned`. Pinned columns stay visible while the rest scroll; the header toggle (`pinIcon`) does the same. Listen with `onColumnPinned({ columnId, pinned })` to persist. A pin that does not fit renders in the center — check `region` in `columns.getState()`.
 - **Frozen rows:** `freezeRows={{ count: 3 }}` keeps the first displayed rows below the header; a changed prop applies in place through `frozenRows.set` (no remount). Read `core.frozenRows.get()` for the effective count and its `limit`, and listen with `onFrozenRowsChanged(state)`. See [Frozen rows](#frozen-rows-freezerows).
 - **Highlighting (row / column / cell, incl. crosshair):** pass `highlighting={{ computeRowClasses, computeColumnClasses, computeCellClasses }}`. Each callback gets a context with `isHovered`, `isActive`, `isSelected`, etc., and returns CSS class names. Combine `computeRowClasses` + `computeColumnClasses` for an Excel-style crosshair. Define the highlight CSS classes globally (not scoped) — gp-grid renders cells outside any per-component CSS scope. Apply translucent row backgrounds through `.gp-grid-row.<class> .gp-grid-cell`; a translucent background on the row itself lets horizontally scrolling content show through pinned regions.
 - **Dark mode:** `darkMode={true}` adds a `.gp-grid-container--dark` modifier; the grid's CSS handles the rest.
-- **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste). All wired automatically.
+- **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste), Alt+Arrow (resize), Alt+Shift+Arrow (move column), Alt+Enter / Alt+Shift+Enter (fit column / row). All wired automatically.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level and nested operator labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), the column-group rejection messages (nested `columnSchemaErrors.*`, tokens `{id}` and `{limit}`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level, nested operator and nested schema-error labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.
@@ -403,7 +479,7 @@ Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 
 
 ### Programmatic API (`GridCore`)
 
-Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Features live on namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowDrag`, `sortFilter`, `viewport`); the root keeps lifecycle and data loading. Common members:
+Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Features live on namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowHeights`, `header`, `rowDrag`, `sortFilter`, `viewport`); the root keeps lifecycle and data loading. Common members:
 
 | Method | Purpose |
 |---|---|
@@ -421,6 +497,9 @@ Every wrapper exposes the underlying `GridCore` instance — same surface in eve
 | `columns.setState(updates)` / `columns.resetState(ids?)` / `columns.getState()` | Column width / hidden / order / pin state |
 | `columns.setPinned(columnId, pinned)` | Pin to `"start"`/`"end"` or unpin with `null`; raises `onColumnPinned` |
 | `frozenRows.get()` | `{ requestedCount, effectiveCount, limit }` for the frozen prefix |
+| `rowHeights.fit(rowIds?)` / `columns.fit(columnIds?)` | One-shot fit of mounted rows / columns; fit after the render |
+| `columns.setGroups(groups)` / `columns.getGroup(id)` | Replace the header hierarchy (`null` = flat) / read one group |
+| `header.setBandHeights(heights)` / `header.getBands()` | Header band heights |
 | `rows.getSlotGeneration(viewIndex)` / `rows.isSlotGenerationCurrent(viewIndex, gen)` | Slot recycle guard for async renderers |
 | `cells.getValue(row, col)` / `cells.setValue(row, col, value)` / `cells.getBounds(rowId, columnId, space?)` | Cell values by position, bounds by identity |
 | `selection` (manager) | `startSelection`, `extendTo`, etc. |
@@ -448,6 +527,8 @@ How to get the ref:
 - **Highlighting CSS in scoped Vue styles or component-scoped Angular styles** → won't apply. Define those rules in a global stylesheet.
 - **Column index drift after `hidden: true`** → don't worry: the grid maps visible↔original indices internally, and events carry `columnId` plus named view indices (`viewIndex`, `fromViewIndex`, `toViewIndex`).
 - **Expecting a pinned column to always render pinned** → a pin that does not fit the viewport renders in the scrolling center and is admitted again on widening. Read `region` from `columns.getState()` instead of assuming the request took effect.
+- **Fitting in the same task as a column change** → `"stale"`, nothing applied. Fit after the render (a later frame).
+- **A `columnGroups` that misses a column, or a column added without its reference** → rejected (`missingLeaf` / `unknownLeaf`); every column, hidden ones included, needs exactly one reference.
 - **Flipping `dir` on an existing grid** → the wrappers read direction at mount and on resize, so a flip without a size change needs a remount (change the `key`).
 
 ## What this skill does NOT do
