@@ -344,6 +344,10 @@ export type {
   HeaderBox,
 } from "./header-layout";
 
+/** Group definitions by id before a core exists (PRD 007 D9). */
+export { createColumnGroupLookup } from "./column-groups/group-lookup";
+export type { ColumnGroupLookup } from "./column-groups/group-lookup";
+
 /** Localization: shared label model and helpers */
 export {
   defaultGridLabels,

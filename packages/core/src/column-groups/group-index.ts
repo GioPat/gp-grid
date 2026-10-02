@@ -72,13 +72,13 @@ interface Walk {
   visits: number;
 }
 
-const isChildList = (value: unknown): value is readonly unknown[] =>
+export const isChildList = (value: unknown): value is readonly unknown[] =>
   Array.isArray(value);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isGroupDefinition = (value: unknown): value is ColumnGroupDefinition =>
+export const isGroupDefinition = (value: unknown): value is ColumnGroupDefinition =>
   isRecord(value) &&
   typeof value.groupId === "string" &&
   value.groupId.length > 0 &&
