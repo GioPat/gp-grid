@@ -2,6 +2,7 @@
 
 import React, { useId, useMemo } from "react";
 import {
+  createColumnGroupLookup,
   fragmentHeaderBox,
   fragmentHeaderId,
   leafHeaderBox,
@@ -9,6 +10,7 @@ import {
   resolveHeaderAssociations,
 } from "@gp-grid/core";
 import type {
+  ColumnGroupChild,
   ColumnWindowSnapshot,
   GridCore,
   GridIcon,
@@ -42,6 +44,8 @@ export interface GridHeaderProps<TData = unknown> {
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
+  /** The `columnGroups` prop: fragments resolve their group here while the core is null. */
+  columnGroups?: readonly ColumnGroupChild[];
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
   headerRenderers: ReactHeaderRendererRegistry;
   globalHeaderRenderer?: ReactHeaderRenderer;
@@ -72,6 +76,7 @@ export const GridHeader = <TData = unknown>(
     onHeaderMouseDown,
     resizeActions,
     coreRef,
+    columnGroups,
     outerContainerRef,
     headerRenderers,
     globalHeaderRenderer,
@@ -79,6 +84,7 @@ export const GridHeader = <TData = unknown>(
   } = props;
 
   const instance = useId();
+  const lookupGroup = useMemo(() => createColumnGroupLookup(columnGroups), [columnGroups]);
   const { count: bandCount, totalHeight } = headerBands;
   const associations = useMemo(
     () =>
@@ -128,6 +134,7 @@ export const GridHeader = <TData = unknown>(
       box={fragmentHeaderBox(headerBands, fragment.band)}
       layoutColumns={layoutColumns}
       coreRef={coreRef}
+      lookupGroup={lookupGroup}
       headerRenderers={headerRenderers}
     />
   );

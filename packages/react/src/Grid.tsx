@@ -662,6 +662,7 @@ export function Grid<TData = unknown>(
         onHeaderMouseDown={handleHeaderMouseDown}
         resizeActions={resizeActions}
         coreRef={coreRef}
+        columnGroups={columnGroups}
         outerContainerRef={outerContainerRef}
         headerRenderers={headerRenderers}
         globalHeaderRenderer={headerRenderer}

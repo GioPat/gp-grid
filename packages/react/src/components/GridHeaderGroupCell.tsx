@@ -1,7 +1,13 @@
 // packages/react/src/components/GridHeaderGroupCell.tsx
 
 import React from "react";
-import type { GridCore, HeaderBox, HeaderFragment, ResolvedColumn } from "@gp-grid/core";
+import type {
+  ColumnGroupLookup,
+  GridCore,
+  HeaderBox,
+  HeaderFragment,
+  ResolvedColumn,
+} from "@gp-grid/core";
 import { renderGroupHeader } from "../renderers/headerRenderer";
 import type { ReactHeaderRendererRegistry } from "../types";
 
@@ -12,6 +18,8 @@ export interface GridHeaderGroupCellProps<TData = unknown> {
   /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
   layoutColumns: readonly ResolvedColumn[];
   coreRef: React.RefObject<GridCore<TData> | null>;
+  /** Resolves the group from the `columnGroups` prop while the core is null. */
+  lookupGroup: ColumnGroupLookup;
   headerRenderers: ReactHeaderRendererRegistry;
 }
 
@@ -22,16 +30,17 @@ export interface GridHeaderGroupCellProps<TData = unknown> {
 export const GridHeaderGroupCell = <TData = unknown>(
   props: GridHeaderGroupCellProps<TData>,
 ): React.ReactNode => {
-  const { fragment, id, box, layoutColumns, coreRef, headerRenderers } = props;
-  const group = coreRef.current?.columns.getGroup(fragment.groupId);
-  const className = group?.wrapHeaderText === true
-    ? "gp-grid-header-cell gp-grid-header-group gp-grid-header-cell--wrap"
-    : "gp-grid-header-cell gp-grid-header-group";
+  const { fragment, id, box, layoutColumns, coreRef, lookupGroup, headerRenderers } = props;
+  const core = coreRef.current;
+  const group = core === null
+    ? lookupGroup(fragment.groupId)
+    : core.columns.getGroup(fragment.groupId);
+  const wrapClass = group?.wrapHeaderText === true ? " gp-grid-header-cell--wrap" : "";
 
   return (
     <div
       id={id}
-      className={className}
+      className={`gp-grid-header-cell gp-grid-header-group${wrapClass}`}
       role="columnheader"
       aria-colindex={fragment.firstDisplayIndex + 1}
       aria-colspan={fragment.leafCount}
