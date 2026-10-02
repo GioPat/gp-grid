@@ -5,6 +5,10 @@ import type {
   AutoFitOptions,
   RowId,
   ColumnDefinition as CoreColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupHeaderParams,
+  ColumnGroupLimits,
+  ColumnSchemaError,
   CellRendererParams,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
@@ -61,6 +65,23 @@ export type VueHeaderRenderer =
   | ((params: HeaderRendererParams) => VNode | string | null)
   | Component;
 
+/**
+ * Vue group header renderer: renders one fragment of a column group, as a
+ * render function or a component taking ColumnGroupHeaderParams as props.
+ */
+export type VueGroupHeaderRenderer =
+  | ((params: ColumnGroupHeaderParams) => VNode | string | null)
+  | Component;
+
+/**
+ * Header renderer registry, shared by columns and groups: a key receives the
+ * params of whichever definition names it.
+ */
+export type VueHeaderRendererRegistry = Record<
+  string,
+  VueHeaderRenderer | VueGroupHeaderRenderer
+>;
+
 // =============================================================================
 // Column Definition
 // =============================================================================
@@ -88,7 +109,19 @@ export interface GpGridProps<TData = unknown> {
   dataSource?: DataSource<TData>;
   rowData?: TData[];
   rowHeight: number;
+  /** Header height in pixels, the default height of every band. Default: rowHeight */
   headerHeight?: number;
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Read at creation. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   overscan?: number;
   /** Column overscan in CSS px per side for the mounted center window. */
   columnOverscan?: number;
@@ -109,7 +142,8 @@ export interface GpGridProps<TData = unknown> {
   maxFlingVelocity?: number;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
-  headerRenderers?: Record<string, VueHeaderRenderer>;
+  /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+  headerRenderers?: VueHeaderRendererRegistry;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;

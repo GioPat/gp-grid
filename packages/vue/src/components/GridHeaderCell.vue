@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import type { GridCore, GridIcon, GridLabels, HeaderData, ResizeTarget, ResolvedColumn } from "@gp-grid/core";
 import { renderHeader } from "../renderers/headerRenderer";
-import type { Row, VueHeaderRenderer } from "../types";
+import type { Row, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
 import ResizeHandle from "./ResizeHandle.vue";
 
+// The placement is passed as primitives so a header re-render on scroll
+// re-renders no cell.
 const props = defineProps<{
   column: ResolvedColumn;
   /** 0-based index in the displayed columns, for `aria-colindex`. */
   displayedIndex: number;
-  headerHeight: number;
+  id: string;
+  /** Top of the leaf's first band. */
+  top: number;
+  /** From its first band to the bottom of the header. */
+  height: number;
+  /** Grouped only: 1-based first band. */
+  bandRowIndex?: number;
+  /** Grouped only: bands the leaf spans. */
+  bandRowSpan?: number;
+  /** Grouped only: ids of its mounted ancestor fragments, outermost first. */
+  describedBy?: string;
   headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
   rtl: boolean;
@@ -18,7 +30,7 @@ const props = defineProps<{
   onResizeDoubleClick: (target: ResizeTarget) => void;
   coreRef: GridCore<Row> | null;
   outerContainerRef: HTMLDivElement | null;
-  headerRenderers: Record<string, VueHeaderRenderer>;
+  headerRenderers: VueHeaderRendererRegistry;
   globalHeaderRenderer?: VueHeaderRenderer;
   pinIcon: GridIcon;
 }>();
@@ -46,17 +58,22 @@ const headerContent = () =>
 
 <template>
   <div
-    class="gp-grid-header-cell"
+    :id="props.id"
+    :class="['gp-grid-header-cell', { 'gp-grid-header-cell--wrap': props.column.column.wrapHeaderText === true }]"
     role="columnheader"
     :aria-colindex="props.displayedIndex + 1"
+    :aria-rowindex="props.bandRowIndex"
+    :aria-rowspan="props.bandRowSpan"
+    :aria-describedby="props.describedBy"
     :data-col-index="props.column.layoutIndex"
     :data-cell-region="props.column.region"
     :style="{
       insetInlineStart: `${props.column.regionOffset}px`,
       width: `${props.column.width}px`,
-      height: `${props.headerHeight}px`,
+      height: `${props.height}px`,
+      top: `${props.top}px`,
     }"
-    @pointerdown="(e) => props.onHeaderMouseDown(props.column.layoutIndex, props.column.width, props.headerHeight, e)"
+    @pointerdown="(e) => props.onHeaderMouseDown(props.column.layoutIndex, props.column.width, props.height, e)"
   >
     <component :is="headerContent()" />
     <ResizeHandle

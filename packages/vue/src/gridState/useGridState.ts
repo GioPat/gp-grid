@@ -25,6 +25,7 @@ const LAYOUT_INSTRUCTIONS: ReadonlySet<GridInstruction["type"]> = new Set([
   "SET_CONTENT_SIZE",
   "SET_COLUMN_WINDOW",
   "SET_ROW_REGIONS",
+  "SET_HEADER_BANDS",
   "SCROLL_TO",
 ]);
 
@@ -109,10 +110,10 @@ export function useGridState(args?: InitialStateArgs): {
   };
 
   /**
-   * Reset state to initial values
+   * Reset state to the seed it was created with
    */
   const reset = (): void => {
-    state.value = createInitialState();
+    state.value = createInitialState(args);
     renderToken.value += 1;
     contentToken.value += 1;
   };

@@ -22,6 +22,8 @@ import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
   totalHeaderHeight: number;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   contentWidth: number;
   contentHeight: number;
   totalWidth: number;
@@ -159,6 +161,7 @@ defineExpose({ bodyRef });
       <GridFrozenRows
         :row-regions="props.rowRegions"
         :slots="frozenSlots"
+        :header-row-count="props.headerRowCount"
         :column-window="props.columnWindow"
         :displayed-index-of="props.displayedIndexOf"
         :content-width-px="contentWidthPx"
@@ -198,6 +201,7 @@ defineExpose({ bodyRef });
             v-for="slot in suffixSlots"
             :key="slot.slotId"
             :slot="slot"
+            :header-row-count="props.headerRowCount"
             :column-window="props.columnWindow"
             :displayed-index-of="props.displayedIndexOf"
             :width="contentWidthPx"

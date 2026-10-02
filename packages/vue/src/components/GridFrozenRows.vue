@@ -19,6 +19,8 @@ const props = defineProps<{
   rowRegions: RowRegionLayout;
   /** Frozen slots only; the suffix rows stay in the scrolling wrapper. */
   slots: SlotData<Row>[];
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   columnWindow: ColumnWindowSnapshot | null;
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
@@ -80,6 +82,7 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
             v-for="slot in props.slots"
             :key="slot.slotId"
             :slot="slot"
+            :header-row-count="props.headerRowCount"
             :column-window="props.columnWindow"
             :displayed-index-of="props.displayedIndexOf"
             :width="props.contentWidthPx"

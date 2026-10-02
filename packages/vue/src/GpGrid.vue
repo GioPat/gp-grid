@@ -21,11 +21,12 @@ import {
   createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { AutoFitOptions, RowId, RowResizedEvent, ColumnFilterModel, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
-import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "./types";
+import { useColumnSchemaSync } from "./composables/useColumnSchemaSync";
+import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
@@ -39,7 +40,19 @@ const props = withDefaults(
     dataSource?: DataSource<Row>;
     rowData?: Row[];
     rowHeight: number;
+    /** Header height in pixels, the default height of every band. Default: rowHeight */
     headerHeight?: number;
+    /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+    headerBandHeights?: readonly number[];
+    /**
+     * Nested header groups over the column ids; every column is referenced
+     * once, ungrouped ones at the root. Applied together with `columns`.
+     */
+    columnGroups?: readonly ColumnGroupChild[];
+    /** Budgets of `columnGroups`. Read at creation. */
+    columnGroupLimits?: ColumnGroupLimits;
+    /** Called when a column change is rejected; the previous schema stays. */
+    onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
     overscan?: number;
     /** Column overscan in CSS px per side for the mounted center window. */
     columnOverscan?: number;
@@ -60,7 +73,8 @@ const props = withDefaults(
     maxFlingVelocity?: number;
     cellRenderers?: Record<string, VueCellRenderer>;
     editRenderers?: Record<string, VueEditRenderer>;
-    headerRenderers?: Record<string, VueHeaderRenderer>;
+    /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+    headerRenderers?: VueHeaderRendererRegistry;
     cellRenderer?: VueCellRenderer;
     editRenderer?: VueEditRenderer;
     headerRenderer?: VueHeaderRenderer;
@@ -146,10 +160,13 @@ const { state, renderToken, contentToken, applyInstructions, reset: resetState }
   initialHeight: props.initialHeight,
   initialColumns: props.columns as unknown as CoreColumnDefinition[],
   initialColumnLayout: props.columnLayout ?? "fit",
+  initialHeaderHeight: props.headerHeight ?? props.rowHeight,
+  initialHeaderBandHeights: props.headerBandHeights,
+  initialColumnGroups: props.columnGroups,
 });
 
 // Computed values
-const totalHeaderHeight = computed(() => props.headerHeight ?? props.rowHeight);
+const totalHeaderHeight = computed(() => state.value.headerBands.totalHeight);
 const resolvedLabels = computed(() => resolveGridLabels(props.labels));
 
 // Resolved layout owned by the core. The `columns` prop is schema input only;
@@ -298,9 +315,13 @@ function initializeCore(dataSource: DataSource<Row>): void {
   // stores the renderer and never invokes it — the Vue layer handles dispatch.
   const core = new GridCore<Row>({
     columns: props.columns as unknown as CoreColumnDefinition[],
+    columnGroups: props.columnGroups,
+    columnGroupLimits: props.columnGroupLimits,
+    onColumnSchemaRejected: (error) => props.onColumnSchemaRejected?.(error),
     dataSource,
     rowHeight: props.rowHeight,
-    headerHeight: totalHeaderHeight.value,
+    headerHeight: props.headerHeight ?? props.rowHeight,
+    headerBandHeights: props.headerBandHeights,
     overscan: props.overscan,
     columnOverscan: props.columnOverscan,
     columnLayout: props.columnLayout ?? "fit",
@@ -500,13 +521,11 @@ watch(
   },
 );
 
-// Reconcile a replacement `columns` array without recreating the core.
-watch(
-  () => props.columns,
-  (columns) => {
-    coreRef.value?.columns.set(columns as unknown as CoreColumnDefinition[]);
-  },
-);
+useColumnSchemaSync(coreRef, {
+  columns: () => props.columns as unknown as CoreColumnDefinition[],
+  columnGroups: () => props.columnGroups,
+  headerBandHeights: () => props.headerBandHeights,
+});
 
 // Apply a controlled column-state input whenever it changes.
 watch(
@@ -529,14 +548,14 @@ defineExpose({
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
     role="grid"
     :aria-colcount="displayedColumnCount"
-    :aria-rowcount="state.totalRows"
+    :aria-rowcount="state.totalRows + state.headerBands.count"
     :data-layout-revision="columnWindow?.layout.revision"
     tabindex="0"
     @keydown="handleKeyDown"
     @paste="handlePaste"
   >
     <GridHeader
-      :header-height="totalHeaderHeight"
+      :header-bands="state.headerBands"
       :scroll-left="scrollLeft"
       :content-width="state.contentWidth"
       :total-width="totalWidth"
@@ -561,6 +580,7 @@ defineExpose({
     <GridBody
       ref="gridBodyComp"
       :total-header-height="totalHeaderHeight"
+      :header-row-count="state.headerBands.count"
       :content-width="state.contentWidth"
       :content-height="state.contentHeight"
       :total-width="totalWidth"
