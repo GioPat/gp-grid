@@ -62,6 +62,7 @@
       [darkMode]="darkMode()"
       [highlighting]="highlighting"
       [rowDragEntireRow]="true"
+      [rowResize]="true"
       [freezeRows]="freezeRows()"
       (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
@@ -87,6 +88,9 @@
     <span>Row heights:</span>
     <button type="button" class="update-btn" (click)="tallRows()">Tall rows</button>
     <button type="button" class="update-btn" (click)="resetRowHeights()">Reset heights</button>
+    <!-- Auto-fit (PRD 007): one-shot fits of the mounted cells, no remount -->
+    <button type="button" class="update-btn" (click)="fitColumns()">Fit columns</button>
+    <button type="button" class="update-btn" (click)="fitRows()">Fit rows</button>
     <!-- Column groups (PRD 007): hierarchy and band heights, no remount -->
     <button
       type="button"

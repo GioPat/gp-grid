@@ -121,6 +121,15 @@ export class App implements AfterViewInit {
     this.gridComponent?.core?.rowHeights.reset();
   }
 
+  /** Auto-fit (PRD 007): one-shot fits of the mounted cells. */
+  protected fitColumns(): void {
+    this.gridComponent?.core?.columns.fit();
+  }
+
+  protected fitRows(): void {
+    this.gridComponent?.core?.rowHeights.fit();
+  }
+
   /** Column groups (PRD 007): hierarchy and band heights, no remount. */
   protected readonly headerHeight = DEMO_HEADER_HEIGHT;
 

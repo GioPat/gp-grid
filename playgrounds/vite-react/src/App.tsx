@@ -586,6 +586,33 @@ function MainDemo() {
         >
           Reset heights
         </button>
+        {/* Auto-fit (PRD 007): one-shot fits of the mounted cells, no remount */}
+        <button
+          onClick={() => gridRef.current?.core?.columns.fit()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Fit columns
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowHeights.fit()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Fit rows
+        </button>
         {/* Column groups (PRD 007): hierarchy and band heights, no remount */}
         <button
           onClick={() => setGrouped((value) => !value)}

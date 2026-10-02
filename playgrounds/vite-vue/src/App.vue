@@ -37,6 +37,14 @@ const resetRowHeights = (): void => {
     coreOf()?.rowHeights.reset();
 };
 
+/** Auto-fit (PRD 007): one-shot fits of the mounted cells. */
+const fitColumns = (): void => {
+    coreOf()?.columns.fit();
+};
+const fitRows = (): void => {
+    coreOf()?.rowHeights.fit();
+};
+
 // Types
 interface Person {
     id: number;
@@ -310,6 +318,8 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         <span class="mode-label">Row heights:</span>
         <button class="mode-btn" @click="tallRows">Tall rows</button>
         <button class="mode-btn" @click="resetRowHeights">Reset heights</button>
+        <button class="mode-btn" @click="fitColumns">Fit columns</button>
+        <button class="mode-btn" @click="fitRows">Fit rows</button>
         <button
             :class="['mode-btn', { active: grouped }]"
             :aria-pressed="grouped"
@@ -341,6 +351,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :data-source="dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
             :row-height="36"
+            :row-resize="true"
             :header-height="DEMO_HEADER_HEIGHT"
             :dark-mode="true"
         />
