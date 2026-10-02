@@ -45,7 +45,7 @@ const TEMPLATE = `
   @if (isLoading()) {
     <div
       style="position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; pointer-events: none;"
-      [style.top.px]="headerHeight()">
+      [style.top.px]="totalHeaderHeight()">
       <div class="gp-grid-loading-overlay"></div>
       <div class="gp-grid-loading">
         <div class="gp-grid-loading-spinner"></div>
@@ -68,7 +68,7 @@ const TEMPLATE = `
       <div
         class="gp-grid-column-drop-indicator"
         [style.inset-inline-start.px]="columnMoveDropLeft()"
-        [style.height.px]="headerHeight()"></div>
+        [style.height.px]="totalHeaderHeight()"></div>
     }
   }
   @if (rowDragGhost(); as rd) {
@@ -93,7 +93,7 @@ export class GridOverlaysComponent {
   isLoading = input<boolean>(false);
   errorMessage = input<string | null>(null);
   labels = input<GridLabels>(defaultGridLabels);
-  headerHeight = input.required<number>();
+  totalHeaderHeight = input.required<number>();
   dragState = input.required<DragState>();
   scrollLeft = input.required<number>();
   effectiveColumns = input.required<ColumnDefinition[]>();
@@ -118,7 +118,7 @@ export class GridOverlaysComponent {
   protected rowResizeLineTop = computed<number | null>(() => {
     const rr = this.dragState().rowResize;
     if (this.dragState().dragType !== 'row-resize' || rr === null) return null;
-    return this.headerHeight() + rr.lineY;
+    return this.totalHeaderHeight() + rr.lineY;
   });
 
   protected columnMove = computed(() => {

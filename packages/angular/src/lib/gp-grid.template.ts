@@ -4,7 +4,7 @@ export const GP_GRID_TEMPLATE = `
       style="width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; outline: none;"
       role="grid"
       [attr.aria-colcount]="vm.displayedColumnCount()"
-      [attr.aria-rowcount]="vm.totalRows()"
+      [attr.aria-rowcount]="vm.totalRows() + vm.headerRowCount()"
       [attr.data-layout-revision]="layoutRevision()"
       tabindex="0"
       (keydown)="onKeyDown($event)"
@@ -12,7 +12,7 @@ export const GP_GRID_TEMPLATE = `
       (wheel)="onWheel($event)"
     >
       <gp-grid-header
-        [headerHeight]="headerHeight()"
+        [headerBands]="vm.headerBands()"
         [scrollLeft]="vm.scrollLeft()"
         [contentWidth]="vm.contentWidth()"
         [totalWidth]="vm.totalWidth()"
@@ -27,6 +27,7 @@ export const GP_GRID_TEMPLATE = `
         [headerRenderers]="headerRenderers()"
         [globalHeaderRenderer]="headerRenderer()"
         [pinIcon]="pinIcon()"
+        [core]="core"
         (headerPointerDown)="onHeaderPointerDown($event)"
         (filterPointerDown)="onFilterPointerDown($event)"
         (resizePointerDown)="onResizePointerDown($event)"
@@ -35,7 +36,8 @@ export const GP_GRID_TEMPLATE = `
         (headerPin)="onHeaderPin($event)"
       />
       <gp-grid-body
-        [totalHeaderHeight]="headerHeight()"
+        [totalHeaderHeight]="vm.headerBands().totalHeight"
+        [headerRowCount]="vm.headerRowCount()"
         [contentWidth]="vm.contentWidth()"
         [contentHeight]="vm.contentHeight()"
         [totalWidth]="vm.totalWidth()"
@@ -89,7 +91,7 @@ export const GP_GRID_TEMPLATE = `
         [labels]="resolvedLabels()"
         [isLoading]="vm.isLoading()"
         [errorMessage]="vm.errorMessage()"
-        [headerHeight]="headerHeight()"
+        [totalHeaderHeight]="vm.headerBands().totalHeight"
         [dragState]="vm.dragState()"
         [scrollLeft]="vm.scrollLeft()"
         [effectiveColumns]="vm.effectiveColumns()"

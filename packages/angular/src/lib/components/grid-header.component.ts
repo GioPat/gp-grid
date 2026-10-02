@@ -4,6 +4,7 @@ import {
   input,
   output,
   computed,
+  inject,
   TemplateRef,
 } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
@@ -12,16 +13,44 @@ import type {
   ColumnWindowSnapshot,
   ResolvedColumn,
   ColumnDefinition,
+  ColumnGroupDefinition,
+  ColumnGroupHeaderParams,
   ColumnPin,
+  GridCore,
   GridLabels,
   GridIcon,
+  HeaderAssociations,
+  HeaderBandLayout,
+  HeaderBox,
+  HeaderFragment,
   HeaderRendererParams,
   ResizeTarget,
   SortDirection,
 } from '@gp-grid/core';
-import { defaultGridLabels, defaultPinIcon } from '@gp-grid/core';
+import {
+  defaultGridLabels,
+  defaultPinIcon,
+  fragmentHeaderBox,
+  fragmentHeaderId,
+  leafHeaderBox,
+  leafHeaderId,
+  resolveHeaderAssociations,
+} from '@gp-grid/core';
 import { ResizeHandleComponent } from './resize-handle.component';
 import type { ResizeHandlePointerDownEvent } from './resize-handle.component';
+import { GRID_HEADER_TEMPLATE } from './grid-header.template';
+import { GridHeaderInstanceIds } from './header-instance-ids';
+import {
+  NO_HEADER_FRAGMENTS,
+  groupHeaderParams,
+  leafHeaderBands,
+  resolveGroupTemplate,
+} from './grid-header-groups';
+import type {
+  GroupHeaderRendererTemplate,
+  HeaderRendererRegistry,
+  LeafHeaderBands,
+} from './grid-header-groups';
 
 export type HeaderRendererTemplate = TemplateRef<{ $implicit: HeaderRendererParams }>;
 
@@ -49,158 +78,15 @@ export interface ResizePointerDownEvent {
   event: PointerEvent;
 }
 
-const TEMPLATE = `
-  <div
-    class="gp-grid-header"
-    [class.gp-grid-header--loading]="isLoading()"
-    role="row"
-    [style.height.px]="headerHeight()">
-    <ng-template #headerCellTpl let-entry="entry">
-      @let colW = entry.width;
-      @let headerData = headers().get(entry.columnId);
-      @let tpl = headerTemplate(entry.column);
-      <div
-        class="gp-grid-header-cell"
-        role="columnheader"
-        [attr.aria-colindex]="displayedIndexOf()(entry.columnId) + 1"
-        [attr.data-col-index]="entry.layoutIndex"
-        [attr.data-cell-region]="entry.region"
-        [style.inset-inline-start.px]="entry.regionOffset"
-        [style.width.px]="colW"
-        [style.height.px]="headerHeight()"
-        (pointerdown)="onHeaderPointerDown($event, entry.layoutIndex, colW)">
-        @if (tpl) {
-          <ng-container
-            [ngTemplateOutlet]="tpl"
-            [ngTemplateOutletContext]="{ $implicit: headerParams(entry.column, entry.layoutIndex, headerData) }">
-          </ng-container>
-        } @else {
-          <button
-            type="button"
-            class="gp-grid-pin-button"
-            [class.active]="entry.column.pinned"
-            [attr.aria-label]="nextPinLabel(entry.column.pinned ?? null)"
-            [attr.aria-pressed]="entry.column.pinned ? 'true' : 'false'"
-            [title]="nextPinLabel(entry.column.pinned ?? null)"
-            (pointerdown)="onPinPointerDown($event)"
-            (click)="onPinClick($event, entry.columnId, entry.column.pinned ?? null)">
-            <svg
-              aria-hidden="true"
-              width="16"
-              height="16"
-              [attr.viewBox]="pinIcon().viewBox ?? '0 0 24 24'">
-              <path [attr.d]="pinIcon().path" fill="currentColor"/>
-            </svg>
-          </button>
-          <span class="gp-grid-header-text">{{ entry.column.headerName ?? entry.column.field }}</span>
-        }
-        <span class="gp-grid-header-icons">
-          @if (sortingEnabled() && entry.column.sortable !== false) {
-            <span class="gp-grid-sort-arrows">
-              <span class="gp-grid-sort-arrows-stack">
-                <svg
-                  [class]="'gp-grid-sort-arrow-up' + (headerData?.sortDirection === 'asc' ? ' active' : '')"
-                  width="8" height="6" viewBox="0 0 8 6">
-                  <path d="M4 0L8 6H0L4 0Z" fill="currentColor"/>
-                </svg>
-                <svg
-                  [class]="'gp-grid-sort-arrow-down' + (headerData?.sortDirection === 'desc' ? ' active' : '')"
-                  width="8" height="6" viewBox="0 0 8 6">
-                  <path d="M4 6L0 0H8L4 6Z" fill="currentColor"/>
-                </svg>
-              </span>
-              @if ((headerData?.sortIndex ?? 0) > 0) {
-                <span class="gp-grid-sort-index">{{ headerData?.sortIndex }}</span>
-              }
-            </span>
-          }
-          @if (entry.column.filterable !== false) {
-            <span
-              [class]="'gp-grid-filter-icon' + (headerData?.hasFilter ? ' active' : '')"
-              (pointerdown)="onFilterPointerDown($event, entry.layoutIndex)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z"/>
-              </svg>
-            </span>
-          }
-        </span>
-        @if (entry.column.resizable !== false) {
-          <div
-            gpGridResizeHandle
-            [axis]="'column'"
-            [index]="entry.layoutIndex"
-            [size]="colW"
-            (resizePointerDown)="onResizePointerDown($event)"
-            (resizeDoubleClick)="resizeDoubleClick.emit($event)">
-          </div>
-        }
-      </div>
-    </ng-template>
-    <div
-      style="position: absolute; top: 0; inset-inline-start: 0;"
-      role="presentation"
-      [style.transform]="transformStyle()"
-      [style.width.px]="innerWidth()"
-      [style.height.px]="headerHeight()">
-      @for (entry of centerColumns(); track entry.columnId) {
-        <ng-container
-          [ngTemplateOutlet]="headerCellTpl"
-          [ngTemplateOutletContext]="{ entry: entry }">
-        </ng-container>
-      }
-    </div>
-    @if (startColumns().length > 0) {
-      <div
-        class="gp-grid-pin-header"
-        role="presentation"
-        data-pin-region="start"
-        style="inset-inline-start: 0;"
-        [style.width.px]="startWidth()"
-        [style.height.px]="headerHeight()">
-        @for (entry of startColumns(); track entry.columnId) {
-          <ng-container
-            [ngTemplateOutlet]="headerCellTpl"
-            [ngTemplateOutletContext]="{ entry: entry }">
-          </ng-container>
-        }
-      </div>
-    }
-    @if (endColumns().length > 0) {
-      <div
-        class="gp-grid-pin-header"
-        role="presentation"
-        data-pin-region="end"
-        [style.inset-inline-start.px]="endOffset()"
-        [style.width.px]="endWidth()"
-        [style.height.px]="headerHeight()">
-        @for (entry of endColumns(); track entry.columnId) {
-          <ng-container
-            [ngTemplateOutlet]="headerCellTpl"
-            [ngTemplateOutletContext]="{ entry: entry }">
-          </ng-container>
-        }
-      </div>
-    }
-    @if (viewportWidth() > 0) {
-      <div
-        class="gp-grid-header-gutter"
-        role="presentation"
-        [style.inset-inline-start.px]="viewportWidth()"
-        [style.height.px]="headerHeight()">
-      </div>
-    }
-  </div>
-`;
-
 @Component({
   selector: 'gp-grid-header',
   standalone: true,
   imports: [NgTemplateOutlet, ResizeHandleComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: TEMPLATE,
+  template: GRID_HEADER_TEMPLATE,
 })
 export class GridHeaderComponent {
-  headerHeight = input.required<number>();
+  headerBands = input.required<HeaderBandLayout>();
   /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
   scrollLeft = input.required<number>();
   contentWidth = input.required<number>();
@@ -214,9 +100,11 @@ export class GridHeaderComponent {
   sortingEnabled = input<boolean>(true);
   rtl = input<boolean>(false);
   labels = input<GridLabels>(defaultGridLabels);
-  headerRenderers = input<Record<string, HeaderRendererTemplate>>({});
+  headerRenderers = input<HeaderRendererRegistry>({});
   globalHeaderRenderer = input<HeaderRendererTemplate | null>(null);
   pinIcon = input<GridIcon>(defaultPinIcon);
+  /** Resolves a fragment's group definition; `null` before the core exists. */
+  core = input<GridCore<unknown> | null>(null);
 
   headerPointerDown = output<HeaderPointerDownEvent>();
   filterPointerDown = output<FilterPointerDownEvent>();
@@ -247,6 +135,61 @@ export class GridHeaderComponent {
     `translateX(${-this.scrollLeft()}px)`
   );
 
+  private readonly instance = inject(GridHeaderInstanceIds).next();
+
+  protected totalHeight = computed(() => this.headerBands().totalHeight);
+
+  protected groups = computed(() => this.columnWindow()?.groups ?? NO_HEADER_FRAGMENTS);
+
+  /** Grouped mode: present while the header has more than one band. */
+  protected associations = computed<HeaderAssociations | null>(() => {
+    const columnWindow = this.columnWindow();
+    const bandCount = this.headerBands().count;
+    if (columnWindow === null || bandCount <= 1) return null;
+    return resolveHeaderAssociations({
+      instance: this.instance,
+      columnWindow,
+      bandCount,
+      displayedIndexOf: this.displayedIndexOf(),
+    });
+  });
+
+  protected rootRole = computed(() => (this.associations() === null ? 'row' : 'rowgroup'));
+
+  protected rootRowIndex = computed(() => (this.associations() === null ? 1 : null));
+
+  protected leafId(columnId: string): string {
+    return leafHeaderId(this.instance, columnId);
+  }
+
+  protected leafBox(headerBand: number): HeaderBox {
+    return leafHeaderBox(this.headerBands(), headerBand);
+  }
+
+  protected leafBands(column: ResolvedColumn): LeafHeaderBands | null {
+    return leafHeaderBands(this.associations(), this.headerBands().count, column);
+  }
+
+  protected fragmentId(fragmentId: string): string {
+    return fragmentHeaderId(this.instance, fragmentId);
+  }
+
+  protected fragmentBox(band: number): HeaderBox {
+    return fragmentHeaderBox(this.headerBands(), band);
+  }
+
+  protected groupOf(groupId: string): ColumnGroupDefinition | undefined {
+    return this.core()?.columns.getGroup(groupId);
+  }
+
+  protected groupTemplate(group: ColumnGroupDefinition | undefined): GroupHeaderRendererTemplate | null {
+    return resolveGroupTemplate(group, this.headerRenderers());
+  }
+
+  protected groupParams(fragment: HeaderFragment, group: ColumnGroupDefinition): ColumnGroupHeaderParams {
+    return groupHeaderParams(fragment, group, this.columnWindow()?.layout.columns ?? []);
+  }
+
   protected onPinPointerDown(event: PointerEvent): void {
     event.stopPropagation();
     event.preventDefault();
@@ -272,8 +215,13 @@ export class GridHeaderComponent {
     return null;
   }
 
-  protected onHeaderPointerDown(event: PointerEvent, colIndex: number, colWidth: number): void {
-    this.headerPointerDown.emit({ colIndex, colWidth, colHeight: this.headerHeight(), event });
+  protected onHeaderPointerDown(
+    event: PointerEvent,
+    colIndex: number,
+    colWidth: number,
+    colHeight: number,
+  ): void {
+    this.headerPointerDown.emit({ colIndex, colWidth, colHeight, event });
   }
 
   protected onFilterPointerDown(event: PointerEvent, colIndex: number): void {
@@ -294,7 +242,7 @@ export class GridHeaderComponent {
       return renderer as HeaderRendererTemplate;
     }
     if (typeof renderer === 'string') {
-      const registered = this.headerRenderers()[renderer];
+      const registered = this.headerRenderers()[renderer] as HeaderRendererTemplate | undefined;
       if (registered) return registered;
     }
     return this.globalHeaderRenderer();

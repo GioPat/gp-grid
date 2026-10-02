@@ -28,6 +28,20 @@ export type {
   ColumnStateSnapshot,
   GridIcon,
 
+  // Column groups and header bands
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
   // Geometry
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
@@ -44,6 +58,7 @@ export type {
   GridEditApi,
   GridColumnsApi,
   GridFrozenRowsApi,
+  GridHeaderApi,
   GridRowDragApi,
   GridRowHeightsApi,
   GridViewportApi,

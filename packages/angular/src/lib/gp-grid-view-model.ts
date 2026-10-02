@@ -1,6 +1,7 @@
 import { Signal, computed, signal } from '@angular/core';
 import {
   calculateFillHandlePosition,
+  createInitialState,
 } from '@gp-grid/core';
 import type {
   BatchChangeSetters,
@@ -15,7 +16,9 @@ import type {
   FilterPopupState,
   GridAnnouncement,
   HeaderData,
+  HeaderBandLayout,
   GridCore,
+  InitialStateArgs,
   RowRegionLayout,
   SlotData,
 } from '@gp-grid/core';
@@ -33,6 +36,14 @@ const EMPTY_ROW_REGIONS: RowRegionLayout = {
   frozenExtent: 0,
   suffixViewportHeight: 0,
   frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
+};
+
+/** Replaced in `ngOnInit` by `seedHeaderBands`, before the first render. */
+const UNSEEDED_HEADER_BANDS: HeaderBandLayout = {
+  count: 1,
+  heights: [0],
+  offsets: [0],
+  totalHeight: 0,
 };
 
 const INITIAL_DRAG_STATE: DragState = {
@@ -80,6 +91,8 @@ export class GpGridViewModel {
   readonly rowsWrapperOffset = signal<number>(0);
   /** C3 frozen/suffix layout published by the core. */
   readonly rowRegions = signal<RowRegionLayout>(EMPTY_ROW_REGIONS);
+  /** Core-owned header bands; every header-height reader takes `totalHeight`. */
+  readonly headerBands = signal<HeaderBandLayout>(UNSEEDED_HEADER_BANDS);
   /** C13 live-region text, or `null` when there is nothing to announce. */
   readonly announcement = signal<GridAnnouncement | null>(null);
   readonly slots = signal<Map<string, SlotData>>(new Map());
@@ -90,6 +103,8 @@ export class GpGridViewModel {
   readonly columnWindow = signal<ColumnWindowSnapshot | null>(null);
   /** Displayed column count, for `aria-colcount`. */
   readonly displayedColumnCount = computed(() => this.layout()?.columns.length ?? 0);
+  /** ARIA rows the header takes ahead of the body: the band count. */
+  readonly headerRowCount = computed(() => this.headerBands().count);
   /** Selected displayed-width policy, mirrored from the core. */
   readonly columnLayout = signal<ColumnLayoutMode>('fit');
   /** Last committed geometry revision, for change detection. */
@@ -168,10 +183,16 @@ export class GpGridViewModel {
       setColumnWindow: (v) => this.columnWindow.set(v),
       setColumnLayout: (v) => this.columnLayout.set(v),
       setRowRegions: (v) => this.rowRegions.set(v),
+      setHeaderBands: (v) => this.headerBands.set(v),
       setAnnouncement: (v) => this.announcement.set(v),
       setGeometryRevision: (v) => this.geometryRevision.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };
+  }
+
+  /** The bands the core resolves from the same options, until its first batch. */
+  seedHeaderBands(args: InitialStateArgs): void {
+    this.headerBands.set(createInitialState(args).headerBands);
   }
 
   setFilterAnchor(el: HTMLElement | null): void {

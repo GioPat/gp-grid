@@ -85,6 +85,8 @@ export interface EditingCellState {
 export class GridBodyComponent {
   @ViewChild("scrollContainer") scrollContainer!: ElementRef<HTMLDivElement>;
   totalHeaderHeight = input.required<number>();
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount = input<number>(1);
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();
   rowsWrapperOffset = input.required<number>();

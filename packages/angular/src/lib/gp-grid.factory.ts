@@ -4,10 +4,13 @@ import type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
   ColumnLayoutMode,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
+  ColumnSchemaError,
   DataSource,
   FreezeRowsOptions,
   FrozenRowsState,
@@ -21,9 +24,12 @@ import type {
 
 export interface BuildGridCoreInputs<TData> {
   columns: ColumnDefinition[];
+  columnGroups: readonly ColumnGroupChild[] | undefined;
+  columnGroupLimits: ColumnGroupLimits | undefined;
   dataSource: DataSource<TData>;
   rowHeight: number;
   headerHeight: number;
+  headerBandHeights: readonly number[] | undefined;
   overscan: number;
   columnOverscan: number | undefined;
   freezeRows: FreezeRowsOptions | undefined;
@@ -50,6 +56,7 @@ export interface BuildGridCoreEmitters<TData> {
   onColumnMoved: (event: ColumnMovedEvent) => void;
   onColumnPinned: (event: ColumnPinnedEvent) => void;
   onFrozenRowsChanged: (state: FrozenRowsState) => void;
+  onColumnSchemaRejected: (error: ColumnSchemaError) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -65,9 +72,12 @@ export const buildGridCore = <TData>(
 
   return new GridCore<TData>({
     columns: inputs.columns,
+    columnGroups: inputs.columnGroups,
+    columnGroupLimits: inputs.columnGroupLimits,
     dataSource: inputs.dataSource,
     rowHeight: inputs.rowHeight,
     headerHeight: inputs.headerHeight,
+    headerBandHeights: inputs.headerBandHeights,
     overscan: inputs.overscan,
     columnOverscan: inputs.columnOverscan,
     freezeRows: inputs.freezeRows,
@@ -90,5 +100,6 @@ export const buildGridCore = <TData>(
     onColumnMoved: emitters.onColumnMoved,
     onColumnPinned: emitters.onColumnPinned,
     onFrozenRowsChanged: emitters.onFrozenRowsChanged,
+    onColumnSchemaRejected: emitters.onColumnSchemaRejected,
   });
 };

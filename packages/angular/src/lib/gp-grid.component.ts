@@ -13,8 +13,14 @@ import {
   effect,
   computed,
 } from '@angular/core';
-import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate, HeaderSortEvent } from './components';
-import type { AngularColumnDefinition } from './types';
+import type {
+  CellRendererTemplate,
+  EditRendererTemplate,
+  HeaderRendererRegistry,
+  HeaderRendererTemplate,
+  HeaderSortEvent,
+} from './components';
+import type { AngularColumnDefinition, AngularColumnGroupChild } from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
   AutoFitOptions,
@@ -23,11 +29,14 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnFilterModel,
+  ColumnGroupChild,
+  ColumnGroupLimits,
   ColumnMovedEvent,
   ColumnLayoutMode,
   ColumnPin,
   ColumnPinnedEvent,
   ColumnResizedEvent,
+  ColumnSchemaError,
   ColumnStateUpdate,
   DataSource,
   FreezeRowsOptions,
@@ -86,9 +95,19 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   getRowId = input<((row: unknown) => RowId) | null>(null);
   rowHeight = input<number>(32);
   headerHeight = input<number>(32);
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights = input<readonly number[] | undefined>(undefined);
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups = input<readonly AngularColumnGroupChild[] | undefined>(undefined);
+  /** Budgets of `columnGroups`. Creation-only. */
+  columnGroupLimits = input<ColumnGroupLimits | undefined>(undefined);
   darkMode = input<boolean>(false);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
-  headerRenderers = input<Record<string, HeaderRendererTemplate>>({});
+  /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+  headerRenderers = input<HeaderRendererRegistry>({});
   editRenderers = input<Record<string, EditRendererTemplate>>({});
   cellRenderer = input<CellRendererTemplate | null>(null);
   headerRenderer = input<HeaderRendererTemplate | null>(null);
@@ -125,6 +144,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onColumnPinned = output<ColumnPinnedEvent>();
   /** C9: fires on a published change of the effective frozen count or its limit. */
   onFrozenRowsChanged = output<FrozenRowsState>();
+  /** Fires when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected = output<ColumnSchemaError>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
@@ -146,13 +167,21 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     isBrowser: this.isBrowser,
     getContainer: () => this.container?.nativeElement ?? null,
     getBody: () => this.body?.scrollContainer?.nativeElement ?? null,
-    getHeaderHeight: () => this.headerHeight(),
   });
+
+  // The Angular group type differs from core's only by its template renderer.
+  private readonly coreColumnGroups = computed(
+    () => this.columnGroups() as readonly ColumnGroupChild[] | undefined,
+  );
 
   constructor() {
     effect(() => this.bindings.applyPendingScroll(), { allowSignalWrites: true });
     effect(() => this.bindings.syncHighlighting(this.highlighting()));
-    effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]), { allowSignalWrites: true });
+    effect(
+      () => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[], this.coreColumnGroups()),
+      { allowSignalWrites: true },
+    );
+    effect(() => this.bindings.syncHeaderBandHeights(this.headerBandHeights()), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
     effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
@@ -161,12 +190,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const columns = this.columns() as unknown as ColumnDefinition[];
     const core = buildGridCore<unknown>(
       {
-        columns: this.columns() as unknown as ColumnDefinition[],
+        columns,
+        columnGroups: this.coreColumnGroups(),
+        columnGroupLimits: this.columnGroupLimits(),
         dataSource: this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows()),
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
+        headerBandHeights: this.headerBandHeights(),
         overscan: this.overscan(),
         columnOverscan: this.columnOverscan(),
         freezeRows: this.freezeRows(),
@@ -191,8 +224,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
         onColumnPinned: (event) => this.onColumnPinned.emit(event),
         onFrozenRowsChanged: (state) => this.onFrozenRowsChanged.emit(state),
+        onColumnSchemaRejected: (error) => this.onColumnSchemaRejected.emit(error),
       },
     );
+    this.vm.seedHeaderBands({
+      initialColumns: columns,
+      initialColumnLayout: this.columnLayout(),
+      initialHeaderHeight: this.headerHeight(),
+      initialHeaderBandHeights: this.headerBandHeights(),
+      initialColumnGroups: this.coreColumnGroups(),
+    });
     this.boundCore.current = core;
     this.bindings.attach(core);
     // The columnState effect ran before the core existed; apply it now.

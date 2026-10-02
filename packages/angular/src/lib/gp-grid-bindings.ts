@@ -14,6 +14,7 @@ import {
 } from '@gp-grid/core';
 import type {
   ColumnDefinition,
+  ColumnGroupChild,
   ColumnLayoutMode,
   ColumnStateUpdate,
   DataSource,
@@ -27,7 +28,6 @@ export interface GpGridBindingsDeps {
   isBrowser: boolean;
   getContainer: () => HTMLElement | null;
   getBody: () => HTMLElement | null;
-  getHeaderHeight: () => number;
 }
 
 /**
@@ -48,6 +48,7 @@ export class GpGridBindings<TData = unknown> {
   private unsubscribe: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private rtl = false;
+  private appliedGroups: readonly ColumnGroupChild[] | undefined = undefined;
 
   /** Inline direction sampled from the body element; a `dir` flip needs a remount. */
   get isRtl(): boolean {
@@ -152,10 +153,18 @@ export class GpGridBindings<TData = unknown> {
     }
   }
 
-  syncColumns(cols: ColumnDefinition[]): void {
+  /** Columns and groups go in one call, so the hierarchy is validated against the new ids. */
+  syncColumns(cols: ColumnDefinition[], groups: readonly ColumnGroupChild[] | undefined): void {
     const core = this.coreRef;
     if (core === null) return;
-    if (this.dataSourceOwner.syncColumns(cols)) core.columns.set(cols);
+    const columnsChanged = this.dataSourceOwner.syncColumns(cols);
+    const groupsChanged = this.appliedGroups !== groups;
+    this.appliedGroups = groups;
+    if (columnsChanged || groupsChanged) core.columns.set(cols, groups ?? null);
+  }
+
+  syncHeaderBandHeights(heights: readonly number[] | undefined): void {
+    this.coreRef?.header.setBandHeights(heights ?? []);
   }
 
   /** Apply a controlled column-state input; explicit commands win. */

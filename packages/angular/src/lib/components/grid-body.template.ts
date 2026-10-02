@@ -135,7 +135,7 @@ export const GRID_BODY_TEMPLATE = `<div
                 <div
                   class="gp-grid-row gp-grid-row--loading"
                   role="row"
-                  [attr.aria-rowindex]="slot.rowIndex + 1"
+                  [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
                   [style.width.px]="innerWidth()"
@@ -145,7 +145,7 @@ export const GRID_BODY_TEMPLATE = `<div
                 <div
                   [class]="rowClass(slot.rowIndex, slot.rowData)"
                   role="row"
-                  [attr.aria-rowindex]="slot.rowIndex + 1"
+                  [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
                   [style.width.px]="innerWidth()"
@@ -220,7 +220,7 @@ export const GRID_BODY_TEMPLATE = `<div
             <div
               [class]="rowClass(slot.rowIndex, slot.rowData)"
               role="row"
-              [attr.aria-rowindex]="slot.rowIndex + 1"
+              [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
               style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
               [style.transform]="'translateY(' + slot.translateY + 'px)'"
               [style.width.px]="innerWidth()"
