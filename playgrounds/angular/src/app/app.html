@@ -53,6 +53,9 @@
   <section class="grid-card">
     <gp-grid
       [columns]="columns"
+      [columnGroups]="columnGroups()"
+      [headerHeight]="headerHeight"
+      [headerBandHeights]="headerBandHeights()"
       [labels]="gridLabels"
       [overscan]="12"
       [dataSource]="grid.dataSource"
@@ -84,6 +87,25 @@
     <span>Row heights:</span>
     <button type="button" class="update-btn" (click)="tallRows()">Tall rows</button>
     <button type="button" class="update-btn" (click)="resetRowHeights()">Reset heights</button>
+    <!-- Column groups (PRD 007): hierarchy and band heights, no remount -->
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="grouped()"
+      [style.opacity]="grouped() ? 1 : 0.5"
+      (click)="toggleGrouped()"
+    >
+      Grouped headers
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="tallBand()"
+      [style.opacity]="tallBand() ? 1 : 0.5"
+      (click)="toggleTallBand()"
+    >
+      Tall band
+    </button>
   </div>
 
   <div class="row-update-controls">

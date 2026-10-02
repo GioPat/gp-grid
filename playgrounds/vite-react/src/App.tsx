@@ -6,6 +6,7 @@ import {
   Grid,
   useGridData,
   type ColumnDefinition,
+  type ColumnGroupChild,
   type CellRendererParams,
   type EditRendererParams,
   type RowId,
@@ -361,6 +362,38 @@ const columns: ColumnDefinition[] = [
   },
 ];
 
+// Three group levels over the demo columns: `id` stays ungrouped, `bio` sits
+// one level shallower than `name` and `age`, and `Record` is two levels deep.
+const demoColumnGroups: ColumnGroupChild[] = [
+  "id",
+  {
+    groupId: "person",
+    headerName: "Person",
+    children: [
+      {
+        groupId: "profile",
+        headerName: "Profile",
+        children: [
+          { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+          "bio",
+        ],
+      },
+    ],
+  },
+  {
+    groupId: "record",
+    headerName: "Record",
+    children: [
+      "createdAt",
+      "status",
+      { groupId: "compensation", headerName: "Compensation", children: ["salary", "tags"] },
+    ],
+  },
+];
+
+const DEMO_HEADER_HEIGHT = 40;
+const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
+
 // Helper to get random tags
 const getRandomTags = (): string[] => {
   const numTags = getRandomInt(0, 3);
@@ -394,6 +427,8 @@ function MainDemo() {
   const [freezeCount, setFreezeCount] = useState<FreezeCount>(0);
   const [frozenStatus, setFrozenStatus] = useState("0 of 0 rows frozen");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
+  const [grouped, setGrouped] = useState(false);
+  const [tallBand, setTallBand] = useState(false);
   const gridRef = useRef<GridRef<Person> | null>(null);
   const showTouchDebug = shouldShowTouchDebug();
 
@@ -551,6 +586,35 @@ function MainDemo() {
         >
           Reset heights
         </button>
+        {/* Column groups (PRD 007): hierarchy and band heights, no remount */}
+        <button
+          onClick={() => setGrouped((value) => !value)}
+          aria-pressed={grouped}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: grouped ? "#3b82f6" : "#374151",
+            color: grouped ? "white" : "#9ca3af",
+          }}
+        >
+          Grouped headers
+        </button>
+        <button
+          onClick={() => setTallBand((value) => !value)}
+          aria-pressed={tallBand}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: tallBand ? "#3b82f6" : "#374151",
+            color: tallBand ? "white" : "#9ca3af",
+          }}
+        >
+          Tall band
+        </button>
       </div>
 
       {showTouchDebug && <DebugOverlay totalRows={1500000} />}
@@ -567,13 +631,15 @@ function MainDemo() {
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
           columns={columns}
+          columnGroups={grouped ? demoColumnGroups : undefined}
+          headerBandHeights={tallBand ? tallBandHeights : undefined}
           labels={gridLabels}
           overscan={12}
           dataSource={dataSource}
           rowHeight={36}
           rowResize
           darkMode={true}
-          headerHeight={40}
+          headerHeight={DEMO_HEADER_HEIGHT}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
           rowDragEntireRow

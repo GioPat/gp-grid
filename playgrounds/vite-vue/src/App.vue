@@ -4,6 +4,7 @@ import {
     GpGrid,
     useGridData,
     type ColumnDefinition,
+    type ColumnGroupChild,
     type HighlightingOptions,
     type GridCore,
     type GridLabels,
@@ -174,6 +175,42 @@ const columns: ColumnDefinition[] = [
     },
 ];
 
+// Three group levels over the demo columns: `id` stays ungrouped, `bio` sits
+// one level shallower than `name` and `age`, and `Record` is two levels deep.
+const demoColumnGroups: ColumnGroupChild[] = [
+    "id",
+    {
+        groupId: "person",
+        headerName: "Person",
+        children: [
+            {
+                groupId: "profile",
+                headerName: "Profile",
+                children: [
+                    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+                    "bio",
+                ],
+            },
+        ],
+    },
+    {
+        groupId: "record",
+        headerName: "Record",
+        children: [
+            "createdAt",
+            "status",
+            { groupId: "compensation", headerName: "Compensation", children: ["salary", "tags"] },
+        ],
+    },
+];
+
+const DEMO_HEADER_HEIGHT = 40;
+const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
+
+/** Column groups (PRD 007): hierarchy and band heights, no remount. */
+const grouped = ref(false);
+const tallBand = ref(false);
+
 // Create data source via useGridData
 const { dataSource, updateRow } = useGridData<Person>(generateRowData(), {
     getRowId: (row) => row.id,
@@ -273,6 +310,20 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         <span class="mode-label">Row heights:</span>
         <button class="mode-btn" @click="tallRows">Tall rows</button>
         <button class="mode-btn" @click="resetRowHeights">Reset heights</button>
+        <button
+            :class="['mode-btn', { active: grouped }]"
+            :aria-pressed="grouped"
+            @click="grouped = !grouped"
+        >
+            Grouped headers
+        </button>
+        <button
+            :class="['mode-btn', { active: tallBand }]"
+            :aria-pressed="tallBand"
+            @click="tallBand = !tallBand"
+        >
+            Tall band
+        </button>
     </div>
 
     <div class="grid-container">
@@ -281,6 +332,8 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
             :columns="columns"
+            :column-groups="grouped ? demoColumnGroups : undefined"
+            :header-band-heights="tallBand ? tallBandHeights : undefined"
             :labels="gridLabels"
             :freeze-rows="freezeRows"
             :on-frozen-rows-changed="handleFrozenRowsChanged"
@@ -288,7 +341,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :data-source="dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
             :row-height="36"
-            :header-height="40"
+            :header-height="DEMO_HEADER_HEIGHT"
             :dark-mode="true"
         />
     </div>
