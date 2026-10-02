@@ -28,7 +28,10 @@ export { GridCell } from "./GridCell";
 export type { GridCellProps } from "./GridCell";
 
 export { GridHeaderCell } from "./GridHeaderCell";
-export type { GridHeaderCellProps } from "./GridHeaderCell";
+export type { GridHeaderCellProps, LeafHeaderBands } from "./GridHeaderCell";
+
+export { GridHeaderGroupCell } from "./GridHeaderGroupCell";
+export type { GridHeaderGroupCellProps } from "./GridHeaderGroupCell";
 
 export { CellPeek } from "./CellPeek";
 export type { CellPeekProps } from "./CellPeek";

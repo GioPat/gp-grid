@@ -23,7 +23,12 @@ import {
   defaultPinIcon,
   resolveGridLabels,
 } from "@gp-grid/core";
-import type { ColumnFilterModel, DataSource, GridLabels } from "@gp-grid/core";
+import type {
+  ColumnFilterModel,
+  DataSource,
+  GridLabels,
+  InitialStateArgs,
+} from "@gp-grid/core";
 import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
 import type { ResizeHandleActions } from "./components/ResizeHandle";
 import { gridReducer, createInitialState } from "./gridState";
@@ -54,6 +59,10 @@ export function Grid<TData = unknown>(
     rowData,
     rowHeight,
     headerHeight = rowHeight,
+    headerBandHeights,
+    columnGroups,
+    columnGroupLimits,
+    onColumnSchemaRejected,
     overscan = 3,
     columnLayout = "fit",
     columnOverscan,
@@ -105,19 +114,21 @@ export function Grid<TData = unknown>(
   const prevDataSourceRef = useRef<DataSource<TData> | null>(null);
   const hasInitializedRef = useRef(false);
   const [pendingScroll] = useState(() => new PendingScrollLatch());
+  // Every seed passes `initialHeaderHeight`: without it the bands seed at 0 px.
+  const seed: InitialStateArgs = {
+    initialColumns: columns,
+    initialColumnLayout: columnLayout,
+    initialHeaderHeight: headerHeight,
+    initialHeaderBandHeights: headerBandHeights,
+    initialColumnGroups: columnGroups,
+  };
   const [state, dispatch] = useReducer(
     gridReducer,
-    {
-      initialWidth,
-      initialHeight,
-      initialColumns: columns,
-      initialColumnLayout: columnLayout,
-    },
+    { ...seed, initialWidth, initialHeight },
     createInitialState,
   ) as [GridState<TData>, React.Dispatch<GridAction>];
 
-  // Computed heights
-  const totalHeaderHeight = headerHeight;
+  const totalHeaderHeight = state.headerBands.totalHeight;
 
   const stopTouchScroll = useCallback(() => {
     touchScrollRef.current?.stop();
@@ -209,7 +220,7 @@ export function Grid<TData = unknown>(
   getRowIdRef.current = getRowId;
   const onCellValueChangedRef = useRef(onCellValueChanged);
   onCellValueChangedRef.current = onCellValueChanged;
-  const appliedColumnsRef = useRef(columns);
+  const appliedSchemaRef = useRef({ columns, columnGroups });
   const columnStateRef = useRef(columnState);
   columnStateRef.current = columnState;
   const onWriteRejectedRef = useRef(onWriteRejected);
@@ -226,6 +237,8 @@ export function Grid<TData = unknown>(
   onColumnPinnedRef.current = onColumnPinned;
   const onFrozenRowsChangedRef = useRef(onFrozenRowsChanged);
   onFrozenRowsChangedRef.current = onFrozenRowsChanged;
+  const onColumnSchemaRejectedRef = useRef(onColumnSchemaRejected);
+  onColumnSchemaRejectedRef.current = onColumnSchemaRejected;
   const highlightingRef = useRef(highlighting);
   highlightingRef.current = highlighting;
 
@@ -287,16 +300,20 @@ export function Grid<TData = unknown>(
     // Skip on first initialization (nothing to reset)
     if (hasInitializedRef.current) {
       pendingScroll.clear();
-      dispatch({ type: "RESET", columns, columnLayout });
+      dispatch({ type: "RESET", seed });
     }
     hasInitializedRef.current = true;
 
-    appliedColumnsRef.current = columns;
+    appliedSchemaRef.current = { columns, columnGroups };
     const core = new GridCore<TData>({
       columns,
+      columnGroups,
+      columnGroupLimits,
+      onColumnSchemaRejected: (error) => onColumnSchemaRejectedRef.current?.(error),
       dataSource: dataSourceRef.current,
       rowHeight,
-      headerHeight: totalHeaderHeight,
+      headerHeight,
+      headerBandHeights,
       overscan,
       columnLayout,
       columnOverscan,
@@ -369,12 +386,12 @@ export function Grid<TData = unknown>(
         gridRef.current = null;
       }
     };
-    // `labels` and `autoFit` are creation-only and `freezeRows` and
-    // `rowResize` have their own runtime effects below, so none may rebuild
-    // the core and reset scroll.
+    // `labels`, `autoFit` and `columnGroupLimits` are creation-only, and the
+    // schema, `headerBandHeights`, `freezeRows` and `rowResize` have their own
+    // runtime effects below, so none may rebuild the core and reset scroll.
   }, [
     rowHeight,
-    totalHeaderHeight,
+    headerHeight,
     overscan,
     columnOverscan,
     maxFlingVelocity,
@@ -385,13 +402,19 @@ export function Grid<TData = unknown>(
     syncViewport,
   ]);
 
-  // Push a new `columns` prop into the core without recreating it. The core
+  // Push new `columns`/`columnGroups` props into the core without recreating
+  // it, together so the hierarchy is validated against the new ids. The core
   // reconciles by column id and keeps retained user state, sort, filter and scroll.
   useEffect(() => {
-    if (appliedColumnsRef.current === columns) return;
-    appliedColumnsRef.current = columns;
-    coreRef.current?.columns.set(columns);
-  }, [columns]);
+    const applied = appliedSchemaRef.current;
+    if (applied.columns === columns && applied.columnGroups === columnGroups) return;
+    appliedSchemaRef.current = { columns, columnGroups };
+    coreRef.current?.columns.set(columns, columnGroups ?? null);
+  }, [columns, columnGroups]);
+
+  useEffect(() => {
+    coreRef.current?.header.setBandHeights(headerBandHeights ?? []);
+  }, [headerBandHeights]);
 
   // Apply a controlled column-state input whenever it changes.
   useEffect(() => {
@@ -460,8 +483,7 @@ export function Grid<TData = unknown>(
   // Initial measurement and resize handling
   useEffect(() => {
     const container = containerRef.current;
-    const core = coreRef.current;
-    if (!container || !core) return;
+    if (!container || !coreRef.current) return;
 
     // Guard for SSR - ResizeObserver not available in Node.js
     if (typeof ResizeObserver === "undefined") {
@@ -469,12 +491,14 @@ export function Grid<TData = unknown>(
       return;
     }
 
+    // A recreated core must receive the body height a band change implies.
     const resizeObserver = new ResizeObserver(() => {
       const nextRtl = readIsRtl(container);
       rtlRef.current = nextRtl;
       setRtl(nextRtl);
       touchScrollRef.current?.resetDirection();
-      syncViewport(core, container);
+      const core = coreRef.current;
+      if (core) syncViewport(core, container);
     });
 
     resizeObserver.observe(container);
@@ -609,7 +633,7 @@ export function Grid<TData = unknown>(
       className={`gp-grid-container${darkMode ? " gp-grid-container--dark" : ""}`}
       role="grid"
       aria-colcount={displayedColumnCount}
-      aria-rowcount={state.totalRows}
+      aria-rowcount={state.totalRows + state.headerBands.count}
       data-layout-revision={columnWindow?.layout.revision}
       style={{
         width: "100%",
@@ -623,7 +647,7 @@ export function Grid<TData = unknown>(
       tabIndex={0}
     >
       <GridHeader
-        headerHeight={headerHeight}
+        headerBands={state.headerBands}
         scrollLeft={scrollLeft}
         contentWidth={state.contentWidth}
         totalWidth={totalWidth}
@@ -647,6 +671,7 @@ export function Grid<TData = unknown>(
       <GridBody
         ref={containerRef}
         totalHeaderHeight={totalHeaderHeight}
+        headerRowCount={state.headerBands.count}
         contentWidth={state.contentWidth}
         contentHeight={state.contentHeight}
         totalWidth={totalWidth}
@@ -696,7 +721,7 @@ export function Grid<TData = unknown>(
         <div
           style={{
             position: "absolute",
-            top: headerHeight,
+            top: totalHeaderHeight,
             left: 0,
             right: 0,
             bottom: 0,
@@ -797,7 +822,7 @@ export function Grid<TData = unknown>(
                   position: "absolute",
                   top: 0,
                   insetInlineStart: cm.dropIndicatorX,
-                  height: headerHeight,
+                  height: totalHeaderHeight,
                 }}
               />
             )}

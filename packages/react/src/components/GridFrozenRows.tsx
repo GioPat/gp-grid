@@ -17,6 +17,8 @@ export interface GridFrozenRowsProps<TData = unknown> {
   rowRegions: RowRegionLayout;
   /** Frozen slots only; the suffix rows stay in the scrolling wrapper. */
   slots: SlotData<TData>[];
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   columnWindow: ColumnWindowSnapshot | null;
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
@@ -40,6 +42,7 @@ export const GridFrozenRows = <TData = unknown>(
   const {
     rowRegions,
     slots,
+    headerRowCount,
     columnWindow,
     displayedIndexOf,
     contentWidthPx,
@@ -79,6 +82,7 @@ export const GridFrozenRows = <TData = unknown>(
         <GridRow
           key={slot.slotId}
           slot={slot}
+          headerRowCount={headerRowCount}
           columnWindow={columnWindow}
           displayedIndexOf={displayedIndexOf}
           width={contentWidthPx}

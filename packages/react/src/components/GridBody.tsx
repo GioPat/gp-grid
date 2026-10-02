@@ -22,6 +22,8 @@ import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
   totalHeaderHeight: number;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   contentWidth: number;
   contentHeight: number;
   totalWidth: number;
@@ -62,6 +64,7 @@ const GridBodyInner = <TData = unknown>(
 ): React.ReactNode => {
   const {
     totalHeaderHeight,
+    headerRowCount,
     contentWidth,
     contentHeight,
     totalWidth,
@@ -183,6 +186,7 @@ const GridBodyInner = <TData = unknown>(
         <GridFrozenRows
           rowRegions={rowRegions}
           slots={frozenSlots}
+          headerRowCount={headerRowCount}
           columnWindow={columnWindow}
           displayedIndexOf={displayedIndexOf}
           contentWidthPx={contentWidthPx}
@@ -208,6 +212,7 @@ const GridBodyInner = <TData = unknown>(
                 <GridRow
                   key={slot.slotId}
                   slot={slot}
+                  headerRowCount={headerRowCount}
                   columnWindow={columnWindow}
                   displayedIndexOf={displayedIndexOf}
                   width={contentWidthPx}

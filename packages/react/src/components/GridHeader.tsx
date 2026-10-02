@@ -1,20 +1,31 @@
 // packages/react/src/components/GridHeader.tsx
 
-import React from "react";
+import React, { useId, useMemo } from "react";
+import {
+  fragmentHeaderBox,
+  fragmentHeaderId,
+  leafHeaderBox,
+  leafHeaderId,
+  resolveHeaderAssociations,
+} from "@gp-grid/core";
 import type {
   ColumnWindowSnapshot,
   GridCore,
   GridIcon,
   GridLabels,
+  HeaderBandLayout,
   HeaderData,
+  HeaderFragment,
   ResolvedColumn,
 } from "@gp-grid/core";
 import { GridHeaderCell } from "./GridHeaderCell";
+import type { LeafHeaderBands } from "./GridHeaderCell";
+import { GridHeaderGroupCell } from "./GridHeaderGroupCell";
 import type { ResizeHandleActions } from "./ResizeHandle";
-import type { ReactHeaderRenderer } from "../types";
+import type { ReactHeaderRenderer, ReactHeaderRendererRegistry } from "../types";
 
 export interface GridHeaderProps<TData = unknown> {
-  headerHeight: number;
+  headerBands: HeaderBandLayout;
   /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
   scrollLeft: number;
   contentWidth: number;
@@ -32,20 +43,21 @@ export interface GridHeaderProps<TData = unknown> {
   resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
-  headerRenderers: Record<string, ReactHeaderRenderer>;
+  headerRenderers: ReactHeaderRendererRegistry;
   globalHeaderRenderer?: ReactHeaderRenderer;
   pinIcon: GridIcon;
 }
 
 /**
  * Header: the center strip translates with the body scroll, while the two pin
- * containers stay absolute at their viewport edges above it.
+ * containers stay absolute at their viewport edges above it. With more than
+ * one band the root is a row group whose band rows own the mounted headers.
  */
 export const GridHeader = <TData = unknown>(
   props: GridHeaderProps<TData>,
 ): React.ReactNode => {
   const {
-    headerHeight,
+    headerBands,
     scrollLeft,
     contentWidth,
     totalWidth,
@@ -66,12 +78,33 @@ export const GridHeader = <TData = unknown>(
     pinIcon,
   } = props;
 
+  const instance = useId();
+  const { count: bandCount, totalHeight } = headerBands;
+  const associations = useMemo(
+    () =>
+      bandCount > 1 && columnWindow !== null
+        ? resolveHeaderAssociations({ instance, columnWindow, bandCount, displayedIndexOf })
+        : null,
+    [instance, columnWindow, bandCount, displayedIndexOf],
+  );
+
+  const leafBands = (column: ResolvedColumn): LeafHeaderBands | undefined => {
+    if (associations === null) return undefined;
+    return {
+      rowIndex: column.headerBand + 1,
+      rowSpan: bandCount - column.headerBand,
+      describedBy: associations.describedBy.get(column.columnId),
+    };
+  };
+
   const renderColumn = (column: ResolvedColumn): React.ReactNode => (
     <GridHeaderCell
       key={column.columnId}
       column={column}
       displayedIndex={displayedIndexOf(column.columnId)}
-      headerHeight={headerHeight}
+      id={leafHeaderId(instance, column.columnId)}
+      box={leafHeaderBox(headerBands, column.headerBand)}
+      bands={leafBands(column)}
       headers={headers}
       sortingEnabled={sortingEnabled}
       rtl={rtl}
@@ -86,15 +119,39 @@ export const GridHeader = <TData = unknown>(
     />
   );
 
+  const layoutColumns = columnWindow?.layout.columns ?? [];
+  const renderFragment = (fragment: HeaderFragment): React.ReactNode => (
+    <GridHeaderGroupCell
+      key={fragment.fragmentId}
+      fragment={fragment}
+      id={fragmentHeaderId(instance, fragment.fragmentId)}
+      box={fragmentHeaderBox(headerBands, fragment.band)}
+      layoutColumns={layoutColumns}
+      coreRef={coreRef}
+      headerRenderers={headerRenderers}
+    />
+  );
+
   const { start, center, end } = columnWindow ?? { start: [], center: [], end: [] };
+  const groups = columnWindow?.groups;
   const { regions } = columnWindow?.layout ?? {};
 
   return (
     <div
       className={`gp-grid-header${isLoading ? " gp-grid-header--loading" : ""}`}
-      role="row"
-      style={{ height: headerHeight }}
+      role={associations === null ? "row" : "rowgroup"}
+      aria-rowindex={associations === null ? 1 : undefined}
+      style={{ height: totalHeight }}
     >
+      {associations?.owns.map((owns, band) => (
+        <div
+          key={band}
+          role="row"
+          aria-rowindex={band + 1}
+          aria-owns={owns === "" ? undefined : owns}
+        />
+      ))}
+
       <div
         role="presentation"
         style={{
@@ -103,9 +160,10 @@ export const GridHeader = <TData = unknown>(
           insetInlineStart: 0,
           transform: `translateX(${-scrollLeft}px)`,
           width: Math.max(contentWidth, totalWidth),
-          height: headerHeight,
+          height: totalHeight,
         }}
       >
+        {groups?.center.map(renderFragment)}
         {center.map(renderColumn)}
       </div>
 
@@ -117,9 +175,10 @@ export const GridHeader = <TData = unknown>(
           style={{
             insetInlineStart: 0,
             width: `${regions.startWidth}px`,
-            height: headerHeight,
+            height: totalHeight,
           }}
         >
+          {groups?.start.map(renderFragment)}
           {start.map(renderColumn)}
         </div>
       )}
@@ -132,9 +191,10 @@ export const GridHeader = <TData = unknown>(
           style={{
             insetInlineStart: `${regions.endOffset}px`,
             width: `${regions.endWidth}px`,
-            height: headerHeight,
+            height: totalHeight,
           }}
         >
+          {groups?.end.map(renderFragment)}
           {end.map(renderColumn)}
         </div>
       )}
@@ -143,7 +203,7 @@ export const GridHeader = <TData = unknown>(
         <div
           className="gp-grid-header-gutter"
           role="presentation"
-          style={{ insetInlineStart: viewportWidth, height: headerHeight }}
+          style={{ insetInlineStart: viewportWidth, height: totalHeight }}
         />
       )}
     </div>

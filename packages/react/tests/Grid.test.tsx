@@ -7,6 +7,7 @@ import { Grid, type GridProps } from "../src/Grid";
 import { createClientDataSource } from "@gp-grid/core";
 import type { ColumnDefinition, CellRendererParams, GridInstruction, HeaderRendererParams } from "@gp-grid/core";
 import type { GridRef } from "../src/types";
+import { bodyAriaRowIndex } from "./aria-rows";
 
 // Test data
 interface TestRow {
@@ -597,7 +598,8 @@ describe("Grid", () => {
 
       const grid = document.querySelector('[role="grid"]')!;
       expect(grid.getAttribute("aria-colcount")).toBe("3");
-      expect(document.querySelector('.gp-grid-row[role="row"]')?.getAttribute("aria-rowindex")).toBe("1");
+      expect(document.querySelector('.gp-grid-row[role="row"]')?.getAttribute("aria-rowindex"))
+        .toBe(String(bodyAriaRowIndex(0)));
       expect(document.querySelector('[data-cell-col="0"]')?.getAttribute("aria-colindex")).toBe("1");
       expect(document.querySelector('[data-cell-col="2"]')?.getAttribute("aria-colindex")).toBe("3");
     });

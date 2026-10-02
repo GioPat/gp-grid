@@ -21,6 +21,8 @@ const PIN_REGIONS: readonly ColumnRegion[] = ["start", "end"];
 
 export interface GridRowProps<TData = unknown> {
   slot: SlotData<TData>;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   columnWindow: ColumnWindowSnapshot;
   /** 0-based displayed index of a column id, for `aria-colindex`. */
   displayedIndexOf: (columnId: string) => number;
@@ -119,12 +121,14 @@ export const GridRow = <TData = unknown>(
 ): React.ReactNode => {
   const {
     slot,
+    headerRowCount,
     columnWindow,
     displayedIndexOf,
     width,
     cellContext,
     regions = ALL_REGIONS,
   } = props;
+  const ariaRowIndex = slot.rowIndex + headerRowCount + 1;
 
   // C7: an unavailable frozen row has no data and renders no cells.
   if (slot.loading) {
@@ -132,7 +136,7 @@ export const GridRow = <TData = unknown>(
       <div
         className="gp-grid-row gp-grid-row--loading"
         role="row"
-        aria-rowindex={slot.rowIndex + 1}
+        aria-rowindex={ariaRowIndex}
         style={rowBoxStyle(slot.translateY, width, slot.height)}
       />
     );
@@ -148,7 +152,7 @@ export const GridRow = <TData = unknown>(
     <div
       className={rowClassName}
       role="row"
-      aria-rowindex={slot.rowIndex + 1}
+      aria-rowindex={ariaRowIndex}
       style={rowBoxStyle(slot.translateY, width, slot.height)}
     >
       {regions.includes("center") &&
