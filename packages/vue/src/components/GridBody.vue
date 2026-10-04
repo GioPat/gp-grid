@@ -10,6 +10,7 @@ import type {
   GridAnnouncement,
   GridCore,
   GridLabels,
+  ResizeTarget,
   RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
@@ -21,6 +22,8 @@ import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
   totalHeaderHeight: number;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
   contentWidth: number;
   contentHeight: number;
   totalWidth: number;
@@ -52,6 +55,10 @@ const props = defineProps<{
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   onCellMouseLeave: () => void;
   onFillHandleMouseDown: (e: PointerEvent) => void;
+  onRowResizePointerDown: (rowIndex: number, rowHeight: number, e: PointerEvent) => void;
+  onResizeDoubleClick: (target: ResizeTarget) => void;
+  /** Every non-editing cell renders the row edge handle. */
+  rowResize: boolean;
   coreRef: GridCore<Row> | null;
   cellRenderers: Record<string, VueCellRenderer>;
   editRenderers: Record<string, VueEditRenderer>;
@@ -80,6 +87,9 @@ const cellContext = computed<GridRowCellContext>(() => ({
   onCellDoubleClick: props.onCellDoubleClick,
   onCellMouseEnter: props.onCellMouseEnter,
   onCellMouseLeave: props.onCellMouseLeave,
+  onRowResizePointerDown: props.onRowResizePointerDown,
+  onResizeDoubleClick: props.onResizeDoubleClick,
+  rowResize: props.rowResize,
 }));
 
 /** C7: rows are split by the published slot region, never by an index guess. */
@@ -151,6 +161,7 @@ defineExpose({ bodyRef });
       <GridFrozenRows
         :row-regions="props.rowRegions"
         :slots="frozenSlots"
+        :header-row-count="props.headerRowCount"
         :column-window="props.columnWindow"
         :displayed-index-of="props.displayedIndexOf"
         :content-width-px="contentWidthPx"
@@ -190,6 +201,7 @@ defineExpose({ bodyRef });
             v-for="slot in suffixSlots"
             :key="slot.slotId"
             :slot="slot"
+            :header-row-count="props.headerRowCount"
             :column-window="props.columnWindow"
             :displayed-index-of="props.displayedIndexOf"
             :width="contentWidthPx"

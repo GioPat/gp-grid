@@ -10,6 +10,8 @@ export type {
   ReactCellRenderer,
   ReactEditRenderer,
   ReactHeaderRenderer,
+  ReactGroupHeaderRenderer,
+  ReactHeaderRendererRegistry,
 } from "./types";
 
 // Re-export core types for convenience
@@ -34,6 +36,19 @@ export type {
   ColumnStateUpdate,
   ColumnStateSnapshot,
 
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
   // Row ID
   RowId,
   ViewRow,
@@ -50,6 +65,18 @@ export type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
+
+  // Row resize and one-shot fit
+  AutoFitOptions,
+  FitStatus,
+  FitClamp,
+  RowFitResult,
+  RowFitEntry,
+  RowFitSkip,
+  ColumnFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
 
   // DataSource
   DataSource,
@@ -102,6 +129,7 @@ export type {
   GridEditApi,
   GridColumnsApi,
   GridFrozenRowsApi,
+  GridHeaderApi,
   GridRowDragApi,
   GridRowHeightsApi,
   GridViewportApi,

@@ -26,7 +26,15 @@ export interface ColumnLayoutInput {
   readonly width: number;
   /** Width override membership per source-layout index. */
   readonly isOverridden: (layoutIndex: number) => boolean;
+  /**
+   * Groups above a column in the active hierarchy, which is its first header
+   * band. A new function marks a new hierarchy.
+   */
+  readonly depthOf: (columnId: string) => number;
 }
+
+/** `depthOf` of a flat grid: every leaf header starts in band 0. */
+export const flatDepthOf = (): number => 0;
 
 const pinRank = (column: ColumnDefinition): number => {
   const pin = pinOfColumn(column);
@@ -62,12 +70,14 @@ const buildDisplayedColumns = (input: ColumnLayoutInput): DisplayedColumn[] => {
   for (let index = 0; index < visible.length; index++) {
     const { column, layoutIndex } = visible[index]!;
     const width = widths[index]!;
+    const columnId = getColumnId(column);
     displayed.push({
-      columnId: getColumnId(column),
+      columnId,
       layoutIndex,
       column,
       offset,
       width,
+      headerBand: input.depthOf(columnId),
     });
     offset += width;
   }
@@ -99,32 +109,25 @@ const isSameRegions = (a: ColumnRegionLayout, b: ColumnRegionLayout): boolean =>
   a.endOffset === b.endOffset &&
   a.centerViewportWidth === b.centerViewportWidth;
 
+const isSameColumn = (before: ResolvedColumn, after: ResolvedColumn): boolean =>
+  before.columnId === after.columnId &&
+  before.layoutIndex === after.layoutIndex &&
+  before.column === after.column &&
+  before.offset === after.offset &&
+  before.width === after.width &&
+  before.region === after.region &&
+  before.regionOffset === after.regionOffset &&
+  before.headerBand === after.headerBand;
+
 const isSameLayout = (
   previous: ColumnLayoutSnapshot,
-  mode: ColumnLayoutMode,
-  columns: readonly ResolvedColumn[],
-  totalWidth: number,
-  regions: ColumnRegionLayout,
+  next: Omit<ColumnLayoutSnapshot, "revision">,
 ): boolean => {
-  if (previous.mode !== mode || previous.totalWidth !== totalWidth) return false;
-  if (isSameRegions(previous.regions, regions) === false) return false;
-  if (previous.columns.length !== columns.length) return false;
-  for (let i = 0; i < columns.length; i++) {
-    const before = previous.columns[i]!;
-    const after = columns[i]!;
-    if (
-      before.columnId !== after.columnId ||
-      before.layoutIndex !== after.layoutIndex ||
-      before.column !== after.column ||
-      before.offset !== after.offset ||
-      before.width !== after.width ||
-      before.region !== after.region ||
-      before.regionOffset !== after.regionOffset
-    ) {
-      return false;
-    }
-  }
-  return true;
+  if (previous.mode !== next.mode || previous.totalWidth !== next.totalWidth) return false;
+  if (previous.bandCount !== next.bandCount) return false;
+  if (isSameRegions(previous.regions, next.regions) === false) return false;
+  if (previous.columns.length !== next.columns.length) return false;
+  return next.columns.every((column, index) => isSameColumn(previous.columns[index]!, column));
 };
 
 /** Replace the previous snapshot only when the render contract differs. */
@@ -137,10 +140,10 @@ export const resolveColumnLayout = (
   const totalWidth = base.reduce((total, column) => total + column.width, 0);
   const regions = getColumnRegionLayout(base, input.width, totalWidth);
   const columns = withRegions(base, regions, totalWidth);
-  if (previous !== null && isSameLayout(previous, input.mode, columns, totalWidth, regions)) {
-    return previous;
-  }
-  return { revision, mode: input.mode, columns, totalWidth, regions };
+  const deepest = base.reduce((depth, column) => Math.max(depth, column.headerBand), 0);
+  const next = { mode: input.mode, columns, totalWidth, regions, bandCount: deepest + 1 };
+  if (previous !== null && isSameLayout(previous, next)) return previous;
+  return { revision, ...next };
 };
 
 const notOverridden = (): boolean => false;
@@ -154,9 +157,10 @@ export const createSeedColumnLayout = (
   columns: readonly ColumnDefinition[],
   mode: ColumnLayoutMode,
   viewportWidth: number,
+  depthOf: (columnId: string) => number = flatDepthOf,
 ): ColumnLayoutSnapshot =>
   resolveColumnLayout(
-    { columns, mode, width: viewportWidth, isOverridden: notOverridden },
+    { columns, mode, width: viewportWidth, isOverridden: notOverridden, depthOf },
     null,
     0,
   );
@@ -174,9 +178,10 @@ export interface ColumnLayoutResolver {
  * so a column change always advances the caller's geometry revision and a
  * reused snapshot keeps the revision of its last change.
  *
- * The supplied `columns` array carries the change signal: the model replaces
- * it whenever the resolved layout changes and reuses it otherwise, so a scroll
- * sample never re-resolves. The comparator below still returns the previous
+ * The supplied `columns` array and `depthOf` function carry the change signal:
+ * the model replaces the array whenever the resolved layout changes, and the
+ * caller replaces the function with the hierarchy, so a scroll sample never
+ * re-resolves. The comparator below still returns the previous
  * snapshot when the render contract is unchanged.
  */
 export const createColumnLayoutResolver = (
@@ -187,12 +192,13 @@ export const createColumnLayoutResolver = (
   let width = -1;
   let columns: readonly ColumnDefinition[] = [];
   let isOverridden: (layoutIndex: number) => boolean = notOverridden;
+  let depthOf: (columnId: string) => number = flatDepthOf;
   let layout: ColumnLayoutSnapshot | null = null;
   let resolvedMode: ColumnLayoutMode | null = null;
 
   const resolve = (): ColumnLayoutSnapshot => {
     const resolved = resolveColumnLayout(
-      { columns, mode, width, isOverridden },
+      { columns, mode, width, isOverridden, depthOf },
       layout,
       layout?.revision ?? 0,
     );
@@ -211,10 +217,14 @@ export const createColumnLayoutResolver = (
       // `mode` is NOT copied from the input: it is owned by `setMode`, so a
       // staged mode change cannot be lost by an interleaved `update` call.
       const isUnchanged =
-        input.columns === columns && input.width === width && mode === resolvedMode;
+        input.columns === columns &&
+        input.width === width &&
+        input.depthOf === depthOf &&
+        mode === resolvedMode;
       if (isUnchanged) return layout ?? resolve();
       columns = input.columns;
       isOverridden = input.isOverridden;
+      depthOf = input.depthOf;
       width = input.width;
       return resolve();
     },

@@ -65,6 +65,16 @@ export class ViewportState {
   }
 
   /**
+   * Commit a body height the core derived from a header band change (D8);
+   * the next measurement confirms or corrects it. The estimate is kept while
+   * unmeasured, so a pre-mount change cannot pass for a measurement.
+   */
+  setViewportHeight(height: number): void {
+    if (this.measured === false) return;
+    this.viewportHeight = height;
+  }
+
+  /**
    * Apply a new viewport state. Returns what actually changed so the
    * caller can decide which side effects to run.
    */

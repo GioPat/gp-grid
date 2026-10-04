@@ -1,6 +1,6 @@
 // packages/react/src/gridState/types.ts
 
-import type { ColumnDefinition, ColumnLayoutMode, GridInstruction } from "@gp-grid/core";
+import type { GridInstruction, InitialStateArgs } from "@gp-grid/core";
 
 // Re-export types from core for backwards compatibility
 export type {
@@ -16,4 +16,4 @@ export type {
 
 export type GridAction =
   | { type: "BATCH_INSTRUCTIONS"; instructions: GridInstruction[] }
-  | { type: "RESET"; columns: ColumnDefinition[]; columnLayout?: ColumnLayoutMode };
+  | { type: "RESET"; seed: InitialStateArgs };

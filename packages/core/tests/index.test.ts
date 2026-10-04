@@ -63,6 +63,7 @@ const expectedExports = [
   "applyBatchInstructions",
   "DataSourceOwner",
   "InputEventAdapter",
+  "createDomMeasurementHost",
 ] as const;
 
 describe("public entry point", () => {

@@ -2,11 +2,16 @@
 
 import type {
   RowId,
+  AutoFitOptions,
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupHeaderParams,
+  ColumnGroupLimits,
   ColumnLayoutMode,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
+  ColumnSchemaError,
   ColumnStateUpdate,
   DataSource,
   CellRendererParams,
@@ -22,6 +27,7 @@ import type {
   HighlightingOptions,
   RowDragEndEvent,
   RowLoadingOptions,
+  RowResizedEvent,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -49,6 +55,20 @@ export type ReactHeaderRenderer = (
   params: HeaderRendererParams,
 ) => React.ReactNode;
 
+/** React group header renderer: renders one fragment of a column group */
+export type ReactGroupHeaderRenderer = (
+  params: ColumnGroupHeaderParams,
+) => React.ReactNode;
+
+/**
+ * Header renderer registry, shared by columns and groups: a key receives the
+ * params of whichever definition names it.
+ */
+export type ReactHeaderRendererRegistry = Record<
+  string,
+  ReactHeaderRenderer | ReactGroupHeaderRenderer
+>;
+
 // =============================================================================
 // Grid Props
 // =============================================================================
@@ -74,8 +94,19 @@ export interface GridProps<TData = unknown> {
   rowData?: TData[];
   /** Row height in pixels */
   rowHeight: number;
-  /** Header height in pixels: Default to row height */
+  /** Header height in pixels, the default height of every band: Default to row height */
   headerHeight?: number;
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Creation-only. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
   /** CSS px of center columns kept mounted past each clip edge. Default: 240 */
@@ -102,8 +133,8 @@ export interface GridProps<TData = unknown> {
   cellRenderers?: Record<string, ReactCellRenderer>;
   /** Edit renderer registries */
   editRenderers?: Record<string, ReactEditRenderer>;
-  /** Header renderer registries */
-  headerRenderers?: Record<string, ReactHeaderRenderer>;
+  /** Header renderer registries, keyed by a column's or a group's `headerRenderer` */
+  headerRenderers?: ReactHeaderRendererRegistry;
 
   /** Global cell renderer */
   cellRenderer?: ReactCellRenderer;
@@ -137,8 +168,18 @@ export interface GridProps<TData = unknown> {
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer handles data reordering. */
   onRowDragEnd?: (event: RowDragEndEvent) => void;
-  /** Called when a column is resized. */
+  /** Called per column a resize, a fit or a resize key changed. */
   onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   * Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row a row resize, a fit or a resize key changed. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Bounds of the fit commands and the row resize gestures. Creation-only. */
+  autoFit?: AutoFitOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */

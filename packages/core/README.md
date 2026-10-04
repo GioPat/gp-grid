@@ -148,6 +148,7 @@ The core emits these instruction types:
 | `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode; `START_EDIT` carries `editId` and is re-sent with the draft when the edited column moves |
 | `COMMIT_EDIT`                                 | Commit edited value               |
 | `UPDATE_HEADER`                               | Update header with sort state     |
+| `SET_HEADER_BANDS`                            | Publish the header bands (`GridState.headerBands`) |
 | `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle              |
 
 ## Data Sources
@@ -392,6 +393,7 @@ interface ColumnDefinition {
   cellRenderer?: string; // Custom renderer key
   editRenderer?: string; // Custom edit renderer key
   headerRenderer?: string; // Custom header renderer key
+  wrapHeaderText?: boolean; // Wrap header text inside its band
 }
 ```
 
@@ -685,8 +687,63 @@ resident pays that pass on each sort or refresh.
 The height reaches a wrapper as `SlotData.height`, published in the same
 `MOVE_SLOT` instruction as `slot.translateY`; a row drag ghost sizes itself from
 `RowDragState.sourceRowHeight`; and `SET_CONTENT_SIZE.height` follows the row
-extent plus the header band, so a change reaches the scroll range. See
+extent plus the header's total height, so a change reaches the scroll range. See
 [Row heights](../../docs/features/row-heights.md).
+
+### Row resize and auto-fit
+
+`rowResize: true` lets the user resize rows: the row edge drag and double-click,
+Alt+ArrowUp/Down and Alt+Shift+Enter. `rowHeights.setResizable(enabled)` changes
+it at runtime and `isResizable()` reads it. `onRowResized({ rowId, height,
+viewIndex })` fires per row a drag, a key or a fit changed.
+
+`rowHeights.fit(rowIds?)` and `columns.fit(columnIds?)` fit mounted rows and
+columns to their rendered content once. They read through the `measurementHost`
+option; a custom adapter passes `createDomMeasurementHost(() => root)` in the
+browser and renders `data-layout-revision` (from `columnWindow.layout.revision`)
+on that root.
+
+```ts
+const core = new GridCore({
+  columns, dataSource, rowHeight: 32, rowResize: true,
+  autoFit: { maxColumnWidth: 600 },
+  measurementHost: createDomMeasurementHost(() => rootEl),
+});
+const result = core.columns.fit(["name"]); // { status, scope: "rendered", consideredRows, columns, skipped }
+```
+
+`status` is `"applied"`, `"unchanged"`, `"unsupported"` (no host, a host that
+answered `null`, or after `destroy()`) or `"stale"`: the host read under a
+layout revision that is not the core's, which happens when the fit runs in the
+same task as a column layout change, before the adapter rendered it. Rows clamp
+into `[autoFit.minRowHeight, autoFit.maxRowHeight]` (defaults `rowHeight` and
+`10 × rowHeight`) and are stored as row heights; columns clamp into
+`[minWidth ?? 50, min(maxWidth ?? ∞, autoFit.maxColumnWidth)]` (default 600) and
+are stored as pixel overrides. `columns.setState([{ columnId, width: null }])`
+drops a width override. See
+[Auto-fit and row resize](../../docs/features/auto-fit.md).
+
+### Column groups and header bands
+
+`columnGroups` nests the headers: a `ColumnGroupDefinition` (`groupId`,
+`headerName?`, `wrapHeaderText?`, `headerRenderer?`, `children`) holds groups and
+leaf column ids, and every column is referenced exactly once, ungrouped ones at
+the root. The hierarchy is validated before adoption; `columns.set(columns,
+groups ?? null)` and `columns.setGroups(groups)` replace it, and the guarded
+column commands return a `ColumnSchemaResult`. A rejection keeps the previous
+schema, calls `onColumnSchemaRejected(error)` and announces
+`labels.columnSchemaErrors[code]`. `columnGroupLimits` (`maxDepth` 64,
+`maxNodes` 100,000, `maxFragments` 100,000) bounds the work.
+
+The header is `bandCount` bands of `headerBandHeights[b] ?? headerHeight`.
+`core.header.getBands()` returns `{ count, heights, offsets, totalHeight }` and
+`core.header.setBandHeights(heights)` replaces the heights in one anchored batch.
+An adapter renders `GridState.headerBands` (`SET_HEADER_BANDS`) and the
+fragments in `columnWindow.groups`, takes the header height from
+`headerBands.totalHeight`, and builds ids and ARIA associations with the exported
+`leafHeaderId`, `fragmentHeaderId`, `leafHeaderBox`, `fragmentHeaderBox` and
+`resolveHeaderAssociations`. See
+[Column groups and header bands](../../docs/features/column-groups.md).
 
 ## Creating a Framework Adapter
 
@@ -791,8 +848,10 @@ class MyGridAdapter {
 | `rows`       | `getCount()`, `getId(i)`, `getData(i)`, `has(i)`, `getViewRow(i)`, `getRecordById(id)`, `isWritable()`, `getSlotGeneration(i)`, `isSlotGenerationCurrent(i, generation)`, `refreshSlotData()` |
 | `cells`      | `getValue(row, col)`, `setValue(row, col, value)`, `getFieldValue(i, field)`, `getBounds(rowId, columnId, space?)` |
 | `edit`       | `start(row, col)`, `updateValue(value, editId?)`, `commit(editId?)`, `cancel(editId?)`, `getState()`, `startPeek(row, col)`, `stopPeek()`, `getPeekState()`, `paste(text)` |
-| `columns`    | `get()`, `set(columns)`, `setWidth(colIndex, width)`, `move(from, to)`, `setPinned(columnId, pinned)`, `getState()`, `setState(updates)`, `resetState(columnIds?)`, `setLayout(mode)` |
+| `columns`    | `get()`, `set(columns, groups?)`, `setGroups(groups)`, `getGroups()`, `getGroup(groupId)`, `setWidth(colIndex, width)`, `move(from, to)`, `setPinned(columnId, pinned)`, `getState()`, `setState(updates)`, `resetState(columnIds?)`, `setLayout(mode)`, `fit(columnIds?)` |
 | `frozenRows` | `set(config?)`, `freezeThrough(viewIndex)`, `get()` |
+| `rowHeights` | `set(updates)`, `reset(rowIds?)`, `getOverrides()`, `fit(rowIds?)`, `setResizable(enabled)`, `isResizable()` |
+| `header`     | `getBands()`, `setBandHeights(heights)` |
 | `rowDrag`    | `commit(from, to)`, `isEntireRow()` |
 | `sortFilter` | `setSort(colId, direction, addToExisting?)`, `setFilter(colId, filter)`, `getSortModel()`, `getFilterModel()`, `hasActiveFilter(colId)`, `openFilterPopup(colIndex, anchorRect, computeDistinctValues?)`, `closeFilterPopup()`; ignored while a load is in flight |
 | `viewport`   | Touch-scroller hooks: `setTopOverride(domScrollTop)`, `isScaling()`, `getScrollRatio()`, `getMaxFlingVelocity()`, `getRowHeight()` |

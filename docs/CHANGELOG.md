@@ -56,6 +56,26 @@ All notable changes to gp-grid will be documented in this file.
 - `PendingScrollLatch` in the adapter kit: it holds `SCROLL_TO` corrections outside the render state until the wrapper writes them, so batches coalesced into one render cannot drop a correction and taking it costs no extra render. React and Vue use it.
 - See [Row heights](./features/row-heights.md)
 
+#### Auto-fit and column groups (PRD 007)
+- `rowResize` (default `false`) on `GridCoreOptions` and as a prop/input of every wrapper: the row edge drag and double-click, Alt+ArrowUp/Down and Alt+Shift+Enter. `GridCore.rowHeights.setResizable(enabled)` changes it at runtime without emitting anything and `isResizable()` reads it; the wrappers apply a changed prop through it.
+- One-shot fits: `GridCore.rowHeights.fit(rowIds?)` and `GridCore.columns.fit(columnIds?)` return `RowFitResult` / `ColumnFitResult` with a `FitStatus` (`"applied"`, `"unchanged"`, `"unsupported"`, `"stale"`), the fitted entries with their `FitClamp`, and the skipped ids with a reason. Omitted ids mean every mounted row or displayed column. A row fit stores row heights like `rowHeights.set`; a column fit stores pixel overrides in one batch. A fit reads mounted cells only and issues no data request.
+- `autoFit: { maxColumnWidth?, minRowHeight?, maxRowHeight? }` (defaults `600`, `rowHeight` and `10 × rowHeight`), creation-only; an invalid value throws `RangeError("Invalid autoFit.<field>: <value>")`
+- `MeasurementHost`, `RowMeasurement`, `ColumnMeasurement` and the `measurementHost` option; `createDomMeasurementHost(getRoot)` in the adapter kit. Every wrapper builds one in the browser and renders `data-layout-revision` on its grid root.
+- `onRowResized({ rowId, height, viewIndex })` (`RowResizedEvent`) on `GridCore` and every wrapper, once per row a drag, a key or a fit changed; `onColumnResized` also fires for a fit and a key
+- Edge handles: a double-click on `.gp-grid-header-resize-handle` fits the column, and while `rowResize` is on every non-editing cell renders `div.gp-grid-row-resize-handle[aria-hidden="true"]` along its bottom edge; `.gp-grid-row-resize-line` previews a row drag. `DragState.rowResize` (`RowResizeDragState`), the `"row-resize"` drag type, `InputHandler.handleRowResizeMouseDown` and `handleResizeDoubleClick(target: ResizeTarget)`, and the adapter's `rowResizePointerDown` and `resizeDoubleClick`.
+- Grid shortcuts on the active cell: Alt+ArrowLeft/Right (column width ±8 px), Alt+ArrowUp/Down (row height ±4 px), Alt+Shift+ArrowLeft/Right (move the column within its region), Alt+Enter (fit the column) and Alt+Shift+Enter (fit the row); `KeyEventData.altKey`
+- `ColumnState.width` and `ColumnStateUpdate.width` accept `null`, which drops the pixel override
+- Nested column groups: `ColumnGroupDefinition` (`groupId`, `headerName?`, `wrapHeaderText?`, `headerRenderer?`, `children`) and `ColumnGroupChild`, the `columnGroups` option/prop/input, and `ColumnGroupHeaderParams` for group renderers. A hierarchy is validated before adoption; a rejection is a `ColumnSchemaError` (`code`, `source`, `id?`, `limit?`, `message`) passed to the new `onColumnSchemaRejected` option/prop/output and announced through the live region.
+- `columnGroupLimits: { maxDepth?, maxNodes?, maxFragments? }` (defaults `64`, `100,000`, `100,000`), creation-only; an invalid value throws `RangeError("Invalid columnGroupLimits.<field>: <value>")`
+- `GridCore.columns.set(columns, groups?)`, `columns.setGroups(groups)`, `columns.getGroups()` and `columns.getGroup(groupId)`; `createColumnGroupLookup(groups)` resolves group definitions before a core exists
+- `ColumnDefinition.wrapHeaderText` and `.gp-grid-header-cell--wrap`; `.gp-grid-header-group` for fragments
+- Header bands: the `headerBandHeights` option/prop/input, `GridCore.header` (`GridHeaderApi`: `getBands()`, `setBandHeights(heights)`) and `HeaderBandLayout`; `SET_HEADER_BANDS` (`SetHeaderBandsInstruction`), `GridState.headerBands` and `BatchChangeSetters.setHeaderBands`; `createInitialState` takes `initialHeaderHeight`, `initialHeaderBandHeights` and `initialColumnGroups`. A band change is one anchored batch.
+- Header runs and fragments: `HeaderRun`, `HeaderFragment` and `HeaderFragments`, published in `ColumnWindowSnapshot.groups`
+- Header layout helpers for adapters: `escapeDomIdPart`, `leafHeaderId`, `fragmentHeaderId`, `leafHeaderBox`, `fragmentHeaderBox` and `resolveHeaderAssociations` (`HeaderAssociationInput`, `HeaderAssociations`, `HeaderBox`)
+- Group renderers: React `ReactGroupHeaderRenderer` and `ReactHeaderRendererRegistry`; Vue `VueGroupHeaderRenderer`, `VueHeaderRendererRegistry` and `renderGroupHeader`; Angular `AngularColumnGroupDefinition`, `AngularColumnGroupChild`, `GroupHeaderRendererTemplate` and `HeaderRendererRegistry`
+- Grouped header DOM: a `role="rowgroup"` header root with one `role="row"` per band owning its cells through `aria-owns`, fragments with `aria-colspan` and `aria-rowindex`, and leaf headers with `aria-rowspan` and `aria-describedby`; every header cell carries an escaped `id`
+- See [Auto-fit and row resize](./features/auto-fit.md) and [Column groups and header bands](./features/column-groups.md)
+
 ### Changed
 
 #### GridCore API (1.0)
@@ -132,6 +152,20 @@ All notable changes to gp-grid will be documented in this file.
 - A row whose height changes re-publishes one `MOVE_SLOT` per mounted slot, so a wrapper can key off the instruction alone
 - Applying a height is an atomic size change: geometry, the content size, the scroll correction and the row sync land in one batch, and an overscan row that is no longer needed is unmounted in the same one
 - A data revision re-resolves placements against the new order in one resident-row pass, once per revision rather than per scroll or query
+
+#### Auto-fit and column groups (PRD 007)
+- **Breaking (0.x → 1.0):** `GridLabels` gained the required nested field `columnSchemaErrors` (`GridColumnSchemaErrorLabels`: `cycle`, `duplicateGroup`, `repeatedLeaf`, `unknownLeaf`, `missingLeaf`, `multipleParents`, `idCollision`, `malformed` and `limit`, with the tokens `{id}` and `{limit}`), so a full `GridLabels` object literal must include it. `GridLabelOverrides` stays fully optional and merges it one level deep, like `operators`.
+- **Breaking (0.x → 1.0):** `columns.set`, `columns.move`, `columns.setPinned`, `columns.setState` and `columns.resetState` return a `ColumnSchemaResult` (`{ status: "applied" | "unchanged" }` or `{ status: "rejected", error }`) instead of `void`, so an object implementing `GridColumnsApi` must return one
+- **Breaking (0.x → 1.0):** `@gp-grid/vue` requires Vue `^3.5.0` (npm peer range and JSR import), for `useId`
+- **Breaking (0.x → 1.0):** ARIA rows number the header first in every wrapper. The flat header row carries `aria-rowindex="1"` and band `b` carries `b + 1`; a body row's `aria-rowindex` is its view index plus the header row count plus 1, and the root's `aria-rowcount` is the row count plus the header row count.
+- A column resize that never moved commits nothing and fires no `onColumnResized`
+- The column resize handle carries `aria-hidden="true"` and is a pointer target only
+- `DisplayedColumn.headerBand` (a leaf's first band, `0` while flat) and `ColumnLayoutSnapshot.bandCount` (`1` while flat), both part of the snapshot comparison
+- `ColumnWindowSnapshot.groups` (`{ start, center, end }`, empty and shared while flat)
+- `GridState.headerBands`: the header height is core-owned, and the wrappers render the header, the body sizer, the loading overlay, the drop indicator and the resize line from `headerBands.totalHeight`. `SET_CONTENT_SIZE.height` is the row extent plus that total.
+- `DragState.rowResize` is a required field (`null` outside a row drag), so a custom adapter that builds a `DragState` must set it
+- While groups are active the depth-first leaf order of the descriptors is the default column order, the order new leaves take on replacement and the order `columns.resetState()` restores
+- Every leaf header carries an `id`, and the header cells of a grouped grid are absolutely placed in their region container from the band offsets
 
 #### Vue rendering
 - Scrolling no longer re-renders every mounted row and cell. A cell re-renders when its row is re-assigned (`slot.generation`) or when a batch can change core-backed content; a batch that only places rows and columns leaves it alone. `useGpGrid().renderToken` still bumps once per batch.

@@ -20,10 +20,14 @@ import {
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
+import { ResizeHandle } from "./ResizeHandle";
+import type { ResizeHandleActions } from "./ResizeHandle";
 
 export interface GridCellProps<TData = unknown> {
   rowIndex: number;
   rowData: TData | undefined;
+  /** Height of the cell's row, where a row handle drag starts. */
+  rowHeight: number;
   column: ResolvedColumn;
   /** 0-based index in the displayed columns, for `aria-colindex`. */
   displayedIndex: number;
@@ -31,6 +35,9 @@ export interface GridCellProps<TData = unknown> {
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number; initialValue: CellValue; editId: number } | null;
   dragState: DragState;
+  resizeActions: ResizeHandleActions;
+  /** Render the row edge handle while not editing. */
+  rowResize: boolean;
   coreRef: React.RefObject<GridCore<TData> | null>;
   cellRenderers: Record<string, ReactCellRenderer>;
   editRenderers: Record<string, ReactEditRenderer>;
@@ -52,12 +59,15 @@ export const GridCell = <TData = unknown>(
   const {
     rowIndex,
     rowData,
+    rowHeight,
     column,
     displayedIndex,
     activeCell,
     selectionRange,
     editingCell,
     dragState,
+    resizeActions,
+    rowResize,
     coreRef,
     cellRenderers,
     editRenderers,
@@ -172,6 +182,15 @@ export const GridCell = <TData = unknown>(
           cellRenderers,
           globalCellRenderer,
         })}
+      {rowResize && isEditing === false && (
+        <ResizeHandle
+          axis="row"
+          index={rowIndex}
+          size={rowHeight}
+          active={dragState.rowResize?.rowIndex === rowIndex}
+          actions={resizeActions}
+        />
+      )}
     </div>
   );
 };

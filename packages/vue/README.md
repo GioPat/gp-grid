@@ -37,6 +37,8 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - **Cell Editing**: Double-click or press Enter to edit, with custom editor support
 - **Fill Handle**: Excel-like drag-to-fill for editable cells
 - **Column Pin**: Pin columns to the start or end edge; a bounded column window keeps wide grids flat
+- **Row Resize and Auto-Fit**: Drag a row edge, or fit a row or a column to its rendered content once
+- **Column Groups**: Nested header groups of any finite depth, with configured header band heights
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
@@ -49,6 +51,8 @@ Use `npm`, `yarn` or `pnpm`
 ```bash
 pnpm add @gp-grid/vue
 ```
+
+Requires Vue 3.5 or later.
 
 ## Quick Start
 
@@ -631,9 +635,67 @@ Applying a height is one atomic size change: the grid anchors the row at the
 clip top and corrects the scroll position in the same batch, so the viewport
 does not jump. Row boxes are sized from `SlotData.height` (published in
 `useGpGrid`'s `slotsArray`), cells fill their row through the shipped CSS, and
-the row drag ghost matches `RowDragState.sourceRowHeight`. Nothing is measured —
-auto height is a later feature. See
+the row drag ghost matches `RowDragState.sourceRowHeight`. Nothing is measured
+continuously; a fit measures once (below). See
 [Row heights](../../docs/features/row-heights.md).
+
+### Row resize and auto-fit
+
+`row-resize` lets the user drag a row edge; a double-click on a row or column
+edge fits it to its rendered content once. The same commands are on the exposed
+core:
+
+```vue
+<GpGrid ref="gridRef" :columns="columns" :row-data="rows" :row-height="32"
+  :row-resize="true" :auto-fit="{ maxColumnWidth: 400 }"
+  :on-row-resized="({ rowId, height }) => saveHeight(rowId, height)" />
+
+<script setup lang="ts">
+coreOf()?.columns.fit(["name"]); // { status, columns, skipped, ... }
+coreOf()?.rowHeights.fit();       // every mounted row
+coreOf()?.columns.setState([{ columnId: "name", width: null }]); // drop the width
+</script>
+```
+
+A fit reads the mounted cells only, clamps into `auto-fit` and the column's
+`minWidth`/`maxWidth`, and stores the result like a resize. Call it after the
+render that follows a column change: a fit in the same task returns `"stale"` and
+applies nothing. The edge handles are pointer-only (`aria-hidden`); the keyboard
+equivalents are the Alt shortcuts below. `useGpGrid` takes `rowResize` and
+`autoFit` too and builds its measurement host over `containerRef`, which must
+carry `data-layout-revision`. See
+[Auto-fit and row resize](../../docs/features/auto-fit.md).
+
+## Column groups
+
+`column-groups` nests the headers over the column ids; every column is
+referenced once, ungrouped ones at the root. `header-band-heights` sets each
+band's height (default `header-height`), and both props apply at runtime without
+a remount:
+
+```vue
+<script setup lang="ts">
+const columnGroups: ColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: ["name", "age"] },
+];
+</script>
+
+<template>
+  <GpGrid :columns="columns" :column-groups="columnGroups" :header-band-heights="[40]"
+    :on-column-schema-rejected="(error) => console.warn(error.code, error.message)" />
+</template>
+```
+
+An invalid hierarchy (a cycle, a duplicate or colliding id, an unknown, repeated
+or missing column, a group under two parents, or an exceeded
+`column-group-limits` budget) is rejected: the grid keeps the previous one and
+calls `onColumnSchemaRejected`. The prop stays as given and is re-applied with
+every later `columns` change, so restore a valid hierarchy. A group's
+`headerRenderer` is a `VueGroupHeaderRenderer` (function or component) or a key
+of `header-renderers`, receiving `ColumnGroupHeaderParams`. A header taller than
+its band is clipped; `wrapHeaderText` wraps it. See
+[Column groups and header bands](../../docs/features/column-groups.md).
 
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
@@ -651,7 +713,12 @@ The public website documentation for this package lives outside this repository 
 | `dataSource`      | `DataSource<TData>`                 | -           | Data source for fetching data                               |
 | `rowData`         | `TData[]`                           | -           | Alternative: raw data array (wrapped in client data source) |
 | `rowHeight`       | `number`                            | required    | Height of each row in pixels                                |
-| `headerHeight`    | `number`                            | `rowHeight` | Height of header row                                        |
+| `headerHeight`    | `number`                            | `rowHeight` | Default height of every header band                         |
+| `headerBandHeights` | `readonly number[]`               | -           | Height per header band; a band without one is `headerHeight`. Applied at runtime |
+| `columnGroups`    | `ColumnGroupChild[]`                | -           | Nested header groups over the column ids, applied with `columns` |
+| `columnGroupLimits` | `ColumnGroupLimits`               | `64` / `100,000` / `100,000` | `{ maxDepth?, maxNodes?, maxFragments? }`; read at creation |
+| `rowResize`       | `boolean`                           | `false`     | Row edge drag and double-click, Alt+ArrowUp/Down, Alt+Shift+Enter; applied at runtime |
+| `autoFit`         | `AutoFitOptions`                    | `600` / `rowHeight` / `10 × rowHeight` | `{ maxColumnWidth?, minRowHeight?, maxRowHeight? }`; read at creation |
 | `overscan`        | `number`                            | `3`         | Number of rows to render outside viewport                   |
 | `sortingEnabled`  | `boolean`                           | `true`      | Enable column sorting                                       |
 | `getRowId`        | `(row: TData) => RowId`             | -           | Stable row identity; required for mutations                 |
@@ -668,6 +735,8 @@ The public website documentation for this package lives outside this repository 
 | `onColumnMoved`   | `(event: ColumnMovedEvent) => void`   | -         | Called with `{ columnId, fromViewIndex, toViewIndex }`      |
 | `onColumnPinned`  | `(event: ColumnPinnedEvent) => void`  | -         | Called with `{ columnId, pinned }` when a pin changes       |
 | `onFrozenRowsChanged` | `(state: FrozenRowsState) => void` | -        | Called with `{ requestedCount, effectiveCount, limit }` when the frozen prefix changes |
+| `onRowResized`    | `(event: RowResizedEvent) => void`  | -           | Called with `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
+| `onColumnSchemaRejected` | `(error: ColumnSchemaError) => void` | - | Called with `{ code, source, id?, limit?, message }` when a column change is rejected |
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -         | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
 | `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |
@@ -686,6 +755,7 @@ The public website documentation for this package lives outside this repository 
 | `editRenderer`   | `string`       | Key in `editRenderers` registry                                     |
 | `headerRenderer` | `string`       | Key in `headerRenderers` registry                                   |
 | `pinned`         | `"start" \| "end"` | Initial pin against that viewport edge; an explicit `pinned: null` command unpins |
+| `wrapHeaderText` | `boolean`      | Wrap the header text inside its band                                |
 
 ### Renderer Types
 
@@ -753,6 +823,11 @@ type VueHeaderRenderer = (
 | Ctrl + C           | Copy selection to clipboard       |
 | Ctrl + V           | Paste clipboard values into selection |
 | Any character      | Start editing with that character |
+| Alt + Left / Right | Shrink / grow the active column by 8 px |
+| Alt + Up / Down    | Shrink / grow the active row by 4 px (`row-resize`) |
+| Alt + Shift + Left / Right | Move the active column within its region |
+| Alt + Enter        | Fit the active column             |
+| Alt + Shift + Enter | Fit the active row (`row-resize`) |
 
 ## Styling
 
@@ -762,6 +837,7 @@ The grid injects its own styles automatically. The main container uses these CSS
 - `.gp-grid-container--dark` - Dark mode modifier
 - `.gp-grid-header` - Header row container
 - `.gp-grid-header-cell` - Individual header cell
+- `.gp-grid-header-group` - Column group fragment (also a `.gp-grid-header-cell`)
 - `.gp-grid-row` - Row container
 - `.gp-grid-cell` - Cell container
 - `.gp-grid-cell--active` - Active cell
@@ -770,6 +846,7 @@ The grid injects its own styles automatically. The main container uses these CSS
 - `.gp-grid-filter-row` - Filter row container
 - `.gp-grid-filter-input` - Filter input field
 - `.gp-grid-fill-handle` - Fill handle element
+- `.gp-grid-row-resize-handle` / `.gp-grid-row-resize-line` - Row edge handle and drag preview
 
 ## Donations
 

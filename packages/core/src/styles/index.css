@@ -6,6 +6,7 @@
 @import "./variables.css";
 @import "./container.css";
 @import "./header.css";
+@import "./header-groups.css";
 @import "./cells.css";
 @import "./states.css";
 @import "./scrollbar.css";

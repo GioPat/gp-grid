@@ -110,8 +110,7 @@ unpinning or moving the column keeps the edit open by identity. Hiding the
 column of an open edit commits it first.
 
 Retention is a bounded, keyed internal facility (`geometryService.retainColumns(key, columnIds)`,
-capped at 16 columns grid-wide) that PRD 007 reuses for its own participants.
-It is not a public API.
+capped at 16 columns grid-wide). It is not a public API.
 
 ## Inline axis (RTL)
 

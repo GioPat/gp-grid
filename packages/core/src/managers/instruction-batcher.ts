@@ -45,6 +45,22 @@ export class InstructionBatcher {
     }
   }
 
+  /**
+   * Run `resync` in the open batch: each instruction of `types` it emits
+   * replaces the ones of its type already buffered instead of following them.
+   */
+  replacing(types: ReadonlySet<GridInstruction["type"]>, resync: () => void): void {
+    const mark = this.buffer?.length ?? 0;
+    resync();
+    const buffer = this.buffer;
+    if (buffer === null) return;
+    const resent = new Set(
+      buffer.slice(mark).map((instruction) => instruction.type).filter((type) => types.has(type)),
+    );
+    if (resent.size === 0) return;
+    this.buffer = buffer.filter((instruction, at) => at >= mark || resent.has(instruction.type) === false);
+  }
+
   emit(instruction: GridInstruction): void {
     if (this.buffer !== null) {
       this.buffer.push(instruction);

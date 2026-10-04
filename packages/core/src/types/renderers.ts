@@ -3,7 +3,8 @@
 
 import type { CellValue, RowId, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
-import type { ColumnPin } from "./geometry";
+import type { ColumnGroupDefinition } from "./column-groups";
+import type { ColumnPin, ColumnRegion } from "./geometry";
 
 /**
  * Cell renderer params.
@@ -86,4 +87,18 @@ export interface HeaderRendererParams {
   onFilterClick: () => void;
   /** Request a pin change; `null` unpins. */
   onPinChange: (pinned: ColumnPin | null) => void;
+}
+
+/** Group header renderer params: one fragment of a column group (PRD 007 D9). */
+export interface ColumnGroupHeaderParams {
+  /** The group's definition, as the caller passed it. */
+  group: ColumnGroupDefinition;
+  groupId: string;
+  /** Header band the fragment fills. */
+  band: number;
+  region: ColumnRegion;
+  /** Displayed leaves the fragment spans. */
+  leafCount: number;
+  /** Ids of the spanned leaves, in display order. */
+  columnIds: readonly string[];
 }

@@ -185,8 +185,42 @@ addresses a view index and is dropped at the next data revision. Applying a
 height anchors the row at the clip top and corrects the scroll position in the
 same batch, so the viewport does not jump; row boxes are sized from
 `slot.height` and the row drag ghost from `rd.sourceRowHeight`. Nothing is
-measured — auto height is a later feature. See
+measured continuously; a fit measures once (below). See
 [Row heights](../../docs/features/row-heights.md).
+
+Row resize and auto-fit: `[rowResize]="true"` lets the user drag a row edge, and
+a double-click on a row or column edge fits it to its rendered content once.
+`[autoFit]` (`{ maxColumnWidth?, minRowHeight?, maxRowHeight? }`, defaults 600,
+`rowHeight` and `10 × rowHeight`) bounds the fits and the row drag, and
+`(onRowResized)` reports each changed row. The commands are on the exposed core:
+
+```ts
+grid.core?.columns.fit(["name"]); // { status, columns, skipped, ... }
+grid.core?.rowHeights.fit();       // every mounted row
+grid.core?.columns.setState([{ columnId: "name", width: null }]); // drop the width
+```
+
+A fit reads the mounted cells only and stores the result like a resize. Call it
+after the render that follows a column change: a fit in the same task returns
+`"stale"` and applies nothing. The edge handles are pointer-only (`aria-hidden`);
+the keyboard equivalents are Alt+ArrowLeft/Right and Alt+ArrowUp/Down (resize),
+Alt+Shift+ArrowLeft/Right (move the column), Alt+Enter (fit the column) and
+Alt+Shift+Enter (fit the row). See
+[Auto-fit and row resize](../../docs/features/auto-fit.md).
+
+Column groups: `[columnGroups]` (`AngularColumnGroupChild[]`) nests the headers
+over the column ids, every column referenced once and ungrouped ones at the
+root, and `[headerBandHeights]` sets each band's height (default
+`headerHeight`); both apply at runtime. An invalid hierarchy is rejected: the
+grid keeps the previous one and emits `(onColumnSchemaRejected)` with
+`{ code, source, id?, limit?, message }`. The input stays as given and is
+re-applied with every later `columns` change, so restore a valid hierarchy.
+`[columnGroupLimits]` (`maxDepth` 64, `maxNodes` 100,000, `maxFragments` 100,000)
+is read at creation. A group's `headerRenderer` is a `TemplateRef` receiving
+`ColumnGroupHeaderParams` as `$implicit`, or a key of `[headerRenderers]`. Under
+strict templates the published input typings do not accept `undefined`: cast an
+absent hierarchy and bind `[]` for no band heights. See
+[Column groups and header bands](../../docs/features/column-groups.md).
 
 | Output | Payload |
 | --- | --- |
@@ -194,6 +228,8 @@ measured — auto height is a later feature. See
 | `(onColumnMoved)` | `{ columnId, fromViewIndex, toViewIndex }` |
 | `(onColumnPinned)` | `{ columnId, pinned }` (`null` when unpinned) |
 | `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
+| `(onRowResized)` | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
+| `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
 | `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
 

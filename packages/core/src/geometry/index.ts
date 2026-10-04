@@ -15,6 +15,7 @@ export {
 export {
   createColumnLayoutResolver,
   createSeedColumnLayout,
+  flatDepthOf,
   resolveColumnLayout,
   type ColumnLayoutInput,
   type ColumnLayoutResolver,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createColumnLayoutResolver,
   createSeedColumnLayout,
+  flatDepthOf,
   resolveColumnLayout,
   type ColumnLayoutInput,
 } from "../src/geometry/column-layout";
@@ -23,7 +24,11 @@ const input = (
   mode: "fit",
   width,
   isOverridden: (layoutIndex) => overridden.includes(layoutIndex),
+  depthOf: flatDepthOf,
 });
+
+const depths = (byId: Record<string, number>) => (columnId: string): number =>
+  byId[columnId] ?? 0;
 
 describe("resolveColumnLayout", () => {
   it("builds offsets, layout indices and total width", () => {
@@ -135,6 +140,7 @@ describe("createColumnLayoutResolver", () => {
         endOffset: 0,
         centerViewportWidth: 0,
       },
+      bandCount: 1,
     });
   });
 
@@ -146,6 +152,7 @@ describe("createColumnLayoutResolver", () => {
       mode: "fit",
       width: 0,
       isOverridden: () => false,
+      depthOf: flatDepthOf,
     });
     const snapshot = resolver.get();
     expect(snapshot.revision).toBe(5);
@@ -158,16 +165,16 @@ describe("createColumnLayoutResolver", () => {
     let revision = 1;
     const resolver = createColumnLayoutResolver("fit", () => revision);
     const columns = [column("a", 100), column("b", 100)];
-    const first = resolver.update({ columns, mode: "fit", width: 400, isOverridden: () => false });
-    const second = resolver.update({ columns, mode: "fit", width: 400, isOverridden: () => false });
+    const flat = { mode: "fit" as const, width: 400, depthOf: flatDepthOf };
+    const first = resolver.update({ columns, ...flat, isOverridden: () => false });
+    const second = resolver.update({ columns, ...flat, isOverridden: () => false });
     expect(second).toBe(first);
     expect(first.columns.map((c) => c.width)).toEqual([200, 200]);
     revision = 2;
     // The column model hands out a new layout array on every state change.
     const third = resolver.update({
       columns: [...columns],
-      mode: "fit",
-      width: 400,
+      ...flat,
       isOverridden: (index) => index === 0,
     });
     expect(third).not.toBe(first);
@@ -183,15 +190,64 @@ describe("createColumnLayoutResolver", () => {
       overrideReads += 1;
       return false;
     };
-    const first = resolver.update({ columns, mode: "fit", width: 400, isOverridden });
+    const depthOf = flatDepthOf;
+    const first = resolver.update({ columns, mode: "fit", width: 400, isOverridden, depthOf });
     const readsAfterFirst = overrideReads;
     for (let step = 0; step < 1_000; step += 1) {
-      expect(resolver.update({ columns, mode: "fit", width: 400, isOverridden })).toBe(first);
+      expect(resolver.update({ columns, mode: "fit", width: 400, isOverridden, depthOf }))
+        .toBe(first);
     }
     expect(overrideReads).toBe(readsAfterFirst);
 
-    expect(resolver.update({ columns, mode: "fit", width: 500, isOverridden })).not.toBe(first);
+    expect(resolver.update({ columns, mode: "fit", width: 500, isOverridden, depthOf }))
+      .not.toBe(first);
     resolver.setMode("fixed");
-    expect(resolver.update({ columns, mode: "fit", width: 500, isOverridden }).mode).toBe("fixed");
+    expect(resolver.update({ columns, mode: "fit", width: 500, isOverridden, depthOf }).mode)
+      .toBe("fixed");
+  });
+});
+
+describe("header bands (PRD 007 D7)", () => {
+  it("starts every leaf header in band 0 and has one band while flat", () => {
+    const snapshot = resolveColumnLayout(input([column("a", 100), column("b", 100)], 0), null, 1);
+    expect(snapshot.bandCount).toBe(1);
+    expect(snapshot.columns.map((c) => c.headerBand)).toEqual([0, 0]);
+  });
+
+  it("counts bands from the deepest displayed leaf only", () => {
+    const columns = [column("a", 100), column("b", 100, { hidden: true }), column("x", 100)];
+    const depthOf = depths({ a: 2, b: 5, x: 0 });
+    const snapshot = resolveColumnLayout({ ...input(columns, 0), depthOf }, null, 1);
+    expect(snapshot.columns.map((c) => [c.columnId, c.headerBand])).toEqual([["a", 2], ["x", 0]]);
+    expect(snapshot.bandCount).toBe(3);
+  });
+
+  it("replaces the snapshot when only a leaf depth changes", () => {
+    const columns = [column("a", 100), column("b", 100)];
+    const first = resolveColumnLayout(
+      { ...input(columns, 0), depthOf: depths({ a: 1, b: 1 }) }, null, 1);
+    const same = resolveColumnLayout(
+      { ...input(columns, 0), depthOf: depths({ a: 1, b: 1 }) }, first, 2);
+    expect(same).toBe(first);
+    const deeper = resolveColumnLayout(
+      { ...input(columns, 0), depthOf: depths({ a: 1, b: 2 }) }, first, 3);
+    expect(deeper).not.toBe(first);
+    expect(deeper.bandCount).toBe(3);
+  });
+
+  it("re-resolves the cached snapshot when the hierarchy's depthOf is replaced", () => {
+    const resolver = createColumnLayoutResolver("fixed", () => 1);
+    const columns = [column("a", 100)];
+    const base = { columns, mode: "fixed" as const, width: 400, isOverridden: () => false };
+    const flat = resolver.update({ ...base, depthOf: flatDepthOf });
+    const grouped = resolver.update({ ...base, depthOf: depths({ a: 2 }) });
+    expect(grouped).not.toBe(flat);
+    expect(grouped.bandCount).toBe(3);
+  });
+
+  it("seeds a grouped layout from a depthOf", () => {
+    const seed = createSeedColumnLayout([column("a", 100)], "fixed", 0, depths({ a: 1 }));
+    expect(seed.bandCount).toBe(2);
+    expect(seed.columns[0]!.headerBand).toBe(1);
   });
 });

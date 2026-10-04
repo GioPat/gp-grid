@@ -43,9 +43,35 @@ export interface GridFilterOperatorLabels {
 }
 
 /**
+ * Rejection messages of a column-group change, keyed by error code.
+ * Token `{id}` names the group or column, `{limit}` the exceeded budget.
+ */
+export interface GridColumnSchemaErrorLabels {
+  /** A group contains itself. Token: `{id}`. */
+  cycle: string;
+  /** Two groups share an id. Token: `{id}`. */
+  duplicateGroup: string;
+  /** A column is referenced twice. Token: `{id}`. */
+  repeatedLeaf: string;
+  /** A reference names no column. Token: `{id}`. */
+  unknownLeaf: string;
+  /** A column is not referenced. Token: `{id}`. */
+  missingLeaf: string;
+  /** A group sits under two parents. Token: `{id}`. */
+  multipleParents: string;
+  /** A group id equals a column id. Token: `{id}`. */
+  idCollision: string;
+  /** A child is neither a column id nor a group. */
+  malformed: string;
+  /** A budget is exceeded. Token: `{limit}`. */
+  limit: string;
+}
+
+/**
  * All user-visible grid labels. Strings containing `{token}` placeholders are
  * templates interpolated by {@link formatLabel}; the documented tokens are
- * `{column}`, `{count}`, `{message}`, `{effective}` and `{requested}`.
+ * `{column}`, `{count}`, `{message}`, `{effective}`, `{requested}`, `{id}`
+ * and `{limit}`.
  */
 export interface GridLabels {
   /** Filter popup title template. Token: `{column}`. */
@@ -101,14 +127,20 @@ export interface GridLabels {
   errorPrefix: string;
   /** Filter operator labels */
   operators: GridFilterOperatorLabels;
+  /** Column-group rejection messages, also announced. */
+  columnSchemaErrors: GridColumnSchemaErrorLabels;
 }
 
 /**
  * Consumer overrides for grid labels. Every top-level label and every nested
- * operator label can be changed independently.
+ * operator and schema-error label can be changed independently.
  */
-export type GridLabelOverrides = Omit<Partial<GridLabels>, "operators"> & {
+export type GridLabelOverrides = Omit<
+  Partial<GridLabels>,
+  "operators" | "columnSchemaErrors"
+> & {
   operators?: Partial<GridFilterOperatorLabels>;
+  columnSchemaErrors?: Partial<GridColumnSchemaErrorLabels>;
 };
 
 /** English defaults for every grid label. */
@@ -153,12 +185,23 @@ export const defaultGridLabels: GridLabels = {
     blank: "Is blank",
     notBlank: "Is not blank",
   },
+  columnSchemaErrors: {
+    cycle: 'Column group "{id}" contains itself',
+    duplicateGroup: 'Column group id "{id}" is used more than once',
+    repeatedLeaf: 'Column "{id}" is referenced more than once',
+    unknownLeaf: 'Column groups reference unknown column "{id}"',
+    missingLeaf: 'Column "{id}" is missing from the column groups',
+    multipleParents: 'Column group "{id}" has more than one parent',
+    idCollision: 'Column group id "{id}" is also a column id',
+    malformed: "Column groups contain an invalid entry",
+    limit: "Column groups exceed the {limit} budget",
+  },
 };
 
 /**
  * Merge a partial label set over the English defaults, producing a complete
- * `GridLabels`. Top-level keys are shallow-merged and `operators` is merged
- * one level deep; the defaults are never mutated.
+ * `GridLabels`. Top-level keys are shallow-merged, and `operators` and
+ * `columnSchemaErrors` one level deep; the defaults are never mutated.
  */
 export const resolveGridLabels = (
   overrides?: GridLabelOverrides,
@@ -168,6 +211,10 @@ export const resolveGridLabels = (
   operators: {
     ...defaultGridLabels.operators,
     ...overrides?.operators,
+  },
+  columnSchemaErrors: {
+    ...defaultGridLabels.columnSchemaErrors,
+    ...overrides?.columnSchemaErrors,
   },
 });
 

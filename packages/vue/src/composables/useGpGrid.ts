@@ -15,10 +15,16 @@ import {
   toPhysicalX,
   TouchScrollController,
   PendingScrollLatch,
+  createDomMeasurementHost,
 } from "@gp-grid/core";
 import type {
+  AutoFitOptions,
   RowId,
+  RowResizedEvent,
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaError,
   ColumnLayoutMode,
   ColumnLayoutSnapshot,
   ColumnFilterModel,
@@ -39,7 +45,8 @@ import type {
 import { useGridState } from "../gridState";
 import { useInputHandler } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";
-import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer } from "../types";
+import { useColumnSchemaSync } from "./useColumnSchemaSync";
+import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
 
 // =============================================================================
 // Types
@@ -50,7 +57,19 @@ export interface UseGpGridOptions<TData = unknown> {
   dataSource?: DataSource<TData>;
   rowData?: TData[];
   rowHeight: number;
+  /** Header height in pixels, the default height of every band. Default: rowHeight */
   headerHeight?: number;
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Read at creation. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   overscan?: number;
   /** Column overscan in CSS px per side for the mounted center window. */
   columnOverscan?: number;
@@ -76,9 +95,19 @@ export interface UseGpGridOptions<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Called when a column is pinned or unpinned. */
   onColumnPinned?: (event: ColumnPinnedEvent) => void;
+  /**
+   * Whether the user can resize rows: the row edge handle, Alt+ArrowUp/Down
+   * and Alt+Shift+Enter. Changeable at runtime. Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row resized by a key or a fit. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Clamps for the fit commands and the row resize keys. Read at creation. */
+  autoFit?: AutoFitOptions;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
-  headerRenderers?: Record<string, VueHeaderRenderer>;
+  /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+  headerRenderers?: VueHeaderRendererRegistry;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
@@ -86,6 +115,11 @@ export interface UseGpGridOptions<TData = unknown> {
 
 export interface UseGpGridResult<TData = unknown> {
   // Refs
+  /**
+   * Scroll container and measurement root of the fit commands: render
+   * `data-layout-revision` from `state.columnWindow.layout.revision` on it,
+   * or every fit is `"stale"`.
+   */
   containerRef: Ref<HTMLDivElement | null>;
   coreRef: ShallowRef<GridCore<TData> | null>;
 
@@ -97,6 +131,7 @@ export interface UseGpGridResult<TData = unknown> {
   slotsArray: ComputedRef<SlotData[]>;
 
   // Computed
+  /** Height of every header band together, from `state.headerBands`. */
   totalHeaderHeight: ComputedRef<number>;
   /** Resolved displayed-column layout published by the core. */
   layout: ComputedRef<ColumnLayoutSnapshot | null>;
@@ -162,10 +197,13 @@ export function useGpGrid<TData = unknown>(
   const { state, renderToken, applyInstructions } = useGridState({
     initialColumns: options.columns,
     initialColumnLayout: options.columnLayout ?? "fit",
+    initialHeaderHeight: options.headerHeight ?? options.rowHeight,
+    initialHeaderBandHeights: options.headerBandHeights,
+    initialColumnGroups: options.columnGroups,
   });
 
   // Computed values
-  const totalHeaderHeight = computed(() => options.headerHeight ?? options.rowHeight);
+  const totalHeaderHeight = computed(() => state.value.headerBands.totalHeight);
 
   const layout = computed(() => state.value.layout);
   const totalWidth = computed(() => state.value.contentWidth);
@@ -246,15 +284,23 @@ export function useGpGrid<TData = unknown>(
 
     const core = new GridCore<TData>({
       columns: options.columns,
+      columnGroups: options.columnGroups,
+      columnGroupLimits: options.columnGroupLimits,
+      onColumnSchemaRejected: (error) => options.onColumnSchemaRejected?.(error),
       dataSource,
       rowHeight: options.rowHeight,
-      headerHeight: totalHeaderHeight.value,
+      headerHeight: options.headerHeight ?? options.rowHeight,
+      headerBandHeights: options.headerBandHeights,
       overscan: options.overscan ?? 3,
       columnOverscan: options.columnOverscan,
       columnLayout: options.columnLayout ?? "fit",
       maxFlingVelocity: options.maxFlingVelocity,
       rowLoading: options.rowLoading,
       freezeRows: options.freezeRows,
+      rowResize: options.rowResize,
+      autoFit: options.autoFit,
+      // Created on mount only, so a server render never builds a host.
+      measurementHost: createDomMeasurementHost(() => containerRef.value),
       sortingEnabled: options.sortingEnabled ?? true,
       highlighting: options.highlighting,
       getRowId: options.getRowId,
@@ -262,6 +308,7 @@ export function useGpGrid<TData = unknown>(
         ? (event) => options.onCellValueChanged?.(event)
         : undefined,
       onColumnPinned: (event) => options.onColumnPinned?.(event),
+      onRowResized: (event) => options.onRowResized?.(event),
       onFrozenRowsChanged: (state) => options.onFrozenRowsChanged?.(state),
     });
 
@@ -365,6 +412,19 @@ export function useGpGrid<TData = unknown>(
       coreRef.value?.frozenRows.set(config);
     },
   );
+
+  watch(
+    () => options.rowResize,
+    (enabled) => {
+      coreRef.value?.rowHeights.setResizable(enabled ?? false);
+    },
+  );
+
+  useColumnSchemaSync(coreRef, {
+    columns: () => options.columns,
+    columnGroups: () => options.columnGroups,
+    headerBandHeights: () => options.headerBandHeights,
+  });
 
   // Watch for highlighting option changes
   watch(

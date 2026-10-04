@@ -41,6 +41,17 @@ Two files in `packages/core` are produced by the build. Never hand-edit them:
 - Use always `pnpm`
 - All the labels related to UI must be configurable to let gp-grid be i18n friendly and configurable
 
+## Accessibility
+
+Follow the WAI-ARIA grid pattern, identically in every wrapper:
+
+- Roles: `grid` on the root, `row`, `columnheader`, `gridcell` (`rowheader` where applicable). Layout-only wrappers get `role="presentation"`, and decorative elements get `aria-hidden="true"`.
+- Virtualization: `aria-rowcount`/`aria-colcount` give the full logical size (`-1` if unknown). Every rendered row and cell carries its logical `aria-rowindex`/`aria-colindex`, never its slot index. Header groups use `aria-colspan`.
+- State: expose `aria-sort`, `aria-selected`, `aria-expanded`, `aria-readonly`/`aria-disabled` when they apply. Give icon-only controls an `aria-label`.
+- Keyboard: the grid is a single tab stop and arrow keys move the active cell. Every pointer action (resize, move, sort, fit, menus) needs a keyboard equivalent. Focus follows logical IDs through recycling and is always visible.
+- Announce async results (loading, errors, counts) through a polite `aria-live` region. Never convey state by color alone, and respect `prefers-reduced-motion`.
+- Accessible names and announcements are labels, so they must be configurable (see Constraints).
+
 ## Code style
 
 - Avoid negated conditions
@@ -51,6 +62,7 @@ Two files in `packages/core` are produced by the build. Never hand-edit them:
 - Prefer `.at()` over `[array.length - n]` for relative array access
 - Avoid nested ternary operators and in general value human readability
 - Keep the cognitive complexity of function to a maximum of 15
+- Keep files in `packages/` under 300 lines. `benchmarks/` and `playgrounds/` are exempt
 - The styling (CSS) is centralized in the `core` package. Use that one as much as you can. Use `:where` to enable styling rewriting from the users
 - Reduce inline styling
 - Before writing a helper, check `packages/core/src/utils` (e.g. `number-guards.ts` for sanitizing numeric inputs such as sizes, counts and page sizes against `NaN`/`Infinity`/negatives) and extend it instead of adding a local copy

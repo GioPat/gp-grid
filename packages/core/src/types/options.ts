@@ -8,14 +8,21 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type {
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaError,
+} from "./column-groups";
+import type {
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
   RowDragEndEvent,
+  RowResizedEvent,
 } from "./events";
 import type { DataSource, DataSourceLoadMode } from "./data-source";
 import type { ColumnLayoutMode, FrozenRowsState } from "./geometry";
 import type { HighlightingOptions } from "./highlighting";
+import type { MeasurementHost } from "./measurement";
 import type { GridLabelOverrides } from "../i18n";
 
 /** Row loading mode used by GridCore. "auto" follows the data source preference. */
@@ -51,6 +58,19 @@ export interface FreezeRowsOptions {
   minSuffixHeight?: number;
 }
 
+/**
+ * Bounds of a one-shot fit. Each value is finite and `> 0`, and
+ * `maxRowHeight` is not below `minRowHeight`. Creation-only.
+ */
+export interface AutoFitOptions {
+  /** Widest width a column fit sets, in px. Default: 600. */
+  maxColumnWidth?: number;
+  /** Shortest height a row fit sets, in px. Default: `rowHeight`. */
+  minRowHeight?: number;
+  /** Tallest height a row fit or a row resize sets, in px. Default: `10 × rowHeight`. */
+  maxRowHeight?: number;
+}
+
 /** Grid row loading options. */
 export interface RowLoadingOptions {
   /** Loading mode. Default: "auto". */
@@ -77,6 +97,21 @@ export interface GridCoreOptions<TData = unknown> {
   columnLayout?: ColumnLayoutMode;
   /** Header height: Default to row height */
   headerHeight?: number;
+  /**
+   * Height of each header band, in px, indexed by band; a band without an
+   * entry is `headerHeight`. Each value is finite and `> 0`.
+   */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids. Every column, hidden ones
+   * included, is referenced exactly once, ungrouped ones at the root. A
+   * hierarchy rejected at creation leaves the grid flat.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Creation-only. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   /** Overscan: How many rows to render outside the viewport */
   overscan?: number;
   /**
@@ -123,8 +158,24 @@ export interface GridCoreOptions<TData = unknown> {
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */
   onRowDragEnd?: (event: RowDragEndEvent) => void;
-  /** Called when a column is resized. */
+  /** Called per column a resize, a fit or a resize key changed. */
   onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: the row edge drag and double-click,
+   * Alt+ArrowUp/Down and Alt+Shift+Enter. Default: false. Changed at runtime
+   * through `rowHeights.setResizable`.
+   */
+  rowResize?: boolean;
+  /** Called per row a row resize, a fit or a resize key changed. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Bounds of `rowHeights.fit`, `columns.fit` and the row resize gestures. */
+  autoFit?: AutoFitOptions;
+  /**
+   * Reads rendered content for the fit commands. Wrappers pass
+   * `createDomMeasurementHost` in the browser; without one a fit is
+   * `"unsupported"`.
+   */
+  measurementHost?: MeasurementHost;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /**

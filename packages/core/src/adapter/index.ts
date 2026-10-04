@@ -21,6 +21,7 @@ export type { PendingScroll } from "./pending-scroll";
 export type { BatchChangeSetters } from "./batch-applier";
 export { DataSourceOwner } from "./data-source-owner";
 export { InputEventAdapter } from "./input-event-adapter";
+export { createDomMeasurementHost } from "./measure-dom";
 export type {
   InputEventAdapterDeps,
   CellPointerAction,

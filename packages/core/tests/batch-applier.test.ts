@@ -27,6 +27,7 @@ const OPTIONAL_SETTERS = [
   "setColumnWindow",
   "setColumnLayout",
   "setRowRegions",
+  "setHeaderBands",
   "setAnnouncement",
   "setGeometryRevision",
 ] as const;
@@ -361,6 +362,14 @@ describe("applyBatchInstructions — columns, layout and filter popup", () => {
     ]);
   });
 
+  it("publishes the header bands with their revision", () => {
+    const bands = { count: 3, heights: [36, 36, 72], offsets: [0, 36, 72], totalHeight: 144 };
+    const { setters } = apply([{ type: "SET_HEADER_BANDS", bands, revision: 7 }]);
+    expect(setters.setHeaderBands).toHaveBeenCalledWith(bands);
+    expect(setters.setGeometryRevision).toHaveBeenCalledWith(7);
+    expect(calledSetters(setters)).toEqual(["setGeometryRevision", "setHeaderBands"]);
+  });
+
   it("keeps both maps by identity for a region-only batch", () => {
     const slots = new Map<string, SlotData>();
     const headers = new Map<string, HeaderData>();
@@ -403,9 +412,11 @@ describe("applyBatchInstructions — columns, layout and filter popup", () => {
       center: [],
       end: [],
     };
+    const bands = { count: 1, heights: [36], offsets: [0], totalHeight: 36 };
     const batch: GridInstruction[] = [
       { type: "COLUMNS_CHANGED", columns: [column], layout, revision: 4 },
       { type: "SET_COLUMN_WINDOW", window, revision: 4 },
+      { type: "SET_HEADER_BANDS", bands, revision: 4 },
       {
         type: "SET_CONTENT_SIZE",
         width: 120,

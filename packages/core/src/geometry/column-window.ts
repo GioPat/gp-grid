@@ -1,6 +1,7 @@
 // packages/core/src/geometry/column-window.ts
-// The mounted column window: displayed-index range plus bounded retention,
-// resolved once per layout so raw scrolling only binary-searches.
+// The mounted column window: displayed-index range plus bounded retention and
+// the header fragments over it, resolved once per layout so raw scrolling
+// only binary-searches.
 
 import type {
   AxisBounds,
@@ -8,8 +9,11 @@ import type {
   ColumnWindowSnapshot,
   DisplayedColumn,
 } from "../types/geometry";
+import type { HeaderRunSet } from "../column-groups/header-runs";
+import { selectHeaderFragments } from "../column-groups/header-fragments";
 import { buildCenterOffsets, resolveCenterRange } from "./column-range";
 import { clampScroll } from "./viewport-sample";
+import { isSameArray } from "../utils/arrays";
 
 export {
   buildCenterOffsets,
@@ -77,15 +81,15 @@ export const mergeRetained = <TColumn extends DisplayedColumn>(
 };
 
 /**
- * The mounted column window for a layout and a displayed-index range. The
- * same object is returned while the layout, the range and the retained set
- * are unchanged.
+ * The mounted column window for a layout and a displayed-index range, with
+ * the fragments of `runs` over it; no runs gives the shared empty lists.
  */
 export const resolveColumnWindow = (
   layout: ColumnLayoutSnapshot,
   range: AxisBounds,
   retained: readonly string[] = [],
   centerIndexOf: (columnId: string) => number | undefined = () => undefined,
+  runs: HeaderRunSet | null = null,
 ): ColumnWindowSnapshot => ({
   layout,
   range,
@@ -98,6 +102,7 @@ export const resolveColumnWindow = (
     centerIndexOf,
   ),
   end: layout.columns.slice(layout.regions.centerEnd),
+  groups: selectHeaderFragments(runs, range),
 });
 
 export interface ColumnWindowResolverDeps {
@@ -108,6 +113,8 @@ export interface ColumnWindowResolverDeps {
   /** Raw viewport width; `0` while the body has not been measured. */
   getViewportWidth(): number;
   getOverscan(): number;
+  /** Header runs of a layout, the same object while it and the hierarchy stay. */
+  getHeaderRuns?(layout: ColumnLayoutSnapshot): HeaderRunSet | null;
 }
 
 export interface ColumnWindowResolver {
@@ -122,9 +129,6 @@ export interface ColumnWindowResolver {
   retain(key: string, columnIds: readonly string[]): void;
 }
 
-const isSameIds = (a: readonly string[], b: readonly string[]): boolean =>
-  a.length === b.length && a.every((id, index) => id === b[index]);
-
 const isSameWindow = (a: AxisBounds, b: AxisBounds): boolean =>
   a.start === b.start && a.end === b.end;
 
@@ -133,6 +137,7 @@ const isSameWindow = (a: AxisBounds, b: AxisBounds): boolean =>
  * window. Prefixes and the center index are rebuilt only when the layout
  * changes, so raw scrolling costs two binary searches. Retained columns are
  * keyed and bounded in total, so a bulk key cannot evict the active edit.
+ * The window object is reused while layout, range, retention and runs stay.
  */
 export const createColumnWindowResolver = (
   deps: ColumnWindowResolverDeps,
@@ -144,6 +149,7 @@ export const createColumnWindowResolver = (
     layout: ColumnLayoutSnapshot;
     range: AxisBounds;
     retained: readonly string[];
+    runs: HeaderRunSet | null;
     window: ColumnWindowSnapshot;
   } | null = null;
   let committed: ColumnWindowSnapshot | null = null;
@@ -225,12 +231,14 @@ export const createColumnWindowResolver = (
       end: centerRange.end + offset,
     };
     const retained = retainedIds();
+    const runs = deps.getHeaderRuns?.(layout) ?? null;
     const previous = cache;
     if (
       previous !== null &&
       previous.layout === layout &&
+      previous.runs === runs &&
       isSameWindow(previous.range, range) &&
-      isSameIds(previous.retained, retained)
+      isSameArray(previous.retained, retained)
     ) {
       return previous.window;
     }
@@ -240,8 +248,9 @@ export const createColumnWindowResolver = (
       range,
       retained,
       (columnId) => centerIndexOf.get(columnId),
+      runs,
     );
-    cache = { layout, range, retained, window };
+    cache = { layout, range, retained, runs, window };
     return window;
   };
 
@@ -262,7 +271,7 @@ export const createColumnWindowResolver = (
         if (previous === undefined) return;
         retainedKeys.delete(key);
       } else {
-        if (previous !== undefined && isSameIds(previous, columnIds)) return;
+        if (previous !== undefined && isSameArray(previous, columnIds)) return;
         retainedKeys.set(key, columnIds.slice(0, MAX_RETAINED_COLUMNS));
       }
       // Identity is the change contract: force the next resolve to rebuild.

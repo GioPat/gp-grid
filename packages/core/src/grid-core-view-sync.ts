@@ -21,14 +21,17 @@ import type {
 } from "./managers";
 import type { ColumnDefinition } from "./types";
 import type { GridGeometryService } from "./geometry/grid-geometry";
-import type { ColumnLayoutSnapshot, ColumnWindowSnapshot, FrozenRowsState } from "./types/geometry";
+import type {
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+  FrozenRowsState,
+  HeaderBandLayout,
+} from "./types/geometry";
 import type { GridLabels } from "./i18n";
 import { HeaderSync } from "./grid-core-header-sync";
 import { FrozenRowsSync } from "./grid-core-frozen-rows-sync";
-
-// With scroll virtualization active a fast fling traverses several rows per
-// frame; overscan below this leaves blank rows behind the fling.
-const RECOMMENDED_SCALED_OVERSCAN = 10;
+import { HeaderBandsSync } from "./grid-core-header-bands-sync";
+import { createOverscanWarning } from "./grid-core-overscan-warning";
 
 export interface ViewSyncDeps<TData> {
   batcher: InstructionBatcher;
@@ -45,13 +48,15 @@ export interface ViewSyncDeps<TData> {
   labels: GridLabels;
   getFrozenRowsBaseline: () => FrozenRowsState;
   onFrozenRowsChanged?: (state: FrozenRowsState) => void;
+  getHeaderBands: () => HeaderBandLayout;
 }
 
 export class ViewSync<TData> {
   private readonly deps: ViewSyncDeps<TData>;
-  private hasWarnedAboutScaledOverscan = false;
+  private readonly warnIfOverscanTooLowForScaling: () => void;
   private readonly headers: HeaderSync<TData>;
   private readonly frozenRows: FrozenRowsSync;
+  private readonly headerBands: HeaderBandsSync;
   private emittedLayout: ColumnLayoutSnapshot | null = null;
   private emittedDefinitions: readonly ColumnDefinition[] | null = null;
   private emittedWindow: ColumnWindowSnapshot | null = null;
@@ -70,6 +75,8 @@ export class ViewSync<TData> {
       getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
       onFrozenRowsChanged: deps.onFrozenRowsChanged,
     });
+    this.headerBands = new HeaderBandsSync({ batcher: deps.batcher });
+    this.warnIfOverscanTooLowForScaling = createOverscanWarning(deps);
   }
 
   /**
@@ -193,8 +200,9 @@ export class ViewSync<TData> {
     const { batcher, scrollVirtualization, viewport } = this.deps;
     const geometry = this.deps.getGeometry();
     const layout = geometry.getColumnLayout();
-    // Captured after the layout resolves: both instructions report it.
+    // Captured after the layout resolves: every instruction reports it.
     const revision = geometry.revision;
+    this.headerBands.publish(this.deps.getHeaderBands(), revision);
     batcher.emit({
       type: "SET_CONTENT_SIZE",
       width: layout.totalWidth,
@@ -276,24 +284,5 @@ export class ViewSync<TData> {
       end: legacy.end,
       rowsWrapperOffset: this.rowsWrapperOffset(),
     });
-  }
-
-  /**
-   * One-time advisory when scroll virtualization kicks in with a small
-   * overscan: momentum flings move several rows per frame at that scale,
-   * and a small overscan shows blank rows behind the fling.
-   */
-  private warnIfOverscanTooLowForScaling(): void {
-    if (this.hasWarnedAboutScaledOverscan) return;
-    if (this.deps.scrollVirtualization.isScalingActive() === false) return;
-    this.hasWarnedAboutScaledOverscan = true;
-    const { overscan } = this.deps;
-    if (overscan >= RECOMMENDED_SCALED_OVERSCAN) return;
-    const totalRows = this.deps.getTotalRows().toLocaleString();
-    console.warn(
-      `[gp-grid] Scroll virtualization is active (${totalRows} rows) ` +
-      `but overscan is ${overscan}. Fast momentum scrolling can outrun rendering and show blank rows ` +
-      `at this scale — set the overscan option to 10–12.`,
-    );
   }
 }

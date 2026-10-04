@@ -40,6 +40,20 @@ describe("ScrollVirtualizationManager — uncompressed", () => {
     expect(manager.toDomScrollTop(123.5)).toBe(123.5);
   });
 
+  it("adds the header height it reads on every sync to the content height", () => {
+    let headerHeight = 36;
+    const axis = createFixedAxis(1_000, 32);
+    const manager = new ScrollVirtualizationManager({
+      getHeaderHeight: () => headerHeight,
+      getViewportHeight: () => 320,
+      getAxis: () => axis,
+    });
+    expect(manager.getVirtualHeight()).toBe(32_036);
+    headerHeight = 132;
+    expect(manager.getVirtualHeight()).toBe(32_132);
+    expect(manager.getScrollRatio()).toBe(1);
+  });
+
   it("keeps the mapping and content-size accessors", () => {
     const { manager } = createManager();
     manager.updateContentSize();
@@ -117,6 +131,22 @@ describe("ScrollVirtualizationManager — compressed", () => {
     const boundary = axis.getOffset(axis.indexAt(naturalRange) + 1);
     expect(boundary).toBeLessThan(axis.extent);
     expect(manager.getMaxLogicalScrollTop()).toBe(boundary);
+  });
+
+  it("recomputes the ratio when the header height changes", () => {
+    let headerHeight = 32;
+    const axis = createFixedAxis(1_000_000, 32);
+    const manager = new ScrollVirtualizationManager({
+      getHeaderHeight: () => headerHeight,
+      getViewportHeight: () => 320,
+      getAxis: () => axis,
+    });
+    const first = manager.getScrollRatio();
+    headerHeight = 132;
+    const naturalRange = Math.ceil((32_000_000 - 320) / 32) * 32;
+    expect(manager.getVirtualHeight()).toBe(10_000_000);
+    expect(manager.getScrollRatio()).toBeCloseTo((10_000_000 - 132 - 320) / naturalRange, 12);
+    expect(manager.getScrollRatio()).toBeLessThan(first);
   });
 
   it("recomputes the ratio when the viewport height changes", () => {

@@ -12,10 +12,12 @@ import {
   getDateOperatorOptions,
 } from "../src/i18n";
 import type {
+  GridColumnSchemaErrorLabels,
   GridFilterOperatorLabels,
   GridLabelOverrides,
   GridLabels,
 } from "../src/i18n";
+import type { ColumnSchemaErrorCode } from "../src/types";
 
 describe("resolveGridLabels", () => {
   it("returns the full English default when no overrides are given", () => {
@@ -48,8 +50,8 @@ describe("resolveGridLabels", () => {
 
   it("allows every visible label to be overridden independently", () => {
     const topLevelKeys = Object.keys(defaultGridLabels).filter(
-      (key) => key !== "operators",
-    ) as Array<Exclude<keyof GridLabels, "operators">>;
+      (key) => key !== "operators" && key !== "columnSchemaErrors",
+    ) as Array<Exclude<keyof GridLabels, "operators" | "columnSchemaErrors">>;
     for (const key of topLevelKeys) {
       const customValue = `custom-${key}`;
       const overrides = { [key]: customValue } as GridLabelOverrides;
@@ -64,6 +66,52 @@ describe("resolveGridLabels", () => {
       const labels = resolveGridLabels({ operators: { [key]: customValue } });
       expect(labels.operators[key]).toBe(customValue);
     }
+
+    const schemaErrorKeys = Object.keys(
+      defaultGridLabels.columnSchemaErrors,
+    ) as Array<keyof GridColumnSchemaErrorLabels>;
+    for (const key of schemaErrorKeys) {
+      const customValue = `custom-${key}`;
+      const labels = resolveGridLabels({ columnSchemaErrors: { [key]: customValue } });
+      expect(labels.columnSchemaErrors[key]).toBe(customValue);
+    }
+  });
+});
+
+describe("columnSchemaErrors", () => {
+  const codes: ColumnSchemaErrorCode[] = [
+    "cycle",
+    "duplicateGroup",
+    "repeatedLeaf",
+    "unknownLeaf",
+    "missingLeaf",
+    "multipleParents",
+    "idCollision",
+    "malformed",
+    "limit",
+  ];
+
+  it("has one template per error code", () => {
+    expect(Object.keys(defaultGridLabels.columnSchemaErrors).sort()).toEqual([...codes].sort());
+  });
+
+  it("interpolates the id and the limit", () => {
+    const templates = defaultGridLabels.columnSchemaErrors;
+    expect(formatLabel(templates.cycle, { id: "Region" })).toBe('Column group "Region" contains itself');
+    expect(formatLabel(templates.unknownLeaf, { id: "zz" })).toBe('Column groups reference unknown column "zz"');
+    expect(formatLabel(templates.limit, { limit: "maxDepth" })).toBe("Column groups exceed the maxDepth budget");
+    for (const code of codes.filter((code) => code !== "malformed" && code !== "limit")) {
+      expect(templates[code]).toContain("{id}");
+    }
+  });
+
+  it("merges one level deep without mutating the defaults", () => {
+    const before = defaultGridLabels.columnSchemaErrors.cycle;
+    const labels = resolveGridLabels({ columnSchemaErrors: { cycle: "Ciclo in {id}" } });
+    expect(labels.columnSchemaErrors.cycle).toBe("Ciclo in {id}");
+    expect(labels.columnSchemaErrors.limit).toBe(defaultGridLabels.columnSchemaErrors.limit);
+    expect(labels.operators).toEqual(defaultGridLabels.operators);
+    expect(defaultGridLabels.columnSchemaErrors.cycle).toBe(before);
   });
 });
 

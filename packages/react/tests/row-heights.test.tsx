@@ -7,6 +7,7 @@ import { createClientDataSource } from "@gp-grid/core";
 import type { ColumnDefinition, RowHeightUpdate } from "@gp-grid/core";
 import { Grid } from "../src/Grid";
 import type { GridProps, GridRef } from "../src/types";
+import { bodyAriaRowIndex, headerRowCount } from "./aria-rows";
 
 interface TestRow {
   id: number;
@@ -71,7 +72,7 @@ const suffixRows = (): HTMLElement[] =>
   );
 
 const rowBox = (viewIndex: number): HTMLElement | null =>
-  document.querySelector<HTMLElement>(`.gp-grid-row[aria-rowindex="${viewIndex + 1}"]`);
+  document.querySelector<HTMLElement>(`.gp-grid-row[aria-rowindex="${bodyAriaRowIndex(viewIndex)}"]`);
 
 /** `translateY(...)` is local to the wrapper the row is mounted in. */
 const localTop = (row: HTMLElement): number =>
@@ -108,7 +109,7 @@ describe("Grid row heights", () => {
 
     const boxes = suffixRows();
     for (const box of boxes) {
-      const viewIndex = Number(box.getAttribute("aria-rowindex")) - 1;
+      const viewIndex = Number(box.getAttribute("aria-rowindex")) - headerRowCount() - 1;
       const bounds = gridRef.current?.core.geometry.getRowBounds(viewIndex, "content");
       if (bounds === undefined) throw new Error(`row ${viewIndex} has no bounds`);
       expect(box.style.height).toBe(`${bounds.end - bounds.start}px`);
@@ -193,7 +194,7 @@ describe("Grid row heights", () => {
     expect(block.style.height).toBe("160px");
 
     const frozenRow = requireElement(
-      block.querySelector<HTMLElement>('.gp-grid-row[aria-rowindex="2"]'),
+      block.querySelector<HTMLElement>(`.gp-grid-row[aria-rowindex="${bodyAriaRowIndex(1)}"]`),
       "frozen row 1",
     );
     expect(frozenRow.style.height).toBe("96px");

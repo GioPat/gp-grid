@@ -204,6 +204,41 @@
 }
 
 /* =============================================================================
+   Row Resize (rowResize option)
+   ============================================================================= */
+
+/* The handle sits inside the cell because the cell clips its overflow. */
+.gp-grid-row-resize-handle {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 5px;
+  z-index: 1;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+@media (pointer: coarse) and (hover: none) and (max-width: 768px) {
+  .gp-grid-row-resize-handle {
+    height: 24px;
+  }
+}
+
+/* Drag preview; wrappers set `top` to the header height plus `lineY`. */
+.gp-grid-row-resize-line {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 100%;
+  height: 2px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+:where(.gp-grid-row-resize-line) {
+  background-color: var(--gp-grid-primary);
+}
+
+/* =============================================================================
    Edit Input
    ============================================================================= */
 

@@ -1,4 +1,5 @@
 import type { GridCore } from "../grid-core";
+import type { ColumnDefinition } from "../types/columns";
 import type {
   ColumnResizeDragState,
   ContainerBounds,
@@ -9,6 +10,13 @@ import type {
 import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
 import { inlineOffset, toInlineX } from "../adapter/inline-axis";
 import { DEFAULT_MIN_COLUMN_WIDTH } from "../geometry/column-widths";
+
+/** A column's own resize bounds; the maximum wins over the minimum. */
+export const clampColumnWidth = (column: ColumnDefinition | undefined, width: number): number => {
+  const atLeastMin = Math.max(column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH, width);
+  const maxWidth = column?.maxWidth;
+  return maxWidth === undefined ? atLeastMin : Math.min(maxWidth, atLeastMin);
+};
 
 export class ColumnResizeDrag<TData = unknown> {
   private active = false;
@@ -50,17 +58,10 @@ export class ColumnResizeDrag<TData = unknown> {
 
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult {
     const column = this.core.columns.get()[this.colIndex];
-    const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
-    const maxWidth = column?.maxWidth;
     // In RTL the inline-end edge the handle sits on is the left one, so a
     // leftward drag grows the column.
     const dragged = toInlineX(event.clientX - this.startX, bounds.rtl === true);
-    let newWidth = this.initialWidth + dragged;
-    newWidth = Math.max(minWidth, newWidth);
-    if (maxWidth !== undefined) {
-      newWidth = Math.min(maxWidth, newWidth);
-    }
-    this.currentWidth = newWidth;
+    this.currentWidth = clampColumnWidth(column, this.initialWidth + dragged);
 
     const mouseXInContainer = inlineOffset(bounds, event.clientX);
     const autoScroll = this.resizeAutoScroll(mouseXInContainer, bounds.width);
@@ -89,8 +90,9 @@ export class ColumnResizeDrag<TData = unknown> {
     return column?.region === "center" && layout.regions.centerViewportWidth > 0;
   }
 
+  /** A press that never changed the width commits nothing and fires no event. */
   end(): void {
-    if (this.active) {
+    if (this.active && this.currentWidth !== this.initialWidth) {
       this.core.columns.setWidth(this.colIndex, this.currentWidth);
     }
     this.active = false;
