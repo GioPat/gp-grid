@@ -97,7 +97,7 @@ export const buildGridManagers = <TData>(
     getColumnCount: () => getColumns().length,
     isColumnDisplayed: (col) => getColumns()[col]?.hidden !== true,
     getCellValue,
-    getRowData: (row) => getCachedRows().get(row),
+    getRowData: (row) => rowData.getRowData(row),
     getColumn: (col) => getColumns()[col],
     setCellValue,
     isWritable: () => rowData.isWritable(),
@@ -138,7 +138,7 @@ export const buildGridManagers = <TData>(
     // Region-aware rows space: frozen rows keep their content offset (C4).
     getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
     getRowSize: (rowIndex) => getRowGeometry().syncAxis().getSize(rowIndex),
-    getRowData: (rowIndex) => getCachedRows().get(rowIndex),
+    getRowData: (rowIndex) => rowData.getRowData(rowIndex),
     isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
