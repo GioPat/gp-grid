@@ -24,6 +24,7 @@
     "test:conformance": "pnpm build:candidate && pnpm --dir benchmarks test:conformance",
     "test:ssr": "pnpm build:candidate && node benchmarks/scripts/ssr-smoke.mjs",
     "test:columnar": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/columnar-smoke.mjs",
+    "test:row-groups": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/row-grouping-smoke.mjs",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
