@@ -1,7 +1,7 @@
 // packages/core/src/types/row-groups.ts
 // Hierarchical row access: the contract a grouping provider hands the grid.
 
-import type { CellValue, RowId } from "./basic";
+import type { CellValue, RowId, SortModel } from "./basic";
 import type { RowAccess } from "./data-source";
 
 export interface HierarchyRecordRow {
@@ -72,9 +72,60 @@ export interface RowGroupingState {
   readonly collapsed: readonly RowId[];
 }
 
+/** One grouping level. `id`, `field` by default, names the bucketing and enters the group id. */
+export interface RowGroupDimension {
+  field: string;
+  id?: string;
+  toKey?: (value: CellValue) => string | number | boolean | null;
+}
+
+/** The flat rows a local grouping engine reads, addressed by flat position. */
+export interface FlatRowSource {
+  readonly rowCount: number;
+  /** Resolves the field once; the reader takes a flat position. */
+  reader(field: string): (row: number) => CellValue;
+  /** A row without a source identity answers its flat position. */
+  getRowId(row: number): RowId;
+  getRecord?(row: number): unknown;
+  readonly sort: readonly SortModel[];
+  /** Source field of a column, or `undefined` for an unknown column. */
+  fieldOf(columnId: string): string | undefined;
+  /** Declared column fields and, for a columnar source, its fields. */
+  readonly fields: readonly string[];
+}
+
+export type RowGroupBuiltInAggregate = "sum" | "count" | "avg" | "min" | "max";
+
+/** A custom fold: every group starts from `init` and adds each of its leaves' values. */
+export interface RowGroupAggregator<S = unknown> {
+  init(): S;
+  add(state: S, value: CellValue): S;
+  result(state: S): CellValue;
+  /** Folds `from` into `into`, leaving `from` intact; with it a parent combines its children's states instead of rereading their leaves. */
+  merge?(into: S, from: S): S;
+}
+
+/** Group and total rows expose the result under `field`; `source`, `field` by default, is the leaf field folded. */
+export interface RowGroupMeasure {
+  field: string;
+  source?: string;
+  aggregate: RowGroupBuiltInAggregate | RowGroupAggregator;
+}
+
+export interface RowGroupingConfig {
+  dimensions: readonly RowGroupDimension[];
+  measures?: readonly RowGroupMeasure[];
+  /** Groups above this depth start expanded; 0, the default, collapses every group. */
+  defaultExpandedDepth?: number;
+  grandTotal?: "top" | "bottom";
+  initialState?: RowGroupingState;
+}
+
 /** A grouping configuration; one serves one grid. */
 export interface RowGrouping {
   getState(): RowGroupingState;
+  /** Groups the resident flat rows; core calls it, an application does not. */
+  build(source: FlatRowSource): HierarchicalRowAccess | RowGroupingRejection;
 }
 
 /** `"unsupported"`: no hierarchy, a provider without `setExpanded`, or a destroyed core. */
@@ -87,7 +138,7 @@ export interface RowGroupingRejection {
   field?: string;
 }
 
-/** `"unsupported"`: no local grouping engine yet, or a destroyed core. */
+/** `"rejected"` leaves the grid flat; `"unsupported"`: a destroyed core. */
 export type RowGroupingResult =
   | { status: "applied" | "unchanged" | "unsupported" }
   | { status: "rejected"; rejection: RowGroupingRejection };

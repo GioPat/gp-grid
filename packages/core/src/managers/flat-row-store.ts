@@ -4,13 +4,17 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   DataSource,
+  FlatRowSource,
   RowAccess,
   RowId,
+  SortModel,
   WriteRejectionOperation,
   WriteRejectionReason,
 } from "../types";
 import type { AxisBounds } from "../types/geometry";
+import { isColumnarDataSource } from "../types";
 import {
+  createFieldReader,
   createWriteRejection,
   getFieldValue as readRowFieldValue,
   readCell,
@@ -196,6 +200,31 @@ export class FlatRowStore<TData = unknown> {
     const row = this.cachedRows.get(viewIndex);
     if (row === undefined) return null;
     return readRowFieldValue(row, field);
+  }
+
+  /**
+   * The flat rows as the local grouping engine reads them (D9). Reads stay
+   * live, so a regroup after a write sees the written records.
+   */
+  toFlatRowSource(sort: readonly SortModel[]): FlatRowSource {
+    const access = this.rowAccess;
+    const dataSource = this.options.getDataSource();
+    const columns = this.options.getColumns();
+    const sourceFields = isColumnarDataSource(dataSource) ? dataSource.access.fields : [];
+    const readRecord = (field: string) => {
+      const read = createFieldReader(field);
+      return (row: number) => read(this.cachedRows.get(row));
+    };
+    return {
+      rowCount: access?.rowCount ?? this.cachedRows.size,
+      reader: (field) => (access ? (row) => access.getValue(row, field) : readRecord(field)),
+      getRowId: (row) => this.getRowId(row) ?? row,
+      ...(access === null && { getRecord: (row: number) => this.cachedRows.get(row) }),
+      sort,
+      fieldOf: (columnId) =>
+        this.options.getColumns().find((column) => (column.colId ?? column.field) === columnId)?.field,
+      fields: [...columns.map((column) => column.field), ...sourceFields],
+    };
   }
 
   /** False when the write was refused. */

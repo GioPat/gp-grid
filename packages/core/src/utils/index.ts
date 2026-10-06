@@ -21,7 +21,7 @@ export {
 
 export type { NormalizedRange } from "./classNames";
 
-export { getFieldValue, setFieldValue } from "../indexed-data-store/field-helpers";
+export { createFieldReader, getFieldValue, setFieldValue } from "../indexed-data-store/field-helpers";
 
 export {
   createInstructionEmitter,

@@ -1,9 +1,11 @@
 import type {
   CellValue,
+  FlatRowSource,
   HierarchicalRowAccess,
   HierarchyRow,
   RowAccess,
   RowId,
+  SortModel,
   WriteRejectionOperation,
   WriteRejectionReason,
 } from "../types";
@@ -103,6 +105,10 @@ export class RowStore<TData = unknown> {
 
   setRowAccess(next: RowAccess | null): void {
     this.flat.setRowAccess(next);
+  }
+
+  toFlatRowSource(sort: readonly SortModel[]): FlatRowSource {
+    return this.flat.toFlatRowSource(sort);
   }
 
   getRowData(rowIndex: number): TData | undefined {

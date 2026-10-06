@@ -248,6 +248,8 @@ export const buildGridManagers = <TData>(
     onCellValueChanged: config.onCellValueChanged,
     onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,
+    rowGrouping: config.rowGrouping,
+    onRowGroupingRejected: config.onRowGroupingRejected,
     onRowsLoaded: (totalRowsChanged) => deps.onRowsLoaded(totalRowsChanged),
   });
 

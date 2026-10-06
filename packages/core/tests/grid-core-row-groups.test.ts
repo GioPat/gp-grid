@@ -111,10 +111,11 @@ describe("rowGroups — statuses", () => {
     expect(destroyed.grid.rowGroups.setGrouping(null)).toEqual({ status: "unsupported" });
   });
 
-  it("answers setGrouping unsupported until the local engine exists", async () => {
+  it("keeps a source hierarchy through setGrouping(null)", async () => {
     const { grid } = createHierarchyGrid(() => createHierarchyFixture());
     await grid.initialize();
-    expect(grid.rowGroups.setGrouping(null)).toEqual({ status: "unsupported" });
+    expect(grid.rowGroups.setGrouping(null)).toEqual({ status: "unchanged" });
+    expect(grid.rowGroups.isActive()).toBe(true);
   });
 });
 

@@ -32,6 +32,9 @@ export {
   createColumnarDataSource,
 } from "./data-source";
 export { isColumnarDataSource, isHierarchicalRowAccess } from "./types";
+
+/** Local row grouping engine (PRD 008) */
+export { createRowGrouping } from "./row-grouping";
 export type {
   ColumnarField,
   ColumnarDataSourceOptions,
@@ -142,6 +145,11 @@ export type {
   HierarchicalRowAccess,
   RowGroupResult,
   RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
   RowGroupingState,
   RowGroupingRejection,
   RowGroupingResult,

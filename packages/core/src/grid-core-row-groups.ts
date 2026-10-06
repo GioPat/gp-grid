@@ -18,7 +18,7 @@ export interface GridRowGroupsApi {
   setExpanded(ids: readonly RowId[] | null, expanded: boolean): RowGroupResult;
   /** Flip one visible group. */
   toggle(id: RowId): RowGroupResult;
-  /** Regroup the resident rows with no query; `"unsupported"` without a local engine. */
+  /** Regroup the resident flat rows with no query; `null` returns to them. */
   setGrouping(grouping: RowGrouping | null): RowGroupingResult;
 }
 
@@ -58,8 +58,16 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
     return this.setExpanded([id], row.expanded === false);
   }
 
-  setGrouping(): RowGroupingResult {
-    return UNSUPPORTED;
+  setGrouping(grouping: RowGrouping | null): RowGroupingResult {
+    if (this.deps.isDestroyed()) return UNSUPPORTED;
+    const rowData = this.deps.getRowData();
+    let result: RowGroupingResult = UNCHANGED;
+    applyViewRowsChange(this.deps, () => {
+      const bound = rowData.getHierarchy();
+      result = rowData.setGrouping(grouping);
+      return rowData.getHierarchy() !== bound;
+    });
+    return result;
   }
 
   /**
