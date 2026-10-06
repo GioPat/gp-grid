@@ -8,6 +8,7 @@ import type {
   CellValue,
   SortDirection,
   ColumnFilterModel,
+  HierarchyRow,
 } from "./index";
 import { createSeedColumnLayout } from "../geometry/column-layout";
 import { buildCenterOffsets, resolveCenterRange } from "../geometry/column-range";
@@ -61,6 +62,8 @@ export interface SlotData<TData = unknown> {
    * A suffix slot is never `loading`.
    */
   loading: boolean;
+  /** Kind and depth of a hierarchy row; absent while flat. */
+  row?: HierarchyRow;
 }
 
 export interface HeaderData {
@@ -220,6 +223,7 @@ export const createInitialState = <TData = unknown>(args?: InitialStateArgs): Gr
     isLoading: false,
     error: null,
     totalRows: 0,
+    hierarchical: false,
     visibleRowRange: null,
     hoverPosition: null,
     columns: seeded.columns,
@@ -260,6 +264,8 @@ export interface GridState<TData = unknown> {
   isLoading: boolean;
   error: string | null;
   totalRows: number;
+  /** A hierarchy is bound: the root is a `treegrid`. */
+  hierarchical: boolean;
   /** Visible row range (start inclusive, end inclusive). Used to prevent selection showing in overscan. */
   visibleRowRange: { start: number; end: number } | null;
   /** Currently hovered cell position (for highlighting) */

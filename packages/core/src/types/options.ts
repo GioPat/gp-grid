@@ -23,6 +23,7 @@ import type { DataSource, DataSourceLoadMode } from "./data-source";
 import type { ColumnLayoutMode, FrozenRowsState } from "./geometry";
 import type { HighlightingOptions } from "./highlighting";
 import type { MeasurementHost } from "./measurement";
+import type { RowGrouping, RowGroupingRejection, RowGroupToggledEvent } from "./row-groups";
 import type { GridLabelOverrides } from "../i18n";
 
 /** Row loading mode used by GridCore. "auto" follows the data source preference. */
@@ -176,6 +177,12 @@ export interface GridCoreOptions<TData = unknown> {
    * `"unsupported"`.
    */
   measurementHost?: MeasurementHost;
+  /** Groups the resident rows; reactive through `rowGroups.setGrouping`. */
+  rowGrouping?: RowGrouping | null;
+  /** Called per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+  /** Called when a grouping is rejected; the grid stays flat. */
+  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /**

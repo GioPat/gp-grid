@@ -32,10 +32,14 @@ const regionInput = <TData>(deps: SizeChangeDeps<TData>): RowRegionMappingInput 
 export const captureSizeAnchor = <TData>(deps: SizeChangeDeps<TData>): RowAnchor | null =>
   captureRowAnchor(regionInput(deps));
 
-/** Runs inside the caller's open batch. */
+/**
+ * Runs inside the caller's open batch. `"reconcile"` re-reads every mounted
+ * slot, for a change of the rows themselves rather than of their sizes.
+ */
 export const resyncAfterSizeChange = <TData>(
   deps: SizeChangeDeps<TData>,
   anchor: RowAnchor | null,
+  sync: "rows" | "reconcile" = "rows",
 ): void => {
   deps.refreshGeometry();
   const corrected = anchor === null ? null : resolveAnchoredScrollTop(anchor, regionInput(deps));
@@ -44,5 +48,6 @@ export const resyncAfterSizeChange = <TData>(
     deps.batcher.emit({ type: "SCROLL_TO", scrollTop: corrected });
   }
   deps.getRowData().requestVisibleRows();
-  deps.getView().syncVisibleRows(true);
+  if (sync === "reconcile") deps.getView().reconcile();
+  else deps.getView().syncVisibleRows(true);
 };

@@ -14,6 +14,7 @@ export type { GridHeaderApi } from "./grid-core-header";
 export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
 export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
+export type { GridRowGroupsApi } from "./grid-core-row-groups";
 export type { GridViewportApi } from "./grid-core-viewport";
 
 /** Input handler (wired by the framework wrappers) */
@@ -30,7 +31,7 @@ export {
   createMutableClientDataSource,
   createColumnarDataSource,
 } from "./data-source";
-export { isColumnarDataSource } from "./types";
+export { isColumnarDataSource, isHierarchicalRowAccess } from "./types";
 export type {
   ColumnarField,
   ColumnarDataSourceOptions,
@@ -131,6 +132,21 @@ export type {
   /** View row identity */
   ViewRow,
 
+  /** Hierarchical rows and row grouping (PRD 008) */
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+
   /** Interaction events */
   ColumnResizedEvent,
   ColumnMovedEvent,
@@ -163,6 +179,7 @@ export type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteRejectionOperation,
+  WriteRejectionReason,
   SlotState,
   /** Application-set row height by identity (PRD 006) */
   RowHeightUpdate,
@@ -215,6 +232,7 @@ export type {
 
   // Renderer params (for adapters)
   CellRendererParams,
+  GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
   ColumnGroupHeaderParams,
@@ -348,6 +366,9 @@ export type {
 export { createColumnGroupLookup } from "./column-groups/group-lookup";
 export type { ColumnGroupLookup } from "./column-groups/group-lookup";
 
+/** Group label column and text (PRD 008) */
+export { resolveGroupLabelColumnId, formatGroupLabel } from "./row-group-layout";
+
 /** Localization: shared label model and helpers */
 export {
   defaultGridLabels,
@@ -360,6 +381,7 @@ export {
 export type {
   GridLabels,
   GridLabelOverrides,
+  GridRowGroupLabels,
   GridFilterOperatorLabels,
   GridColumnSchemaErrorLabels,
   FilterOperatorOption,

@@ -6,11 +6,14 @@ import type {
   DataSource,
   DataSourceResponse,
   FilterModel,
+  HierarchicalRowAccess,
+  HierarchyRow,
   RowAccess,
   RowId,
   RowLoadingOptions,
   SortModel,
   WriteRejectionOperation,
+  WriteRejectionReason,
 } from "../types";
 import type { InstructionBatcher } from "./instruction-batcher";
 import type { AxisBounds } from "../types/geometry";
@@ -18,6 +21,7 @@ import { buildDataSourceRequest } from "../utils";
 import { PaginatedRowLoader } from "./paginated-row-loader";
 import { RowIdDiagnostics } from "./row-id-diagnostics";
 import { RowStore } from "./row-store";
+import { bindResponse } from "./row-view-binder";
 import type { RowLoadContext, RowPageBudgetInput } from "./row-window-loader";
 import { refreshTransactionData } from "../grid-core-operations";
 
@@ -128,6 +132,12 @@ export class RowDataManager<TData = unknown> {
   getRowAccess(): RowAccess | null {
     return this.store.getRowAccess();
   }
+  getHierarchy(): HierarchicalRowAccess<TData> | null {
+    return this.store.getHierarchy();
+  }
+  getHierarchyRow(viewIndex: number): HierarchyRow | undefined {
+    return this.store.getHierarchyRow(viewIndex);
+  }
   getRowId(viewRow: number): RowId | undefined {
     return this.store.getRowId(viewRow);
   }
@@ -161,15 +171,14 @@ export class RowDataManager<TData = unknown> {
   getFieldValue(viewIndex: number, field: string): CellValue {
     return this.store.getFieldValue(viewIndex, field);
   }
-  setCellValue(row: number, col: number, value: CellValue): void {
-    this.store.setCellValue(row, col, value);
+  /** False when the write was refused, and reported. */
+  setCellValue(row: number, col: number, value: CellValue): boolean {
+    return this.store.setCellValue(row, col, value);
   }
-  rejectWrite(
-    row: number,
-    col: number,
-    operation: WriteRejectionOperation,
-  ): void {
-    this.store.rejectWrite(row, col, operation);
+  /** D6: a group or total row takes no write. */
+  isRowWritable(row: number): boolean { return this.store.isRowWritable(row); }
+  rejectWrite(row: number, col: number, operation: WriteRejectionOperation, reason: WriteRejectionReason): void {
+    this.store.rejectWrite(row, col, operation, reason);
   }
 
   async loadInitial(): Promise<void> {
@@ -191,7 +200,8 @@ export class RowDataManager<TData = unknown> {
   }
 
   async refreshFromTransaction(): Promise<void> {
-    if (this.dataSource.writable === false) {
+    // A hierarchy has no flat cache to patch: it is re-bound from a full query.
+    if (this.dataSource.writable === false || this.store.getHierarchy()) {
       await this.fetchAllData();
       return;
     }
@@ -213,16 +223,14 @@ export class RowDataManager<TData = unknown> {
 
     // Keep wrapper row counts in sync without showing a loading indicator.
     this.bumpDataRevision();
-    this.options.batcher.emit({
-      type: "DATA_LOADED",
-      totalRows: this.store.getTotalRows(),
-    });
+    this.emitLoaded();
   }
 
   setDataSource(dataSource: DataSource<TData>): void {
     this.dataSource = dataSource;
     this.paginated.reset();
     this.store.setRowAccess(null);
+    this.store.bindHierarchy(null);
     this.loadGeneration += 1;
     this.store.setTotalRows(0);
     this.bumpDataRevision();
@@ -231,6 +239,7 @@ export class RowDataManager<TData = unknown> {
   destroy(): void {
     this.paginated.reset();
     this.store.setRowAccess(null);
+    this.store.bindHierarchy(null);
     this.loadGeneration += 1;
     this.store.clear();
     this.isDataLoading = false;
@@ -252,11 +261,7 @@ export class RowDataManager<TData = unknown> {
       const response = await this.dataSource.query(request);
       if (generation !== this.loadGeneration) return;
       this.applyResponse(response);
-
-      this.options.batcher.emit({
-        type: "DATA_LOADED",
-        totalRows: this.store.getTotalRows(),
-      });
+      this.emitLoaded();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       this.emitDataError(error);
@@ -267,26 +272,19 @@ export class RowDataManager<TData = unknown> {
     }
   }
 
-  /**
-   * Adopt a query response. A response with scalar access binds that access
-   * and leaves the row cache empty; otherwise the materialized rows replace it.
-   */
   private applyResponse(response: DataSourceResponse<TData>): void {
     this.bumpDataRevision();
-    if (response.access) {
-      this.store.getCachedRows().clear();
-      this.store.setRowAccess(response.access);
-      this.store.setTotalRows(response.totalRows);
+    if (bindResponse(this.store, response) === "rows") this.diagnostics.diagnoseLoadedRows();
+  }
+
+  /** A flat load omits `hierarchical`, so the flat payload stays exact. */
+  emitLoaded(): void {
+    const totalRows = this.store.getTotalRows();
+    if (this.store.getHierarchy()) {
+      this.options.batcher.emit({ type: "DATA_LOADED", totalRows, hierarchical: true });
       return;
     }
-    this.store.setRowAccess(null);
-    const cachedRows = this.store.getCachedRows();
-    cachedRows.clear();
-    response.rows.forEach((row, index) => {
-      cachedRows.set(index, row);
-    });
-    this.store.setTotalRows(response.totalRows);
-    this.diagnostics.diagnoseLoadedRows();
+    this.options.batcher.emit({ type: "DATA_LOADED", totalRows });
   }
 
   private emitDataError(error: unknown): void {

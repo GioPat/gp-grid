@@ -6,12 +6,6 @@
 // down to their filter popup / body components, so a user only has to
 // override the labels they care about via the `labels` prop/input.
 
-import type {
-  DateFilterOperator,
-  NumberFilterOperator,
-  TextFilterOperator,
-} from "./types";
-
 /** Labels for the filter operator dropdowns, keyed by semantic meaning. */
 export interface GridFilterOperatorLabels {
   /** Text operator: contains */
@@ -65,6 +59,14 @@ export interface GridColumnSchemaErrorLabels {
   malformed: string;
   /** A budget is exceeded. Token: `{limit}`. */
   limit: string;
+}
+
+/** Group and total row labels (PRD 008). */
+export interface GridRowGroupLabels {
+  /** Group row label. Tokens: `{value}`, the formatted key, and `{count}`, its records. */
+  label: string;
+  /** Grand total row label. Token: `{count}`. */
+  grandTotal: string;
 }
 
 /**
@@ -129,18 +131,21 @@ export interface GridLabels {
   operators: GridFilterOperatorLabels;
   /** Column-group rejection messages, also announced. */
   columnSchemaErrors: GridColumnSchemaErrorLabels;
+  /** Group and total row labels. */
+  rowGroups: GridRowGroupLabels;
 }
 
 /**
  * Consumer overrides for grid labels. Every top-level label and every nested
- * operator and schema-error label can be changed independently.
+ * operator, schema-error and row-group label can be changed independently.
  */
 export type GridLabelOverrides = Omit<
   Partial<GridLabels>,
-  "operators" | "columnSchemaErrors"
+  "operators" | "columnSchemaErrors" | "rowGroups"
 > & {
   operators?: Partial<GridFilterOperatorLabels>;
   columnSchemaErrors?: Partial<GridColumnSchemaErrorLabels>;
+  rowGroups?: Partial<GridRowGroupLabels>;
 };
 
 /** English defaults for every grid label. */
@@ -196,12 +201,17 @@ export const defaultGridLabels: GridLabels = {
     malformed: "Column groups contain an invalid entry",
     limit: "Column groups exceed the {limit} budget",
   },
+  rowGroups: {
+    label: "{value} ({count})",
+    grandTotal: "Grand total",
+  },
 };
 
 /**
  * Merge a partial label set over the English defaults, producing a complete
- * `GridLabels`. Top-level keys are shallow-merged, and `operators` and
- * `columnSchemaErrors` one level deep; the defaults are never mutated.
+ * `GridLabels`. Top-level keys are shallow-merged, and `operators`,
+ * `columnSchemaErrors` and `rowGroups` one level deep; the defaults are
+ * never mutated.
  */
 export const resolveGridLabels = (
   overrides?: GridLabelOverrides,
@@ -215,6 +225,10 @@ export const resolveGridLabels = (
   columnSchemaErrors: {
     ...defaultGridLabels.columnSchemaErrors,
     ...overrides?.columnSchemaErrors,
+  },
+  rowGroups: {
+    ...defaultGridLabels.rowGroups,
+    ...overrides?.rowGroups,
   },
 });
 
@@ -231,59 +245,9 @@ export const formatLabel = (
     return value !== undefined ? String(value) : match;
   });
 
-/** A single operator option rendered in a filter dropdown. */
-export interface FilterOperatorOption<TOperator extends string = string> {
-  value: TOperator;
-  label: string;
-}
-
-/** Text filter operators in display order. */
-export const getTextOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<TextFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "contains", label: op.contains },
-    { value: "notContains", label: op.notContains },
-    { value: "equals", label: op.equals },
-    { value: "notEquals", label: op.notEquals },
-    { value: "startsWith", label: op.startsWith },
-    { value: "endsWith", label: op.endsWith },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
-
-/** Number filter operators in display order. */
-export const getNumberOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<NumberFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "=", label: op.equals },
-    { value: "!=", label: op.notEquals },
-    { value: ">", label: op.greaterThan },
-    { value: "<", label: op.lessThan },
-    { value: ">=", label: op.greaterThanOrEqual },
-    { value: "<=", label: op.lessThanOrEqual },
-    { value: "between", label: op.between },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
-
-/** Date filter operators in display order. */
-export const getDateOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<DateFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "=", label: op.equals },
-    { value: "!=", label: op.notEquals },
-    { value: ">", label: op.greaterThan },
-    { value: "<", label: op.lessThan },
-    { value: "between", label: op.between },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
+export {
+  getTextOperatorOptions,
+  getNumberOperatorOptions,
+  getDateOperatorOptions,
+} from "./i18n-operator-options";
+export type { FilterOperatorOption } from "./i18n-operator-options";

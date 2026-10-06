@@ -48,7 +48,7 @@ export class EditController implements GridEditApi {
     // registered only for an edit that will open, inside the batch that
     // publishes START_EDIT and the window mounting its editor (B7).
     const { editManager, batcher } = this.deps;
-    if (editManager.canEdit(col) === false) return editManager.startEdit(row, col);
+    if (editManager.canEdit(col, row) === false) return editManager.startEdit(row, col);
     const columnId = this.deps.columnModel.idAt(col);
     batcher.start();
     try {

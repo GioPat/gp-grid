@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SlotPoolManager } from "../src/slot-pool";
 import { applyInstruction } from "../src/state-reducer";
 import type { RowRegionLayout } from "../src/geometry/row-regions";
-import type { GridInstruction } from "../src/types";
+import type { GridInstruction, HierarchyRow } from "../src/types";
 import type { AssignSlotInstruction } from "../src/types/instructions";
 import type { HeaderData, SlotData } from "../src/types/ui-state";
 
@@ -22,6 +22,8 @@ interface HarnessOptions {
   window?: { start: number; end: number };
   /** Rows the source cannot serve yet (a paginated miss). */
   missing?: number[];
+  /** Hierarchy rows by index; omitted while flat. */
+  getRow?: (rowIndex: number) => HierarchyRow | undefined;
 }
 
 const createPool = (options: HarnessOptions = {}) => {
@@ -49,6 +51,7 @@ const createPool = (options: HarnessOptions = {}) => {
     getRowSize: (rowIndex) => sizes.get(rowIndex) ?? ROW_HEIGHT,
     getRowData: (rowIndex) => ({ id: rowIndex }),
     isRowAvailable: (rowIndex) => missing.has(rowIndex) === false,
+    getRow: options.getRow,
   });
   // Single emissions arrive here as one-item batches too, so every
   // instruction is applied exactly once.
@@ -315,5 +318,31 @@ describe("SlotPoolManager — published row heights (D8)", () => {
       height: 64,
     });
     expect(harness.slotAt(2)?.height).toBe(64);
+  });
+});
+
+describe("SlotPoolManager — hierarchy rows (D10)", () => {
+  const rowOf = (rowIndex: number): HierarchyRow =>
+    rowIndex === 0
+      ? { kind: "total", id: "total", depth: 0, leafCount: 4 }
+      : { kind: "record", id: `r${rowIndex}`, depth: 1 };
+
+  it("publishes the row on assignment, refresh and single update", () => {
+    const harness = createPool({ window: { start: 0, end: 3 }, getRow: rowOf });
+    const batch = harness.sync();
+    expect(assignFor(batch, 0)?.row).toEqual(rowOf(0));
+    expect(harness.slotAt(1)?.row).toEqual(rowOf(1));
+
+    expect(assignFor(harness.refresh(), 2)?.row).toEqual(rowOf(2));
+    harness.pool.updateSlot(1);
+    expect(assignFor(harness.lastBatch(), 1)?.row).toEqual(rowOf(1));
+  });
+
+  it("emits no row field while flat", () => {
+    const harness = createPool({ window: { start: 0, end: 3 }, getRow: () => undefined });
+    for (const instruction of [...harness.sync(), ...harness.refresh()]) {
+      expect("row" in instruction).toBe(false);
+    }
+    expect(harness.slotAt(0) !== undefined && "row" in harness.slotAt(0)!).toBe(false);
   });
 });

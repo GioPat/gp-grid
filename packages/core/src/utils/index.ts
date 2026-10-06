@@ -55,7 +55,7 @@ export type { BuildRequestOptions } from "./data-source-request";
 export { reorderCachedRows } from "./cached-rows";
 
 
-export { readCell, writeCell } from "./cell-access";
+export { readCell, writeCell, writeRecordCell } from "./cell-access";
 export type { WriteCellDeps } from "./cell-access";
 
 export { createWriteRejection } from "./write-rejection";

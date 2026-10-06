@@ -43,24 +43,30 @@ export const writeCell = <TData>(
   deps: WriteCellDeps<TData>,
 ): void => {
   const rowData = cachedRows.get(row);
-  if (!rowData || typeof rowData !== "object") return;
   const column = columns[col];
-  if (!column) return;
+  if (!rowData || !column) return;
+  writeRecordCell(rowData, column, col, value, deps.onCellValueChanged, () => deps.getRowId!(rowData));
+};
 
-  const emitChange = deps.onCellValueChanged !== undefined;
-  const oldValue = emitChange ? getFieldValue(rowData, column.field) : undefined;
-
+/** Mutate one record's field in place and report the change; no-op on a non-object record. */
+export const writeRecordCell = <TData>(
+  rowData: TData,
+  column: ColumnDefinition,
+  col: number,
+  value: CellValue,
+  onCellValueChanged: ((event: CellValueChangedEvent<TData>) => void) | undefined,
+  getRowId: () => RowId,
+): void => {
+  if (typeof rowData !== "object" || rowData === null) return;
+  const oldValue = onCellValueChanged === undefined ? null : getFieldValue(rowData, column.field);
   setFieldValue(rowData as Record<string, unknown>, column.field, value);
-
-  if (emitChange) {
-    deps.onCellValueChanged!({
-      rowId: deps.getRowId!(rowData),
-      columnId: column.colId ?? column.field,
-      colIndex: col,
-      field: column.field,
-      oldValue: oldValue!,
-      newValue: value,
-      rowData,
-    });
-  }
+  onCellValueChanged?.({
+    rowId: getRowId(),
+    columnId: column.colId ?? column.field,
+    colIndex: col,
+    field: column.field,
+    oldValue,
+    newValue: value,
+    rowData,
+  });
 };

@@ -114,6 +114,13 @@ export class InputEventAdapter<TData = unknown> {
     };
   }
 
+  /** The expander toggles its group; the cell beneath sees no pointer down (D5). */
+  groupTogglePointerDown(rowIndex: number, event: PointerEvent): void {
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    this.deps.getCore()?.input.handleGroupToggle(rowIndex);
+  }
+
   cellPointerEnter(rowIndex: number, colIndex: number): void {
     this.deps.getCore()?.input.handleCellMouseEnter(rowIndex, colIndex);
   }

@@ -1,6 +1,7 @@
 import type { GridCore } from "../grid-core";
 import type { CellPosition } from "../types/basic";
 import type { KeyEventData, KeyboardResult } from "../types/input";
+import type { RowGroupResult } from "../types/row-groups";
 import type { Direction } from "../selection";
 import { applyGridResizeAction, resolveGridResizeKey } from "./resize-keys";
 import type { RowResizeCommands } from "./row-resize-drag";
@@ -14,13 +15,21 @@ const ARROW_DIRECTIONS = new Map<string, Direction>([
 
 type EditingCell = { row: number; col: number } | null;
 
+/** Commands a gesture runs past the public API; only a gesture fires `onRowGroupToggled`. */
+export interface InputCommands extends RowResizeCommands {
+  toggleGroupAt(viewIndex: number): RowGroupResult;
+}
+
+export const isGroupRow = <TData>(core: GridCore<TData>, row: number): boolean =>
+  core.rows.getViewRow(row)?.kind === "group";
+
 const isResizeKey = (key: string): boolean => key === "Enter" || ARROW_DIRECTIONS.has(key);
 
 export class KeyboardHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
-  private readonly commands: RowResizeCommands;
+  private readonly commands: InputCommands;
 
-  constructor(core: GridCore<TData>, commands: RowResizeCommands) {
+  constructor(core: GridCore<TData>, commands: InputCommands) {
     this.core = core;
     this.commands = commands;
   }
@@ -54,6 +63,7 @@ export class KeyboardHandler<TData = unknown> {
     // With an editor open, Alt+Enter commits like Enter.
     const resizeKey = event.altKey === true && editingCell === null && isResizeKey(event.key);
     if (resizeKey) return this.resizeFromKey(event, activeCell);
+    if (this.toggleGroup(event.key, activeCell, editingCell)) return { preventDefault: true };
 
     const direction = ARROW_DIRECTIONS.get(event.key);
     if (direction) return this.moveFocus(direction, event.shiftKey);
@@ -74,6 +84,15 @@ export class KeyboardHandler<TData = unknown> {
       return { preventDefault: true, scrollToCell: this.core.selection.getActiveCell() ?? undefined };
     }
     return { preventDefault: true };
+  }
+
+  /** D5: Enter and Space on a group row toggle it instead of opening an editor. */
+  private toggleGroup(key: string, activeCell: CellPosition | null, editingCell: EditingCell): boolean {
+    if (editingCell !== null || activeCell === null) return false;
+    if (key !== "Enter" && key !== " ") return false;
+    if (isGroupRow(this.core, activeCell.row) === false) return false;
+    this.commands.toggleGroupAt(activeCell.row);
+    return true;
   }
 
   private moveFocus(direction: Direction, isShift: boolean): KeyboardResult {

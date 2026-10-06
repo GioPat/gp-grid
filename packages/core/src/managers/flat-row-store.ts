@@ -7,6 +7,7 @@ import type {
   RowAccess,
   RowId,
   WriteRejectionOperation,
+  WriteRejectionReason,
 } from "../types";
 import type { AxisBounds } from "../types/geometry";
 import {
@@ -16,9 +17,9 @@ import {
   writeCell,
 } from "../utils";
 
-const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
+export const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
 
-const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
+export const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
   Math.min(Math.trunc(range?.end ?? extent), extent);
 
 export interface FlatRowStoreOptions<TData> {
@@ -197,15 +198,17 @@ export class FlatRowStore<TData = unknown> {
     return readRowFieldValue(row, field);
   }
 
-  setCellValue(row: number, col: number, value: CellValue): void {
+  /** False when the write was refused. */
+  setCellValue(row: number, col: number, value: CellValue): boolean {
     if (this.options.isWritable() === false) {
-      this.rejectWrite(row, col, "setCellValue");
-      return;
+      this.rejectWrite(row, col, "setCellValue", "read-only-source");
+      return false;
     }
     writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
       onCellValueChanged: this.options.onCellValueChanged,
       getRowId: this.options.getRowId,
     });
+    return true;
   }
 
   /**
@@ -216,10 +219,11 @@ export class FlatRowStore<TData = unknown> {
     row: number,
     col: number,
     operation: WriteRejectionOperation,
+    reason: WriteRejectionReason,
   ): void {
     const column = this.options.getColumns()[col];
     this.options.onWriteRejected?.(
-      createWriteRejection(row, col, column?.field ?? "", operation),
+      createWriteRejection(row, col, column?.field ?? "", operation, reason),
     );
   }
 

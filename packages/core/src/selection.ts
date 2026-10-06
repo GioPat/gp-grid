@@ -35,7 +35,12 @@ export interface SelectionManagerOptions {
   setCellValue: (row: number, col: number, value: CellValue) => void;
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
-  /** Called when a paste is refused because the source is read-only. */
+  /** False for a group or total row (D6). */
+  isRowWritable?: (row: number) => boolean;
+  /** Open and close one write command, so its writes are reported together. */
+  beginWrites?: () => void;
+  endWrites?: () => void;
+  /** Called when a paste is refused, or skips a cell. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
@@ -331,7 +336,7 @@ export class SelectionManager {
       const { minRow, minCol } = normalizeRange(effectiveRange);
       const column = this.options.getColumn(minCol);
       this.options.onWriteRejected?.(
-        createWriteRejection(minRow, minCol, column?.field ?? "", "paste"),
+        createWriteRejection(minRow, minCol, column?.field ?? "", "paste", "read-only-source"),
       );
       return { handled: false, changedCells: [] };
     }
@@ -341,12 +346,17 @@ export class SelectionManager {
       return { handled: false, changedCells: [] };
     }
 
-    const changedCells = this.applyPasteSource(
-      sourceCells,
-      effectiveRange,
-      this.state.range !== null,
-    );
-    return { handled: true, changedCells };
+    this.options.beginWrites?.();
+    try {
+      const changedCells = this.applyPasteSource(
+        sourceCells,
+        effectiveRange,
+        this.state.range !== null,
+      );
+      return { handled: true, changedCells };
+    } finally {
+      this.options.endWrites?.();
+    }
   }
 
   // ===========================================================================
@@ -482,6 +492,12 @@ export class SelectionManager {
     if (column === undefined) return;
     if (column.hidden === true) return;
     if (column.editable !== true) return;
+    if (this.options.isRowWritable?.(row) === false) {
+      this.options.onWriteRejected?.(
+        createWriteRejection(row, col, column.field, "paste", "not-a-record"),
+      );
+      return;
+    }
 
     const coerced = coerceClipboardValue(sourceCell, column);
     if (coerced.ok === false) return;

@@ -33,6 +33,7 @@ describe("createInitialState — defaults", () => {
       frozen: { requestedCount: 0, effectiveCount: 0, limit: null },
     });
     expect(state.announcement).toBeNull();
+    expect(state.hierarchical).toBe(false);
   });
 
   it("hands out independent maps per state", () => {

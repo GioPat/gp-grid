@@ -4,6 +4,7 @@
 import type { CellValue, RowId } from "./types";
 import type { CellBounds, GeometrySpace, GridGeometry } from "./types/geometry";
 import type { RowDataManager } from "./managers/row-data-manager";
+import type { RecordWrites } from "./grid-core-record-writes";
 
 export interface GridCellsApi {
   getValue(row: number, col: number): CellValue;
@@ -20,6 +21,7 @@ export interface GridCellsApi {
 export interface CellsControllerDeps<TData> {
   rowData: RowDataManager<TData>;
   geometry: GridGeometry;
+  writes: RecordWrites;
 }
 
 export class CellsController<TData> implements GridCellsApi {
@@ -34,7 +36,13 @@ export class CellsController<TData> implements GridCellsApi {
   }
 
   setValue(row: number, col: number, value: CellValue): void {
-    this.deps.rowData.setCellValue(row, col, value);
+    const { writes } = this.deps;
+    writes.begin();
+    try {
+      writes.setCellValue(row, col, value);
+    } finally {
+      writes.end();
+    }
   }
 
   getFieldValue(viewIndex: number, field: string): CellValue {

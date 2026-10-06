@@ -21,7 +21,12 @@ export interface FillManagerOptions {
   setCellValue: (row: number, col: number, value: CellValue) => void;
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
-  /** Called when a fill drag is refused because the source is read-only. */
+  /** False for a group or total row (D6). */
+  isRowWritable?: (row: number) => boolean;
+  /** Open and close one write command, so its writes are reported together. */
+  beginWrites?: () => void;
+  endWrites?: () => void;
+  /** Called when a fill drag is refused, or skips a cell. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
@@ -65,7 +70,7 @@ export class FillManager {
       const { minRow, minCol } = normalizeRange(sourceRange);
       const column = this.options.getColumn(minCol);
       this.options.onWriteRejected?.(
-        createWriteRejection(minRow, minCol, column?.field ?? "", "fill"),
+        createWriteRejection(minRow, minCol, column?.field ?? "", "fill", "read-only-source"),
       );
       return;
     }
@@ -104,16 +109,26 @@ export class FillManager {
     if (!this.state) return;
 
     const { sourceRange, targetRow } = this.state;
-    const filledCells = this.calculateFilledCells(sourceRange, targetRow);
-
-    // Apply values
-    for (const { row, col, value } of filledCells) {
-      this.options.setCellValue(row, col, value);
+    const targets = this.calculateFilledCells(sourceRange, targetRow);
+    this.options.beginWrites?.();
+    try {
+      const filledCells = targets.filter((cell) => this.writeFillCell(cell));
+      this.emit({ type: "COMMIT_FILL", filledCells });
+      this.state = null;
+    } finally {
+      this.options.endWrites?.();
     }
+  }
 
-    this.emit({ type: "COMMIT_FILL", filledCells });
-
-    this.state = null;
+  /** A group or total target is skipped and reported (D6). */
+  private writeFillCell({ row, col, value }: { row: number; col: number; value: CellValue }): boolean {
+    if (this.options.isRowWritable?.(row) === false) {
+      const field = this.options.getColumn(col)?.field ?? "";
+      this.options.onWriteRejected?.(createWriteRejection(row, col, field, "fill", "not-a-record"));
+      return false;
+    }
+    this.options.setCellValue(row, col, value);
+    return true;
   }
 
   /**

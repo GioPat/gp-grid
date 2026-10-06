@@ -9,6 +9,7 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
+import type { HierarchyRow } from "./row-groups";
 import type {
   ColumnLayoutSnapshot,
   ColumnWindowSnapshot,
@@ -56,6 +57,8 @@ export interface AssignSlotInstruction extends SlotRegionFields {
   rowData: unknown;
   /** Assignment generation, matching the slot's current generation. */
   generation: number;
+  /** Kind and depth of a hierarchy row; absent while flat. */
+  row?: HierarchyRow;
 }
 
 /** Move slot instruction */
@@ -258,6 +261,8 @@ export interface DataLoadingInstruction {
 export interface DataLoadedInstruction {
   type: "DATA_LOADED";
   totalRows: number;
+  /** Present and `true` while a hierarchy is bound; a flat load omits it. */
+  hierarchical?: boolean;
 }
 
 /** Data error instruction */

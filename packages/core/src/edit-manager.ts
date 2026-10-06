@@ -27,6 +27,11 @@ export interface EditManagerOptions {
   isWritable?: () => boolean;
   /** Called when an editable cell refuses a write because the source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** False for a group or total row, which never opens an editor (D6). */
+  isRowWritable?: (row: number) => boolean;
+  /** Open and close one write command, so its writes are reported together. */
+  beginWrites?: () => void;
+  endWrites?: () => void;
   /**
    * Current slot-assignment generation for a view row, or -1 when no slot
    * serves it. Used to drop a commit that belongs to a recycled assignment.
@@ -98,13 +103,15 @@ export class EditManager {
   // ===========================================================================
 
   /**
-   * Whether `startEdit` would open: the column is editable and the bound
-   * source accepts writes. Lets a caller that must register state first (a
-   * keep-alive, a batch) skip it when the edit will be refused.
+   * Whether `startEdit` would open: the column is editable, the row, when
+   * given, takes writes and the bound source accepts them. Lets a caller that
+   * must register state first (a keep-alive, a batch) skip it when the edit
+   * will be refused.
    */
-  canEdit(col: number): boolean {
+  canEdit(col: number, row?: number): boolean {
     const column = this.options.getColumn(col);
     if (!column?.editable) return false;
+    if (row !== undefined && this.options.isRowWritable?.(row) === false) return false;
     return this.options.isWritable?.() !== false;
   }
 
@@ -115,13 +122,14 @@ export class EditManager {
    */
   startEdit(row: number, col: number): boolean {
     const column = this.options.getColumn(col);
-    // A non-editable column is a disabled control: no attempted command.
-    if (!column?.editable) {
+    // A non-editable column or a group or total row is a disabled control:
+    // no attempted command.
+    if (!column?.editable || this.options.isRowWritable?.(row) === false) {
       return false;
     }
     if (this.options.isWritable?.() === false) {
       this.options.onWriteRejected?.(
-        createWriteRejection(row, col, column.field, "edit"),
+        createWriteRejection(row, col, column.field, "edit", "read-only-source"),
       );
       return false;
     }
@@ -239,6 +247,15 @@ export class EditManager {
       return;
     }
 
+    this.options.beginWrites?.();
+    try {
+      this.commitValue(row, col, currentValue);
+    } finally {
+      this.options.endWrites?.();
+    }
+  }
+
+  private commitValue(row: number, col: number, currentValue: CellValue): void {
     // Update the cell value
     this.options.setCellValue(row, col, currentValue);
 

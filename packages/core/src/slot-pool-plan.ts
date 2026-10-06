@@ -3,7 +3,7 @@
 // become create/assign/move/destroy instructions. Pure over injected
 // accessors and the pool's own maps, which it mutates in place.
 
-import type { GridInstruction, SlotState } from "./types";
+import type { GridInstruction, HierarchyRow, SlotState } from "./types";
 import type { RowRegion } from "./types/geometry";
 import type { RowRegionLayout } from "./geometry";
 
@@ -20,6 +20,8 @@ export interface SlotPlanInput {
   regions: RowRegionLayout;
   isRowAvailable: (rowIndex: number) => boolean;
   getRowData: (rowIndex: number) => unknown;
+  /** Kind and depth of a hierarchy row; `undefined` while flat. */
+  getRow: (rowIndex: number) => HierarchyRow | undefined;
   getRowOffset: (rowIndex: number) => number;
   /** Row height from the synced row axis (D8). */
   getRowSize: (rowIndex: number) => number;
@@ -42,10 +44,11 @@ const regionOfRow = (rowIndex: number, regions: RowRegionLayout): RowRegion =>
   rowIndex < regions.frozenCount ? "frozen" : "suffix";
 
 /** Only the non-default fields: the flat instruction payload stays exact. */
-const slotRegionFields = (region: RowRegion, loading: boolean) => {
-  const fields: { region?: RowRegion; loading?: boolean } = {};
+const slotRegionFields = (region: RowRegion, loading: boolean, row?: HierarchyRow) => {
+  const fields: { region?: RowRegion; loading?: boolean; row?: HierarchyRow } = {};
   if (region === "frozen") fields.region = region;
   if (loading) fields.loading = loading;
+  if (row) fields.row = row;
   return fields;
 };
 
@@ -172,7 +175,7 @@ const assignSlot = (
       rowIndex,
       rowData,
       generation,
-      ...slotRegionFields(region, loading),
+      ...slotRegionFields(region, loading, input.getRow(rowIndex)),
     },
     { type: "MOVE_SLOT", slotId, translateY, height },
   );
@@ -256,7 +259,7 @@ export const planSlotRefresh = (input: SlotPlanInput): GridInstruction[] => {
         rowIndex: slot.rowIndex,
         rowData,
         generation,
-        ...slotRegionFields(region, loading),
+        ...slotRegionFields(region, loading, input.getRow(slot.rowIndex)),
       },
       { type: "MOVE_SLOT", slotId, translateY, height },
     );
@@ -288,7 +291,7 @@ export const planSlotUpdate = (input: SlotPlanInput, rowIndex: number): GridInst
       rowIndex,
       rowData: available ? input.getRowData(rowIndex) : undefined,
       generation,
-      ...slotRegionFields(region, loading),
+      ...slotRegionFields(region, loading, input.getRow(rowIndex)),
     },
   ];
 };

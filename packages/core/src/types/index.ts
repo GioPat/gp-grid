@@ -17,6 +17,7 @@ export type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteRejectionOperation,
+  WriteRejectionReason,
   SlotState,
   RowHeightUpdate,
 } from "./basic";
@@ -103,6 +104,24 @@ export type {
   RowAccess,
 } from "./data-source";
 
+// Hierarchical rows
+export type {
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+} from "./row-groups";
+export { isHierarchicalRowAccess } from "./row-groups";
+
 // Columnar source types
 export type {
   ColumnarField,
@@ -153,6 +172,7 @@ export type {
 // Renderer types
 export type {
   CellRendererParams,
+  GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
   ColumnGroupHeaderParams,

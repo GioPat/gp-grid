@@ -691,6 +691,48 @@ describe("SelectionManager", () => {
         [null, null],
       ]);
     });
+
+    it("skips a non-record row, reports each skipped cell and brackets the writes", () => {
+      const onWriteRejected = vi.fn();
+      const calls: string[] = [];
+      const base = createPasteOptions(
+        [[null, null], [null, null], [null, null]],
+        [editableColumn("a", "text"), editableColumn("b", "text")],
+      );
+      const pasteOptions: SelectionManagerOptions = {
+        ...base,
+        isRowWritable: (row) => row !== 1,
+        onWriteRejected,
+        beginWrites: () => calls.push("begin"),
+        endWrites: () => calls.push("end"),
+      };
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 0, col: 0 });
+
+      const result = manager.pasteClipboardText("x\ty\nx\ty\nx\ty");
+
+      expect(result.changedCells.map(({ row, col }) => [row, col])).toEqual([
+        [0, 0], [0, 1], [2, 0], [2, 1],
+      ]);
+      expect(base.getData()[1]).toEqual([null, null]);
+      expect(onWriteRejected.mock.calls.map(([event]) => event)).toEqual([
+        { row: 1, col: 0, field: "a", reason: "not-a-record", operation: "paste" },
+        { row: 1, col: 1, field: "b", reason: "not-a-record", operation: "paste" },
+      ]);
+      expect(calls).toEqual(["begin", "end"]);
+    });
+
+    it("reports a read-only source once with its reason", () => {
+      const onWriteRejected = vi.fn();
+      const base = createPasteOptions([[null]], [editableColumn("a", "text")]);
+      manager = new SelectionManager({ ...base, isWritable: () => false, onWriteRejected });
+      manager.startSelection({ row: 0, col: 0 });
+
+      expect(manager.pasteClipboardText("x").handled).toBe(false);
+      expect(onWriteRejected).toHaveBeenCalledExactlyOnceWith({
+        row: 0, col: 0, field: "a", reason: "read-only-source", operation: "paste",
+      });
+    });
   });
 
   describe("getActiveCell", () => {

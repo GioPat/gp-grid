@@ -2,6 +2,7 @@
 // Basic types: primitives, cell values, positions, ranges
 
 import type { RowRegion } from "../geometry/row-regions-mapping";
+import type { HierarchyGroupRow, HierarchyRecordRow, HierarchyTotalRow } from "./row-groups";
 
 /** Cell data type primitive types */
 export type CellDataType =
@@ -21,18 +22,16 @@ export type CellValue = string | number | boolean | Date | object | null;
 export type RowId = string | number;
 
 /**
- * A displayed row and its identity. Built on request — the grid never
- * allocates one per row. 002 only produces `kind: "record"`; groups and
- * aggregates are planned for later releases.
+ * A displayed row and its identity, built on request: the grid never
+ * allocates one per row. A flat row is a record row of depth 0.
  */
-export interface ViewRow<TData = unknown> {
-  kind: "record";
-  /** Source identity; the view index when the source exposes none. */
-  id: RowId;
-  viewIndex: number;
-  /** Source record, absent for record-less (columnar) rows. */
-  record?: TData;
-}
+export type ViewRow<TData = unknown> =
+  | (HierarchyRecordRow & {
+      viewIndex: number;
+      /** Source record, absent for record-less (columnar) rows. */
+      record?: TData;
+    })
+  | ((HierarchyGroupRow | HierarchyTotalRow) & { viewIndex: number });
 
 /** Sort direction type */
 export type SortDirection = "asc" | "desc" | null;
@@ -116,7 +115,13 @@ export type WriteRejectionOperation =
   | "fill"
   | "row-move";
 
-/** Emitted when a write is refused because the bound source is read-only. */
+/**
+ * Why a write was refused: the source is read-only, the row is a group or
+ * total row, or row order is derived from a hierarchy.
+ */
+export type WriteRejectionReason = "read-only-source" | "not-a-record" | "derived-view";
+
+/** Emitted when a write is refused. */
 export interface CellWriteRejectedEvent {
   /** View row index the write targeted; the dragged row for `row-move` */
   row: number;
@@ -125,7 +130,7 @@ export interface CellWriteRejectedEvent {
   /** Source field key, when the column exists */
   field: string;
   /** Why the write was refused */
-  reason: "read-only-source";
+  reason: WriteRejectionReason;
   /** Attempted write entry point that was refused */
   operation: WriteRejectionOperation;
 }

@@ -14,6 +14,7 @@ const expectedExports = [
   "createServerDataSource",
   "createDataSourceFromArray",
   "createMutableClientDataSource",
+  "isHierarchicalRowAccess",
   // Transaction system
   "IndexedDataStore",
   // Filtering utilities

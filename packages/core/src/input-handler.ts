@@ -4,7 +4,7 @@
 // handling in-place.
 
 import type { GridCore } from "./grid-core";
-import type { CellPosition, CellRange, SortDirection } from "./types";
+import type { CellPosition, CellRange, RowGroupResult, SortDirection } from "./types";
 import type {
   PointerEventData,
   KeyEventData,
@@ -28,7 +28,8 @@ import {
   computeCellTarget,
   applyGridResizeAction,
   resolveHandleFit,
-  type RowResizeCommands,
+  isGroupRow,
+  type InputCommands,
 } from "./input";
 
 // =============================================================================
@@ -59,9 +60,9 @@ export class InputHandler<TData = unknown> {
   private readonly pendingRowDrag = new PendingRowDragState();
   private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
-  private readonly commands: RowResizeCommands;
+  private readonly commands: InputCommands;
 
-  constructor(core: GridCore<TData>, commands: RowResizeCommands) {
+  constructor(core: GridCore<TData>, commands: InputCommands) {
     this.core = core;
     this.commands = commands;
     this.columnResize = new ColumnResizeDrag(core);
@@ -150,9 +151,11 @@ export class InputHandler<TData = unknown> {
     this.core.edit.stopPeek();
 
     const column = this.core.columns.get()[colIndex];
+    // A hierarchy's order is derived, so no row drag starts (D6).
     const wantsRowDrag =
       (column?.rowDrag === true || this.core.rowDrag.isEntireRow()) &&
-      !event.shiftKey;
+      !event.shiftKey &&
+      this.core.rowGroups.isActive() === false;
 
     if (wantsRowDrag && event.pointerType === "touch") {
       return this.startPendingRowDrag(rowIndex, colIndex, event);
@@ -235,12 +238,21 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
+    if (isGroupRow(this.core, rowIndex)) {
+      this.commands.toggleGroupAt(rowIndex);
+      return;
+    }
     const column = this.core.columns.get()[colIndex];
     if (column?.editable) {
       this.core.edit.start(rowIndex, colIndex);
       return;
     }
     this.core.edit.startPeek(rowIndex, colIndex);
+  }
+
+  /** A pointer down on a group row's expander (D5). */
+  handleGroupToggle(rowIndex: number): RowGroupResult {
+    return this.commands.toggleGroupAt(rowIndex);
   }
 
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {
