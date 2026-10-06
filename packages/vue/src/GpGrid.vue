@@ -287,10 +287,18 @@ function handleCellMouseLeave(): void {
   coreRef.value?.input.handleCellMouseLeave();
 }
 
-// Helper to create or get data source
+// Only a source built here from `rowData` is destroyed by the grid; a provided one belongs to the caller.
+let ownedDataSource: DataSource<Row> | null = null;
+
 function getOrCreateDataSource(): DataSource<Row> {
-  return props.dataSource ??
-    (props.rowData ? createDataSourceFromArray(props.rowData) : createClientDataSource<Row>([]));
+  if (props.dataSource) {
+    ownedDataSource = null;
+    return props.dataSource;
+  }
+  ownedDataSource = props.rowData
+    ? createDataSourceFromArray(props.rowData)
+    : createClientDataSource<Row>([]);
+  return ownedDataSource;
 }
 
 /**
@@ -417,10 +425,9 @@ onMounted(() => {
       coreRef.value.destroy();
       coreRef.value = null;
     }
-    if (currentDataSourceRef.value) {
-      currentDataSourceRef.value.destroy?.();
-      currentDataSourceRef.value = null;
-    }
+    if (currentDataSourceRef.value === ownedDataSource) ownedDataSource?.destroy?.();
+    ownedDataSource = null;
+    currentDataSourceRef.value = null;
   });
 });
 
@@ -435,12 +442,13 @@ watch(
       );
     }
 
-    const newDataSource = getOrCreateDataSource();
     const oldDataSource = currentDataSourceRef.value;
+    const oldOwned = ownedDataSource;
+    const newDataSource = getOrCreateDataSource();
 
     if (oldDataSource && oldDataSource !== newDataSource) {
-      // Destroy old data source (terminates Web Workers)
-      oldDataSource.destroy?.();
+      // Destroy an owned old data source (terminates Web Workers)
+      if (oldDataSource === oldOwned) oldDataSource.destroy?.();
       // Update data source ref
       currentDataSourceRef.value = newDataSource;
       // Swap data source without destroying core (preserves sort, filter, scroll, selection)
@@ -455,7 +463,7 @@ watch(
 // Subscribe to data source changes
 watch(
   () => props.dataSource,
-  (dataSource) => {
+  (dataSource, _previous, onCleanup) => {
     if (dataSource) {
       const mutableDataSource = dataSource as {
         subscribe?: (listener: () => void) => () => void;
@@ -464,7 +472,7 @@ watch(
         const unsubscribe = mutableDataSource.subscribe(() => {
           coreRef.value?.refreshFromTransaction();
         });
-        onUnmounted(() => unsubscribe());
+        onCleanup(unsubscribe);
       }
     }
   },

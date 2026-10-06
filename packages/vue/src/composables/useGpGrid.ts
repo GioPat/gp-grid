@@ -354,12 +354,16 @@ export function useGpGrid<TData = unknown>(
       });
       resizeObserver.observe(container);
 
-      onUnmounted(() => {
-        resizeObserver.disconnect();
-        unsubscribe();
-        coreRef.value = null;
-      });
+      onUnmounted(() => resizeObserver.disconnect());
     }
+
+    onUnmounted(() => {
+      unsubscribe();
+      core.destroy();
+      coreRef.value = null;
+      // A provided source belongs to the caller; only the one built from `rowData` is ours.
+      if (dataSource !== options.dataSource) dataSource.destroy?.();
+    });
   });
 
   // Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM
@@ -380,16 +384,16 @@ export function useGpGrid<TData = unknown>(
   // Subscribe to data source changes
   watch(
     () => options.dataSource,
-    (dataSource) => {
+    (dataSource, _previous, onCleanup) => {
       if (dataSource) {
         const mutableDataSource = dataSource as {
           subscribe?: (listener: () => void) => () => void;
         };
         if (mutableDataSource.subscribe) {
           const unsubscribe = mutableDataSource.subscribe(() => {
-            coreRef.value?.refresh();
+            coreRef.value?.refreshFromTransaction();
           });
-          onUnmounted(() => unsubscribe());
+          onCleanup(unsubscribe);
         }
       }
     },

@@ -191,12 +191,13 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const columns = this.columns() as unknown as ColumnDefinition[];
+    const dataSource = this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows());
     const core = buildGridCore<unknown>(
       {
         columns,
         columnGroups: this.coreColumnGroups(),
         columnGroupLimits: this.columnGroupLimits(),
-        dataSource: this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows()),
+        dataSource,
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
         headerBandHeights: this.headerBandHeights(),
@@ -235,7 +236,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       initialColumnGroups: this.coreColumnGroups(),
     });
     this.boundCore.current = core;
-    this.bindings.attach(core);
+    this.bindings.attach(core, dataSource);
     // The columnState effect ran before the core existed; apply it now.
     this.bindings.syncColumnState(this.columnState() ?? []);
   }
