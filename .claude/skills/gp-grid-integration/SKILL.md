@@ -68,7 +68,7 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | `minWidth` / `maxWidth` | `50` / unlimited | Resize bounds. |
 | `rowDrag` | `false` | This column acts as the row drag handle. |
 | `cellRenderer` / `editRenderer` / `headerRenderer` | none | Custom rendering — exact type **differs per framework**, see references. This takes the value formatted data from the `valueFormatter` field. |
-| `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. |
+| `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. **Numbers are displayed unrounded**: a computed value (a group `avg`, a division, a float sum such as `0.1 + 0.2`) can print many decimals, so give every numeric column that may hold one a formatter that rounds it (`toFixed`, `Intl.NumberFormat`). |
 | `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the row height (rows do **not** auto-grow; a row fit grows one once). Only affects the default text renderer, not custom `cellRenderer` output. |
 | `wrapHeaderText` | `false` | Wrap the header text inside its band; a header taller than its band is clipped. |
 | `computeRowClasses` / `computeColumnClasses` / `computeCellClasses` | none | Per-column/row/cell highlighting overrides — see Highlighting below. |
