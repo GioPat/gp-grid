@@ -20,12 +20,16 @@ import type {
   EditRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
+  GroupLabelRendererParams,
   HeaderRendererParams,
   GridCore,
   GridIcon,
   GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
   RowResizedEvent,
 } from "@gp-grid/core";
@@ -53,6 +57,11 @@ export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
 /** React header renderer: A function that renders a header cell */
 export type ReactHeaderRenderer = (
   params: HeaderRendererParams,
+) => React.ReactNode;
+
+/** React group label renderer: the label of a group or total row, beside its expander */
+export type ReactGroupLabelRenderer = (
+  params: GroupLabelRendererParams,
 ) => React.ReactNode;
 
 /** React group header renderer: renders one fragment of a column group */
@@ -184,6 +193,16 @@ export interface GridProps<TData = unknown> {
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */
   onColumnPinned?: (event: ColumnPinnedEvent) => void;
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping?: RowGrouping | null;
+  /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+  groupLabelColumn?: string;
+  /** Renders the label of a group or total row. */
+  groupLabelRenderer?: ReactGroupLabelRenderer;
+  /** Called per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+  /** Called when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

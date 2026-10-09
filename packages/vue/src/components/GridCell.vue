@@ -3,18 +3,32 @@ import { computed, inject } from "vue";
 import type { CellValue, ColumnDefinition } from "@gp-grid/core";
 import {
   buildCellClasses,
+  formatGroupLabel,
   isCellActive,
   isCellEditing,
   isCellInFillPreview,
   isCellSelected,
+  isEmptyGroupCell,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
 import { HOVER_POSITION, type GridCellProps } from "./cell-props";
 import ResizeHandle from "./ResizeHandle.vue";
+import GroupLabelCell from "./GroupLabelCell.vue";
+import { groupCellClassName, groupCellOf } from "./row-group-attributes";
 
 const props = defineProps<GridCellProps>();
 const hoverPosition = inject(HOVER_POSITION, null);
+
+const groupCell = computed(() => groupCellOf(props.row, props.column.columnId, props.rowGroups));
+const groupLabel = computed(() => {
+  const labelRow = groupCell.value.labelRow;
+  const context = props.rowGroups;
+  if (labelRow === null || context === null) return null;
+  return formatGroupLabel(labelRow, context.columns, context.labels);
+});
+const labelTitle = computed(() =>
+  props.column.column.tooltip === false ? undefined : groupLabel.value ?? undefined);
 
 const getCellClasses = (): string => {
   const { rowIndex, column, rowData } = props;
@@ -52,6 +66,7 @@ const getCellClasses = (): string => {
     ...highlightCellClasses,
     definition.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
     wrapText ? "gp-grid-cell--wrap" : "",
+    groupCellClassName(groupCell.value),
   ].filter(Boolean).join(" ");
 };
 
@@ -77,6 +92,12 @@ const getRowIdAt = () => props.coreRef?.rows.getId(props.rowIndex);
 
 const getFieldValueAt = (field: string): CellValue =>
   props.coreRef?.cells.getFieldValue(props.rowIndex, field) ?? null;
+
+const isEmptyCell = (): boolean => {
+  void props.renderToken;
+  void props.generation;
+  return isEmptyGroupCell(props.row?.kind, getRawValue());
+};
 
 /** The open editor is the source of truth for its draft value. */
 const initialEditValue = (): CellValue => {
@@ -120,6 +141,7 @@ const cellContent = () => {
     isActive: isCellActive(props.rowIndex, column.layoutIndex, props.activeCell),
     isSelected: isCellSelected(props.rowIndex, column.layoutIndex, props.selectionRange),
     isEditing: false,
+    rowKind: props.row?.kind,
     cellRenderers: props.cellRenderers,
     globalCellRenderer: props.globalCellRenderer,
   });
@@ -134,13 +156,23 @@ const cellContent = () => {
     :data-cell-row="props.rowIndex"
     :data-cell-col="props.column.layoutIndex"
     :data-cell-region="props.column.region"
+    :title="labelTitle"
+    :aria-readonly="groupCell.readOnly ? 'true' : undefined"
     :style="cellStyle"
     @pointerdown="(e) => props.onCellMouseDown(props.rowIndex, props.column.layoutIndex, e)"
     @dblclick="() => props.onCellDoubleClick(props.rowIndex, props.column.layoutIndex)"
     @mouseenter="() => props.onCellMouseEnter(props.rowIndex, props.column.layoutIndex)"
     @mouseleave="props.onCellMouseLeave"
   >
-    <component :is="cellContent()" />
+    <GroupLabelCell
+      v-if="groupCell.labelRow !== null && groupLabel !== null && props.rowGroups !== null"
+      :row="groupCell.labelRow"
+      :row-index="props.rowIndex"
+      :label="groupLabel"
+      :context="props.rowGroups"
+    />
+    <template v-else-if="isEmptyCell()"></template>
+    <component :is="cellContent()" v-else />
     <ResizeHandle
       v-if="hasRowHandle"
       axis="row"

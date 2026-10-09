@@ -1,7 +1,13 @@
 // packages/core/src/row-group-layout.ts
 // The label column and the label text of group and total rows (PRD 008 D10).
 
-import type { ColumnDefinition, HierarchyGroupRow, HierarchyTotalRow } from "./types";
+import type {
+  CellValue,
+  ColumnDefinition,
+  HierarchyGroupRow,
+  HierarchyRowKind,
+  HierarchyTotalRow,
+} from "./types";
 import type { ColumnLayoutSnapshot } from "./types/geometry";
 import { formatLabel, type GridLabels } from "./i18n";
 import { formatCellValue } from "./utils";
@@ -36,3 +42,9 @@ export const formatGroupLabel = (
   const value = formatGroupValue(row, columns, labels);
   return formatLabel(labels.rowGroups.label, { value, count });
 };
+
+/** A group or total row cell without an aggregate renders empty, bypassing cell renderers. */
+export const isEmptyGroupCell = (
+  rowKind: HierarchyRowKind | undefined,
+  value: CellValue | undefined,
+): boolean => (rowKind === "group" || rowKind === "total") && value == null;

@@ -33,6 +33,8 @@ export interface EditControllerDeps {
   selection: SelectionManager;
   retainEditColumn: (columnId: string | null) => void;
   refreshSlotData: () => void;
+  /** An empty group or total cell has nothing to peek. */
+  isEmptyGroupCell: (row: number, col: number) => boolean;
 }
 
 export class EditController implements GridEditApi {
@@ -78,6 +80,7 @@ export class EditController implements GridEditApi {
   startPeek(row: number, col: number): boolean {
     const column = this.deps.columnModel.columnAt(col);
     if (column === undefined || column.peekable === false) return false;
+    if (this.deps.isEmptyGroupCell(row, col)) return false;
     return this.deps.editManager.startPeek(row, col);
   }
 

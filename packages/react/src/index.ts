@@ -11,6 +11,7 @@ export type {
   ReactEditRenderer,
   ReactHeaderRenderer,
   ReactGroupHeaderRenderer,
+  ReactGroupLabelRenderer,
   ReactHeaderRendererRegistry,
 } from "./types";
 
@@ -52,6 +53,28 @@ export type {
   // Row ID
   RowId,
   ViewRow,
+
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
 
   // Cell position & range
   CellPosition,
@@ -158,6 +181,8 @@ export {
   isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
+  createRowGrouping,
+  isHierarchicalRowAccess,
 } from "@gp-grid/core";
 
 // Re-export MutableDataSource type

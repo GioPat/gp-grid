@@ -17,6 +17,9 @@ import type {
   GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
   RowId,
   RowResizedEvent,
@@ -43,6 +46,7 @@ export interface BuildGridCoreInputs<TData> {
   labels: GridLabelOverrides | undefined;
   rowResize: boolean;
   autoFit: AutoFitOptions | undefined;
+  rowGrouping: RowGrouping | null | undefined;
   /** Grid root the fit commands measure; `null` on the server, where no host is built. */
   measureRoot: (() => HTMLElement | null) | null;
 }
@@ -57,6 +61,8 @@ export interface BuildGridCoreEmitters<TData> {
   onColumnPinned: (event: ColumnPinnedEvent) => void;
   onFrozenRowsChanged: (state: FrozenRowsState) => void;
   onColumnSchemaRejected: (error: ColumnSchemaError) => void;
+  onRowGroupToggled: (event: RowGroupToggledEvent) => void;
+  onRowGroupingRejected: (rejection: RowGroupingRejection) => void;
 }
 
 export const buildGridCore = <TData>(
@@ -91,6 +97,7 @@ export const buildGridCore = <TData>(
     labels: inputs.labels,
     rowResize: inputs.rowResize,
     autoFit: inputs.autoFit,
+    rowGrouping: inputs.rowGrouping,
     measurementHost,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
@@ -101,5 +108,7 @@ export const buildGridCore = <TData>(
     onColumnPinned: emitters.onColumnPinned,
     onFrozenRowsChanged: emitters.onFrozenRowsChanged,
     onColumnSchemaRejected: emitters.onColumnSchemaRejected,
+    onRowGroupToggled: emitters.onRowGroupToggled,
+    onRowGroupingRejected: emitters.onRowGroupingRejected,
   });
 };

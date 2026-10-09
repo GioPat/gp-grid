@@ -20,8 +20,10 @@ import type {
   DataSource,
   FreezeRowsOptions,
   HighlightingOptions,
+  RowGrouping,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
+import { hierarchicalOf } from './gp-grid-row-groups';
 
 const isSubscribable = (
   dataSource: object,
@@ -55,6 +57,7 @@ export class GpGridBindings<TData = unknown> {
   private resizeObserver: ResizeObserver | null = null;
   private rtl = false;
   private appliedGroups: readonly ColumnGroupChild[] | undefined = undefined;
+  private appliedGrouping: RowGrouping | null | undefined = undefined;
 
   /** Inline direction sampled from the body element; a `dir` flip needs a remount. */
   get isRtl(): boolean {
@@ -110,6 +113,8 @@ export class GpGridBindings<TData = unknown> {
       );
       vm.slots.set(maps.slots);
       vm.headerState.set(maps.headers);
+      const hierarchical = hierarchicalOf(instructions);
+      if (hierarchical !== null) vm.hierarchical.set(hierarchical);
     });
 
     core.initialize();
@@ -223,6 +228,16 @@ export class GpGridBindings<TData = unknown> {
   /** Apply a runtime freeze configuration without recreating the core. */
   syncFreezeRows(config: FreezeRowsOptions | undefined): void {
     this.coreRef?.frozenRows.set(config);
+  }
+
+  /**
+   * Before the core exists this records the grouping it is created with; a
+   * later value reaches that core through `setGrouping`, never a new core.
+   */
+  syncRowGrouping(grouping: RowGrouping | null | undefined): void {
+    if (this.appliedGrouping === grouping) return;
+    this.appliedGrouping = grouping;
+    this.coreRef?.rowGroups.setGrouping(grouping ?? null);
   }
 
   syncRowResize(enabled: boolean): void {

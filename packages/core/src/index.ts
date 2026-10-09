@@ -375,7 +375,7 @@ export { createColumnGroupLookup } from "./column-groups/group-lookup";
 export type { ColumnGroupLookup } from "./column-groups/group-lookup";
 
 /** Group label column and text (PRD 008) */
-export { resolveGroupLabelColumnId, formatGroupLabel } from "./row-group-layout";
+export { resolveGroupLabelColumnId, formatGroupLabel, isEmptyGroupCell } from "./row-group-layout";
 
 /** Localization: shared label model and helpers */
 export {

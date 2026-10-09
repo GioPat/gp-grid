@@ -18,6 +18,7 @@ import { formatLabel } from "@gp-grid/core";
 import GridRow from "./GridRow.vue";
 import GridFrozenRows from "./GridFrozenRows.vue";
 import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
+import type { RowGroupCellContext } from "./row-group-attributes";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{
@@ -64,6 +65,8 @@ const props = defineProps<{
   editRenderers: Record<string, VueEditRenderer>;
   globalCellRenderer?: VueCellRenderer;
   globalEditRenderer?: VueEditRenderer;
+  /** Label column, labels and toggles of a hierarchy; `null` while flat. */
+  rowGroups: RowGroupCellContext | null;
 }>();
 
 const bodyRef = ref<HTMLDivElement | null>(null);
@@ -83,6 +86,7 @@ const cellContext = computed<GridRowCellContext>(() => ({
   editRenderers: props.editRenderers,
   globalCellRenderer: props.globalCellRenderer,
   globalEditRenderer: props.globalEditRenderer,
+  rowGroups: props.rowGroups,
   onCellMouseDown: props.onCellMouseDown,
   onCellDoubleClick: props.onCellDoubleClick,
   onCellMouseEnter: props.onCellMouseEnter,

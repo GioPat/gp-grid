@@ -64,6 +64,7 @@
       [rowDragEntireRow]="true"
       [rowResize]="true"
       [freezeRows]="freezeRows()"
+      [rowGrouping]="rowGrouping()"
       (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>
@@ -109,6 +110,24 @@
       (click)="toggleTallBand()"
     >
       Tall band
+    </button>
+    <!-- Row grouping (PRD 008): regroup and expand, no remount -->
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="groupRows()"
+      [style.opacity]="groupRows() ? 1 : 0.5"
+      (click)="toggleGroupRows()"
+    >
+      Group rows
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [disabled]="groupRows() === false"
+      (click)="expandAllGroups()"
+    >
+      Expand all
     </button>
   </div>
 

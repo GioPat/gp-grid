@@ -18,6 +18,7 @@ import { CellsController } from "./grid-core-cells";
 import { EditController } from "./grid-core-edit";
 import { RowDragController } from "./grid-core-row-drag";
 import { RowGroupsController } from "./grid-core-row-groups";
+import { isEmptyGroupCell } from "./row-group-layout";
 import type { HierarchyChangeDeps } from "./grid-core-hierarchy-change";
 
 export interface ColumnControllersDeps<TData> {
@@ -124,6 +125,8 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
       selection,
       retainEditColumn: deps.retainEditColumn,
       refreshSlotData: () => slotPool.refreshAllSlots(),
+      isEmptyGroupCell: (row, col) =>
+        isEmptyGroupCell(rowData.getHierarchyRow(row)?.kind, rowData.getCellValue(row, col)),
     }),
     rowDrag: new RowDragController({
       config,

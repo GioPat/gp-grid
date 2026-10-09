@@ -11,13 +11,16 @@ export const GRID_BODY_TEMPLATE = `<div
       [style.height.px]="sizerHeight()">
       <ng-template #cellTpl let-slot="slot" let-entry="entry">
         @let editing = isEditing(slot.rowIndex, entry.layoutIndex);
+        @let group = groupCell(slot.row, entry.columnId);
         <div
-          [class]="cellClass(slot.rowIndex, entry.layoutIndex, entry.column, slot.rowData)"
+          [class]="cellClass(slot.rowIndex, entry.layoutIndex, entry.column, slot.rowData, group)"
           role="gridcell"
           [attr.aria-colindex]="displayedIndexOf()(entry.columnId) + 1"
           [attr.data-cell-row]="slot.rowIndex"
           [attr.data-cell-col]="entry.layoutIndex"
           [attr.data-cell-region]="entry.region"
+          [attr.title]="entry.column.tooltip === false || editing ? null : group.label"
+          [attr.aria-readonly]="group.readOnly ? 'true' : null"
           style="position: absolute; top: 0;"
           [style.inset-inline-start.px]="entry.regionOffset"
           [style.width.px]="entry.width"
@@ -26,7 +29,18 @@ export const GRID_BODY_TEMPLATE = `<div
           (mouseleave)="cellPointerLeave.emit()"
           (dblclick)="cellDoubleClick.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
         >
-          @if (editing) {
+          @if (group.labelRow !== null && rowGroups() !== null) {
+            <span gpGridGroupToggle
+              [row]="group.labelRow"
+              [rowIndex]="slot.rowIndex"
+              [context]="rowGroups()!"></span>
+            <span gpGridGroupLabel
+              [row]="group.labelRow"
+              [rowIndex]="slot.rowIndex"
+              [label]="group.label ?? ''"
+              [context]="rowGroups()!"></span>
+          } @else if (emptyGroupCell(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind)) {
+          } @else if (editing) {
             @let etpl = editTemplate(entry.column);
             @if (etpl) {
               <ng-container
@@ -50,22 +64,22 @@ export const GRID_BODY_TEMPLATE = `<div
             @if (tpl) {
               <ng-container
                 [ngTemplateOutlet]="tpl"
-                [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }">
+                [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind) }">
               </ng-container>
             } @else {
-              <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }}</span>
+              <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind) }}</span>
             }
-            @if (rowResize()) {
-              <div
-                gpGridResizeHandle
-                [axis]="'row'"
-                [index]="slot.rowIndex"
-                [size]="slot.height"
-                [resizing]="resizingRow() === slot.rowIndex"
-                (resizePointerDown)="onRowResizePointerDown($event)"
-                (resizeDoubleClick)="resizeDoubleClick.emit($event)">
-              </div>
-            }
+          }
+          @if (rowResize() && editing === false) {
+            <div
+              gpGridResizeHandle
+              [axis]="'row'"
+              [index]="slot.rowIndex"
+              [size]="slot.height"
+              [resizing]="resizingRow() === slot.rowIndex"
+              (resizePointerDown)="onRowResizePointerDown($event)"
+              (resizeDoubleClick)="resizeDoubleClick.emit($event)">
+            </div>
           }
         </div>
       </ng-template>
@@ -143,9 +157,13 @@ export const GRID_BODY_TEMPLATE = `<div
                 </div>
               } @else {
                 <div
-                  [class]="rowClass(slot.rowIndex, slot.rowData)"
+                  [class]="rowClass(slot.rowIndex, slot.rowData, slot.row)"
                   role="row"
                   [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
+                  [attr.data-row-kind]="slot.row?.kind"
+                  [attr.aria-level]="rowAriaLevel(slot.row)"
+                  [attr.aria-expanded]="rowAriaExpanded(slot.row)"
+                  [style.--gp-grid-group-depth]="slot.row?.depth"
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
                   [style.width.px]="innerWidth()"
@@ -184,6 +202,8 @@ export const GRID_BODY_TEMPLATE = `<div
               <div
                 class="gp-grid-frozen-pin-row"
                 role="presentation"
+                [attr.data-row-kind]="slot.row?.kind"
+                [style.--gp-grid-group-depth]="slot.row?.depth"
                 style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                 [style.transform]="'translateY(' + slot.translateY + 'px)'"
                 [style.width.px]="innerWidth()"
@@ -218,9 +238,13 @@ export const GRID_BODY_TEMPLATE = `<div
         @for (slot of suffixSlots(); track slot.slotId) {
           @if (slot.rowIndex >= 0) {
             <div
-              [class]="rowClass(slot.rowIndex, slot.rowData)"
+              [class]="rowClass(slot.rowIndex, slot.rowData, slot.row)"
               role="row"
               [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
+              [attr.data-row-kind]="slot.row?.kind"
+              [attr.aria-level]="rowAriaLevel(slot.row)"
+              [attr.aria-expanded]="rowAriaExpanded(slot.row)"
+              [style.--gp-grid-group-depth]="slot.row?.depth"
               style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
               [style.transform]="'translateY(' + slot.translateY + 'px)'"
               [style.width.px]="innerWidth()"

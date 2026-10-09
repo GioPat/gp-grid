@@ -97,6 +97,8 @@ export class GpGridViewModel {
   readonly announcement = signal<GridAnnouncement | null>(null);
   readonly slots = signal<Map<string, SlotData>>(new Map());
   readonly totalRows = signal<number>(0);
+  /** A hierarchy is bound: the root is a `treegrid` and rows carry their level. */
+  readonly hierarchical = signal<boolean>(false);
   /** Core-resolved displayed-column layout; null until the core publishes. */
   readonly layout = signal<ColumnLayoutSnapshot | null>(null);
   /** Center columns to mount at the committed geometry revision. */

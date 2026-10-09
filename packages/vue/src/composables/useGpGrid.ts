@@ -40,12 +40,16 @@ import type {
   RowRegionLayout,
   SlotData,
   HighlightingOptions,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
 } from "@gp-grid/core";
 import { useGridState } from "../gridState";
 import { useInputHandler } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";
 import { useColumnSchemaSync } from "./useColumnSchemaSync";
+import { createGroupTogglePointerDown, useRowGroupingSync } from "./useRowGroupingSync";
 import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
 
 // =============================================================================
@@ -104,6 +108,12 @@ export interface UseGpGridOptions<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Clamps for the fit commands and the row resize keys. Read at creation. */
   autoFit?: AutoFitOptions;
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping?: RowGrouping | null;
+  /** Called per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+  /** Called when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
@@ -155,6 +165,8 @@ export interface UseGpGridResult<TData = unknown> {
   handleFilterPopupClose: () => void;
   handleCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   handleCellMouseLeave: () => void;
+  /** Pointer down on a group row's expander (`span.gp-grid-group-toggle`): toggles it. */
+  handleGroupTogglePointerDown: (rowIndex: number, e: PointerEvent) => void;
 
   // Drag state
   dragState: Ref<DragState>;
@@ -310,6 +322,9 @@ export function useGpGrid<TData = unknown>(
       onColumnPinned: (event) => options.onColumnPinned?.(event),
       onRowResized: (event) => options.onRowResized?.(event),
       onFrozenRowsChanged: (state) => options.onFrozenRowsChanged?.(state),
+      rowGrouping: options.rowGrouping,
+      onRowGroupToggled: (event) => options.onRowGroupToggled?.(event),
+      onRowGroupingRejected: (rejection) => options.onRowGroupingRejected?.(rejection),
     });
 
     coreRef.value = core;
@@ -424,6 +439,8 @@ export function useGpGrid<TData = unknown>(
     },
   );
 
+  useRowGroupingSync(coreRef, () => options.rowGrouping);
+
   useColumnSchemaSync(coreRef, {
     columns: () => options.columns,
     columnGroups: () => options.columnGroups,
@@ -480,6 +497,7 @@ export function useGpGrid<TData = unknown>(
     handleFilterPopupClose,
     handleCellMouseEnter,
     handleCellMouseLeave,
+    handleGroupTogglePointerDown: createGroupTogglePointerDown(coreRef),
 
     // Drag state
     dragState,

@@ -11,6 +11,7 @@ import type {
 import GridCell from "./GridCell.vue";
 import GridRow from "./GridRow.vue";
 import type { GridRowCellContext } from "./cell-props";
+import { groupDepthStyle } from "./row-group-attributes";
 import type { Row } from "../types";
 
 const CENTER_REGIONS: readonly ColumnRegion[] = ["center"];
@@ -51,13 +52,14 @@ const pinOverlayWidth = (region: "start" | "end"): number | null => {
 const startOverlayWidth = computed(() => pinOverlayWidth("start"));
 const endOverlayWidth = computed(() => pinOverlayWidth("end"));
 
-const pinRowStyle = (translateY: number, height: number): string =>
-  `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${translateY}px); width: ${props.contentWidthPx}px; height: ${height}px; display: flex;`;
+const pinRowStyle = (slot: SlotData<Row>): string =>
+  `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${slot.translateY}px); width: ${props.contentWidthPx}px; height: ${slot.height}px; display: flex;${groupDepthStyle(slot.row)}`;
 
 const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: slot.rowIndex,
   rowData: slot.rowData,
+  row: slot.row,
   rowHeight: slot.height,
   generation: slot.generation,
   column,
@@ -112,7 +114,8 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
           :key="slot.slotId"
           class="gp-grid-frozen-pin-row"
           role="presentation"
-          :style="pinRowStyle(slot.translateY, slot.height)"
+          :data-row-kind="slot.row?.kind"
+          :style="pinRowStyle(slot)"
         >
           <div
             v-if="startPinColumns.length > 0"

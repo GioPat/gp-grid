@@ -7,6 +7,7 @@ import type {
   CellRange,
   CellValue,
   DragState,
+  HierarchyRow,
   ResolvedColumn,
 } from "@gp-grid/core";
 import {
@@ -16,16 +17,23 @@ import {
   isCellInFillPreview,
   buildCellClasses,
   formatCellValue,
+  formatGroupLabel,
+  isEmptyGroupCell,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import { renderEditCell } from "../renderers/editRenderer";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 import { ResizeHandle } from "./ResizeHandle";
 import type { ResizeHandleActions } from "./ResizeHandle";
+import { GroupLabelCell } from "./GroupLabelCell";
+import { groupCellClassName, groupCellOf } from "./row-group-attributes";
+import type { RowGroupCellContext } from "./row-group-attributes";
 
 export interface GridCellProps<TData = unknown> {
   rowIndex: number;
   rowData: TData | undefined;
+  /** The row under a hierarchy; absent while flat. */
+  row?: HierarchyRow;
   /** Height of the cell's row, where a row handle drag starts. */
   rowHeight: number;
   column: ResolvedColumn;
@@ -43,6 +51,7 @@ export interface GridCellProps<TData = unknown> {
   editRenderers: Record<string, ReactEditRenderer>;
   globalCellRenderer?: ReactCellRenderer;
   globalEditRenderer?: ReactEditRenderer;
+  rowGroups: RowGroupCellContext | null;
   onCellMouseDown: (rowIndex: number, colIndex: number, e: React.PointerEvent) => void;
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
@@ -59,6 +68,7 @@ export const GridCell = <TData = unknown>(
   const {
     rowIndex,
     rowData,
+    row,
     rowHeight,
     column,
     displayedIndex,
@@ -73,6 +83,7 @@ export const GridCell = <TData = unknown>(
     editRenderers,
     globalCellRenderer,
     globalEditRenderer,
+    rowGroups,
     onCellMouseDown,
     onCellDoubleClick,
     onCellMouseEnter,
@@ -81,6 +92,11 @@ export const GridCell = <TData = unknown>(
 
   const { column: definition, layoutIndex, width, regionOffset } = column;
   const core = coreRef.current;
+  const groupCell = groupCellOf(row, column.columnId, rowGroups);
+  const groupLabel =
+    groupCell.labelRow !== null && rowGroups !== null
+      ? formatGroupLabel(groupCell.labelRow, rowGroups.columns, rowGroups.labels)
+      : null;
 
   const isEditing = isCellEditing(rowIndex, layoutIndex, editingCell);
   const liveEdit = isEditing ? core?.edit.getState() : null;
@@ -118,6 +134,7 @@ export const GridCell = <TData = unknown>(
     ...highlightCellClasses,
     definition.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
     wrapText ? "gp-grid-cell--wrap" : "",
+    groupCellClassName(groupCell),
   ]
     .filter(Boolean)
     .join(" ");
@@ -128,7 +145,55 @@ export const GridCell = <TData = unknown>(
   const titleText =
     definition.tooltip === false || isEditing
       ? ""
-      : formatCellValue(rawValue, definition.valueFormatter);
+      : groupLabel ?? formatCellValue(rawValue, definition.valueFormatter);
+
+  const content = (): React.ReactNode => {
+    if (groupCell.labelRow !== null && rowGroups !== null) {
+      return (
+        <GroupLabelCell
+          row={groupCell.labelRow}
+          rowIndex={rowIndex}
+          label={groupLabel ?? ""}
+          context={rowGroups}
+        />
+      );
+    }
+    if (isEmptyGroupCell(row?.kind, rawValue)) return null;
+    if (isEditing && editingCell) {
+      return renderEditCell({
+        column: definition,
+        rowData,
+        rawValue,
+        rowId,
+        getValue,
+        rowIndex,
+        colIndex: layoutIndex,
+        initialValue:
+          liveEdit?.editId === editingCell.editId
+            ? liveEdit.currentValue
+            : editingCell.initialValue,
+        editId: editingCell.editId,
+        coreRef,
+        editRenderers,
+        globalEditRenderer,
+      });
+    }
+    return renderCell({
+      column: definition,
+      rowData,
+      rawValue,
+      rowId,
+      getValue,
+      rowIndex,
+      colIndex: layoutIndex,
+      isActive: active,
+      isSelected: selected,
+      isEditing,
+      rowKind: row?.kind,
+      cellRenderers,
+      globalCellRenderer,
+    });
+  };
 
   return (
     <div
@@ -139,6 +204,7 @@ export const GridCell = <TData = unknown>(
       data-cell-col={layoutIndex}
       data-cell-region={column.region}
       title={titleText || undefined}
+      aria-readonly={groupCell.readOnly || undefined}
       style={{
         position: "absolute",
         insetInlineStart: `${regionOffset}px`,
@@ -150,38 +216,7 @@ export const GridCell = <TData = unknown>(
       onMouseEnter={() => onCellMouseEnter(rowIndex, layoutIndex)}
       onMouseLeave={onCellMouseLeave}
     >
-      {isEditing && editingCell
-        ? renderEditCell({
-          column: definition,
-          rowData,
-          rawValue,
-          rowId,
-          getValue,
-          rowIndex,
-          colIndex: layoutIndex,
-          initialValue:
-            liveEdit?.editId === editingCell.editId
-              ? liveEdit.currentValue
-              : editingCell.initialValue,
-          editId: editingCell.editId,
-          coreRef,
-          editRenderers,
-          globalEditRenderer,
-        })
-        : renderCell({
-          column: definition,
-          rowData,
-          rawValue,
-          rowId,
-          getValue,
-          rowIndex,
-          colIndex: layoutIndex,
-          isActive: active,
-          isSelected: selected,
-          isEditing,
-          cellRenderers,
-          globalCellRenderer,
-        })}
+      {content()}
       {rowResize && isEditing === false && (
         <ResizeHandle
           axis="row"

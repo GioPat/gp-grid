@@ -9,11 +9,12 @@ import type {
 } from "@gp-grid/core";
 import { GridCell } from "./GridCell";
 import type { GridCellProps } from "./GridCell";
+import { groupDepthStyle, rowGroupAttributes } from "./row-group-attributes";
 
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext<TData = unknown> = Omit<
   GridCellProps<TData>,
-  "rowIndex" | "rowData" | "rowHeight" | "column" | "displayedIndex"
+  "rowIndex" | "rowData" | "row" | "rowHeight" | "column" | "displayedIndex"
 >;
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -70,6 +71,7 @@ const renderColumn = <TData = unknown>(
     {...cellContext}
     rowIndex={slot.rowIndex}
     rowData={slot.rowData}
+    row={slot.row}
     rowHeight={slot.height}
     column={column}
     displayedIndex={displayedIndexOf(column.columnId)}
@@ -146,14 +148,18 @@ export const GridRow = <TData = unknown>(
 
   const highlightRowClasses =
     cellContext.coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  const rowClassName = ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
+  const { className: kindClassName, ...groupAttributes } = rowGroupAttributes(slot.row);
+  const rowClassName = ["gp-grid-row", kindClassName, ...highlightRowClasses]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
       className={rowClassName}
       role="row"
       aria-rowindex={ariaRowIndex}
-      style={rowBoxStyle(slot.translateY, width, slot.height)}
+      {...groupAttributes}
+      style={{ ...rowBoxStyle(slot.translateY, width, slot.height), ...groupDepthStyle(slot.row) }}
     >
       {regions.includes("center") &&
         center.map((column) => renderColumn(slot, displayedIndexOf, cellContext, column))}

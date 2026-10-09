@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import {
     GpGrid,
     useGridData,
+    createRowGrouping,
     type ColumnDefinition,
     type ColumnGroupChild,
     type HighlightingOptions,
@@ -219,6 +220,22 @@ const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
 const grouped = ref(false);
 const tallBand = ref(false);
 
+// Row grouping (PRD 008): two dimensions, one `sum` and one `avg`, no remount.
+const createDemoRowGrouping = () =>
+    createRowGrouping({
+        dimensions: [{ field: "status" }, { field: "name" }],
+        measures: [
+            { field: "salary", aggregate: "sum" },
+            { field: "age", aggregate: "avg" },
+        ],
+        grandTotal: "top",
+    });
+const groupRows = ref(false);
+const rowGrouping = computed(() => (groupRows.value ? createDemoRowGrouping() : null));
+const expandAllGroups = (): void => {
+    coreOf()?.rowGroups.setExpanded(null, true);
+};
+
 // Create data source via useGridData
 const { dataSource, updateRow } = useGridData<Person>(generateRowData(), {
     getRowId: (row) => row.id,
@@ -334,6 +351,16 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         >
             Tall band
         </button>
+        <button
+            :class="['mode-btn', { active: groupRows }]"
+            :aria-pressed="groupRows"
+            @click="groupRows = !groupRows"
+        >
+            Group rows
+        </button>
+        <button class="mode-btn" :disabled="groupRows === false" @click="expandAllGroups">
+            Expand all
+        </button>
     </div>
 
     <div class="grid-container">
@@ -344,6 +371,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :columns="columns"
             :column-groups="grouped ? demoColumnGroups : undefined"
             :header-band-heights="tallBand ? tallBandHeights : undefined"
+            :row-grouping="rowGrouping"
             :labels="gridLabels"
             :freeze-rows="freezeRows"
             :on-frozen-rows-changed="handleFrozenRowsChanged"

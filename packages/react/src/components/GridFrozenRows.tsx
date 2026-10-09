@@ -10,6 +10,7 @@ import type {
 } from "@gp-grid/core";
 import { GridRow, GridRowPins, rowBoxStyle } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
+import { groupDepthStyle } from "./row-group-attributes";
 
 const CENTER_REGION: readonly ColumnRegion[] = ["center"];
 
@@ -102,7 +103,11 @@ export const GridFrozenRows = <TData = unknown>(
             key={slot.slotId}
             className="gp-grid-frozen-pin-row"
             role="presentation"
-            style={rowBoxStyle(slot.translateY, contentWidthPx, slot.height)}
+            data-row-kind={slot.row?.kind}
+            style={{
+              ...rowBoxStyle(slot.translateY, contentWidthPx, slot.height),
+              ...groupDepthStyle(slot.row),
+            }}
           >
             <GridRowPins
               slot={slot}

@@ -1,7 +1,7 @@
 // PRD 008 D10: the group label column and the label text.
 
 import { describe, expect, it } from "vitest";
-import { formatGroupLabel, resolveGroupLabelColumnId } from "../src/row-group-layout";
+import { formatGroupLabel, isEmptyGroupCell, resolveGroupLabelColumnId } from "../src/row-group-layout";
 import { resolveGridLabels } from "../src/i18n";
 import type { CellValue, ColumnDefinition, HierarchyGroupRow } from "../src/types";
 
@@ -57,5 +57,19 @@ describe("formatGroupLabel", () => {
     expect(formatGroupLabel(total, columns, labels)).toBe("Grand total");
     const custom = resolveGridLabels({ rowGroups: { grandTotal: "Totale ({count})" } });
     expect(formatGroupLabel(total, columns, custom)).toBe("Totale (9)");
+  });
+});
+
+describe("isEmptyGroupCell", () => {
+  it("is empty on a group or total row without an aggregate", () => {
+    expect(isEmptyGroupCell("group", null)).toBe(true);
+    expect(isEmptyGroupCell("total", undefined)).toBe(true);
+  });
+
+  it("keeps aggregates, record rows and flat grids", () => {
+    expect(isEmptyGroupCell("group", 0)).toBe(false);
+    expect(isEmptyGroupCell("total", "")).toBe(false);
+    expect(isEmptyGroupCell("record", null)).toBe(false);
+    expect(isEmptyGroupCell(undefined, null)).toBe(false);
   });
 });

@@ -8,3 +8,5 @@ export type { RenderEditCellOptions } from "./editRenderer";
 
 export { renderHeader, renderGroupHeader } from "./headerRenderer";
 export type { RenderHeaderOptions, RenderGroupHeaderOptions } from "./headerRenderer";
+
+export { renderGroupLabel } from "./groupLabelRenderer";

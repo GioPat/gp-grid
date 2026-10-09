@@ -20,7 +20,11 @@ import type {
   HeaderRendererTemplate,
   HeaderSortEvent,
 } from './components';
-import type { AngularColumnDefinition, AngularColumnGroupChild } from './types';
+import type {
+  AngularColumnDefinition,
+  AngularColumnGroupChild,
+  GroupLabelRendererTemplate,
+} from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
   AutoFitOptions,
@@ -46,6 +50,9 @@ import type {
   GridLabelOverrides,
   HighlightingOptions,
   RowDragEndEvent,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
   RowId,
   RowResizedEvent,
@@ -72,6 +79,7 @@ import { GP_GRID_TEMPLATE } from './gp-grid.template';
 import { GpGridViewModel } from './gp-grid-view-model';
 import { GpGridBindings } from './gp-grid-bindings';
 import { buildGridCore } from './gp-grid.factory';
+import { createRowGroupCells } from './gp-grid-row-groups';
 
 @Component({
   selector: 'gp-grid',
@@ -146,6 +154,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onFrozenRowsChanged = output<FrozenRowsState>();
   /** Fires when a column change is rejected; the previous schema stays. */
   onColumnSchemaRejected = output<ColumnSchemaError>();
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping = input<RowGrouping | null | undefined>(undefined);
+  /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+  groupLabelColumn = input<string | undefined>(undefined);
+  /** Renders the label of a group or total row. */
+  groupLabelRenderer = input<GroupLabelRendererTemplate | null>(null);
+  /** Fires per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled = output<RowGroupToggledEvent>();
+  /** Fires when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected = output<RowGroupingRejection>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
@@ -169,6 +187,17 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     getBody: () => this.body?.scrollContainer?.nativeElement ?? null,
   });
 
+  protected readonly rowGroupCells = createRowGroupCells({
+    hierarchical: this.vm.hierarchical,
+    layout: this.vm.layout,
+    columns: this.vm.effectiveColumns,
+    labels: this.resolvedLabels,
+    groupLabelColumn: this.groupLabelColumn,
+    groupLabelRenderer: this.groupLabelRenderer,
+    onTogglePointerDown: (rowIndex, event) => this.bindings.input.groupTogglePointerDown(rowIndex, event),
+    onToggle: (rowIndex) => this.bindings.coreRef?.input.handleGroupToggle(rowIndex),
+  });
+
   // The Angular group type differs from core's only by its template renderer.
   private readonly coreColumnGroups = computed(
     () => this.columnGroups() as readonly ColumnGroupChild[] | undefined,
@@ -187,11 +216,13 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
     effect(() => this.bindings.syncFreezeRows(this.freezeRows()), { allowSignalWrites: true });
     effect(() => this.bindings.syncRowResize(this.rowResize()));
+    effect(() => this.bindings.syncRowGrouping(this.rowGrouping()), { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
     const columns = this.columns() as unknown as ColumnDefinition[];
     const dataSource = this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows());
+    this.bindings.syncRowGrouping(this.rowGrouping());
     const core = buildGridCore<unknown>(
       {
         columns,
@@ -214,6 +245,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         labels: this.labels(),
         rowResize: this.rowResize(),
         autoFit: this.autoFit(),
+        rowGrouping: this.rowGrouping(),
         measureRoot: this.isBrowser ? () => this.container?.nativeElement ?? null : null,
       },
       {
@@ -226,6 +258,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onColumnPinned: (event) => this.onColumnPinned.emit(event),
         onFrozenRowsChanged: (state) => this.onFrozenRowsChanged.emit(state),
         onColumnSchemaRejected: (error) => this.onColumnSchemaRejected.emit(error),
+        onRowGroupToggled: (event) => this.onRowGroupToggled.emit(event),
+        onRowGroupingRejected: (rejection) => this.onRowGroupingRejected.emit(rejection),
       },
     );
     this.vm.seedHeaderBands({

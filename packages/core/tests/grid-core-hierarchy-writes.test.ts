@@ -74,6 +74,16 @@ describe("hierarchy writes — no editor on group and total rows", () => {
     const { grid } = await setup();
     expect(grid.edit.start(3, AMOUNT)).toBe(true);
   });
+
+  it("opens no peek on a group or total cell without an aggregate", async () => {
+    const { grid } = await setup();
+    const CITY = 1;
+    expect(grid.edit.startPeek(0, CITY)).toBe(false);
+    expect(grid.edit.startPeek(1, CITY)).toBe(false);
+    expect(grid.edit.startPeek(1, AMOUNT)).toBe(true);
+    grid.edit.stopPeek();
+    expect(grid.edit.startPeek(3, CITY)).toBe(true);
+  });
 });
 
 describe("hierarchy writes — toggles (D5)", () => {

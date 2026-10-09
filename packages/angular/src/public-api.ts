@@ -88,6 +88,28 @@ export type {
   RowId,
   ViewRow,
 
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
+
   // Cell position & range
   CellPosition,
   CellRange,
@@ -154,6 +176,8 @@ export {
   isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
+  createRowGrouping,
+  isHierarchicalRowAccess,
 } from '@gp-grid/core';
 
 export type { MutableDataSource } from '@gp-grid/core';
