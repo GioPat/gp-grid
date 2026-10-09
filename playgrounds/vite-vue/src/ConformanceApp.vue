@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, h, nextTick, onMounted, ref, shallowRef, watch } from "vue";
 import { GpGrid, createColumnarDataSource } from "@gp-grid/vue";
 import type {
+  CellRendererParams,
   CellValue,
   DataSource,
   CellValueChangedEvent,
@@ -18,6 +19,7 @@ import type {
   ColumnLayoutMode,
   FreezeRowsOptions,
   GridCore,
+  GroupLabelRendererParams,
   RowDragEndEvent,
   RowLoadingOptions,
   RowResizedEvent,
@@ -62,6 +64,16 @@ import {
   type ColumnGroupsMode,
   type ColumnGroupsSchema,
 } from "./conformance-column-groups";
+import {
+  createRowGroupsFixture,
+  ROW_GROUPS_COLUMN_LAYOUT,
+  ROW_GROUPS_HEADER_HEIGHT,
+  ROW_GROUPS_ROW_HEIGHT,
+  ROW_KIND_PROBE,
+  type RowGroupsArm,
+  type RowGroupsColumnsVariant,
+  type RowGroupsMode,
+} from "./conformance-row-groups";
 
 interface ConformanceRow {
   id: number;
@@ -82,7 +94,8 @@ type FixtureArm =
   | { fixture: "frozen"; mode: FrozenMode }
   | { fixture: "rowHeights"; mode: RowHeightsMode }
   | { fixture: "autoFit"; mode: AutoFitMode }
-  | { fixture: "columnGroups"; mode: ColumnGroupsMode };
+  | { fixture: "columnGroups"; mode: ColumnGroupsMode }
+  | { fixture: "rowGroups"; mode: RowGroupsMode };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -193,6 +206,29 @@ const frozen = createFrozenFixture();
 const rowHeights = createRowHeightsFixture();
 const autoFit = createAutoFitFixture();
 const columnGroups = createColumnGroupsFixture();
+const rowGroups = createRowGroupsFixture();
+// Shallow: the grouping and the columns reach the grid as the fixture's own objects.
+const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
+
+/** PRD 008: prints the renderer's `rowKind`, so a spec can read it. */
+const renderRowKindProbe = (params: CellRendererParams) =>
+  h("span", { class: "rg-kind-probe", "data-probe-kind": params.rowKind ?? "flat" }, String(params.value ?? ""));
+const rowGroupRenderers = { [ROW_KIND_PROBE]: renderRowKindProbe };
+
+/** The external arm's label: the formatted text and a button wired to `toggle`. */
+const renderExternalLabel = (params: GroupLabelRendererParams) =>
+  h("span", { class: "rg-custom-label", "data-row-kind": params.row.kind }, [
+    params.label,
+    params.row.kind === "group"
+      ? h("button", {
+        type: "button",
+        class: "rg-custom-toggle",
+        "aria-label": "Toggle group",
+        style: { width: "14px", height: "14px", marginInlineStart: "4px" },
+        onClick: params.toggle,
+      })
+      : null,
+  ]);
 const arm = ref<FixtureArm>(NO_ARM);
 // Shallow: the hierarchy reaches the core as the caller's own objects.
 const groupsSchema = shallowRef<ColumnGroupsSchema>(columnGroups.schemaFor("off"));
@@ -261,6 +297,8 @@ const frozenMode = computed<FrozenMode>(() => (arm.value.fixture === "frozen" ? 
 const rowHeightsMode = computed<RowHeightsMode>(() => (arm.value.fixture === "rowHeights" ? arm.value.mode : "off"));
 const autoFitMode = computed<AutoFitMode>(() => (arm.value.fixture === "autoFit" ? arm.value.mode : "off"));
 const columnGroupsMode = computed<ColumnGroupsMode>(() => (arm.value.fixture === "columnGroups" ? arm.value.mode : "off"));
+const rowGroupsMode = computed<RowGroupsMode>(() => (arm.value.fixture === "rowGroups" ? arm.value.mode : "off"));
+const rowGroupsActive = computed(() => rowGroupsMode.value !== "off");
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
 const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
@@ -294,6 +332,19 @@ const armColumnGroups = (next: ColumnGroupsMode): void => {
   armFixture({ fixture: "columnGroups", mode: next });
 };
 const useColumnGroups = (): void => armColumnGroups("groups");
+
+/** Row group arms (PRD 008): fresh rows, source and grouping, then a remount. */
+const armRowGroups = (next: RowGroupsMode): void => {
+  rowGroupsArm.value = rowGroups.arm(next);
+  armFixture({ fixture: "rowGroups", mode: next });
+};
+/** In place: the grid keeps its core and regroups or relabels. */
+const setRowGroupColumns = (variant: RowGroupsColumnsVariant): void => {
+  rowGroupsArm.value = { ...rowGroupsArm.value, columns: rowGroups.columnsFor(rowGroupsMode.value, variant) };
+};
+const ungroup = (): void => {
+  rowGroupsArm.value = { ...rowGroupsArm.value, grouping: null };
+};
 const useWideGroups = (): void => armColumnGroups("wide");
 
 // In-place controls: the option stays reactive, so these never touch the
@@ -319,6 +370,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (rowGroupsActive.value) return rowGroups.source();
   if (columnGroupsActive.value) return undefined;
   if (autoFitActive.value) return autoFit.sourceFor(autoFitMode.value);
   if (rowHeightsActive.value) return rowHeights.sourceFor(rowHeightsMode.value);
@@ -329,6 +381,7 @@ const activeDataSource = (): DataSource<never> | undefined => {
 
 /** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
+  if (rowGroupsActive.value) return undefined;
   if (columnGroupsActive.value) {
     return columnGroups.rowDataFor(columnGroupsMode.value) as unknown as ConformanceRow[] | undefined;
   }
@@ -339,6 +392,7 @@ const activeRowData = (): ConformanceRow[] | undefined => {
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  if (rowGroupsActive.value) return rowGroupsArm.value.columns;
   if (columnGroupsActive.value) return groupsSchema.value.columns;
   const fitColumns = autoFitActive.value ? autoFit.columnsFor(autoFitMode.value) : undefined;
   if (fitColumns !== undefined) return fitColumns;
@@ -350,6 +404,7 @@ const activeColumns = (): ColumnDefinition[] => {
 };
 
 const activeRowLoading = (): RowLoadingOptions | undefined => {
+  if (rowGroupsActive.value) return rowGroups.rowLoading();
   if (autoFitActive.value) return autoFit.rowLoadingFor(autoFitMode.value);
   return rowHeightsActive.value
     ? rowHeights.rowLoadingFor(rowHeightsMode.value)
@@ -361,6 +416,7 @@ const activeRowHeight = (): number => {
   if (rowHeightsActive.value) return ROW_HEIGHTS_ROW_HEIGHT;
   if (autoFitActive.value) return AUTO_FIT_ROW_HEIGHT;
   if (columnGroupsActive.value) return COLUMN_GROUPS_ROW_HEIGHT;
+  if (rowGroupsActive.value) return ROW_GROUPS_ROW_HEIGHT;
   return 32;
 };
 
@@ -369,11 +425,13 @@ const activeHeaderHeight = (): number => {
   if (rowHeightsActive.value) return ROW_HEIGHTS_HEADER_HEIGHT;
   if (autoFitActive.value) return AUTO_FIT_HEADER_HEIGHT;
   if (columnGroupsActive.value) return COLUMN_GROUPS_HEADER_HEIGHT;
+  if (rowGroupsActive.value) return ROW_GROUPS_HEADER_HEIGHT;
   return 36;
 };
 
 const activeColumnLayout = (): ColumnLayoutMode => {
   if (autoFitActive.value) return AUTO_FIT_COLUMN_LAYOUT;
+  if (rowGroupsActive.value) return ROW_GROUPS_COLUMN_LAYOUT;
   return columnGroupsActive.value ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout.value;
 };
 
@@ -478,7 +536,8 @@ const onCellValueChanged = (event: CellValueChangedEvent<unknown>): void => {
   editEvents.value += 1;
 };
 
-const onWriteRejected = (_event: CellWriteRejectedEvent): void => {
+const onWriteRejected = (event: CellWriteRejectedEvent): void => {
+  rowGroups.recordWriteRejected(event);
   writeRejected.value += 1;
 };
 
@@ -587,8 +646,9 @@ if (typeof window !== "undefined") {
     columnState: (): ColumnStateSnapshot[] => coreOf()?.columns.getState() ?? [],
     sortColumn: (): string | null => coreOf()?.sortFilter.getSortModel()[0]?.colId ?? null,
     filterCount: (): number => Object.keys(coreOf()?.sortFilter.getFilterModel() ?? {}).length,
-    eventCounts: () => ({ ...eventCounts }),
+    eventCounts: () => ({ ...eventCounts, ...rowGroups.eventCounts() }),
     resetEventCounts: (): void => {
+      rowGroups.resetEventCounts();
       eventCounts.resized = 0;
       eventCounts.moved = 0;
       eventCounts.dragged = 0;
@@ -605,6 +665,7 @@ if (typeof window !== "undefined") {
         bandHeights.value = heights;
       },
     }),
+    ...rowGroups.createHooks(() => coreOf()),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
       if (autoFitActive.value) return autoFit.requestedRanges();
@@ -662,7 +723,22 @@ if (typeof window !== "undefined") {
       <button data-testid="over-budget-move" @click="overBudgetMove">Over budget</button>
       <button data-testid="tall-band" @click="tallBand">Tall band</button>
       <button data-testid="freeze-three" @click="freezeCount(3)">Freeze 3 rows</button>
-      <button data-testid="replace-columns" @click="replaceColumns">Replace columns</button>
+      <button data-testid="use-row-groups" @click="armRowGroups('object')">RG</button>
+      <button data-testid="use-row-groups-columnar" @click="armRowGroups('columnar')">RG col</button>
+      <button data-testid="use-row-groups-external" @click="armRowGroups('external')">RG ext</button>
+      <button data-testid="use-row-groups-paged" @click="armRowGroups('paged')">RG page</button>
+      <button data-testid="expand-all" @click="withCore(rowGroups.expandAll)()">Exp</button>
+      <button data-testid="collapse-all" @click="withCore(rowGroups.collapseAll)()">Col</button>
+      <button data-testid="tall-leaf" @click="withCore(rowGroups.tallLeaf)()">Tall</button>
+      <button data-testid="ungroup" @click="ungroup">Flat</button>
+      <button data-testid="replace-revision" @click="withCore((core) => void rowGroups.replaceRevision(core))()">Rev</button>
+      <button data-testid="format-country" @click="setRowGroupColumns('formatted')">Fmt</button>
+      <button
+        data-testid="replace-columns"
+        @click="rowGroupsActive ? setRowGroupColumns('replaced') : replaceColumns()"
+      >
+        Replace columns
+      </button>
       <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
       <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
       <button data-testid="apply-sort" @click="applySort">Apply sort</button>
@@ -714,6 +790,12 @@ if (typeof window !== "undefined") {
         :on-row-resized="onRowResized"
         :on-column-schema-rejected="onColumnSchemaRejected"
         :on-frozen-rows-changed="frozen.recordFreezeEvent"
+        :cell-renderers="rowGroupRenderers"
+        :row-grouping="rowGroupsActive ? rowGroupsArm.grouping : undefined"
+        :group-label-column="rowGroupsActive ? rowGroups.labelColumn() : undefined"
+        :group-label-renderer="rowGroupsMode === 'external' ? renderExternalLabel : undefined"
+        :on-row-group-toggled="rowGroups.recordToggle"
+        :on-row-grouping-rejected="rowGroups.recordRejection"
       />
     </div>
   </main>

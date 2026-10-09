@@ -109,8 +109,11 @@ export const lastFitResult = (page: Page): Promise<ColumnFitResult | RowFitResul
 export const setColumnWidth = (page: Page, columnId: string, width: number | null): Promise<void> =>
   callHook<void>(page, "setColumnWidth", [columnId, width]);
 
-export const fitEventCounts = (page: Page): Promise<FitEventCounts> =>
-  readHook<FitEventCounts>(page, "eventCounts");
+/** The hook also counts row-group events, which these suites do not own. */
+export const fitEventCounts = async (page: Page): Promise<FitEventCounts> => {
+  const { resized, moved, dragged, pinned, rowResized } = await readHook<FitEventCounts>(page, "eventCounts");
+  return { resized, moved, dragged, pinned, rowResized };
+};
 
 /** Displayed width of a column in the core layout, `-1` when not displayed. */
 export const layoutWidth = async (page: Page, columnId: string): Promise<number> => {
