@@ -3,6 +3,8 @@
 export { Grid, Grid as GpGrid } from "./Grid";
 export { useGridData } from "./useGridData";
 export type { UseGridDataOptions, UseGridDataResult } from "./useGridData";
+export { useRowGroupingSync, useRowGroupCellContext } from "./hooks/useRowGroups";
+export type { RowGroupCellContext, RowGroupCellOptions } from "./hooks/useRowGroups";
 
 export type {
   GridRef,

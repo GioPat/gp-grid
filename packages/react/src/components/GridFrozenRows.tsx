@@ -8,9 +8,8 @@ import type {
   RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
-import { GridRow, GridRowPins, rowBoxStyle } from "./GridRow";
+import { GridRow, GridRowPins, groupDepthStyle, rowBoxStyle } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
-import { groupDepthStyle } from "./row-group-attributes";
 
 const CENTER_REGION: readonly ColumnRegion[] = ["center"];
 

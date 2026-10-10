@@ -18,7 +18,7 @@ import { GridRow } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
 import { GridFrozenRows } from "./GridFrozenRows";
 import type { ResizeHandleActions } from "./ResizeHandle";
-import type { RowGroupCellContext } from "./row-group-attributes";
+import type { RowGroupCellContext } from "../hooks/useRowGroups";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {

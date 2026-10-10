@@ -4,12 +4,13 @@ import React from "react";
 import type {
   ColumnRegion,
   ColumnWindowSnapshot,
+  HierarchyRow,
   ResolvedColumn,
   SlotData,
 } from "@gp-grid/core";
+import { GROUP_DEPTH_PROPERTY, hierarchyRowAttributes } from "@gp-grid/core";
 import { GridCell } from "./GridCell";
 import type { GridCellProps } from "./GridCell";
-import { groupDepthStyle, rowGroupAttributes } from "./row-group-attributes";
 
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext<TData = unknown> = Omit<
@@ -59,6 +60,10 @@ export const rowBoxStyle = (
   height: `${height}px`,
   display: "flex",
 });
+
+/** The custom property the label column's indent reads. */
+export const groupDepthStyle = (row: HierarchyRow | undefined): React.CSSProperties =>
+  row === undefined ? {} : ({ [GROUP_DEPTH_PROPERTY]: row.depth } as React.CSSProperties);
 
 const renderColumn = <TData = unknown>(
   slot: SlotData<TData>,
@@ -148,7 +153,7 @@ export const GridRow = <TData = unknown>(
 
   const highlightRowClasses =
     cellContext.coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  const { className: kindClassName, ...groupAttributes } = rowGroupAttributes(slot.row);
+  const { className: kindClassName, ...groupAttributes } = hierarchyRowAttributes(slot.row);
   const rowClassName = ["gp-grid-row", kindClassName, ...highlightRowClasses]
     .filter(Boolean)
     .join(" ");

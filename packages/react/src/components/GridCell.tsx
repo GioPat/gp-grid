@@ -17,7 +17,7 @@ import {
   isCellInFillPreview,
   buildCellClasses,
   formatCellValue,
-  formatGroupLabel,
+  groupCellOf,
   isEmptyGroupCell,
 } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
@@ -26,8 +26,7 @@ import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 import { ResizeHandle } from "./ResizeHandle";
 import type { ResizeHandleActions } from "./ResizeHandle";
 import { GroupLabelCell } from "./GroupLabelCell";
-import { groupCellClassName, groupCellOf } from "./row-group-attributes";
-import type { RowGroupCellContext } from "./row-group-attributes";
+import type { RowGroupCellContext } from "../hooks/useRowGroups";
 
 export interface GridCellProps<TData = unknown> {
   rowIndex: number;
@@ -93,10 +92,6 @@ export const GridCell = <TData = unknown>(
   const { column: definition, layoutIndex, width, regionOffset } = column;
   const core = coreRef.current;
   const groupCell = groupCellOf(row, column.columnId, rowGroups);
-  const groupLabel =
-    groupCell.labelRow !== null && rowGroups !== null
-      ? formatGroupLabel(groupCell.labelRow, rowGroups.columns, rowGroups.labels)
-      : null;
 
   const isEditing = isCellEditing(rowIndex, layoutIndex, editingCell);
   const liveEdit = isEditing ? core?.edit.getState() : null;
@@ -134,7 +129,7 @@ export const GridCell = <TData = unknown>(
     ...highlightCellClasses,
     definition.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
     wrapText ? "gp-grid-cell--wrap" : "",
-    groupCellClassName(groupCell),
+    groupCell.className,
   ]
     .filter(Boolean)
     .join(" ");
@@ -142,21 +137,17 @@ export const GridCell = <TData = unknown>(
   // Native tooltip: show the formatted value on hover so users can read
   // content that's clipped by the cell width. Opt out per column with
   // `tooltip: false`. Suppressed while editing (the input shows its value).
-  const titleText =
-    definition.tooltip === false || isEditing
-      ? ""
-      : groupLabel ?? formatCellValue(rawValue, definition.valueFormatter);
+  const titleOf = (): string => {
+    if (definition.tooltip === false || isEditing) return "";
+    if (groupCell.labelRow !== null) return groupCell.label;
+    return formatCellValue(rawValue, definition.valueFormatter);
+  };
+  const titleText = titleOf();
 
   const content = (): React.ReactNode => {
-    if (groupCell.labelRow !== null && rowGroups !== null) {
-      return (
-        <GroupLabelCell
-          row={groupCell.labelRow}
-          rowIndex={rowIndex}
-          label={groupLabel ?? ""}
-          context={rowGroups}
-        />
-      );
+    const { labelRow, label } = groupCell;
+    if (labelRow !== null && rowGroups !== null) {
+      return <GroupLabelCell row={labelRow} rowIndex={rowIndex} label={label} context={rowGroups} />;
     }
     if (isEmptyGroupCell(row?.kind, rawValue)) return null;
     if (isEditing && editingCell) {

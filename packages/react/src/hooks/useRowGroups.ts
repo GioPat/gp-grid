@@ -1,36 +1,35 @@
 // packages/react/src/hooks/useRowGroups.ts
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type React from "react";
 import type {
   ColumnDefinition,
   ColumnLayoutSnapshot,
   GridCore,
   GridLabels,
+  GroupCellInput,
   RowGrouping,
 } from "@gp-grid/core";
 import { groupTogglePointerDown, resolveGroupLabelColumnId } from "@gp-grid/core";
-import type { RowGroupCellContext } from "../components/row-group-attributes";
 import type { ReactGroupLabelRenderer } from "../types";
 
 type CoreRef<TData> = React.RefObject<GridCore<TData> | null>;
 
-/**
- * The grouping the current core holds. Creation reads and records it; a later
- * `rowGrouping` reaches that core through `setGrouping`, never a new core.
- */
+/** Shared by every cell while a hierarchy is bound; `null` while flat. */
+export type RowGroupCellContext = GroupCellInput & {
+  renderer?: ReactGroupLabelRenderer;
+  onTogglePointerDown: (rowIndex: number, e: React.PointerEvent) => void;
+  onToggle: (rowIndex: number) => void;
+};
+
+/** A later `rowGrouping` reaches the current core through `setGrouping`, never a new core. */
 export const useRowGroupingSync = <TData>(
   coreRef: CoreRef<TData>,
   rowGrouping: RowGrouping | null | undefined,
-): React.MutableRefObject<RowGrouping | null | undefined> => {
-  const appliedRef = useRef(rowGrouping);
+): void => {
   useEffect(() => {
-    const core = coreRef.current;
-    if (core === null || appliedRef.current === rowGrouping) return;
-    appliedRef.current = rowGrouping;
-    core.rowGroups.setGrouping(rowGrouping ?? null);
+    coreRef.current?.rowGroups.setGrouping(rowGrouping ?? null);
   }, [coreRef, rowGrouping]);
-  return appliedRef;
 };
 
 export interface RowGroupCellOptions {

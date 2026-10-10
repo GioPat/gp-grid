@@ -2,8 +2,9 @@
 
 import React from "react";
 import type { HierarchyGroupRow, HierarchyTotalRow } from "@gp-grid/core";
+import { groupLabelParams, groupToggleClassName } from "@gp-grid/core";
 import { renderGroupLabel } from "../renderers/groupLabelRenderer";
-import type { RowGroupCellContext } from "./row-group-attributes";
+import type { RowGroupCellContext } from "../hooks/useRowGroups";
 
 export interface GroupLabelCellProps {
   row: HierarchyGroupRow | HierarchyTotalRow;
@@ -13,35 +14,26 @@ export interface GroupLabelCellProps {
 }
 
 // The cell's own double-click toggles too, so a double-click on the expander
-// must not reach it after its two pointer downs already toggled (D5).
+// must not reach it after its two pointer downs already toggled.
 const stopDoubleClick = (e: React.MouseEvent): void => e.stopPropagation();
 
 /** Content of a group or total row's label cell: the expander and the label. */
 export const GroupLabelCell = (props: GroupLabelCellProps): React.ReactNode => {
   const { row, rowIndex, label, context } = props;
-  const isGroup = row.kind === "group";
-  const toggle = (): void => {
-    if (isGroup) context.onToggle(rowIndex);
+  const onPointerDown = (e: React.PointerEvent): void => {
+    if (row.kind === "group") context.onTogglePointerDown(rowIndex, e);
   };
-
-  const toggleClassName = [
-    "gp-grid-group-toggle",
-    isGroup ? "" : "gp-grid-group-toggle--none",
-    isGroup && row.expanded ? "gp-grid-group-toggle--expanded" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
 
   return (
     <>
       <span
-        className={toggleClassName}
+        className={groupToggleClassName(row)}
         aria-hidden="true"
-        onPointerDown={isGroup ? (e) => context.onTogglePointerDown(rowIndex, e) : undefined}
+        onPointerDown={onPointerDown}
         onDoubleClick={stopDoubleClick}
       />
       <span className="gp-grid-group-label">
-        {renderGroupLabel({ row, viewIndex: rowIndex, label, toggle }, context.renderer)}
+        {renderGroupLabel(groupLabelParams(row, rowIndex, label, context.onToggle), context.renderer)}
       </span>
     </>
   );

@@ -21,6 +21,7 @@ import {
   TouchScrollController,
   PendingScrollLatch,
   defaultPinIcon,
+  isMutableDataSource,
   resolveGridLabels,
 } from "@gp-grid/core";
 import type {
@@ -251,7 +252,7 @@ export function Grid<TData = unknown>(
   onRowGroupToggledRef.current = onRowGroupToggled;
   const onRowGroupingRejectedRef = useRef(onRowGroupingRejected);
   onRowGroupingRejectedRef.current = onRowGroupingRejected;
-  const appliedGroupingRef = useRowGroupingSync(coreRef, rowGrouping);
+  useRowGroupingSync(coreRef, rowGrouping);
 
   // Ref for dataSource so initial core gets the right one without being in the dep array
   const dataSourceRef = useRef(dataSource);
@@ -325,7 +326,6 @@ export function Grid<TData = unknown>(
     hasInitializedRef.current = true;
 
     appliedSchemaRef.current = { columns, columnGroups };
-    appliedGroupingRef.current = rowGrouping;
     const core = new GridCore<TData>({
       columns,
       columnGroups,
@@ -477,15 +477,10 @@ export function Grid<TData = unknown>(
 
   // Subscribe to data source changes (for MutableDataSource)
   useEffect(() => {
-    const mutableDataSource = dataSource as {
-      subscribe?: (listener: () => void) => () => void;
-    };
-    if (mutableDataSource.subscribe) {
-      const unsubscribe = mutableDataSource.subscribe(() => {
-        coreRef.current?.refreshFromTransaction();
-      });
-      return unsubscribe;
-    }
+    if (isMutableDataSource(dataSource) === false) return;
+    return dataSource.subscribe(() => {
+      coreRef.current?.refreshFromTransaction();
+    });
   }, [dataSource]);
 
   // Handle reactive highlighting changes without re-creating core

@@ -37,4 +37,4 @@ export { CellPeek } from "./CellPeek";
 export type { CellPeekProps } from "./CellPeek";
 export { GroupLabelCell } from "./GroupLabelCell";
 export type { GroupLabelCellProps } from "./GroupLabelCell";
-export type { RowGroupCellContext } from "./row-group-attributes";
+export type { RowGroupCellContext } from "../hooks/useRowGroups";
