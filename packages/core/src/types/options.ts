@@ -181,7 +181,7 @@ export interface GridCoreOptions<TData = unknown> {
   rowGrouping?: RowGrouping | null;
   /** Called per group a pointer or key gesture toggled; commands stay silent. */
   onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
-  /** Called when a grouping is rejected; the grid stays flat. */
+  /** Called when a grouping is rejected; the source's own rows render ungrouped. */
   onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;

@@ -126,6 +126,6 @@ export class RowViewBinder<TData> {
     if (this.warned.has(rejection.reason)) return;
     this.warned.add(rejection.reason);
     const field = rejection.field === undefined ? "" : ` (${rejection.field})`;
-    console.warn(`[gp-grid] rowGrouping rejected: ${rejection.reason}${field}; the grid stays flat.`);
+    console.warn(`[gp-grid] rowGrouping rejected: ${rejection.reason}${field}; the grouping is not applied.`);
   }
 }

@@ -146,6 +146,7 @@ export type {
   RowGroupResult,
   RowGrouping,
   RowGroupingConfig,
+  FlatRowSource,
   RowGroupDimension,
   RowGroupMeasure,
   RowGroupAggregator,
