@@ -34,6 +34,21 @@ const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?
 const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
   Math.min(Math.trunc(range?.end ?? extent), extent);
 
+/** Reads ids straight from the hierarchy: this loop runs over every view row after a toggle. */
+const locateInHierarchy = (
+  hierarchy: HierarchicalRowAccess<unknown>,
+  ids: ReadonlySet<RowId>,
+  range?: AxisBounds,
+): Map<RowId, number> => {
+  const found = new Map<RowId, number>();
+  const end = rangeEnd(range, hierarchy.rowCount);
+  for (let index = rangeStart(range); index < end && found.size < ids.size; index += 1) {
+    const rowId = hierarchy.getRowId(index);
+    if (ids.has(rowId)) found.set(rowId, index);
+  }
+  return found;
+};
+
 /**
  * Owns the row cache, the bound scalar access, the row count and the bound
  * hierarchy, and answers every row read and write by view index: through the
@@ -120,24 +135,24 @@ export class RowStore<TData = unknown> {
    * the resident rows, O(resident), and stops once every id has been found.
    */
   locateIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    if (this.hierarchy) return locateInHierarchy(this.hierarchy, ids, range);
+    if (this.rowAccess) return this.locateInAccess(this.rowAccess.rowCount, ids, range);
+    return this.locateInCache(ids, range);
+  }
+
+  private locateInAccess(rowCount: number, ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    const found = new Map<RowId, number>();
+    const end = rangeEnd(range, rowCount);
+    for (let index = rangeStart(range); index < end && found.size < ids.size; index += 1) {
+      this.collectFlat(found, index, ids);
+    }
+    return found;
+  }
+
+  /** A paged cache has gaps, so it walks the loaded positions instead of the range. */
+  private locateInCache(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
     const found = new Map<RowId, number>();
     const first = rangeStart(range);
-    const { hierarchy } = this;
-    if (hierarchy) {
-      const end = rangeEnd(range, hierarchy.rowCount);
-      for (let index = first; index < end && found.size < ids.size; index += 1) {
-        const rowId = hierarchy.getRowId(index);
-        if (ids.has(rowId)) found.set(rowId, index);
-      }
-      return found;
-    }
-    if (this.rowAccess) {
-      const end = rangeEnd(range, this.rowAccess.rowCount);
-      for (let index = first; index < end && found.size < ids.size; index += 1) {
-        this.collectFlat(found, index, ids);
-      }
-      return found;
-    }
     const end = rangeEnd(range, Number.MAX_SAFE_INTEGER);
     for (const index of this.cachedRows.keys()) {
       if (found.size === ids.size) break;
