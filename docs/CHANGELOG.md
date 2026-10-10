@@ -78,6 +78,9 @@ All notable changes to gp-grid will be documented in this file.
 
 ### Changed
 
+#### Typed edit commits
+- An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"` on a `number` column stores `60000`. A draft that cannot be converted writes nothing and keeps the previous value; a value a custom `editRenderer` already typed is stored unchanged. This applies to flat grids too.
+
 #### GridCore API (1.0)
 - **Breaking (0.x → 1.0):** GridCore API grouped into namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowDrag`, `viewport`), typed by the exported `GridRowsApi`, `GridCellsApi`, `GridEditApi`, `GridColumnsApi`, `GridFrozenRowsApi`, `GridRowDragApi` and `GridViewportApi`. No forwarders remain. The root keeps `initialize`, `destroy`, `onBatchInstruction`, `setViewport`, `setDataSource`, `refresh`, `refreshFromTransaction` and the `geometry`, `selection`, `fill`, `input`, `highlight` and `sortFilter` members. `sortFilter.setSort`, `setFilter` and `openFilterPopup` ignore calls while a load is in flight, as the removed root copies did.
 

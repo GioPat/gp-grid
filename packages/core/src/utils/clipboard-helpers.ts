@@ -143,3 +143,14 @@ const coerceObject = (
 };
 
 const isValidDate = (value: Date): boolean => Number.isFinite(value.getTime());
+
+/** An editor's text draft is coerced like a pasted cell; a typed value passes through. */
+export const coerceEditValue = (
+  value: CellValue,
+  column: ColumnDefinition | undefined,
+): CoerceClipboardValueResult => {
+  if (typeof value === "string" && column !== undefined) {
+    return coerceClipboardValue({ value, text: value }, column);
+  }
+  return { ok: true, value };
+};

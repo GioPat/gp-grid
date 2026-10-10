@@ -50,7 +50,7 @@ const expandPath = async (page: Page, country: unknown, cities: readonly string[
   return viewRows(page);
 };
 
-/** The sums the engine must report for the records as the grid wrote them. */
+/** The sums the engine must report for the records the grid holds. */
 const expectSumsMatchRecords = async (page: Page): Promise<void> => {
   const leaves = await records(page);
   const rows = await viewRows(page);
@@ -66,14 +66,18 @@ test("AC-008-04 a leaf edit refolds its group and the total", async ({ page }, t
   const rows = await expandPath(page, "IT", ["City 0"]);
   const it = groupIndex(rows, "IT");
   const leaf = indexOfId(rows, IT_CITY0_SECOND);
+  const before = (await records(page)).find((record) => record.id === IT_CITY0_SECOND)!.amount;
+  const delta = 100 - before;
 
   await cell(page, leaf, AMOUNT).dblclick();
   await editor(page).fill("100");
   await editor(page).press("Enter");
 
   await expect(editor(page)).toHaveCount(0);
-  await expect.poll(async () => (await viewRows(page))[it]!.values.amount).not.toBe(rows[it]!.values.amount);
-  expect((await viewRows(page))[0]!.values.amount).not.toBe(rows[0]!.values.amount);
+  // The editor's text is stored as a number, so it enters the sums.
+  await expect.poll(async () => (await viewRows(page))[it]!.values.amount).toBe((rows[it]!.values.amount as number) + delta);
+  expect((await viewRows(page))[0]!.values.amount).toBe((rows[0]!.values.amount as number) + delta);
+  expect((await records(page)).find((record) => record.id === IT_CITY0_SECOND)!.amount).toBe(100);
   await expectSumsMatchRecords(page);
   expect(pageErrors).toEqual([]);
 });

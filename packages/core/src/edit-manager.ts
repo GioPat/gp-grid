@@ -9,10 +9,7 @@ import type {
   RowId,
 } from "./types";
 import { createInstructionEmitter, createWriteRejection } from "./utils";
-
-// =============================================================================
-// Types
-// =============================================================================
+import { coerceEditValue } from "./utils/clipboard-helpers";
 
 export interface EditManagerOptions {
   /** Get column definition by index */
@@ -45,10 +42,6 @@ export interface EditManagerOptions {
   onEditEnd?: () => void;
 }
 
-// =============================================================================
-// EditManager
-// =============================================================================
-
 /**
  * Manages cell editing state and operations.
  */
@@ -61,17 +54,12 @@ export class EditManager {
   private readonly options: EditManagerOptions;
   private readonly emitter = createInstructionEmitter();
 
-  // Public API delegates to emitter
   onInstruction = this.emitter.onInstruction;
   private readonly emit = this.emitter.emit;
 
   constructor(options: EditManagerOptions) {
     this.options = options;
   }
-
-  // ===========================================================================
-  // State Accessors
-  // ===========================================================================
 
   /**
    * Get the current edit state.
@@ -97,10 +85,6 @@ export class EditManager {
       this.editState.col === col
     );
   }
-
-  // ===========================================================================
-  // Edit Operations
-  // ===========================================================================
 
   /**
    * Whether `startEdit` would open: the column is editable, the row, when
@@ -179,10 +163,6 @@ export class EditManager {
     });
   }
 
-  // ===========================================================================
-  // Peek (read-only multi-line overlay)
-  // ===========================================================================
-
   /**
    * Get the cell currently shown in a peek overlay, or null.
    */
@@ -242,24 +222,24 @@ export class EditManager {
 
     const { row, col, currentValue } = this.editState;
 
-    if (this.isEditAssignmentCurrent(row) === false) {
+    const coerced = coerceEditValue(currentValue, this.options.getColumn(col));
+    // Like paste, a draft the column type cannot hold is dropped, not written.
+    if (coerced.ok === false || this.isEditAssignmentCurrent(row) === false) {
       this.cancel();
       return;
     }
 
     this.options.beginWrites?.();
     try {
-      this.commitValue(row, col, currentValue);
+      this.commitValue(row, col, coerced.value);
     } finally {
       this.options.endWrites?.();
     }
   }
 
   private commitValue(row: number, col: number, currentValue: CellValue): void {
-    // Update the cell value
     this.options.setCellValue(row, col, currentValue);
 
-    // Emit commit instruction
     this.emit({
       type: "COMMIT_EDIT",
       row,
@@ -267,12 +247,10 @@ export class EditManager {
       value: currentValue,
     });
 
-    // Clear edit state
     this.editState = null;
     this.editGeneration = -1;
     this.editRowId = undefined;
     this.emit({ type: "STOP_EDIT" });
-
     // Notify that edit was committed (for slot update)
     this.options.onCommit?.(row, col, currentValue);
     this.options.onEditEnd?.();
@@ -302,10 +280,6 @@ export class EditManager {
     this.emit({ type: "STOP_EDIT" });
     this.options.onEditEnd?.();
   }
-
-  // ===========================================================================
-  // Cleanup
-  // ===========================================================================
 
   /**
    * Clean up resources for garbage collection.
