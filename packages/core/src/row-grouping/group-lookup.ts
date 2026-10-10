@@ -30,23 +30,37 @@ const insertPath = (root: PathNode, tree: GroupTree, id: RowId): void => {
   node.ids.push(id);
 };
 
-const walkChildren = (tree: GroupTree, node: PathNode, first: number, end: number, visit: Visit): void => {
-  for (let group = first; group < end; group = tree.end[group]!) {
-    const child = node.children[tree.tag[group]!]?.get(tree.key[group]!);
-    if (child !== undefined) visitNode(tree, child, group, visit);
-  }
-};
+/** The siblings `[group, end)` still to match against `node`'s children. */
+interface Frame {
+  node: PathNode;
+  group: number;
+  end: number;
+}
 
-const visitNode = (tree: GroupTree, node: PathNode, group: number, visit: Visit): void => {
-  for (const id of node.ids) visit(id, group);
-  if (node.children.length > 0) walkChildren(tree, node, group + 1, tree.end[group]!, visit);
+/** Pre-order over the named subtrees; an explicit stack so the bundler can drop it from a flat consumer. */
+const walk = (tree: GroupTree, root: PathNode, visit: Visit): void => {
+  const stack: Frame[] = [{ node: root, group: 0, end: tree.groupCount }];
+  while (stack.length > 0) {
+    const frame = stack.at(-1)!;
+    if (frame.group >= frame.end) {
+      stack.pop();
+      continue;
+    }
+    const group = frame.group;
+    const end = tree.end[group]!;
+    frame.group = end;
+    const child = frame.node.children[tree.tag[group]!]?.get(tree.key[group]!);
+    if (child === undefined) continue;
+    for (const id of child.ids) visit(id, group);
+    if (child.children.length > 0) stack.push({ node: child, group: group + 1, end });
+  }
 };
 
 /** Calls `visit` for every id naming a group of `tree`; other ids are skipped. */
 export const findGroups = (tree: GroupTree, ids: Iterable<RowId>, visit: Visit): void => {
   const root = newNode();
   for (const id of ids) insertPath(root, tree, id);
-  if (root.children.length > 0) walkChildren(tree, root, 0, tree.groupCount, visit);
+  if (root.children.length > 0) walk(tree, root, visit);
 };
 
 /** The group `id` names, or -1. */

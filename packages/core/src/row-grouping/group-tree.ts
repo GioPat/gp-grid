@@ -159,14 +159,22 @@ export const buildGroupTree = (
   return byMeasure && ordering !== undefined ? orderByMeasure(tree, orders, ordering.measureValues) : tree;
 };
 
-/** The group's id, built from its parent's on first use and cached. */
+/** The group's id, built down from its nearest cached ancestor and cached. Iterative so the bundler can drop it from a flat consumer. */
 export const groupIdOf = (tree: GroupTree, group: number): string => {
   const cached = tree.ids[group];
   if (cached !== undefined) return cached;
-  const parent = tree.parent[group]!;
-  const parentId = parent < 0 ? null : groupIdOf(tree, parent);
-  const dimension = tree.dimensions[tree.depth[group]!]!;
-  const id = childGroupId(parentId, dimension.id, tree.tag[group]!, tree.key[group]!);
-  tree.ids[group] = id;
-  return id;
+  const pending: number[] = [];
+  let ancestor = group;
+  while (ancestor >= 0 && tree.ids[ancestor] === undefined) {
+    pending.push(ancestor);
+    ancestor = tree.parent[ancestor]!;
+  }
+  let parentId = ancestor < 0 ? null : tree.ids[ancestor]!;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    const dimension = tree.dimensions[tree.depth[current]!]!;
+    parentId = childGroupId(parentId, dimension.id, tree.tag[current]!, tree.key[current]!);
+    tree.ids[current] = parentId;
+  }
+  return tree.ids[group]!;
 };
