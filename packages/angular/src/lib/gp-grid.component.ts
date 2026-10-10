@@ -212,7 +212,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     );
     effect(() => this.bindings.syncHeaderBandHeights(this.headerBandHeights()), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
-    effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncRows(this.rows(), this.dataSource() ?? null), { allowSignalWrites: true });
     effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
     effect(() => this.bindings.syncFreezeRows(this.freezeRows()), { allowSignalWrites: true });
     effect(() => this.bindings.syncRowResize(this.rowResize()));
@@ -221,7 +221,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const columns = this.columns() as unknown as ColumnDefinition[];
-    const dataSource = this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows());
+    const dataSource = this.bindings.dataSourceOwner.initialize(this.dataSource() ?? null, this.rows());
     this.bindings.syncRowGrouping(this.rowGrouping());
     const core = buildGridCore<unknown>(
       {
