@@ -469,11 +469,11 @@ export function useInputHandler<TData = unknown>(
     const container = containerRef.value;
     if (!core?.input || !container) return;
 
-    const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening);
+    const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening, e.deltaMode);
     if (dampened) {
       e.preventDefault();
       if (options.scrollByWheel?.(dampened.dy) !== true) container.scrollTop += dampened.dy;
-      container.scrollLeft += dampened.dx;
+      if (dampened.dx !== 0) container.scrollLeft += dampened.dx;
     }
   }
 

@@ -8,11 +8,13 @@ import type {
   CellValue,
   DragState,
   GridCore,
+  HierarchyRow,
   ResizeTarget,
   ResolvedColumn,
 } from "@gp-grid/core";
 import type { InjectionKey, Ref } from "vue";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
+import type { RowGroupCellContext } from "../composables/useRowGroupingSync";
 
 /**
  * Hover position for the highlight classes. Injected rather than passed as a
@@ -25,6 +27,8 @@ export const HOVER_POSITION: InjectionKey<Readonly<Ref<CellPosition | null>>> =
 export interface GridCellProps {
   rowIndex: number;
   rowData: Row | undefined;
+  /** The row under a hierarchy; absent while flat. */
+  row?: HierarchyRow;
   /** The row's height, where a row handle drag starts. */
   rowHeight: number;
   /** Region-local geometry: `regionOffset` is the inset inside its region. */
@@ -47,6 +51,8 @@ export interface GridCellProps {
   editRenderers: Record<string, VueEditRenderer>;
   globalCellRenderer?: VueCellRenderer;
   globalEditRenderer?: VueEditRenderer;
+  /** Label column, labels and toggles of a hierarchy; `null` while flat. */
+  rowGroups: RowGroupCellContext | null;
   onCellMouseDown: (rowIndex: number, colIndex: number, e: PointerEvent) => void;
   onCellDoubleClick: (rowIndex: number, colIndex: number) => void;
   onCellMouseEnter: (rowIndex: number, colIndex: number) => void;
@@ -60,5 +66,5 @@ export interface GridCellProps {
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext = Omit<
   GridCellProps,
-  "rowIndex" | "rowData" | "rowHeight" | "column" | "displayedIndex" | "generation"
+  "rowIndex" | "rowData" | "row" | "rowHeight" | "column" | "displayedIndex" | "generation"
 >;

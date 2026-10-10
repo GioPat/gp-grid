@@ -6,6 +6,7 @@ import type {
   KeyboardResult,
   ResizeTarget,
 } from "../types/input";
+import { groupTogglePointerDown as toggleGroupOnPointerDown } from "../input";
 import { toPointerEventData } from "./pointer-event";
 import { normalizeHorizontalKey, readContainerBounds, readIsRtl } from "./inline-axis";
 import type { AutoScrollDriver } from "./auto-scroll";
@@ -114,6 +115,11 @@ export class InputEventAdapter<TData = unknown> {
     };
   }
 
+  /** The expander toggles its group; the cell beneath sees no pointer down. */
+  groupTogglePointerDown(rowIndex: number, event: PointerEvent): void {
+    toggleGroupOnPointerDown(this.deps.getCore(), rowIndex, event);
+  }
+
   cellPointerEnter(rowIndex: number, colIndex: number): void {
     this.deps.getCore()?.input.handleCellMouseEnter(rowIndex, colIndex);
   }
@@ -177,10 +183,10 @@ export class InputEventAdapter<TData = unknown> {
     return { wasRowDrag };
   }
 
-  wheel(deltaY: number, deltaX: number, dampening: number): { dy: number; dx: number } | null {
+  wheel(event: WheelEvent, dampening: number): { dy: number; dx: number } | null {
     const core = this.deps.getCore();
     if (core === null) return null;
-    return core.input.handleWheel(deltaY, deltaX, dampening);
+    return core.input.handleWheel(event.deltaY, event.deltaX, dampening, event.deltaMode);
   }
 
   keyDown(

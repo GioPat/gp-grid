@@ -82,7 +82,7 @@ Every UI change is one of these instructions. Each wrapper has its own dispatch 
 |---|---|
 | `CREATE_SLOT` | Create a new row container in your DOM pool. |
 | `DESTROY_SLOT` | Remove a slot from your pool. |
-| `ASSIGN_SLOT` | Bind row data + row index to an existing slot. |
+| `ASSIGN_SLOT` | Bind row data + row index to an existing slot. Under a hierarchy it carries `row` (`HierarchyRow`: kind, id, depth), published as `SlotData.row`. |
 | `MOVE_SLOT` | Update a slot's `translateY` (vertical position). |
 | `SET_ACTIVE_CELL` | Update the active cell highlight. |
 | `SET_SELECTION_RANGE` | Update the selected range highlight. |
@@ -91,7 +91,7 @@ Every UI change is one of these instructions. Each wrapper has its own dispatch 
 | `UPDATE_HEADER` | Re-render header (sort indicator changed, filter applied, etc.). |
 | `START_FILL` / `UPDATE_FILL` / `COMMIT_FILL` / `CANCEL_FILL` | Fill handle drag lifecycle. |
 | `OPEN_FILTER_POPUP` / `CLOSE_FILTER_POPUP` | Filter UI lifecycle. |
-| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle (show/hide loading overlay). |
+| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle (show/hide loading overlay). `DATA_LOADED.hierarchical` is `true` while a hierarchy is bound (`GridState.hierarchical`). |
 | `ROWS_ADDED` / `ROWS_REMOVED` / `ROWS_UPDATED` / `TRANSACTION_PROCESSED` | Mutable data source events. |
 | `COLUMNS_CHANGED` | Columns replaced — schema reconciles by id in one batch (surviving ids keep live state, definition order is authoritative), then `REMOVE_HEADERS` drops headers for ids no longer present. |
 | `START_COLUMN_RESIZE` / `UPDATE_COLUMN_RESIZE` / `COMMIT_COLUMN_RESIZE` / `CANCEL_COLUMN_RESIZE` | Column resize lifecycle. |
@@ -156,6 +156,33 @@ import {
 
 These exist because every wrapper needs them. Use them instead of reinventing.
 
+**Wheel.** `grid.input.handleWheel(e.deltaY, e.deltaX, dampening, e.deltaMode)`
+(or `adapter.wheel(e, dampening)` on `InputEventAdapter`) returns `null` unless
+the grid is scaled; otherwise `preventDefault()` and apply `{ dy, dx }`, both in
+pixels. Only `dy` is dampened. Pass `dy` to `TouchScrollController.scrollByWheel`
+and write it to `scrollTop` yourself only when that returns `false`.
+
+**Scroll motion.** While a touch fling or a wheel glide is moving the content
+(`grid.viewport.isScrollMotionActive()`), a press only stops it: the pointer
+entry points of `grid.input` (cell, header click, column move and resize, row
+resize, fill handle, group toggle) return
+`{ preventDefault: true, stopPropagation: true }` and do nothing else, so apply
+the result as usual. `grid.viewport.interruptScrollMotion()` stops the motion on
+demand. `TouchScrollController` registers itself; a custom scroller registers a
+`ScrollMotionHandle` (`{ isActive(), interrupt() }`) with
+`grid.viewport.setScrollMotionHandle(handle)` and removes it with
+`clearScrollMotionHandle(handle)`.
+
+**Group expander.** Route its pointer down to
+`adapter.groupTogglePointerDown(rowIndex, event)`, to the standalone
+`groupTogglePointerDown(grid, rowIndex, event)` when you hold the core yourself,
+or call `grid.input.handleGroupToggle(rowIndex, event.pointerType)` after
+`event.stopPropagation()`, and stop its `dblclick` too: a double-click on a group
+row already toggles through `handleCellDoubleClick`.
+
+**Edit commits** are coerced by the column's `cellDataType`, like paste, so a
+text draft on a `number` column is stored as a number.
+
 ## Imperative API
 
 Outside of input wiring, the imperative methods on `GridCore` are the same set the framework wrappers expose:
@@ -177,7 +204,7 @@ grid.refreshFromTransaction();                      // apply mutable ds queued t
 grid.rows.getCount();                               // displayed view-row count
 grid.rows.getData(viewIndex);                       // source record, or undefined
 grid.rows.has(viewIndex);                           // whether the view row exists
-grid.rows.getViewRow(viewIndex);                    // { kind, id, viewIndex, record? } | undefined
+grid.rows.getViewRow(viewIndex);                    // record, group or total row + viewIndex | undefined
 grid.rows.getRecordById(rowId);                     // source record for a stable id
 grid.cells.getValue(row, col);                      // cell value; cells.setValue writes one
 grid.cells.getBounds(rowId, columnId, "viewport");  // identity-addressed cell bounds
@@ -206,6 +233,12 @@ grid.columns.setGroups(groups);                     // ColumnSchemaResult: appli
 grid.columns.getGroup("person");                    // the active group definition, or undefined
 grid.header.getBands();                             // { count, heights, offsets, totalHeight }
 grid.header.setBandHeights([40]);                   // band 0 is 40 px, the rest headerHeight
+grid.rowGroups.isActive();                          // a hierarchy is bound
+grid.rowGroups.setExpanded(null, true);             // null = every group; { status: applied | unchanged | unsupported }
+grid.rowGroups.toggle(groupId);                     // flip one visible group
+grid.rowGroups.setGrouping(createRowGrouping({ dimensions: [{ field: "country" }] })); // null = flat; no query
+grid.viewport.isScrollMotionActive();               // a fling or wheel glide is moving the content
+grid.viewport.interruptScrollMotion();              // stop it where it is
 grid.geometry.getCellBounds(0, 0, "viewport");      // { top, left, width, height, ... }
 grid.geometry.hitTest({ x: 10, y: 10 });            // { row, displayIndex, col, columnId?, region }
 grid.geometry.getScrollTarget(12, 0);               // { scrollTop?, scrollLeft? }
@@ -252,6 +285,44 @@ class GraphQLDataSource<T> implements DataSource<T> {
 
 For mutability, wrap the prebuilt `createMutableClientDataSource` or implement the `MutableDataSource<T>` interface yourself.
 
+### Returning rows you grouped yourself
+
+A source that already holds grouped rows returns a `HierarchicalRowAccess` as
+`access`, with `rows: []` and `loadMode: "all"`. It imports types only; do not
+also set `rowGrouping` (rejected with `hierarchical-source`).
+
+```ts
+import type { CellValue, DataSource, HierarchicalRowAccess, HierarchyRow } from "@gp-grid/core";
+
+interface Entry {
+  row: HierarchyRow; // { kind: "record" | "group" | "total", id, depth, ... }
+  values: Record<string, CellValue>;
+}
+
+const createGroupedSource = (entries: readonly Entry[]): DataSource<never> => ({
+  loadMode: "all",
+  query: async () => {
+    const access: HierarchicalRowAccess = {
+      hierarchical: true,                 // the flag the grid detects
+      rowCount: entries.length,           // view rows, all resident
+      getRowId: (viewRow) => entries[viewRow]?.row.id ?? viewRow,
+      getRow: (viewRow) => entries[viewRow]?.row,
+      getValue: (viewRow, field) => entries[viewRow]?.values[field] ?? null, // aggregate or null on group rows
+      locate: (id) => entries.findIndex((entry) => entry.row.id === id),     // nearest visible ancestor when hidden, -1 when gone
+    };
+    return { rows: [], totalRows: access.rowCount, access };
+  },
+});
+```
+
+Optional members are capabilities: `setExpanded(ids | null, expanded): boolean`
+(without it the expansion commands return `"unsupported"`), `getRecord(viewRow)`
+(without it every row is read-only) and `recordsChanged(changes): boolean`
+(called once per edit, paste or fill; `true` when view rows moved). Ids must be
+unique and stable across queries. Sort and filter arrive in the request; the
+grid never regroups or re-aggregates a supplied hierarchy. See
+[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+
 ## Building a wrapper for a new framework
 
 The minimal wrapper does five things, in order:
@@ -264,6 +335,7 @@ The minimal wrapper does five things, in order:
 6. **Render the mounted column window**, not every displayed column: `GridState.columnWindow` gives `start` / `center` / `end` resolved columns, each with a region-local `regionOffset`. Key cells and headers by `columnId` so a column keeps its DOM node when it changes region, and place `lineX` / `dropIndicatorX` (viewport x) and the fill handle's region-local `left` directly.
 7. **Render the frozen prefix from `GridState.rowRegions`**, only while `frozenCount > 0`: a sticky block of height `frozenExtent` for the frozen center cells, plus a sibling sticky layer at the sizer level for their pinned cells (a pin inside the horizontally scrolling block would ride its content box out of the viewport). Split slots by `SlotData.region`, never by `rowIndex < frozenCount`, render `SlotData.loading` frozen rows as cell-less placeholders, and render `GridState.announcement` in one `aria-live="polite"` region. `freezeRows: { count, maxCount?, minSuffixHeight? }` is the option; a wrapper applies a changed prop through `frozenRows.set(config?)`, which replaces the whole config (omitted fields take the defaults) and stays silent for an equal-valued call, so no remount is needed. `frozenRows.get()` reports the effective count and its limiting constraint.
 8. **Pass a measurement host and render the header bands.** Give `GridCore` `measurementHost: createDomMeasurementHost(() => rootEl)` in the browser only, and render `data-layout-revision` (from `columnWindow.layout.revision`) on that root, so `rowHeights.fit` and `columns.fit` work and detect a stale layout. Header cells carry `data-col-index`, body cells `data-cell-row` and `data-cell-col`. Render the `aria-hidden` edge handles (`.gp-grid-header-resize-handle`, and `.gp-grid-row-resize-handle` in every non-editing cell while `rowResize` is on) and wire them through `InputEventAdapter.resizePointerDown`, `rowResizePointerDown` and `resizeDoubleClick`, stopping propagation on pointer down and double-click; pass `altKey` with key events. Render `GridState.headerBands` and the fragments in `columnWindow.groups` (each at `regionOffset`, `offsets[band]`, its run width and the band height), and build ids and ARIA with `leafHeaderId`, `fragmentHeaderId`, `leafHeaderBox`, `fragmentHeaderBox` and `resolveHeaderAssociations`. Number ARIA rows with the header bands first: a body row's `aria-rowindex` is its view index plus `headerBands.count` plus 1.
+9. **Render hierarchy rows from `SlotData.row`** (absent while flat). The root is `role="treegrid"` while `GridState.hierarchical`; a row carries `aria-level = depth + 1`, `data-row-kind`, `--gp-grid-group-depth`, and a group row `aria-expanded` plus `.gp-grid-row--group` (`.gp-grid-row--total` for the total row). The label column is `resolveGroupLabelColumnId(state.layout, preferred)`; its cell is `.gp-grid-cell--group-indent` on every row, and on a group or total row also `.gp-grid-cell--group-label` holding `span.gp-grid-group-toggle[aria-hidden="true"]` and `span.gp-grid-group-label` with `formatGroupLabel(row, columns, labels)`. Every cell of a group or total row is `aria-readonly="true"`; skip the renderer when `isEmptyGroupCell(row.kind, value)`, and pass `rowKind` to it otherwise. Forward `onRowGroupToggled` and `onRowGroupingRejected`, and apply a changed grouping with `grid.rowGroups.setGrouping`.
 
 For a complete reference implementation, read **`packages/react/src/Grid.tsx`** and **`packages/react/src/gridState/`** end to end. The Vue wrapper (`packages/vue/src/GpGrid.vue` + `packages/vue/src/gridState/`) is the same shape with Vue reactivity. The Angular wrapper (`packages/angular/src/lib/gp-grid.component.ts` + `gp-grid-bindings.ts` + `gp-grid-view-model.ts`) is the same shape with signals.
 

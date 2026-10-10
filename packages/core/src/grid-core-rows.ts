@@ -13,6 +13,7 @@ export interface GridRowsApi<TData> {
    * sources resolve it lazily; no per-row ID table is built on bind.
    */
   getId(viewIndex: number): RowId | undefined;
+  /** `undefined` on a group or total row, which has no source record. */
   getData(viewIndex: number): TData | undefined;
   /**
    * Whether a view row exists and can be rendered. A columnar row exists with
@@ -20,7 +21,7 @@ export interface GridRowsApi<TData> {
    */
   has(viewIndex: number): boolean;
   /**
-   * A displayed row and its identity, built on request. Without a source
+   * A displayed row, its kind and identity, built on request. Without a source
    * identity `id` is the view index, valid until the next sort, filter or refresh.
    */
   getViewRow(viewIndex: number): ViewRow<TData> | undefined;
@@ -72,9 +73,12 @@ export class RowsController<TData> implements GridRowsApi<TData> {
   getViewRow(viewIndex: number): ViewRow<TData> | undefined {
     const { rowData } = this.deps;
     if (rowData.hasRow(viewIndex) === false) return undefined;
+    const row = rowData.getHierarchyRow(viewIndex);
+    if (row !== undefined && row.kind !== "record") return { ...row, viewIndex };
     return {
       kind: "record",
       id: rowData.getRowId(viewIndex) ?? viewIndex,
+      depth: row?.depth ?? 0,
       viewIndex,
       record: rowData.getRowData(viewIndex),
     };

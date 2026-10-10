@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import type { ColumnRegion, ColumnWindowSnapshot, ResolvedColumn, SlotData } from "@gp-grid/core";
+import { hierarchyRowAttributes } from "@gp-grid/core";
 import GridCell from "./GridCell.vue";
 import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
+import { groupDepthStyle } from "./group-depth-style";
 import type { Row } from "../types";
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -32,21 +34,32 @@ const endColumns = computed(() =>
 const hoverPosition = inject(HOVER_POSITION, null);
 
 // A string style is only written when it changes; an object rewrites every key.
-const rowStyle = computed(() =>
+// `v-bind` with an object beside `:style` would merge it into an object.
+const boxStyle = computed(() =>
   `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${props.slot.translateY}px); width: ${props.width}px; height: ${props.slot.height}px; display: flex;`);
+const rowStyle = computed(() => `${boxStyle.value}${groupDepthStyle(props.slot.row)}`);
+const hierarchyAttributes = computed(() => hierarchyRowAttributes(props.slot.row));
+// `className` would land on the element as a DOM property and clobber `class`.
+const rowAttributes = computed(() => {
+  const { className: _className, ...attributes } = hierarchyAttributes.value;
+  return attributes;
+});
 
 const rowClasses = computed(() => {
   void hoverPosition?.value;
   void props.cellContext.renderToken;
   const highlightRowClasses =
     props.cellContext.coreRef?.highlight?.computeRowClasses(props.slot.rowIndex, props.slot.rowData) ?? [];
-  return ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
+  return ["gp-grid-row", hierarchyAttributes.value.className, ...highlightRowClasses]
+    .filter(Boolean)
+    .join(" ");
 });
 
 const cellProps = (column: ResolvedColumn) => ({
   ...props.cellContext,
   rowIndex: props.slot.rowIndex,
   rowData: props.slot.rowData,
+  row: props.slot.row,
   rowHeight: props.slot.height,
   generation: props.slot.generation,
   column,
@@ -61,13 +74,14 @@ const cellProps = (column: ResolvedColumn) => ({
     class="gp-grid-row gp-grid-row--loading"
     role="row"
     :aria-rowindex="ariaRowIndex"
-    :style="rowStyle"
+    :style="boxStyle"
   />
   <div
     v-else
     :class="rowClasses"
     role="row"
     :aria-rowindex="ariaRowIndex"
+    v-bind="rowAttributes"
     :style="rowStyle"
   >
     <GridCell

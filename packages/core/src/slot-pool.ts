@@ -1,6 +1,6 @@
 // packages/core/src/slot-pool.ts
 
-import type { SlotState, GridInstruction } from "./types";
+import type { SlotState, GridInstruction, HierarchyRow } from "./types";
 import type { RowRegionLayout } from "./geometry";
 import { createBatchInstructionEmitter } from "./utils";
 import { planSlotRefresh, planSlotSync, planSlotUpdate, type SlotPlanInput } from "./slot-pool-plan";
@@ -18,10 +18,12 @@ export interface SlotPoolManagerOptions {
   getRowRegions: () => RowRegionLayout;
   /** `translateY` of a row inside the rows wrapper (rows space). */
   getRowOffset: (rowIndex: number) => number;
-  /** Row height from the row axis (D8). */
+  /** Row height from the row axis. */
   getRowSize: (rowIndex: number) => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
+  /** Kind and depth of a hierarchy row; omitted or `undefined` while flat. */
+  getRow?: (rowIndex: number) => HierarchyRow | undefined;
   /**
    * Whether the row exists and can be rendered. Distinct from row data: a
    * columnar row renders with no source record.
@@ -168,6 +170,7 @@ export class SlotPoolManager {
       regions: options.getRowRegions(),
       isRowAvailable: (rowIndex) => options.isRowAvailable(rowIndex),
       getRowData: (rowIndex) => options.getRowData(rowIndex),
+      getRow: (rowIndex) => options.getRow?.(rowIndex),
       getRowOffset: (rowIndex) => options.getRowOffset(rowIndex),
       getRowSize: (rowIndex) => options.getRowSize(rowIndex),
     };

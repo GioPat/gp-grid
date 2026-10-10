@@ -5,6 +5,7 @@ import type { CellValue, RowId, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnGroupDefinition } from "./column-groups";
 import type { ColumnPin, ColumnRegion } from "./geometry";
+import type { HierarchyGroupRow, HierarchyRowKind, HierarchyTotalRow } from "./row-groups";
 
 /**
  * Cell renderer params.
@@ -46,6 +47,18 @@ export interface CellRendererParams<TData = unknown> {
   isSelected: boolean;
   /** Is editing cell */
   isEditing: boolean;
+  /** Kind of the row under a hierarchy; absent while flat. */
+  rowKind?: HierarchyRowKind;
+}
+
+/** Group label renderer params: the label cell of a group or total row. */
+export interface GroupLabelRendererParams {
+  row: HierarchyGroupRow | HierarchyTotalRow;
+  viewIndex: number;
+  /** The formatted label from `labels.rowGroups`. */
+  label: string;
+  /** Flip the group as a gesture; a no-op on the total row. */
+  toggle: () => void;
 }
 
 /** Edit renderer params */

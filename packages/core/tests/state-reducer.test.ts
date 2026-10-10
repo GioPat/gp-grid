@@ -142,6 +142,24 @@ describe("applyInstruction", () => {
       expect(slots.get("s1")).toMatchObject({ region: "suffix", loading: false });
     });
 
+    it("sets the hierarchy row an instruction carries and drops it when absent", () => {
+      applyInstruction<Row>({ type: "CREATE_SLOT", slotId: "s1", generation: 0 }, slots, headers);
+      const row = { kind: "group", id: "g", depth: 0, expanded: false, childCount: 1, leafCount: 2, field: "name", value: "x" } as const;
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 0, rowData: undefined, generation: 1, row },
+        slots,
+        headers,
+      );
+      expect(slots.get("s1")?.row).toEqual(row);
+
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 1, rowData: undefined, generation: 2 },
+        slots,
+        headers,
+      );
+      expect("row" in slots.get("s1")!).toBe(false);
+    });
+
     it("ASSIGN_SLOT on an unknown slot id is ignored", () => {
       const result = applyInstruction<Row>(
         {
@@ -478,7 +496,16 @@ describe("applyInstruction", () => {
         slots,
         headers,
       );
-      expect(result).toEqual({ isLoading: false, totalRows: 123 });
+      expect(result).toEqual({ isLoading: false, totalRows: 123, hierarchical: false });
+    });
+
+    it("DATA_LOADED mirrors hierarchical and a flat load clears it", () => {
+      expect(
+        applyInstruction<Row>({ type: "DATA_LOADED", totalRows: 3, hierarchical: true }, slots, headers),
+      ).toMatchObject({ hierarchical: true });
+      expect(
+        applyInstruction<Row>({ type: "DATA_LOADED", totalRows: 3 }, slots, headers),
+      ).toMatchObject({ hierarchical: false });
     });
 
     it("DATA_ERROR sets isLoading false and records error", () => {

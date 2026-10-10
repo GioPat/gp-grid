@@ -1,5 +1,6 @@
 import type { GridCore } from "../grid-core";
 import { readIsRtl, toInlineX } from "./inline-axis";
+import { agreedTop } from "./touch-scroll-helpers";
 import { updateRenderIntervalEma } from "../utils/touch-scroll-physics";
 
 /**
@@ -86,15 +87,15 @@ export class SyntheticScroll<TData = unknown> {
     this.overrideActive = false;
     const core = this.getCore();
     if (core === null) return;
+    const override = core.viewport.getTopOverride();
     core.viewport.setTopOverride(null);
     const el = this.getEl();
-    if (el !== null) {
-      core.setViewport(
-        el.scrollTop,
-        toInlineX(el.scrollLeft, this.isRtl(el)),
-        el.clientWidth,
-        el.clientHeight,
-      );
-    }
+    if (el === null) return;
+    core.setViewport(
+      agreedTop(override, el.scrollTop),
+      toInlineX(el.scrollLeft, this.isRtl(el)),
+      el.clientWidth,
+      el.clientHeight,
+    );
   }
 }

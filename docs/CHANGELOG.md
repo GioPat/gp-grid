@@ -76,7 +76,35 @@ All notable changes to gp-grid will be documented in this file.
 - Grouped header DOM: a `role="rowgroup"` header root with one `role="row"` per band owning its cells through `aria-owns`, fragments with `aria-colspan` and `aria-rowindex`, and leaf headers with `aria-rowspan` and `aria-describedby`; every header cell carries an escaped `id`
 - See [Auto-fit and row resize](./features/auto-fit.md) and [Column groups and header bands](./features/column-groups.md)
 
+#### Row grouping (PRD 008)
+- `createRowGrouping(config): RowGrouping`, the local grouping engine: ordered `dimensions` (`RowGroupDimension`: `field`, `id?`, `toKey?`), `measures` (`RowGroupMeasure`: `field`, `source?`, `aggregate`), `defaultExpandedDepth` (default `0`, every group collapsed), `grandTotal: "top" | "bottom"` and `initialState`. An invalid configuration throws `RangeError("Invalid rowGrouping.<field>: <value>")`. It groups the complete filtered and sorted result of a source loaded in full, object or columnar, without materializing columnar records.
+- `RowGrouping` is opaque: `getState()` is its only member, and core binds it through an internal engine contract, so a hand-made object throws `TypeError("rowGrouping must be created by createRowGrouping")`. `groupTogglePointerDown(core, rowIndex, event)` is the helper every wrapper routes the expander's pointer down to.
+- The `rowGrouping` option/prop/input, reactive through `GridCore.rowGroups.setGrouping(grouping | null)`, which regroups the resident rows with no query. `groupLabelColumn` and `groupLabelRenderer` are props/inputs of every wrapper.
+- `GridCore.rowGroups` (`GridRowGroupsApi`): `isActive()`, `setExpanded(ids | null, expanded)`, `toggle(id)` and `setGrouping`, returning `RowGroupResult` (`"applied"`, `"unchanged"`, `"unsupported"`) and `RowGroupingResult` (plus `{ status: "rejected", rejection }`)
+- `onRowGroupToggled({ rowId, expanded })` (`RowGroupToggledEvent`), once per group a pointer or key gesture toggled, and `onRowGroupingRejected(rejection)` (`RowGroupingRejection`: `reason` `"partial-source" | "hierarchical-source" | "unknown-field" | "object-key"`, `field?`) on `GridCore` and every wrapper. A rejected grouping renders the source's rows and warns once per reason.
+- Hierarchical row access: `HierarchicalRowAccess<TData>` (`hierarchical: true`, `getRowId`, `getRow`, `getValue`, `locate`, and the optional `setExpanded`, `getRecord` and `recordsChanged`), `HierarchyRow` (`HierarchyRecordRow`, `HierarchyGroupRow`, `HierarchyTotalRow`), `HierarchyRowKind`, `HierarchyRecordChange` and `isHierarchicalRowAccess`. A data source returns one as `DataSourceResponse.access` to supply rows it grouped itself, without the engine.
+- Typed keys and ids: `undefined` and `null` share one bucket; strings, numbers and booleans are keyed by type and value, a `Date` by its timestamp, and an object needs `toKey`. A group id is `"gp-group:"` plus the JSON of its path and the total row is `"gp-total"`; labels and formatters never enter an id.
+- Group order: a sorted dimension column orders its groups by key, a measure column sorted first orders groups by that aggregate, and keys ascend otherwise. Mixed-type keys and aggregates order by type (number, date, boolean, string, object, null last), then by `compareValues`.
+- Aggregates: `"sum"`, `"count"`, `"avg"`, `"min"`, `"max"` (`RowGroupBuiltInAggregate`) and a custom `RowGroupAggregator<S>` (`init`, `add`, `result`, optional `merge`). Every group folds its own leaves and retains its state; `init()` must return a fresh state and `merge(into, from)` must leave `from` intact.
+- Expansion state: `RowGrouping.getState(): RowGroupingState` (`expanded`, `collapsed` and, after `setExpanded(null, …)`, `expandedDepth`, the depth that replaced the configured default) and `RowGroupingConfig.initialState`; expansion survives a sort, a filter, a transaction and a refresh by group id. Expanding or collapsing every group moves the depth and lists no id.
+- Group rows as rows of cells: the label column holds `span.gp-grid-group-toggle` and `span.gp-grid-group-label`, aggregates render under their own columns, and the label column is indented by depth on every row. `resolveGroupLabelColumnId`, `formatGroupLabel`, `isEmptyGroupCell`, `hierarchyRowAttributes` (row class and ARIA attributes), `groupCellOf` (what one cell of a hierarchy is: indent, label row, label, read-only, class), `groupToggleClassName`, `groupLabelParams` and `GROUP_DEPTH_PROPERTY` are exported so every adapter binds the same markup; `GroupLabelRendererParams` (`row`, `viewIndex`, `label`, `toggle`) and `CellRendererParams.rowKind` type the renderers.
+- Input: a pointer down on the expander, a double-click on a group row, and Enter or Space with the active cell on a group row toggle it. `InputHandler.handleGroupToggle(rowIndex, pointerType?)` and the adapter's `groupTogglePointerDown(rowIndex, event)`.
+- Writes under a hierarchy: a measure edit refolds the aggregates on its path; a dimension edit regroups, expands the record's new ancestor groups (without `onRowGroupToggled`) and moves the active cell with the record. Paste and fill skip group and total rows.
+- `ASSIGN_SLOT.row`, `DATA_LOADED.hierarchical` and `BatchChangeSetters.setHierarchical`; the styles `.gp-grid-row--group`, `.gp-grid-row--total`, `.gp-grid-cell--group-label`, `.gp-grid-cell--group-indent`, `.gp-grid-group-toggle` (`--expanded`, `--none`), `.gp-grid-group-label` and the theme variables `--gp-grid-cell-padding-inline` (12px, the cell padding the indent starts from) and `--gp-grid-group-indent` (20px per depth); the row sets `--gp-grid-group-depth`
+- Accessibility: the rows of a hierarchy carry `aria-level` and `data-row-kind`, a group row `aria-expanded`, and every cell of a group or total row `aria-readonly="true"`
+- `GridLabelOverrides.rowGroups` (`GridRowGroupLabels`: `label`, default `"{value} ({count})"`, and `grandTotal`, default `"Grand total"`)
+- Wrapper renderers: React `ReactGroupLabelRenderer`; Vue `VueGroupLabelRenderer` and `renderGroupLabel`; Angular `GroupLabelRendererTemplate`, `GroupToggleComponent` and `GroupLabelComponent`. Headless use: React exports `useRowGroupingSync` and `useRowGroupCellContext`, Vue exports the same two composables and `useGpGrid` takes `rowGrouping`, `groupLabelColumn`, `groupLabelRenderer`, `labels`, `onRowGroupToggled` and `onRowGroupingRejected` and returns `handleGroupTogglePointerDown` and `rowGroupCells`; every wrapper exports its `RowGroupCellContext`.
+- `isMutableDataSource(source)` tells a wrapper whether a source notifies transactions
+- See [Row grouping and aggregation](./features/row-grouping.md)
+
+#### Scroll motion
+- `GridCore.viewport.isScrollMotionActive()` and `interruptScrollMotion()`: whether a touch fling or a wheel glide is still moving the content, and a command that stops it where it is. An adapter registers its motion with `viewport.setScrollMotionHandle(handle)` / `clearScrollMotionHandle(handle)` (`ScrollMotionHandle`: `isActive()`, `interrupt()`); `TouchScrollController` does so on attach and exposes `interrupt()`.
+- `InputHandler.handleWheel(deltaY, deltaX, dampening, deltaMode?)` takes the `WheelEvent.deltaMode`: line and page deltas (modes 1 and 2) are converted to pixels (40 and 800 per unit) before dampening
+
 ### Changed
+
+#### Typed edit commits
+- An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"` on a `number` column stores `60000`. A draft that cannot be converted, or a typed value that does not fit (`NaN` on a number column, an invalid `Date`), writes nothing, keeps the previous value and is reported through `onWriteRejected` with `reason: "type-mismatch"` and `operation: "edit"`; a whitespace-only draft on a `text` column stores `""`. This applies to flat grids too.
 
 #### GridCore API (1.0)
 - **Breaking (0.x → 1.0):** GridCore API grouped into namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowDrag`, `viewport`), typed by the exported `GridRowsApi`, `GridCellsApi`, `GridEditApi`, `GridColumnsApi`, `GridFrozenRowsApi`, `GridRowDragApi` and `GridViewportApi`. No forwarders remain. The root keeps `initialize`, `destroy`, `onBatchInstruction`, `setViewport`, `setDataSource`, `refresh`, `refreshFromTransaction` and the `geometry`, `selection`, `fill`, `input`, `highlight` and `sortFilter` members. `sortFilter.setSort`, `setFilter` and `openFilterPopup` ignore calls while a load is in flight, as the removed root copies did.
@@ -167,6 +195,18 @@ All notable changes to gp-grid will be documented in this file.
 - While groups are active the depth-first leaf order of the descriptors is the default column order, the order new leaves take on replacement and the order `columns.resetState()` restores
 - Every leaf header carries an `id`, and the header cells of a grouped grid are absolutely placed in their region container from the band offsets
 
+#### Row grouping (PRD 008)
+- **Breaking (0.x → 1.0):** `GridLabels` gained the required nested field `rowGroups` (`GridRowGroupLabels`: `label` and `grandTotal`), so a full `GridLabels` object literal must include it. `GridLabelOverrides` stays fully optional and merges it one level deep.
+- **Breaking (0.x → 1.0):** `ViewRow<TData>` is a union: a record row (`kind: "record"`, `id`, `depth`, `viewIndex`, `record?`) or a group or total row (`HierarchyGroupRow | HierarchyTotalRow` plus `viewIndex`). A flat row is a record row of depth 0, so code that reads `record` must narrow on `kind` first.
+- **Breaking (0.x → 1.0):** `GridState.hierarchical` is a required field (`false` while flat), so a consumer that builds a `GridState` by hand must set it
+- `CellWriteRejectedEvent.reason` is `"read-only-source" | "not-a-record" | "derived-view" | "type-mismatch"`: a write that targets a group or total row reports `"not-a-record"` under the operation that attempted it (`"paste"`, `"fill"`, `"setCellValue"`), `rowDrag.commit` under a hierarchy reports `"derived-view"` with `operation: "row-move"`, and an edit commit the column type cannot hold reports `"type-mismatch"`
+- `SlotData.row` (`HierarchyRow`) is set on every slot of a hierarchy and absent while flat
+- The root is `role="treegrid"` while a hierarchy is bound and `role="grid"` otherwise
+- Under a hierarchy `rows.getCount()` counts view rows, `rows.getData(viewIndex)` is `undefined` on a group or total row, and `edit.start` on such a row returns `false`
+- A group or total row cell without an aggregate renders empty and calls no cell renderer, and `edit.startPeek` returns `false` on it; an aggregate cell calls the renderer with `rowKind` and no `rowData`
+- No row drag starts while a hierarchy is bound
+- A transaction refresh under a hierarchy reloads through the full query path and keeps the active record and the scroll anchor by row id
+
 #### Vue rendering
 - Scrolling no longer re-renders every mounted row and cell. A cell re-renders when its row is re-assigned (`slot.generation`) or when a batch can change core-backed content; a batch that only places rows and columns leaves it alone. `useGpGrid().renderToken` still bumps once per batch.
 - `GpGrid` passes rows a stable `displayedIndexOf` that is rebuilt only when the column layout changes
@@ -174,6 +214,12 @@ All notable changes to gp-grid will be documented in this file.
 
 #### Wheel scrolling on scaled grids
 - A dampened wheel delta keeps its fraction: `TouchScrollController.scrollByWheel(domDy)` accumulates it and drives the core through the synthetic scroll override, once per frame, and hands the top back to native scroll 150 ms after the last wheel event. Writing the dampened delta to `scrollTop` directly lost every trackpad delta under 5 px (the DOM rounds each write), so momentum stopped abruptly and speed stepped. All three wrappers use it and fall back to the direct write when no controller is attached.
+
+#### Scroll motion
+- A press while a touch fling or a wheel glide is moving the content only stops it: the cell, header, column and row resize handles, the fill handle and the group expander swallow that press, so it selects, sorts, drags and toggles nothing, and the header click and double-click that belong to it are ignored for 500 ms. A touch press leaves the stop to the touch scroller, which carries the fling's velocity into the next flick. A wheel glide counts as moving only while a frame is carrying the content; once it has landed, a press is a press even before the wheel is released to native scroll.
+- On a scaled grid a large wheel delta (a mouse notch) glides to its target over a few frames instead of jumping, in one frame under `prefers-reduced-motion`; when the wheel rests the fractional top is kept instead of snapping to the rounded DOM value
+- `InputHandler.handleWheel` dampens `dy` only: `dx` is returned undampened, because only the vertical axis is scaled
+- **Breaking (0.x → 1.0):** `InputEventAdapter.wheel(event, dampening)` takes the `WheelEvent` instead of `(deltaY, deltaX, dampening)`, so it can read `deltaMode`
 
 ### Removed
 
@@ -350,6 +396,9 @@ core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl)
 - `sortFilter.setFilter()` accepts canonical grouped filters plus legacy flat/string inputs for migration
 
 ### Fixed
+- Angular refreshes the grid after a `MutableDataSource` transaction (`updateRow`, `addRows`, `removeRows`, `updateCell`), as React and Vue do
+- `GpGrid.vue` no longer destroys a caller-provided `dataSource` on unmount or when the prop changes; only a source it built from `rowData` is destroyed. A replaced source's transaction subscription is released.
+- Vue's `useGpGrid` destroys its core, and a source it built from `rowData`, on unmount, and applies transactions through `refreshFromTransaction`
 - Centered the remove-condition and remove-group glyphs within their buttons
 - Rendered each condition/group combination selector once for its scope instead of showing tied duplicates
 - Ensured active filter toggles and focus outlines retain the theme primary color against generic application button styles

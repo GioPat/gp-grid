@@ -3,6 +3,8 @@
 export { Grid, Grid as GpGrid } from "./Grid";
 export { useGridData } from "./useGridData";
 export type { UseGridDataOptions, UseGridDataResult } from "./useGridData";
+export { useRowGroupingSync, useRowGroupCellContext } from "./hooks/useRowGroups";
+export type { RowGroupCellContext, RowGroupCellOptions } from "./hooks/useRowGroups";
 
 export type {
   GridRef,
@@ -11,6 +13,7 @@ export type {
   ReactEditRenderer,
   ReactHeaderRenderer,
   ReactGroupHeaderRenderer,
+  ReactGroupLabelRenderer,
   ReactHeaderRendererRegistry,
 } from "./types";
 
@@ -52,6 +55,28 @@ export type {
   // Row ID
   RowId,
   ViewRow,
+
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
 
   // Cell position & range
   CellPosition,
@@ -158,6 +183,8 @@ export {
   isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
+  createRowGrouping,
+  isHierarchicalRowAccess,
 } from "@gp-grid/core";
 
 // Re-export MutableDataSource type

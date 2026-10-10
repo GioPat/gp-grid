@@ -16,6 +16,7 @@ import type {
   GridFilterOperatorLabels,
   GridLabelOverrides,
   GridLabels,
+  GridRowGroupLabels,
 } from "../src/i18n";
 import type { ColumnSchemaErrorCode } from "../src/types";
 
@@ -49,9 +50,10 @@ describe("resolveGridLabels", () => {
   });
 
   it("allows every visible label to be overridden independently", () => {
+    const nested = new Set(["operators", "columnSchemaErrors", "rowGroups"]);
     const topLevelKeys = Object.keys(defaultGridLabels).filter(
-      (key) => key !== "operators" && key !== "columnSchemaErrors",
-    ) as Array<Exclude<keyof GridLabels, "operators" | "columnSchemaErrors">>;
+      (key) => nested.has(key) === false,
+    ) as Array<Exclude<keyof GridLabels, "operators" | "columnSchemaErrors" | "rowGroups">>;
     for (const key of topLevelKeys) {
       const customValue = `custom-${key}`;
       const overrides = { [key]: customValue } as GridLabelOverrides;
@@ -75,6 +77,25 @@ describe("resolveGridLabels", () => {
       const labels = resolveGridLabels({ columnSchemaErrors: { [key]: customValue } });
       expect(labels.columnSchemaErrors[key]).toBe(customValue);
     }
+
+    const rowGroupKeys = Object.keys(defaultGridLabels.rowGroups) as Array<keyof GridRowGroupLabels>;
+    for (const key of rowGroupKeys) {
+      const customValue = `custom-${key}`;
+      const labels = resolveGridLabels({ rowGroups: { [key]: customValue } });
+      expect(labels.rowGroups[key]).toBe(customValue);
+    }
+  });
+});
+
+describe("rowGroups", () => {
+  it("defaults the group and grand total labels", () => {
+    expect(defaultGridLabels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Grand total" });
+  });
+
+  it("merges one level deep without mutating the defaults", () => {
+    const labels = resolveGridLabels({ rowGroups: { grandTotal: "Totale" } });
+    expect(labels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Totale" });
+    expect(defaultGridLabels.rowGroups.grandTotal).toBe("Grand total");
   });
 });
 

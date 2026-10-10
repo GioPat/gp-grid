@@ -2,7 +2,7 @@ export const GP_GRID_TEMPLATE = `
     <div #container
       [class]="'gp-grid-container' + (darkMode() ? ' gp-grid-container--dark' : '')"
       style="width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; outline: none;"
-      role="grid"
+      [attr.role]="vm.hierarchical() ? 'treegrid' : 'grid'"
       [attr.aria-colcount]="vm.displayedColumnCount()"
       [attr.aria-rowcount]="vm.totalRows() + vm.headerRowCount()"
       [attr.data-layout-revision]="layoutRevision()"
@@ -67,6 +67,7 @@ export const GP_GRID_TEMPLATE = `
         [dragState]="vm.dragState()"
         [rowResize]="rowResize()"
         [labels]="resolvedLabels()"
+        [rowGroups]="rowGroupCells()"
         (scrolled)="onBodyScroll($event)"
         (cellPointerDown)="onCellPointerDown($event)"
         (cellPointerEnter)="onCellPointerEnter($event)"

@@ -21,6 +21,7 @@ import {
   TouchScrollController,
   PendingScrollLatch,
   defaultPinIcon,
+  isMutableDataSource,
   resolveGridLabels,
 } from "@gp-grid/core";
 import type {
@@ -34,6 +35,7 @@ import type { ResizeHandleActions } from "./components/ResizeHandle";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
 import { useInputHandler } from "./hooks/useInputHandler";
+import { useRowGroupCellContext, useRowGroupingSync } from "./hooks/useRowGroups";
 import type { GridProps } from "./types";
 
 // Re-export types for backwards compatibility
@@ -96,6 +98,11 @@ export function Grid<TData = unknown>(
     onFrozenRowsChanged,
     rowResize = false,
     autoFit,
+    rowGrouping,
+    groupLabelColumn,
+    groupLabelRenderer,
+    onRowGroupToggled,
+    onRowGroupingRejected,
     labels,
   } = props;
 
@@ -241,6 +248,11 @@ export function Grid<TData = unknown>(
   onColumnSchemaRejectedRef.current = onColumnSchemaRejected;
   const highlightingRef = useRef(highlighting);
   highlightingRef.current = highlighting;
+  const onRowGroupToggledRef = useRef(onRowGroupToggled);
+  onRowGroupToggledRef.current = onRowGroupToggled;
+  const onRowGroupingRejectedRef = useRef(onRowGroupingRejected);
+  onRowGroupingRejectedRef.current = onRowGroupingRejected;
+  useRowGroupingSync(coreRef, rowGrouping);
 
   // Ref for dataSource so initial core gets the right one without being in the dep array
   const dataSourceRef = useRef(dataSource);
@@ -283,6 +295,15 @@ export function Grid<TData = unknown>(
     filterPopupOpen: state.filterPopup?.isOpen ?? false,
     onBeforeProgrammaticScroll: stopTouchScroll,
     scrollByWheel,
+  });
+
+  const rowGroupCells = useRowGroupCellContext(coreRef, {
+    hierarchical: state.hierarchical,
+    layout: state.layout,
+    columns: effectiveColumns,
+    labels: resolvedLabels,
+    groupLabelColumn,
+    groupLabelRenderer,
   });
 
   const resizeActions = useMemo<ResizeHandleActions>(
@@ -337,6 +358,9 @@ export function Grid<TData = unknown>(
       onColumnMoved: (event) => onColumnMovedRef.current?.(event),
       onColumnPinned: (event) => onColumnPinnedRef.current?.(event),
       onFrozenRowsChanged: (state) => onFrozenRowsChangedRef.current?.(state),
+      rowGrouping,
+      onRowGroupToggled: (event) => onRowGroupToggledRef.current?.(event),
+      onRowGroupingRejected: (rejection) => onRowGroupingRejectedRef.current?.(rejection),
       labels,
     });
 
@@ -453,15 +477,10 @@ export function Grid<TData = unknown>(
 
   // Subscribe to data source changes (for MutableDataSource)
   useEffect(() => {
-    const mutableDataSource = dataSource as {
-      subscribe?: (listener: () => void) => () => void;
-    };
-    if (mutableDataSource.subscribe) {
-      const unsubscribe = mutableDataSource.subscribe(() => {
-        coreRef.current?.refreshFromTransaction();
-      });
-      return unsubscribe;
-    }
+    if (isMutableDataSource(dataSource) === false) return;
+    return dataSource.subscribe(() => {
+      coreRef.current?.refreshFromTransaction();
+    });
   }, [dataSource]);
 
   // Handle reactive highlighting changes without re-creating core
@@ -631,7 +650,7 @@ export function Grid<TData = unknown>(
     <div
       ref={outerContainerRef}
       className={`gp-grid-container${darkMode ? " gp-grid-container--dark" : ""}`}
-      role="grid"
+      role={state.hierarchical ? "treegrid" : "grid"}
       aria-colcount={displayedColumnCount}
       aria-rowcount={state.totalRows + state.headerBands.count}
       data-layout-revision={columnWindow?.layout.revision}
@@ -703,6 +722,7 @@ export function Grid<TData = unknown>(
         editRenderers={editRenderers}
         globalCellRenderer={cellRenderer}
         globalEditRenderer={editRenderer}
+        rowGroups={rowGroupCells}
       />
 
       {/* C13 live region: the revision key remounts it so each message is read once. */}

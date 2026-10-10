@@ -13,3 +13,15 @@ export const cancelFrame = (frame: number | null): null => {
   }
   return null;
 };
+
+/** Keep an override the DOM still agrees with; snapping to the rounded DOM top shifts rows. */
+export const agreedTop = (override: number | null, domTop: number): number =>
+  override !== null && Math.abs(override - domTop) <= 1 ? override : domTop;
+
+let reducedMotionQuery: MediaQueryList | null | undefined;
+
+/** Live `prefers-reduced-motion: reduce`; false where `matchMedia` is missing (SSR, tests). */
+export const prefersReducedMotion = (): boolean => {
+  reducedMotionQuery ??= globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
+  return reducedMotionQuery?.matches === true;
+};

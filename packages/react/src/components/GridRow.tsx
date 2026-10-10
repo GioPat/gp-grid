@@ -4,16 +4,18 @@ import React from "react";
 import type {
   ColumnRegion,
   ColumnWindowSnapshot,
+  HierarchyRow,
   ResolvedColumn,
   SlotData,
 } from "@gp-grid/core";
+import { GROUP_DEPTH_PROPERTY, hierarchyRowAttributes } from "@gp-grid/core";
 import { GridCell } from "./GridCell";
 import type { GridCellProps } from "./GridCell";
 
 /** Everything a cell needs except the position it renders at. */
 export type GridRowCellContext<TData = unknown> = Omit<
   GridCellProps<TData>,
-  "rowIndex" | "rowData" | "rowHeight" | "column" | "displayedIndex"
+  "rowIndex" | "rowData" | "row" | "rowHeight" | "column" | "displayedIndex"
 >;
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -59,6 +61,10 @@ export const rowBoxStyle = (
   display: "flex",
 });
 
+/** The custom property the label column's indent reads. */
+export const groupDepthStyle = (row: HierarchyRow | undefined): React.CSSProperties =>
+  row === undefined ? {} : ({ [GROUP_DEPTH_PROPERTY]: row.depth } as React.CSSProperties);
+
 const renderColumn = <TData = unknown>(
   slot: SlotData<TData>,
   displayedIndexOf: (columnId: string) => number,
@@ -70,6 +76,7 @@ const renderColumn = <TData = unknown>(
     {...cellContext}
     rowIndex={slot.rowIndex}
     rowData={slot.rowData}
+    row={slot.row}
     rowHeight={slot.height}
     column={column}
     displayedIndex={displayedIndexOf(column.columnId)}
@@ -146,14 +153,18 @@ export const GridRow = <TData = unknown>(
 
   const highlightRowClasses =
     cellContext.coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
-  const rowClassName = ["gp-grid-row", ...highlightRowClasses].filter(Boolean).join(" ");
+  const { className: kindClassName, ...groupAttributes } = hierarchyRowAttributes(slot.row);
+  const rowClassName = ["gp-grid-row", kindClassName, ...highlightRowClasses]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
       className={rowClassName}
       role="row"
       aria-rowindex={ariaRowIndex}
-      style={rowBoxStyle(slot.translateY, width, slot.height)}
+      {...groupAttributes}
+      style={{ ...rowBoxStyle(slot.translateY, width, slot.height), ...groupDepthStyle(slot.row) }}
     >
       {regions.includes("center") &&
         center.map((column) => renderColumn(slot, displayedIndexOf, cellContext, column))}

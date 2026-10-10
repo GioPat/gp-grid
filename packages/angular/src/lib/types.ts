@@ -5,6 +5,7 @@ import type {
   ColumnGroupHeaderParams,
   CellRendererParams,
   EditRendererParams,
+  GroupLabelRendererParams,
   HeaderRendererParams,
 } from '@gp-grid/core';
 
@@ -43,3 +44,6 @@ export interface AngularColumnGroupDefinition extends Omit<ColumnGroupDefinition
 
 /** A nested Angular group, or a leaf `ColumnId`. */
 export type AngularColumnGroupChild = AngularColumnGroupDefinition | string;
+
+/** Template for the label of a group or total row, beside its expander. */
+export type GroupLabelRendererTemplate = TemplateRef<{ $implicit: GroupLabelRendererParams }>;

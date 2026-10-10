@@ -1,11 +1,12 @@
 import { Component, signal, computed, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { isPlatformBrowser } from '@angular/common';
-import { GpGridComponent, provideGridData, injectGridData } from '@gp-grid/angular';
+import { GpGridComponent, provideGridData, injectGridData, createRowGrouping } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
   AngularColumnGroupChild,
   CellRendererTemplate,
+  CellValue,
   EditRendererParams,
   EditRendererTemplate,
   FreezeRowsOptions,
@@ -13,6 +14,7 @@ import type {
   GridLabels,
   HeaderRendererTemplate,
   HighlightingOptions,
+  RowGrouping,
 } from '@gp-grid/angular';
 
 interface Person {
@@ -64,6 +66,21 @@ const demoColumnGroups: AngularColumnGroupChild[] = [
   },
   { groupId: 'record', headerName: 'Record', children: ['city', 'createdAt'] },
 ];
+
+// Row grouping (PRD 008): two dimensions, one `sum` and one `avg`.
+const createDemoRowGrouping = (): RowGrouping =>
+  createRowGrouping({
+    dimensions: [{ field: 'city' }, { field: 'name' }],
+    measures: [
+      { field: 'id', aggregate: 'sum' },
+      { field: 'age', aggregate: 'avg' },
+    ],
+    grandTotal: 'top',
+  });
+
+// A group's `avg` is fractional; leaf ages stay integers.
+const formatAge = (value: CellValue): string =>
+  typeof value === 'number' ? String(Math.round(value * 10) / 10) : String(value ?? '');
 
 const DEMO_HEADER_HEIGHT = 40;
 const tallBandHeights: readonly number[] = [DEMO_HEADER_HEIGHT * 2];
@@ -153,6 +170,22 @@ export class App implements AfterViewInit {
     this.tallBand.update((value) => !value);
   }
 
+  /** Row grouping (PRD 008): regroups and expands without a remount. */
+  protected readonly groupRows = signal(false);
+
+  // The published input typing drops `| null` like `columnGroups` above.
+  protected readonly rowGrouping = computed(
+    () => (this.groupRows() ? createDemoRowGrouping() : null) as RowGrouping,
+  );
+
+  protected toggleGroupRows(): void {
+    this.groupRows.update((value) => !value);
+  }
+
+  protected expandAllGroups(): void {
+    this.gridComponent?.core?.rowGroups.setExpanded(null, true);
+  }
+
   protected readonly freezeCounts = [0, 1, 3, 5] as const;
 
   protected readonly freezeCount = signal<0 | 1 | 3 | 5>(0);
@@ -195,7 +228,7 @@ export class App implements AfterViewInit {
     this.columns = [
       { field: 'id', cellDataType: 'number', headerName: 'ID', width: 80, sortable: true },
       { field: 'name', cellDataType: 'text', headerName: 'Name', width: 200, sortable: true, filterable: true, editable: true },
-      { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge },
+      { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge, valueFormatter: formatAge },
       { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor, valueFormatter: (v) => `🏙 ${String(v ?? "")}` },
       // Long text column — wrapText lets it flow onto new lines (clipped to the
       // fixed row height) instead of truncating with an ellipsis. Not editable so

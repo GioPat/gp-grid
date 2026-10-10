@@ -4,7 +4,7 @@
 // handling in-place.
 
 import type { GridCore } from "./grid-core";
-import type { CellPosition, CellRange, SortDirection } from "./types";
+import type { CellPosition, CellRange, RowGroupResult, SortDirection } from "./types";
 import type {
   PointerEventData,
   KeyEventData,
@@ -28,7 +28,11 @@ import {
   computeCellTarget,
   applyGridResizeAction,
   resolveHandleFit,
-  type RowResizeCommands,
+  isGroupRow,
+  wheelDeltaToPx,
+  DOM_DELTA_PIXEL,
+  MotionGate,
+  type InputCommands,
 } from "./input";
 
 // =============================================================================
@@ -49,6 +53,7 @@ const cycleSortDirection = (
 
 export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
+  private readonly motion: MotionGate;
 
   readonly columnResize: ColumnResizeDrag<TData>;
   readonly rowResize: RowResizeDrag<TData>;
@@ -59,11 +64,12 @@ export class InputHandler<TData = unknown> {
   private readonly pendingRowDrag = new PendingRowDragState();
   private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
-  private readonly commands: RowResizeCommands;
+  private readonly commands: InputCommands;
 
-  constructor(core: GridCore<TData>, commands: RowResizeCommands) {
+  constructor(core: GridCore<TData>, commands: InputCommands) {
     this.core = core;
     this.commands = commands;
+    this.motion = new MotionGate(core.viewport);
     this.columnResize = new ColumnResizeDrag(core);
     this.rowResize = new RowResizeDrag(core, commands);
     this.columnMove = new ColumnMoveDrag(core);
@@ -112,6 +118,7 @@ export class InputHandler<TData = unknown> {
     colHeight: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnMove.start(colIndex, colWidth, colHeight, event);
   }
 
@@ -120,6 +127,7 @@ export class InputHandler<TData = unknown> {
     colWidth: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnResize.start(colIndex, colWidth, event);
   }
 
@@ -128,12 +136,14 @@ export class InputHandler<TData = unknown> {
     rowHeight: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     if (this.core.rowHeights.isResizable() === false) return noopResult;
     return this.rowResize.start(rowIndex, rowHeight, event);
   }
 
   /** A double-click on a column or row edge handle fits that target once. */
   handleResizeDoubleClick(target: ResizeTarget): void {
+    if (this.motion.absorbClick()) return;
     const action = resolveHandleFit(this.core, target);
     if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
@@ -143,6 +153,7 @@ export class InputHandler<TData = unknown> {
     colIndex: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     if (event.button !== 0) return noopResult;
     if (this.core.edit.getState() !== null) return noopResult;
 
@@ -150,9 +161,11 @@ export class InputHandler<TData = unknown> {
     this.core.edit.stopPeek();
 
     const column = this.core.columns.get()[colIndex];
+    // A hierarchy's order is derived, so no row drag starts.
     const wantsRowDrag =
       (column?.rowDrag === true || this.core.rowDrag.isEntireRow()) &&
-      !event.shiftKey;
+      !event.shiftKey &&
+      this.core.rowGroups.isActive() === false;
 
     if (wantsRowDrag && event.pointerType === "touch") {
       return this.startPendingRowDrag(rowIndex, colIndex, event);
@@ -235,12 +248,23 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
+    if (this.motion.absorbClick()) return;
+    if (isGroupRow(this.core, rowIndex)) {
+      this.commands.toggleGroupAt(rowIndex);
+      return;
+    }
     const column = this.core.columns.get()[colIndex];
     if (column?.editable) {
       this.core.edit.start(rowIndex, colIndex);
       return;
     }
     this.core.edit.startPeek(rowIndex, colIndex);
+  }
+
+  /** A pointer down on a group row's expander. */
+  handleGroupToggle(rowIndex: number, pointerType?: string): RowGroupResult {
+    if (this.motion.absorbPress(pointerType)) return { status: "unchanged" };
+    return this.commands.toggleGroupAt(rowIndex);
   }
 
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {
@@ -254,12 +278,14 @@ export class InputHandler<TData = unknown> {
   handleFillHandleMouseDown(
     activeCell: CellPosition | null,
     selectionRange: CellRange | null,
-    _event: PointerEventData,
+    event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.fillDrag.start(activeCell, selectionRange);
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
+    if (this.motion.absorbClick()) return;
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
@@ -345,13 +371,18 @@ export class InputHandler<TData = unknown> {
   // Wheel
   // ---------------------------------------------------------------------------
 
+  /** Only the vertical axis is scaled, so only `dy` is dampened. */
   handleWheel(
     deltaY: number,
     deltaX: number,
     dampening: number,
+    deltaMode = DOM_DELTA_PIXEL,
   ): { dy: number; dx: number } | null {
-    if (!this.core.viewport.isScaling()) return null;
-    return { dy: deltaY * dampening, dx: deltaX * dampening };
+    if (this.core.viewport.isScaling() === false) return null;
+    return {
+      dy: wheelDeltaToPx(deltaY, deltaMode) * dampening,
+      dx: wheelDeltaToPx(deltaX, deltaMode),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -369,3 +400,4 @@ export class InputHandler<TData = unknown> {
 }
 
 const noopResult: InputResult = { preventDefault: false, stopPropagation: false };
+const swallowedResult: InputResult = { preventDefault: true, stopPropagation: true };

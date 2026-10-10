@@ -18,7 +18,8 @@ export type { PendingRowDragRecord } from "./pending-row-drag-state";
 export { PendingCellTapState } from "./pending-cell-tap-state";
 export type { PendingCellTapRecord } from "./pending-cell-tap-state";
 export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS } from "./interaction-constants";
-export { KeyboardHandler } from "./keyboard-handler";
+export { KeyboardHandler, isGroupRow } from "./keyboard-handler";
+export type { InputCommands } from "./keyboard-handler";
 export { computeCellTarget } from "./cell-target";
 export type { CellTarget } from "./cell-target";
 export {
@@ -27,3 +28,6 @@ export {
   DRAG_THRESHOLD,
   calculateAutoScroll,
 } from "./auto-scroll-util";
+export { DOM_DELTA_PIXEL, wheelDeltaToPx } from "./wheel-delta";
+export { MotionGate } from "./motion-gate";
+export { groupTogglePointerDown, type GroupTogglePointerEvent } from "./group-toggle";

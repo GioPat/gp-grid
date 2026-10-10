@@ -1,7 +1,7 @@
 // packages/core/src/grid-core-controllers.ts
-// Construction of the header and column controllers for GridCore. They are
-// built together because every column command that can change the band count
-// runs inside the header controller's applier.
+// Construction of GridCore's namespace controllers. The header and column
+// controllers are built together because every column command that can change
+// the band count runs inside the header controller's applier.
 
 import type { ColumnModel } from "./column-model";
 import type { GridGeometryService } from "./geometry";
@@ -12,6 +12,13 @@ import type { ViewportController } from "./grid-core-viewport";
 import type { ColumnGroupState } from "./grid-core-column-guard";
 import { HeaderController } from "./grid-core-header";
 import { ColumnsController } from "./grid-core-column-api";
+import type { GridGeometry } from "./types/geometry";
+import { RowsController } from "./grid-core-rows";
+import { CellsController } from "./grid-core-cells";
+import { EditController } from "./grid-core-edit";
+import { RowDragController } from "./grid-core-row-drag";
+import { RowGroupsController } from "./grid-core-row-groups";
+import type { HierarchyChangeDeps } from "./grid-core-hierarchy-change";
 
 export interface ColumnControllersDeps<TData> {
   config: GridCoreConfig<TData>;
@@ -41,12 +48,11 @@ export const buildColumnControllers = <TData>(
   const header = new HeaderController<TData>({
     batcher,
     config,
-    viewport: managers.viewport,
+    viewportState: managers.viewport,
     getGeometry,
-    getRowData: () => managers.rowData,
-    getView: () => managers.view,
-    refreshGeometry,
-    writeScrollTop: (domScrollTop) => viewportController.writeScrollTop(domScrollTop),
+    rowData: managers.rowData,
+    view: managers.view,
+    viewport: viewportController,
     isDestroyed,
   });
   const columns = new ColumnsController<TData>({
@@ -68,4 +74,68 @@ export const buildColumnControllers = <TData>(
     applyBandChange: (change) => header.applyBandChange(change),
   });
   return { header, columns };
+};
+
+export interface RowControllersDeps<TData> {
+  config: GridCoreConfig<TData>;
+  batcher: InstructionBatcher;
+  columnModel: ColumnModel;
+  managers: GridManagers<TData>;
+  viewportController: ViewportController<TData>;
+  getGeometry: () => GridGeometryService;
+  geometry: GridGeometry;
+  retainEditColumn: (columnId: string | null) => void;
+  /** The move changed row identity, so heights must be re-placed. */
+  onRowsMoved: () => void;
+  isDestroyed: () => boolean;
+}
+
+export interface RowControllers<TData> {
+  rows: RowsController<TData>;
+  cells: CellsController<TData>;
+  edit: EditController<TData>;
+  rowDrag: RowDragController<TData>;
+  rowGroups: RowGroupsController<TData>;
+  /** The view-rows applier's inputs, shared with a transaction refresh. */
+  hierarchyChange: HierarchyChangeDeps<TData>;
+}
+
+export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): RowControllers<TData> => {
+  const { config, batcher, managers, viewportController } = deps;
+  const { rowData, slotPool, selection, editManager } = managers;
+  const hierarchyChange: HierarchyChangeDeps<TData> = {
+    batcher,
+    selection,
+    editManager,
+    getGeometry: deps.getGeometry,
+    rowData,
+    view: managers.view,
+    viewport: viewportController,
+  };
+  return {
+    rows: new RowsController({ rowData, slotPool }),
+    cells: new CellsController({ rowData, geometry: deps.geometry, writes: managers.recordWrites }),
+    edit: new EditController({
+      batcher,
+      editManager,
+      columnModel: deps.columnModel,
+      selection,
+      rowData,
+      slotPool,
+      retainEditColumn: deps.retainEditColumn,
+    }),
+    rowDrag: new RowDragController({
+      config,
+      rowData,
+      slotPool,
+      highlight: managers.highlight,
+      onRowsMoved: deps.onRowsMoved,
+    }),
+    rowGroups: new RowGroupsController({
+      ...hierarchyChange,
+      isDestroyed: deps.isDestroyed,
+      onRowGroupToggled: config.onRowGroupToggled,
+    }),
+    hierarchyChange,
+  };
 };

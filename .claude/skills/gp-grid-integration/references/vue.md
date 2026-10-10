@@ -489,6 +489,71 @@ one on screen; the prop is re-applied with every later `columns` change, so put
 a valid one back. See
 [docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
+## Row grouping
+
+```vue
+<script setup lang="ts">
+import { h, ref } from "vue";
+import {
+  GpGrid,
+  createRowGrouping,
+  type GridCore,
+  type VueCellRenderer,
+  type VueGroupLabelRenderer,
+} from "@gp-grid/vue";
+
+// Created once, outside reactive state: a new object regroups.
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const groupLabel: VueGroupLabelRenderer = ({ row, label }) =>
+  row.kind === "total" ? h("strong", label) : label;
+
+// `rowData` is undefined on a group or total row: branch on `rowKind`.
+const amountCell: VueCellRenderer = ({ value, rowKind }) =>
+  rowKind === "group" || rowKind === "total" ? h("strong", String(value)) : String(value ?? "");
+
+const grid = ref<{ core: GridCore | null } | null>(null);
+const expandAll = () => grid.value?.core?.rowGroups.setExpanded(null, true);
+</script>
+
+<template>
+  <button @click="expandAll">Expand all</button>
+  <GpGrid
+    ref="grid"
+    :columns="columns"
+    :row-data="sales"
+    :row-height="32"
+    :get-row-id="(row) => row.id"
+    :row-grouping="grouping"
+    group-label-column="country"
+    :group-label-renderer="groupLabel"
+    :cell-renderers="{ amount: amountCell }"
+    :on-row-group-toggled="({ rowId, expanded }) => console.log(rowId, expanded)"
+    :on-row-grouping-rejected="({ reason, field }) => console.warn(reason, field)"
+  />
+</template>
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`. A
+group cell with no aggregate renders empty and calls no renderer.
+`:row-grouping` is reactive (`null` = flat). The grouping needs every row
+resident (`row-data`, a client source or `useGridData`); a server source is
+rejected with `partial-source`.
+
+`useGpGrid` takes `rowGrouping`, `onRowGroupToggled` and `onRowGroupingRejected`
+and returns `handleGroupTogglePointerDown(rowIndex, event)`, which a custom grid
+binds to its expander's `pointerdown`; `renderGroupLabel(params, renderer?)`
+renders the label. See
+[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |
@@ -533,6 +598,11 @@ a valid one back. See
 | `:on-frozen-rows-changed` | `(s: FrozenRowsState) => void` | — |
 | `:on-row-resized` | `(e: RowResizedEvent) => void` | — |
 | `:on-column-schema-rejected` | `(e: ColumnSchemaError) => void` | — |
+| `:row-grouping` | `RowGrouping \| null` | — |
+| `group-label-column` | `string` | first displayed column |
+| `:group-label-renderer` | `VueGroupLabelRenderer` | — |
+| `:on-row-group-toggled` | `(e: RowGroupToggledEvent) => void` | — |
+| `:on-row-grouping-rejected` | `(r: RowGroupingRejection) => void` | — |
 
 ## Vue-specific gotchas
 

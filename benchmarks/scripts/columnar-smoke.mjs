@@ -17,6 +17,10 @@
 //   pnpm --filter @gp-grid/core build
 //   node --expose-gc benchmarks/scripts/columnar-smoke.mjs
 //   BENCH_RUN_ID=my-run node --expose-gc benchmarks/scripts/columnar-smoke.mjs
+//   BENCH_ITERATIONS=5 node --expose-gc benchmarks/scripts/columnar-smoke.mjs
+//
+// Performance samples: one discarded warm-up, then BENCH_ITERATIONS (default 3)
+// measured samples per representation; the median and the raw samples are kept.
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -289,69 +293,106 @@ const deterministicCase = async (n) => {
   };
 };
 
-const performanceCases = [];
-const runPerformanceCase = async (n) => {
+const readIterations = () => {
+  const raw = process.env.BENCH_ITERATIONS;
+  if (raw === undefined || raw === "") return 3;
+  const parsed = Number(raw);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  throw new Error(`BENCH_ITERATIONS must be a positive integer, got ${raw}.`);
+};
+const ITERATIONS = readIterations();
+const WARM_UP_SAMPLES = 1;
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+const medianSample = (samples) =>
+  Object.fromEntries(
+    Object.keys(samples[0]).map((key) => [key, median(samples.map((sample) => sample[key]))]),
+  );
+
+const sampleObject = async (n) => {
   gc();
   const base = heapUsed();
   const buildStart = now();
   const rows = generateObjectRows(n);
-  const objectBuildMs = now() - buildStart;
+  const buildMs = now() - buildStart;
   const afterBuild = heapUsed();
   const initStart = now();
-  const objectCore = new GridCore({
+  const core = new GridCore({
     columns,
     dataSource: createClientDataSource(rows),
     rowHeight: ROW_HEIGHT,
   });
-  await objectCore.initialize();
-  const objectInitMs = now() - initStart;
+  await core.initialize();
+  const initMs = now() - initStart;
   const afterInit = heapUsed();
-  objectCore.destroy();
-  const objectSample = {
-    buildMs: objectBuildMs,
-    initMs: objectInitMs,
+  core.destroy();
+  rows.length = 0;
+  gc();
+  return {
+    buildMs,
+    initMs,
     datasetHeapBytes: afterBuild - base,
     bindingHeapBytes: afterInit - afterBuild,
   };
-  // Release the object representation before generating the columnar one.
-  rows.length = 0;
-  gc();
+};
 
-  const columnBase = heapUsed();
-  const columnBuildStart = now();
+const sampleColumnar = async (n) => {
+  gc();
+  const base = heapUsed();
+  const buildStart = now();
   const data = generateColumns(n);
-  const columnBuildMs = now() - columnBuildStart;
-  const columnAfterBuild = heapUsed();
-  const columnInitStart = now();
-  const columnSource = createColumnarDataSource({
+  const buildMs = now() - buildStart;
+  const afterBuild = heapUsed();
+  const initStart = now();
+  const source = createColumnarDataSource({
     rowCount: n,
     fields: COLUMN_NAMES.map((field) => ({ field, data: data[field] })),
   });
-  const columnCore = new GridCore({
+  const core = new GridCore({
     columns,
-    dataSource: columnSource,
+    dataSource: source,
     rowHeight: ROW_HEIGHT,
   });
-  await columnCore.initialize();
-  const columnInitMs = now() - columnInitStart;
-  const columnAfterInit = heapUsed();
-  columnCore.destroy();
-  const columnarSample = {
-    buildMs: columnBuildMs,
-    initMs: columnInitMs,
-    datasetHeapBytes: columnAfterBuild - columnBase,
-    bindingHeapBytes: columnAfterInit - columnAfterBuild,
-  };
+  await core.initialize();
+  const initMs = now() - initStart;
+  const afterInit = heapUsed();
+  core.destroy();
   gc();
+  return {
+    buildMs,
+    initMs,
+    datasetHeapBytes: afterBuild - base,
+    bindingHeapBytes: afterInit - afterBuild,
+  };
+};
 
+const collectSamples = async (sample, n) => {
+  for (let warmUp = 0; warmUp < WARM_UP_SAMPLES; warmUp += 1) await sample(n);
+  const samples = [];
+  for (let iteration = 0; iteration < ITERATIONS; iteration += 1) samples.push(await sample(n));
+  return samples;
+};
+
+const performanceCases = [];
+const runPerformanceCase = async (n) => {
+  // Each representation is measured in its own block so its samples never
+  // share the heap with the other representation's dataset.
+  const objectSamples = await collectSamples(sampleObject, n);
+  const columnarSamples = await collectSamples(sampleColumnar, n);
   performanceCases.push({
     n,
     scope: "core-only",
     representation: "object-vs-columnar",
-    note: "Single noisy sample; the repeated three-sample performance gate remains open.",
-    rawSamples: [{ object: objectSample, columnar: columnarSample }],
-    object: objectSample,
-    columnar: columnarSample,
+    warmUpSamplesDiscarded: WARM_UP_SAMPLES,
+    iterations: ITERATIONS,
+    statistic: "median",
+    object: { median: medianSample(objectSamples), rawSamples: objectSamples },
+    columnar: { median: medianSample(columnarSamples), rawSamples: columnarSamples },
   });
 };
 
@@ -365,7 +406,7 @@ const run = async () => {
     if (result !== null) deterministic.push(result);
   }
 
-  console.log("Bounded performance smoke");
+  console.log(`Bounded performance smoke (1 warm-up, ${ITERATIONS} samples per representation)`);
   for (const n of rowCounts) {
     await runCase(`n=${n} performance`, () => runPerformanceCase(n));
   }
@@ -417,6 +458,7 @@ const run = async () => {
       viewport: VIEWPORT,
       overscan: OVERSCAN,
       scrollTopPx: SCROLL_TOP,
+      performance: { warmUpSamplesDiscarded: WARM_UP_SAMPLES, iterations: ITERATIONS, statistic: "median" },
       representations: ["object rows", "borrowed ordinary/typed-array columns"],
       scopes: {
         coreOnly: [

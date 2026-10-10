@@ -12,6 +12,7 @@ A high-performance virtualized data grid for React applications.
 - [Row heights](./features/row-heights.md) - Per-row heights by identity, the scroll correction a change implies, paging, frozen rows and the published DOM contract
 - [Auto-fit and row resize](./features/auto-fit.md) - Row edge resize, one-shot row and column fits, their results and clamps, the edge handles and the grid shortcuts
 - [Column groups and header bands](./features/column-groups.md) - Nested group descriptors, validation and budgets, order and fragments, configured band heights, accessibility and SSR
+- [Row grouping and aggregation](./features/row-grouping.md) - Dimensions, keys and ids, group order, aggregates, the label column, writes, rejections, expansion state and hierarchies supplied by a data source
 - [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only) - Borrowed columns, read-only access, and revision refresh with inferred or explicit row counts
 
 ## Changelog

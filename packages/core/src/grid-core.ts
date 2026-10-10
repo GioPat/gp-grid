@@ -20,15 +20,17 @@ import type { ViewSync } from "./grid-core-view-sync";
 import { FrozenRowsController, type GridFrozenRowsApi } from "./grid-core-frozen-rows";
 import { RowHeightsController, type GridRowHeightsApi } from "./grid-core-row-heights";
 import { ViewportController, type GridViewportApi } from "./grid-core-viewport";
-import { EditController, type GridEditApi } from "./grid-core-edit";
-import { CellsController, type GridCellsApi } from "./grid-core-cells";
-import { RowsController, type GridRowsApi } from "./grid-core-rows";
+import type { GridEditApi } from "./grid-core-edit";
+import type { GridCellsApi } from "./grid-core-cells";
+import type { GridRowsApi } from "./grid-core-rows";
 import type { GridColumnsApi } from "./grid-core-column-api";
 import type { GridHeaderApi } from "./grid-core-header";
-import { buildColumnControllers } from "./grid-core-controllers";
+import { buildColumnControllers, buildRowControllers } from "./grid-core-controllers";
 import { adoptInitialColumnGroups } from "./grid-core-column-groups";
 import type { ColumnGroupState } from "./grid-core-column-guard";
-import { RowDragController, type GridRowDragApi } from "./grid-core-row-drag";
+import type { GridRowDragApi } from "./grid-core-row-drag";
+import type { RowGroupsController, GridRowGroupsApi } from "./grid-core-row-groups";
+import { applyViewRowsChange, reloadViewRows, type HierarchyChangeDeps } from "./grid-core-hierarchy-change";
 
 /**
  * The framework-agnostic grid. Owns lifecycle, the viewport sample and data
@@ -47,6 +49,8 @@ export class GridCore<TData = unknown> {
   /** Application-set row heights by identity (PRD 006). */
   public readonly rowHeights: GridRowHeightsApi;
   public readonly rowDrag: GridRowDragApi;
+  /** Expansion of a bound hierarchy (PRD 008). */
+  public readonly rowGroups: GridRowGroupsApi;
   /** Scroll hooks for adapters driving a synthetic touch scroller. */
   public readonly viewport: GridViewportApi;
   public readonly selection: SelectionManager;
@@ -68,6 +72,8 @@ export class GridCore<TData = unknown> {
   private readonly rowData: RowDataManager<TData>;
   private readonly slotPool: SlotPoolManager;
   private readonly editManager: EditManager;
+  private readonly rowGroupsController: RowGroupsController<TData>;
+  private readonly hierarchyChange: HierarchyChangeDeps<TData>;
   // Derived-view emission: content size, headers, visible range, slots
   private readonly view: ViewSync<TData>;
   private isDestroyed: boolean = false;
@@ -88,6 +94,7 @@ export class GridCore<TData = unknown> {
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       onRowsLoaded: (totalRowsChanged) =>
         this.rowHeightsController.onRowsLoaded(totalRowsChanged),
+      applyViewRowsChange: (change) => applyViewRowsChange(this.hierarchyChange, change),
     });
     this.rowData = managers.rowData;
     this.rowHeightOverrides = new RowHeightOverrides({
@@ -118,11 +125,10 @@ export class GridCore<TData = unknown> {
       initial: this.config.freezeRows,
       batcher: this.batcher,
       getGeometry: () => this.geometryService,
-      getRowData: () => this.rowData,
-      getView: () => this.view,
-      getEditManager: () => this.editManager,
-      refreshGeometry: () => this.viewportController.refreshGeometry(),
-      writeScrollTop: (domScrollTop) => this.viewportController.writeScrollTop(domScrollTop),
+      rowData: this.rowData,
+      view: this.view,
+      editManager: this.editManager,
+      viewport: this.viewportController,
       isDestroyed: () => this.isDestroyed,
     });
     this.geometryService = createCoreGeometry({
@@ -165,10 +171,9 @@ export class GridCore<TData = unknown> {
       batcher: this.batcher,
       overrides: this.rowHeightOverrides,
       getGeometry: () => this.geometryService,
-      getRowData: () => this.rowData,
-      getView: () => this.view,
-      refreshGeometry: () => this.viewportController.refreshGeometry(),
-      writeScrollTop: (domScrollTop) => this.viewportController.writeScrollTop(domScrollTop),
+      rowData: this.rowData,
+      view: this.view,
+      viewport: this.viewportController,
       isDestroyed: () => this.isDestroyed,
       measurementHost: this.config.measurementHost,
       fitLimits: { min: this.config.autoFit.minRowHeight, max: this.config.autoFit.maxRowHeight },
@@ -179,26 +184,29 @@ export class GridCore<TData = unknown> {
     this.viewport = this.viewportController;
     this.frozenRows = this.frozenRowsController;
     this.rowHeights = this.rowHeightsController;
-    this.rows = new RowsController({ rowData: this.rowData, slotPool: this.slotPool });
-    this.cells = new CellsController({ rowData: this.rowData, geometry: this.geometry });
-    this.edit = new EditController({
-      batcher: this.batcher,
-      editManager: this.editManager,
-      columnModel: this.columnModel,
-      selection: this.selection,
-      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
-      refreshSlotData: () => this.slotPool.refreshAllSlots(),
-    });
-    this.rowDrag = new RowDragController({
+    const rowControllers = buildRowControllers<TData>({
       config: this.config,
-      rowData: this.rowData,
-      slotPool: this.slotPool,
-      highlight: this.highlight,
+      batcher: this.batcher,
+      columnModel: this.columnModel,
+      managers,
+      viewportController: this.viewportController,
+      getGeometry: () => this.geometryService,
+      geometry: this.geometry,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
+      isDestroyed: () => this.isDestroyed,
     });
+    this.rows = rowControllers.rows;
+    this.cells = rowControllers.cells;
+    this.edit = rowControllers.edit;
+    this.rowDrag = rowControllers.rowDrag;
+    this.rowGroupsController = rowControllers.rowGroups;
+    this.rowGroups = this.rowGroupsController;
+    this.hierarchyChange = rowControllers.hierarchyChange;
     this.input = new InputHandler(this, {
       maxRowHeight: this.config.autoFit.maxRowHeight,
       resizeRow: (viewIndex, height) => this.rowHeightsController.resize(viewIndex, height),
+      toggleGroupAt: (viewIndex) => this.rowGroupsController.toggleAt(viewIndex),
     });
   }
 
@@ -241,10 +249,16 @@ export class GridCore<TData = unknown> {
 
   /**
    * Fast-path refresh after `MutableDataSource` transactions: only the
-   * visible window is re-fetched.
+   * visible window is re-fetched. Under a hierarchy the anchor and the active
+   * row follow their identity.
    */
   async refreshFromTransaction(): Promise<void> {
-    await this.rowData.refreshFromTransaction();
+    const reload = () => this.rowData.refreshFromTransaction();
+    if (this.rowData.getHierarchy()) {
+      await reloadViewRows(this.hierarchyChange, reload);
+      return;
+    }
+    await reload();
     this.view.reconcile();
   }
 

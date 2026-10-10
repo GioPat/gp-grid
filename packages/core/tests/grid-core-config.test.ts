@@ -79,6 +79,8 @@ describe("resolveGridCoreConfig — freezeRows defaults", () => {
     expect(withoutOption.columnOverscan).toBe(240);
     expect(withoutOption.headerBandHeights).toEqual([]);
     expect(withoutOption.columnGroups).toBeUndefined();
+    const { rowGrouping, onRowGroupToggled, onRowGroupingRejected } = withoutOption;
+    expect([rowGrouping, onRowGroupToggled, onRowGroupingRejected]).toEqual([undefined, undefined, undefined]);
   });
 
   it("keeps both limits' defaults for a partial count", () => {
@@ -280,5 +282,18 @@ describe("resolveGridCoreConfig — header bands", () => {
     });
     const grid = new GridCore<Row>({ ...baseOptions(), headerHeight: 40, headerBandHeights: [50, 60] });
     expect(grid.header.getBands().heights).toEqual([50]);
+  });
+});
+
+// PRD 008 D3: the row grouping options reach the config unchanged.
+describe("resolveGridCoreConfig — row grouping", () => {
+  it("keeps rowGrouping and both callbacks", () => {
+    const options = {
+      rowGrouping: { getState: () => ({ expanded: [], collapsed: [] }) },
+      onRowGroupToggled: () => {},
+      onRowGroupingRejected: () => {},
+    };
+    expect(resolveGridCoreConfig<Row>({ ...baseOptions(), ...options })).toMatchObject(options);
+    expect(resolveGridCoreConfig<Row>({ ...baseOptions(), rowGrouping: null }).rowGrouping).toBeNull();
   });
 });

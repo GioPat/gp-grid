@@ -691,6 +691,52 @@ describe("SelectionManager", () => {
         [null, null],
       ]);
     });
+
+    it("leaves a refused cell out of the result and runs the paste as one write command", () => {
+      const calls: string[] = [];
+      const base = createPasteOptions(
+        [[null, null], [null, null], [null, null]],
+        [editableColumn("a", "text"), editableColumn("b", "text")],
+      );
+      const pasteOptions: SelectionManagerOptions = {
+        ...base,
+        setCellValue: (row, col, value, operation) => {
+          if (row === 1) return false;
+          base.setCellValue(row, col, value, operation);
+          return true;
+        },
+        runWrites: (command) => {
+          calls.push("begin");
+          try {
+            return command();
+          } finally {
+            calls.push("end");
+          }
+        },
+      };
+      manager = new SelectionManager(pasteOptions);
+      manager.startSelection({ row: 0, col: 0 });
+
+      const result = manager.pasteClipboardText("x\ty\nx\ty\nx\ty");
+
+      expect(result.changedCells.map(({ row, col }) => [row, col])).toEqual([
+        [0, 0], [0, 1], [2, 0], [2, 1],
+      ]);
+      expect(base.getData()[1]).toEqual([null, null]);
+      expect(calls).toEqual(["begin", "end"]);
+    });
+
+    it("reports a read-only source once with its reason", () => {
+      const onWriteRejected = vi.fn();
+      const base = createPasteOptions([[null]], [editableColumn("a", "text")]);
+      manager = new SelectionManager({ ...base, isWritable: () => false, onWriteRejected });
+      manager.startSelection({ row: 0, col: 0 });
+
+      expect(manager.pasteClipboardText("x").handled).toBe(false);
+      expect(onWriteRejected).toHaveBeenCalledExactlyOnceWith({
+        row: 0, col: 0, field: "a", reason: "read-only-source", operation: "paste",
+      });
+    });
   });
 
   describe("getActiveCell", () => {

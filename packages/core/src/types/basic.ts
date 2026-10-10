@@ -2,6 +2,7 @@
 // Basic types: primitives, cell values, positions, ranges
 
 import type { RowRegion } from "../geometry/row-regions-mapping";
+import type { HierarchyGroupRow, HierarchyRecordRow, HierarchyTotalRow } from "./row-groups";
 
 /** Cell data type primitive types */
 export type CellDataType =
@@ -21,18 +22,16 @@ export type CellValue = string | number | boolean | Date | object | null;
 export type RowId = string | number;
 
 /**
- * A displayed row and its identity. Built on request — the grid never
- * allocates one per row. 002 only produces `kind: "record"`; groups and
- * aggregates are planned for later releases.
+ * A displayed row and its identity, built on request: the grid never
+ * allocates one per row. A flat row is a record row of depth 0.
  */
-export interface ViewRow<TData = unknown> {
-  kind: "record";
-  /** Source identity; the view index when the source exposes none. */
-  id: RowId;
-  viewIndex: number;
-  /** Source record, absent for record-less (columnar) rows. */
-  record?: TData;
-}
+export type ViewRow<TData = unknown> =
+  | (HierarchyRecordRow & {
+      viewIndex: number;
+      /** Source record, absent for record-less (columnar) rows. */
+      record?: TData;
+    })
+  | ((HierarchyGroupRow | HierarchyTotalRow) & { viewIndex: number });
 
 /** Sort direction type */
 export type SortDirection = "asc" | "desc" | null;
@@ -116,7 +115,14 @@ export type WriteRejectionOperation =
   | "fill"
   | "row-move";
 
-/** Emitted when a write is refused because the bound source is read-only. */
+/**
+ * Why a write was refused: the source is read-only, the row is a group or
+ * total row, row order is derived from a hierarchy, or an edit draft cannot be
+ * converted to the column's `cellDataType`.
+ */
+export type WriteRejectionReason = "read-only-source" | "not-a-record" | "derived-view" | "type-mismatch";
+
+/** Emitted when a write is refused. */
 export interface CellWriteRejectedEvent {
   /** View row index the write targeted; the dragged row for `row-move` */
   row: number;
@@ -125,7 +131,7 @@ export interface CellWriteRejectedEvent {
   /** Source field key, when the column exists */
   field: string;
   /** Why the write was refused */
-  reason: "read-only-source";
+  reason: WriteRejectionReason;
   /** Attempted write entry point that was refused */
   operation: WriteRejectionOperation;
 }
@@ -152,7 +158,7 @@ export interface SlotState {
   generation: number;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
-  /** Row height from the row axis (D8). */
+  /** Row height from the row axis. */
   height: number;
   /** Region the slot's row renders in (C7). */
   region: RowRegion;

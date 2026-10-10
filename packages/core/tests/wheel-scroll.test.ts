@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GridCore } from "../src/grid-core";
 import { TouchScrollController } from "../src/adapter/touch-scroll";
+import { createMotionSlot } from "./motion-slot";
 import { WHEEL_RELEASE_MS } from "../src/adapter/wheel-scroll";
 
 const createCore = (scaling = true, topOverride: number | null = null) => {
@@ -17,6 +18,7 @@ const createCore = (scaling = true, topOverride: number | null = null) => {
       getRowHeight: () => 32,
       getTopOverride: () => state.topOverride,
       setTopOverride,
+      ...createMotionSlot(),
     },
     setViewport,
     onBatchInstruction: () => () => {},
@@ -51,6 +53,9 @@ describe("TouchScrollController — dampened wheel", () => {
     frames = [];
     batch.forEach((callback) => callback(now));
   };
+  const settle = (): void => {
+    for (let now = 16; frames.length > 0; now += 16) pump(now);
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -77,12 +82,12 @@ describe("TouchScrollController — dampened wheel", () => {
 
   it("runs one pipeline per frame however many events arrive", () => {
     const { controller, setViewport } = setup();
-    for (let tick = 0; tick < 5; tick += 1) controller.scrollByWheel(2);
+    for (let tick = 0; tick < 5; tick += 1) controller.scrollByWheel(0.8);
     expect(setViewport).not.toHaveBeenCalled();
 
     pump(16);
     expect(setViewport).toHaveBeenCalledTimes(1);
-    expect(setViewport.mock.calls[0]![0]).toBe(10);
+    expect(setViewport.mock.calls[0]![0]).toBeCloseTo(4, 6);
   });
 
   it("hands the top back to native scroll once the wheel is idle", () => {
@@ -95,6 +100,7 @@ describe("TouchScrollController — dampened wheel", () => {
     // The wheel listener itself must not release a sequence in flight.
     el.dispatchEvent(new Event("wheel"));
     controller.scrollByWheel(4);
+    pump(32);
     vi.advanceTimersByTime(WHEEL_RELEASE_MS - 1);
     expect(setTopOverride).not.toHaveBeenLastCalledWith(null);
 
@@ -105,11 +111,11 @@ describe("TouchScrollController — dampened wheel", () => {
   it("clamps the accumulated top to the scroll range", () => {
     const { controller, setTopOverride } = setup();
     controller.scrollByWheel(-20);
-    pump(16);
+    settle();
     expect(setTopOverride).toHaveBeenLastCalledWith(0);
 
     controller.scrollByWheel(20_000);
-    pump(32);
+    settle();
     expect(setTopOverride).toHaveBeenLastCalledWith(9500);
   });
 

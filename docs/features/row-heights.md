@@ -127,6 +127,16 @@ the first suffix row keeps its *offset below the band*, which means its viewport
 top legitimately moves by the band's growth while its content offset is
 unchanged. The layout a wrapper reads is `state.rowRegions.frozenExtent`.
 
+## Row grouping
+
+Under [row grouping](./row-grouping.md) every view row has an id, so heights
+always place by identity: a record row by its source id, a group row by its
+group id and the total row by `"gp-total"`. Every expand, collapse and regroup
+moves the data revision and re-places the stored heights. A height on a leaf
+stays stored while its group is collapsed and is placed again when the leaf
+returns; a height on a group row stays with the group. The toggle is anchored
+like a height change: the row at the clip top keeps its viewport position.
+
 ## Geometry and DOM contract
 
 The core publishes the height with the row it belongs to:

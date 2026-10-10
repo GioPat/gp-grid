@@ -7,6 +7,7 @@ import {
   PendingRowDragController,
   TouchScrollController,
   applyBatchInstructions,
+  isMutableDataSource,
   readIsRtl,
   scrollCellIntoView,
   toInlineX,
@@ -20,6 +21,7 @@ import type {
   DataSource,
   FreezeRowsOptions,
   HighlightingOptions,
+  RowGrouping,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
 
@@ -46,9 +48,11 @@ export class GpGridBindings<TData = unknown> {
 
   coreRef: GridCore<TData> | null = null;
   private unsubscribe: (() => void) | null = null;
+  private unsubscribeSource: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private rtl = false;
   private appliedGroups: readonly ColumnGroupChild[] | undefined = undefined;
+  private appliedGrouping: RowGrouping | null | undefined = undefined;
 
   /** Inline direction sampled from the body element; a `dir` flip needs a remount. */
   get isRtl(): boolean {
@@ -86,8 +90,9 @@ export class GpGridBindings<TData = unknown> {
     });
   }
 
-  attach(core: GridCore<TData>): void {
+  attach(core: GridCore<TData>, dataSource: DataSource<TData>): void {
     this.coreRef = core;
+    this.watchSource(dataSource);
     this.touchScroll.syncCore();
     this.deps.vm.columns.set(core.columns.get());
     this.unsubscribe = core.onBatchInstruction((instructions) => {
@@ -140,6 +145,8 @@ export class GpGridBindings<TData = unknown> {
     this.pendingCellTap.cancel();
     this.touchScroll.detach();
     this.unsubscribe?.();
+    this.unsubscribeSource?.();
+    this.unsubscribeSource = null;
     this.resizeObserver?.disconnect();
     this.coreRef?.destroy();
     this.dataSourceOwner.destroy();
@@ -176,7 +183,17 @@ export class GpGridBindings<TData = unknown> {
     const core = this.coreRef;
     if (core === null) return;
     const newDs = this.dataSourceOwner.syncRows(rows, dataSource);
-    if (newDs !== null) core.setDataSource(newDs);
+    if (newDs === null) return;
+    this.watchSource(newDs);
+    core.setDataSource(newDs);
+  }
+
+  /** A `MutableDataSource` announces its transactions; refresh the visible window on each. */
+  private watchSource(dataSource: DataSource<TData>): void {
+    this.unsubscribeSource?.();
+    this.unsubscribeSource = isMutableDataSource(dataSource)
+      ? dataSource.subscribe(() => void this.coreRef?.refreshFromTransaction())
+      : null;
   }
 
   applyPendingScroll(): void {
@@ -204,6 +221,16 @@ export class GpGridBindings<TData = unknown> {
   /** Apply a runtime freeze configuration without recreating the core. */
   syncFreezeRows(config: FreezeRowsOptions | undefined): void {
     this.coreRef?.frozenRows.set(config);
+  }
+
+  /**
+   * Before the core exists this records the grouping it is created with; a
+   * later value reaches that core through `setGrouping`, never a new core.
+   */
+  syncRowGrouping(grouping: RowGrouping | null | undefined): void {
+    if (this.appliedGrouping === grouping) return;
+    this.appliedGrouping = grouping;
+    this.coreRef?.rowGroups.setGrouping(grouping ?? null);
   }
 
   syncRowResize(enabled: boolean): void {

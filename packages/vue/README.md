@@ -23,6 +23,7 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - [Quick Start](#quick-start)
 - [Examples](#examples)
 - [Column state and schema lifecycle](#column-state-and-schema-lifecycle)
+- [Row grouping](#row-grouping)
 - [API Reference](#api-reference)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Styling](#styling)
@@ -39,6 +40,7 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - **Column Pin**: Pin columns to the start or end edge; a bounded column window keeps wide grids flat
 - **Row Resize and Auto-Fit**: Drag a row edge, or fit a row or a column to its rendered content once
 - **Column Groups**: Nested header groups of any finite depth, with configured header band heights
+- **Row Grouping**: Group rows by ordered dimensions with aggregates, a total row and expand/collapse
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
@@ -357,6 +359,10 @@ const orders: Order[] = [
 ```
 
 ### Editable Cells with Custom Editors
+
+An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
+typed into a `number` column stores `60000`, a draft the type cannot hold writes
+nothing, and a value a custom editor already typed is stored unchanged.
 
 ```vue
 <script setup lang="ts">
@@ -697,6 +703,62 @@ of `header-renderers`, receiving `ColumnGroupHeaderParams`. A header taller than
 its band is clipped; `wrapHeaderText` wraps it. See
 [Column groups and header bands](../../docs/features/column-groups.md).
 
+## Row grouping
+
+`row-grouping` groups the rows of a source loaded in full by ordered dimensions,
+with aggregates and an optional total row. Build it once, outside reactive
+state or in a `shallowRef`: a new object regroups.
+
+```vue
+<script setup lang="ts">
+import { ref } from "vue";
+import { GpGrid, createRowGrouping, type GridCore } from "@gp-grid/vue";
+
+const grid = ref<{ core: GridCore | null } | null>(null);
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+const expandAll = () => grid.value?.core?.rowGroups.setExpanded(null, true);
+</script>
+
+<template>
+  <GpGrid ref="grid" :columns="columns" :row-data="rows" :row-height="32"
+    :get-row-id="(row) => row.id" :row-grouping="grouping" group-label-column="country"
+    :on-row-group-toggled="({ rowId, expanded }) => console.log(rowId, expanded)"
+    :on-row-grouping-rejected="(rejection) => console.warn(rejection.reason)" />
+</template>
+```
+
+Every group starts collapsed (`defaultExpandedDepth: 0`). A group row is an
+ordinary row: its expander and label sit in ``group-label-column`` (default: the first
+displayed column) and each aggregate under the column named by the measure's
+`field`. Aggregates are `"sum"`, `"count"`, `"avg"`, `"min"`, `"max"` or a custom
+`RowGroupAggregator`; they are displayed unrounded, so give a numeric measure
+column a `valueFormatter`. A cell renderer receives `rowKind` (`"group"` or
+`"total"`, with `rowData` undefined) on an aggregate cell and is not called for
+a group cell without an aggregate. ``group-label-renderer`` (`VueGroupLabelRenderer`, a function or a component)
+replaces the label text and receives `{ row, viewIndex, label, toggle }`.
+
+A pointer down on the expander, a double-click on a group row, and Enter or
+Space on its active cell toggle it and call `onRowGroupToggled`. Editing a
+measure cell updates the aggregates on its path; editing a dimension cell moves
+the record, expands its new groups and keeps the active cell on it. Group and
+total rows are read-only, and row drag is disabled while grouped. A paginated
+source, an unknown field or an object key without `toKey` is rejected: the grid
+stays flat and calls `onRowGroupingRejected`. A data source can also return rows
+it grouped itself as a `HierarchicalRowAccess`. On the server the grid renders
+the flat shell and groups after the first client load. See
+[Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+`useGpGrid` takes `rowGrouping`, `onRowGroupToggled` and `onRowGroupingRejected`
+and returns `handleGroupTogglePointerDown(rowIndex, event)` for the expander of a
+custom grid; `renderGroupLabel(params, renderer?)` renders the label.
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference
@@ -737,9 +799,14 @@ The public website documentation for this package lives outside this repository 
 | `onFrozenRowsChanged` | `(state: FrozenRowsState) => void` | -        | Called with `{ requestedCount, effectiveCount, limit }` when the frozen prefix changes |
 | `onRowResized`    | `(event: RowResizedEvent) => void`  | -           | Called with `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
 | `onColumnSchemaRejected` | `(error: ColumnSchemaError) => void` | - | Called with `{ code, source, id?, limit?, message }` when a column change is rejected |
+| `rowGrouping`     | `RowGrouping \| null`                 | -           | Groups the resident rows (`createRowGrouping`); a new value regroups without a remount |
+| `groupLabelColumn` | `string`                             | first displayed column | Column showing a group's expander and label |
+| `groupLabelRenderer` | `VueGroupLabelRenderer`              | -           | Renders the label of a group or total row from `{ row, viewIndex, label, toggle }` |
+| `onRowGroupToggled` | `(event: RowGroupToggledEvent) => void` | -      | Called with `{ rowId, expanded }` per group a pointer or key gesture toggled |
+| `onRowGroupingRejected` | `(rejection: RowGroupingRejection) => void` | - | Called with `{ reason, field? }` when `rowGrouping` cannot apply; the grid renders the source's rows |
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -         | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
-| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused by a read-only source |
+| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused: `reason` is `"read-only-source"`, `"not-a-record"` (a group or total row), `"derived-view"` (a row drag under grouping) or `"type-mismatch"` (an edit commit the column type cannot hold) |
 
 ### ColumnDefinition
 
@@ -775,6 +842,7 @@ interface CellRendererParams<TData = unknown> {
   isActive: boolean; // Is this the active cell?
   isSelected: boolean; // Is this cell in selection?
   isEditing: boolean; // Is this cell being edited?
+  rowKind?: "record" | "group" | "total"; // Under row grouping; absent while flat
 }
 
 // Vue cell renderer - can return VNode or string
@@ -814,6 +882,7 @@ type VueHeaderRenderer = (
 | Arrow keys         | Navigate between cells            |
 | Shift + Arrow      | Extend selection                  |
 | Enter              | Start editing / Commit edit       |
+| Enter / Space      | Expand or collapse the group row under the active cell |
 | Escape             | Cancel edit / Clear selection     |
 | Tab                | Commit and move right             |
 | Shift + Tab        | Commit and move left              |

@@ -395,6 +395,57 @@ describe("FillManager", () => {
     });
   });
 
+  describe("commitFillDrag - refused cells", () => {
+    it("lists written cells only and runs the fill as one write command", () => {
+      const calls: string[] = [];
+      options = createMockOptions(4, 1, [["A"], [null], [null], [null]]);
+      manager = new FillManager({
+        ...options,
+        setCellValue: (row, col, value) => {
+          if (row === 2) return false;
+          options.setCellValue(row, col, value);
+          return true;
+        },
+        runWrites: (command) => {
+          calls.push("begin");
+          try {
+            return command();
+          } finally {
+            calls.push("end");
+          }
+        },
+      });
+      manager.onInstruction((i) => emittedInstructions.push(i));
+
+      manager.startFillDrag({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
+      manager.updateFillDrag(3, 0);
+      manager.commitFillDrag();
+
+      expect(options.getData()).toEqual([["A"], ["A"], [null], ["A"]]);
+      expect(emittedInstructions.find((i) => i.type === "COMMIT_FILL")).toEqual({
+        type: "COMMIT_FILL",
+        filledCells: [
+          { row: 1, col: 0, value: "A" },
+          { row: 3, col: 0, value: "A" },
+        ],
+      });
+            expect(calls).toEqual(["begin", "end"]);
+      expect(manager.isActive()).toBe(false);
+    });
+
+    it("refuses a read-only source with its reason", () => {
+      const onWriteRejected = vi.fn();
+      manager = new FillManager({ ...options, isWritable: () => false, onWriteRejected });
+
+      manager.startFillDrag({ startRow: 1, startCol: 2, endRow: 1, endCol: 2 });
+
+      expect(manager.isActive()).toBe(false);
+      expect(onWriteRejected).toHaveBeenCalledExactlyOnceWith({
+        row: 1, col: 2, field: "col2", reason: "read-only-source", operation: "fill",
+      });
+    });
+  });
+
   describe("getState", () => {
     it("should return null when not active", () => {
       expect(manager.getState()).toBeNull();

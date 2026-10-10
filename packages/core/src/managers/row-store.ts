@@ -4,9 +4,12 @@ import type {
   CellWriteRejectedEvent,
   ColumnDefinition,
   DataSource,
+  HierarchicalRowAccess,
+  HierarchyRow,
   RowAccess,
   RowId,
   WriteRejectionOperation,
+  WriteRejectionReason,
 } from "../types";
 import type { AxisBounds } from "../types/geometry";
 import {
@@ -14,12 +17,8 @@ import {
   getFieldValue as readRowFieldValue,
   readCell,
   writeCell,
+  writeRecordCell,
 } from "../utils";
-
-const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
-
-const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
-  Math.min(Math.trunc(range?.end ?? extent), extent);
 
 export interface RowStoreOptions<TData> {
   getColumns: () => ColumnDefinition[];
@@ -30,19 +29,42 @@ export interface RowStoreOptions<TData> {
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
+const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
+
+const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
+  Math.min(Math.trunc(range?.end ?? extent), extent);
+
+/** Asks the hierarchy for each id; a hidden row answers its ancestor, which is not a match. */
+const locateInHierarchy = (
+  hierarchy: HierarchicalRowAccess<unknown>,
+  ids: ReadonlySet<RowId>,
+  range?: AxisBounds,
+): Map<RowId, number> => {
+  const found = new Map<RowId, number>();
+  const first = rangeStart(range);
+  const end = rangeEnd(range, hierarchy.rowCount);
+  for (const id of ids) {
+    const index = hierarchy.locate(id);
+    if (index < first || index >= end || hierarchy.getRowId(index) !== id) continue;
+    found.set(id, index);
+  }
+  return found;
+};
+
 /**
- * Owns the row cache, the bound scalar access and the row count, and answers
- * every typed read and write against them.
+ * Owns the row cache, the bound scalar access, the row count and the bound
+ * hierarchy, and answers every row read and write by view index: through the
+ * hierarchy while one is bound, through the flat rows otherwise.
  */
 export class RowStore<TData = unknown> {
   private readonly options: RowStoreOptions<TData>;
-  private cachedRows: Map<number, TData> = new Map();
+  private readonly cachedRows: Map<number, TData> = new Map();
   /**
    * Scalar access for a response that returns no materialized rows. When set,
-   * it is the authoritative read path: the row cache stays empty and cells are
-   * read on demand instead of being copied into row objects.
+   * it is the authoritative flat read path and the row cache stays empty.
    */
   private rowAccess: RowAccess | null = null;
+  private hierarchy: HierarchicalRowAccess<TData> | null = null;
   private totalRows = 0;
   private revision = 0;
 
@@ -54,19 +76,15 @@ export class RowStore<TData = unknown> {
     return this.cachedRows;
   }
 
-  setCachedRows(rows: Map<number, TData>): void {
-    this.cachedRows = rows;
-  }
-
   getTotalRows(): number {
-    return this.totalRows;
+    return this.hierarchy?.rowCount ?? this.totalRows;
   }
 
   setTotalRows(count: number): void {
     this.totalRows = count;
   }
 
-  /** Bumped whenever row order or membership may have changed (D6). */
+  /** Bumped whenever row order or membership may have changed. */
   getRevision(): number {
     return this.revision;
   }
@@ -75,151 +93,198 @@ export class RowStore<TData = unknown> {
     this.revision += 1;
   }
 
-  /** Whether the bound source exposes a stable row identity (D2). */
-  hasStableIdentity(): boolean {
-    if (this.rowAccess) return this.rowAccess.getRowId !== undefined;
-    return this.options.getRowId !== undefined;
-  }
-
-  /**
-   * View indices of the requested identities, optionally within one range.
-   * Scans the resident rows, which is O(resident), and stops once every ID
-   * has been found.
-   */
-  locateIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
-    const found = new Map<RowId, number>();
-    const first = rangeStart(range);
-    if (this.rowAccess) {
-      const extent = this.rowAccess.rowCount;
-      const end = Math.min(rangeEnd(range, extent), extent);
-      for (let index = first; index < end; index += 1) {
-        if (found.size === ids.size) break;
-        this.collect(found, index, ids);
-      }
-      return found;
-    }
-    const end = rangeEnd(range, Number.MAX_SAFE_INTEGER);
-    for (const index of this.cachedRows.keys()) {
-      if (found.size === ids.size) break;
-      if (index >= first && index < end) this.collect(found, index, ids);
-    }
-    return found;
-  }
-
-  private collect(found: Map<RowId, number>, index: number, ids: ReadonlySet<RowId>): void {
-    const rowId = this.getRowId(index);
-    if (rowId !== undefined && ids.has(rowId)) found.set(rowId, index);
-  }
-
   /** Scalar access for the current response, when the source provides one. */
   getRowAccess(): RowAccess | null {
     return this.rowAccess;
   }
 
-  /**
-   * Bind a response's scalar access, releasing any projection owned by the
-   * previous one. The row cache is left empty: no record is materialized.
-   */
+  /** Bind a response's scalar access, releasing the one it replaces; no record is materialized. */
   setRowAccess(next: RowAccess | null): void {
     if (this.rowAccess === next) return;
     this.rowAccess?.release?.();
     this.rowAccess = next;
   }
 
-  getRowData(rowIndex: number): TData | undefined {
-    return this.cachedRows.get(rowIndex);
+  getHierarchy(): HierarchicalRowAccess<TData> | null {
+    return this.hierarchy;
+  }
+
+  /** Bind a hierarchy, releasing the one it replaces. */
+  bindHierarchy(next: HierarchicalRowAccess<TData> | null): void {
+    if (this.hierarchy === next) return;
+    this.hierarchy?.release?.();
+    this.hierarchy = next;
+  }
+
+  /** The view row's kind and depth; `undefined` while flat. */
+  getHierarchyRow(viewIndex: number): HierarchyRow | undefined {
+    return this.isResident(viewIndex) ? this.hierarchy?.getRow(viewIndex) : undefined;
+  }
+
+  private isResident(viewIndex: number): boolean {
+    return this.hierarchy !== null && viewIndex >= 0 && viewIndex < this.hierarchy.rowCount;
+  }
+
+  /** Whether the bound source exposes a stable row identity. */
+  hasStableIdentity(): boolean {
+    if (this.hierarchy) return true;
+    if (this.rowAccess) return this.rowAccess.getRowId !== undefined;
+    return this.options.getRowId !== undefined;
   }
 
   /**
-   * Whether a view row exists and can be rendered. Independent of whether a
-   * source record is available: a columnar row renders with no record.
+   * View indices of the requested identities, within `range` when given. Scans
+   * the resident rows, O(resident), and stops once every id has been found.
    */
-  hasRow(rowIndex: number): boolean {
-    if (this.rowAccess) {
-      return rowIndex >= 0 && rowIndex < this.rowAccess.rowCount;
+  locateIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    if (this.hierarchy) return locateInHierarchy(this.hierarchy, ids, range);
+    if (this.rowAccess) return this.locateInAccess(this.rowAccess.rowCount, ids, range);
+    return this.locateInCache(ids, range);
+  }
+
+  private locateInAccess(rowCount: number, ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    const found = new Map<RowId, number>();
+    const end = rangeEnd(range, rowCount);
+    for (let index = rangeStart(range); index < end && found.size < ids.size; index += 1) {
+      this.collectFlat(found, index, ids);
     }
+    return found;
+  }
+
+  /** A paged cache has gaps, so it walks the loaded positions instead of the range. */
+  private locateInCache(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    const found = new Map<RowId, number>();
+    const first = rangeStart(range);
+    const end = rangeEnd(range, Number.MAX_SAFE_INTEGER);
+    for (const index of this.cachedRows.keys()) {
+      if (found.size === ids.size) break;
+      if (index >= first && index < end) this.collectFlat(found, index, ids);
+    }
+    return found;
+  }
+
+  private collectFlat(found: Map<RowId, number>, row: number, ids: ReadonlySet<RowId>): void {
+    const rowId = this.flatRowId(row);
+    if (rowId !== undefined && ids.has(rowId)) found.set(rowId, row);
+  }
+
+  /** The record of a record row; `undefined` on group, total and columnar rows. */
+  getRowData(rowIndex: number): TData | undefined {
+    if (this.hierarchy) {
+      if (this.getHierarchyRow(rowIndex)?.kind !== "record") return undefined;
+      return this.hierarchy.getRecord?.(rowIndex);
+    }
+    return this.cachedRows.get(rowIndex);
+  }
+
+  /** Whether a view row exists and can be rendered; a columnar row renders with no record. */
+  hasRow(rowIndex: number): boolean {
+    if (this.hierarchy) return this.isResident(rowIndex);
+    if (this.rowAccess) return rowIndex >= 0 && rowIndex < this.rowAccess.rowCount;
     return this.cachedRows.get(rowIndex) !== undefined;
   }
 
   /** Stable identity for a view row, when the source exposes one. */
   getRowId(viewRow: number): RowId | undefined {
-    if (this.rowAccess) {
-      if (viewRow < 0 || viewRow >= this.rowAccess.rowCount) return undefined;
-      return this.rowAccess.getRowId?.(viewRow);
-    }
-    const row = this.cachedRows.get(viewRow);
-    if (row === undefined) return undefined;
-    return this.options.getRowId?.(row);
+    if (this.hierarchy) return this.isResident(viewRow) ? this.hierarchy.getRowId(viewRow) : undefined;
+    return this.flatRowId(viewRow);
   }
 
-  /**
-   * Record lookup by stable identity. Uses the source's direct lookup when
-   * present; otherwise scans the resident rows, which is O(resident).
-   */
+  /** Identity of a flat row: from the scalar access, or the record's `getRowId`. */
+  private flatRowId(row: number): RowId | undefined {
+    if (this.rowAccess) {
+      if (row < 0 || row >= this.rowAccess.rowCount) return undefined;
+      return this.rowAccess.getRowId?.(row);
+    }
+    const record = this.cachedRows.get(row);
+    return record === undefined ? undefined : this.options.getRowId?.(record);
+  }
+
+  /** Record lookup by identity: the source's direct lookup, else a scan of the flat rows, O(resident). */
   getRecordById(rowId: RowId): TData | undefined {
     const dataSource = this.options.getDataSource();
     if (dataSource.getRecordById) return dataSource.getRecordById(rowId);
-    for (const [viewIndex, row] of this.cachedRows) {
-      if (this.getRowId(viewIndex) === rowId) return row;
+    for (const [row, record] of this.cachedRows) {
+      if (this.flatRowId(row) === rowId) return record;
     }
     return undefined;
   }
 
-  /** View index of a resident record by identity, or -1. O(resident). */
+  /** View index of a row by identity, or -1. Under a hierarchy a hidden row is `-1`, never its visible ancestor. */
   findViewIndexById(rowId: RowId): number {
-    for (const viewIndex of this.cachedRows.keys()) {
-      if (this.getRowId(viewIndex) === rowId) return viewIndex;
+    if (this.hierarchy) {
+      const viewIndex = this.hierarchy.locate(rowId);
+      return this.getRowId(viewIndex) === rowId ? viewIndex : -1;
+    }
+    for (const row of this.cachedRows.keys()) {
+      if (this.flatRowId(row) === rowId) return row;
     }
     return -1;
   }
 
   getCellValue(row: number, col: number): CellValue {
-    if (this.rowAccess) {
-      const column = this.options.getColumns()[col];
-      if (column === undefined) return null;
-      if (row < 0 || row >= this.rowAccess.rowCount) return null;
-      return this.rowAccess.getValue(row, column.field);
-    }
-    return readCell(this.cachedRows, this.options.getColumns(), row, col);
+    const columns = this.options.getColumns();
+    if (this.hierarchy === null && this.rowAccess === null) return readCell(this.cachedRows, columns, row, col);
+    const column = columns[col];
+    return column === undefined ? null : this.getFieldValue(row, column.field);
   }
 
-  /**
-   * Read any source field at a view row, independent of the displayed
-   * columns. Columnar rows read scalar access; object rows read the record.
-   */
+  /** Any source field at a view row, independent of the displayed columns. */
   getFieldValue(viewIndex: number, field: string): CellValue {
+    if (this.hierarchy) return this.isResident(viewIndex) ? this.hierarchy.getValue(viewIndex, field) : null;
     if (this.rowAccess) {
       if (viewIndex < 0 || viewIndex >= this.rowAccess.rowCount) return null;
       return this.rowAccess.getValue(viewIndex, field);
     }
     const row = this.cachedRows.get(viewIndex);
-    if (row === undefined) return null;
-    return readRowFieldValue(row, field);
+    return row === undefined ? null : readRowFieldValue(row, field);
   }
 
-  setCellValue(row: number, col: number, value: CellValue): void {
+  /** Under a hierarchy only a record row with a record takes a write. */
+  isRowWritable(viewIndex: number): boolean {
+    return this.hierarchy === null || this.getRowData(viewIndex) !== undefined;
+  }
+
+  /** The one write gate: false when the write was refused, and reported as `operation`. */
+  setCellValue(
+    row: number,
+    col: number,
+    value: CellValue,
+    operation: WriteRejectionOperation = "setCellValue",
+  ): boolean {
     if (this.options.isWritable() === false) {
-      this.rejectWrite(row, col, "setCellValue");
-      return;
+      this.rejectWrite(row, col, operation, "read-only-source");
+      return false;
     }
-    writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
-      onCellValueChanged: this.options.onCellValueChanged,
-      getRowId: this.options.getRowId,
-    });
+    const hierarchy = this.hierarchy;
+    if (hierarchy === null) {
+      writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
+        onCellValueChanged: this.options.onCellValueChanged,
+        getRowId: this.options.getRowId,
+      });
+      return true;
+    }
+    const record = this.getRowData(row);
+    if (record === undefined) {
+      this.rejectWrite(row, col, operation, "not-a-record");
+      return false;
+    }
+    const column = this.options.getColumns()[col];
+    if (column === undefined) return false;
+    writeRecordCell(record, column, col, value, this.options.onCellValueChanged, () => hierarchy.getRowId(row));
+    return true;
   }
 
-  /**
-   * Report a refused write through the single diagnostic contract. Every write
-   * entry point routes here so a read-only source is observable consistently.
-   */
+  /** Every refused write routes here, so a read-only source is observable consistently. */
   rejectWrite(
     row: number,
     col: number,
     operation: WriteRejectionOperation,
+    reason: WriteRejectionReason,
   ): void {
     const column = this.options.getColumns()[col];
     this.options.onWriteRejected?.(
-      createWriteRejection(row, col, column?.field ?? "", operation),
+      createWriteRejection(row, col, column?.field ?? "", operation, reason),
     );
   }
 

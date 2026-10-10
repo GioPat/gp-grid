@@ -222,6 +222,53 @@ strict templates the published input typings do not accept `undefined`: cast an
 absent hierarchy and bind `[]` for no band heights. See
 [Column groups and header bands](../../docs/features/column-groups.md).
 
+Row grouping: `[rowGrouping]` takes a `createRowGrouping({ dimensions, measures?,
+grandTotal? })` and groups the rows of a source loaded in full; keep it in a
+field, because a new object regroups. Every group starts collapsed. The expander
+and label sit in `[groupLabelColumn]` (default: the first displayed column) and
+each aggregate under the column named by the measure's `field`; aggregates are
+displayed unrounded, so give a numeric measure column a `valueFormatter`.
+`[groupLabelRenderer]` is a `TemplateRef` (`GroupLabelRendererTemplate`) whose
+`$implicit` is `{ row, viewIndex, label, toggle }`. A cell template receives
+`rowKind` on an aggregate cell, with `rowData` undefined, and is not rendered for
+a group cell without an aggregate.
+
+```ts
+import { createRowGrouping } from "@gp-grid/angular";
+
+protected readonly grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  grandTotal: "top",
+});
+```
+
+```html
+<gp-grid #grid [columns]="columns" [rows]="rows" [rowHeight]="32" [getRowId]="getRowId"
+  [rowGrouping]="grouping" groupLabelColumn="country"
+  (onRowGroupToggled)="onToggled($event)"
+  (onRowGroupingRejected)="onRejected($event)" />
+<button (click)="grid.core?.rowGroups.setExpanded(null, true)">Expand all</button>
+```
+
+A pointer down on the expander, a double-click on a group row, and Enter or
+Space on its active cell toggle it. Editing a measure cell updates the
+aggregates on its path; editing a dimension cell moves the record, expands its
+new groups and keeps the active cell on it. Group and total rows are read-only,
+and row drag is disabled while grouped. A paginated source, an unknown field or
+an object key without `toKey` is rejected: the grid stays flat and emits
+`(onRowGroupingRejected)`. A data source can also return rows it grouped itself
+as a `HierarchicalRowAccess`. Under strict templates the published input typings
+do not accept `null` or `undefined`: cast to ungroup
+(`null as unknown as RowGrouping`). Angular creates its core on the server, so a
+server render may already contain the collapsed group rows (`role="treegrid"`).
+The label cell's parts, `GroupToggleComponent` and `GroupLabelComponent`, are
+exported. See [Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
+typed into a `number` column stores `60000`, and a draft the type cannot hold
+writes nothing.
+
 | Output | Payload |
 | --- | --- |
 | `(onColumnResized)` | `{ columnId, width, viewIndex }` |
@@ -230,6 +277,8 @@ absent hierarchy and bind `[]` for no band heights. See
 | `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
 | `(onRowResized)` | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
 | `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
+| `(onRowGroupToggled)` | `{ rowId, expanded }` per group a pointer or key gesture toggled |
+| `(onRowGroupingRejected)` | `RowGroupingRejection` — `{ reason, field? }` |
 | `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
 

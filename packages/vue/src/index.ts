@@ -16,6 +16,9 @@ export type {
   UseGpGridResult,
 } from "./composables/useGpGrid";
 
+export { useRowGroupCellContext, useRowGroupingSync } from "./composables/useRowGroupingSync";
+export type { RowGroupCellContext } from "./composables/useRowGroupingSync";
+
 export { useGridData } from "./composables/useGridData";
 export type {
   UseGridDataOptions,
@@ -55,6 +58,7 @@ export { useGridState, createInitialState } from "./gridState";
 export { renderCell, getCellValue } from "./renderers/cellRenderer";
 export { renderEditCell } from "./renderers/editRenderer";
 export { renderHeader, renderGroupHeader } from "./renderers/headerRenderer";
+export { renderGroupLabel } from "./renderers/groupLabelRenderer";
 
 // =============================================================================
 // Types
@@ -65,6 +69,7 @@ export type {
   VueEditRenderer,
   VueHeaderRenderer,
   VueGroupHeaderRenderer,
+  VueGroupLabelRenderer,
   VueHeaderRendererRegistry,
   GpGridProps,
   ColumnDefinition,
@@ -84,6 +89,9 @@ export {
   isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
+  // Row grouping
+  createRowGrouping,
+  isHierarchicalRowAccess,
   // Utils
   calculateColumnPositions,
   getTotalWidth,
@@ -104,6 +112,27 @@ export type {
   CellValue,
   RowId,
   ViewRow,
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
   SortDirection,
   SortModel,
   // Cell coordinates

@@ -1,0 +1,87 @@
+/* =============================================================================
+   Row Groups: group and total rows, the label cell and its expander. The row
+   sets --gp-grid-group-depth; the label column's cell indents by it on every
+   row of a hierarchy. Only the expander's geometry is unconditional; every
+   other rule is :where so a theme can override it at zero specificity.
+   ============================================================================= */
+
+:where(.gp-grid-row--group) {
+  background-color: var(--gp-grid-bg-alt);
+  font-weight: 600;
+}
+
+:where(.gp-grid-row--total) {
+  background-color: var(--gp-grid-bg-alt);
+  font-weight: 700;
+}
+
+:where(.gp-grid-cell--group-indent) {
+  padding-inline-start: calc(
+    var(--gp-grid-cell-padding-inline) + var(--gp-grid-group-depth, 0) * var(--gp-grid-group-indent)
+  );
+}
+
+:where(.gp-grid-cell--group-label) {
+  gap: 4px;
+}
+
+:where(.gp-grid-group-label) {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gp-grid-group-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* The chevron points to the inline end; the mirror keeps it so in RTL. */
+.gp-grid-group-toggle:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+:where(.gp-grid-group-toggle) {
+  cursor: pointer;
+  color: var(--gp-grid-text-secondary);
+  border-radius: 2px;
+}
+
+:where(.gp-grid-group-toggle:not(.gp-grid-group-toggle--none):hover) {
+  background-color: var(--gp-grid-hover);
+}
+
+:where(.gp-grid-group-toggle)::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: translateX(-1px) rotate(45deg);
+  transition: transform 120ms ease;
+}
+
+:where(.gp-grid-group-toggle--expanded)::before {
+  transform: translateY(-1px) rotate(135deg);
+}
+
+/* The total row toggles nothing; its empty expander keeps the label aligned. */
+:where(.gp-grid-group-toggle--none) {
+  cursor: default;
+}
+
+:where(.gp-grid-group-toggle--none)::before {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.gp-grid-group-toggle)::before {
+    transition: none;
+  }
+}

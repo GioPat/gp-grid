@@ -35,14 +35,17 @@ export const applyInstruction = <TData = unknown>(
     case "ASSIGN_SLOT": {
       const existing = slots.get(instruction.slotId);
       if (existing) {
-        slots.set(instruction.slotId, {
-          ...existing,
+        const { row: _previousRow, ...rest } = existing;
+        const next: SlotData<TData> = {
+          ...rest,
           rowIndex: instruction.rowIndex,
           rowData: instruction.rowData as TData,
           generation: instruction.generation,
           region: instruction.region ?? "suffix",
           loading: instruction.loading ?? false,
-        });
+        };
+        if (instruction.row) next.row = instruction.row;
+        slots.set(instruction.slotId, next);
       }
       return null;
     }
@@ -144,7 +147,11 @@ export const applyInstruction = <TData = unknown>(
       return { isLoading: true, error: null };
 
     case "DATA_LOADED":
-      return { isLoading: false, totalRows: instruction.totalRows };
+      return {
+        isLoading: false,
+        totalRows: instruction.totalRows,
+        hierarchical: instruction.hierarchical === true,
+      };
 
     case "DATA_ERROR":
       return { isLoading: false, error: instruction.error };

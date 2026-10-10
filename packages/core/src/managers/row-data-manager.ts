@@ -1,53 +1,26 @@
 import type {
   CellValue,
-  CellValueChangedEvent,
-  CellWriteRejectedEvent,
-  ColumnDefinition,
   DataSource,
   DataSourceResponse,
-  FilterModel,
+  HierarchicalRowAccess,
+  HierarchyRow,
   RowAccess,
+  RowGrouping,
+  RowGroupingResult,
   RowId,
-  RowLoadingOptions,
-  SortModel,
   WriteRejectionOperation,
+  WriteRejectionReason,
 } from "../types";
-import type { InstructionBatcher } from "./instruction-batcher";
 import type { AxisBounds } from "../types/geometry";
 import { buildDataSourceRequest } from "../utils";
 import { PaginatedRowLoader } from "./paginated-row-loader";
 import { RowIdDiagnostics } from "./row-id-diagnostics";
 import { RowStore } from "./row-store";
-import type { RowLoadContext, RowPageBudgetInput } from "./row-window-loader";
+import { RowViewBinder } from "./row-view-binder";
 import { refreshTransactionData } from "../grid-core-operations";
+import type { RowDataManagerOptions } from "./row-data-manager-options";
 
-export interface RowDataManagerOptions<TData> {
-  dataSource: DataSource<TData>;
-  rowLoading: RowLoadingOptions | undefined;
-  batcher: InstructionBatcher;
-  getColumns: () => ColumnDefinition[];
-  getSortModel: () => SortModel[];
-  getFilterModel: () => FilterModel;
-  /** Overscanned half-open row window from the geometry service. */
-  getRowWindow: () => { start: number; end: number };
-  /** Exact half-open visible row window from the geometry service. */
-  getVisibleRowWindow: () => { start: number; end: number };
-  /** Finite row estimate for the first load, while the row axis is still empty. */
-  getBootstrapRowCount: () => number;
-  /** Capacity inputs for C2's cache predicate; never reads the region layout. */
-  getPageBudgetInput: () => RowPageBudgetInput;
-  /** Windows and the published C9 layout for the load being computed. */
-  getLoadContext: () => RowLoadContext;
-  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
-  getRowId?: (row: TData) => RowId;
-  /** Called when a write is refused because the source is read-only. */
-  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
-  /**
-   * A row window arrived from a fire-and-forget load (scroll-triggered), so
-   * nobody is awaiting it: the view must be synced from here.
-   */
-  onRowsLoaded: (totalRowsChanged: boolean) => void;
-}
+export type { RowDataManagerOptions } from "./row-data-manager-options";
 
 export class RowDataManager<TData = unknown> {
   private dataSource: DataSource<TData>;
@@ -55,6 +28,7 @@ export class RowDataManager<TData = unknown> {
   private readonly store: RowStore<TData>;
   private readonly diagnostics: RowIdDiagnostics<TData>;
   private readonly paginated: PaginatedRowLoader<TData>;
+  private readonly binder: RowViewBinder<TData>;
   private isDataLoading = false;
   /** Guards against an obsolete load applying after a newer one. */
   private loadGeneration = 0;
@@ -101,13 +75,15 @@ export class RowDataManager<TData = unknown> {
       onRowsLoaded: options.onRowsLoaded,
       bumpDataRevision: () => this.bumpDataRevision(),
     });
+    this.binder = new RowViewBinder(
+      this.store,
+      { ...options, getDataSource: () => this.dataSource },
+      () => this.paginated.isPaginatedLoading(),
+    );
   }
 
   getCachedRows(): Map<number, TData> {
     return this.store.getCachedRows();
-  }
-  setCachedRows(rows: Map<number, TData>): void {
-    this.store.setCachedRows(rows);
   }
   getTotalRows(): number {
     return this.store.getTotalRows();
@@ -128,6 +104,12 @@ export class RowDataManager<TData = unknown> {
   getRowAccess(): RowAccess | null {
     return this.store.getRowAccess();
   }
+  getHierarchy(): HierarchicalRowAccess<TData> | null {
+    return this.store.getHierarchy();
+  }
+  getHierarchyRow(viewIndex: number): HierarchyRow | undefined {
+    return this.store.getHierarchyRow(viewIndex);
+  }
   getRowId(viewRow: number): RowId | undefined {
     return this.store.getRowId(viewRow);
   }
@@ -137,13 +119,13 @@ export class RowDataManager<TData = unknown> {
   findViewIndexById(rowId: RowId): number {
     return this.store.findViewIndexById(rowId);
   }
-  /** Whether the bound source exposes a stable row identity (D2). */
+  /** Whether the bound source exposes a stable row identity. */
   hasStableIdentity(): boolean { return this.store.hasStableIdentity(); }
   /** View indices of the requested identities, within `range` when given. */
   locateRowIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
     return this.store.locateIds(ids, range);
   }
-  /** Changes whenever row order or membership may have changed (D6). */
+  /** Changes whenever row order or membership may have changed. */
   getDataRevision(): number { return this.store.getRevision(); }
   bumpDataRevision(): void { this.store.bumpRevision(); }
 
@@ -161,24 +143,31 @@ export class RowDataManager<TData = unknown> {
   getFieldValue(viewIndex: number, field: string): CellValue {
     return this.store.getFieldValue(viewIndex, field);
   }
-  setCellValue(row: number, col: number, value: CellValue): void {
-    this.store.setCellValue(row, col, value);
+  /** False when the write was refused, and reported as `operation`. */
+  setCellValue(row: number, col: number, value: CellValue, operation?: WriteRejectionOperation): boolean {
+    return this.store.setCellValue(row, col, value, operation);
   }
-  rejectWrite(
-    row: number,
-    col: number,
-    operation: WriteRejectionOperation,
-  ): void {
-    this.store.rejectWrite(row, col, operation);
+  /** A group or total row takes no write. */
+  isRowWritable(row: number): boolean {
+    return this.store.isRowWritable(row);
+  }
+  rejectWrite(row: number, col: number, operation: WriteRejectionOperation, reason: WriteRejectionReason): void {
+    this.store.rejectWrite(row, col, operation, reason);
   }
 
   async loadInitial(): Promise<void> {
     if (this.paginated.isPaginatedLoading()) {
+      this.binder.bindPaginated();
       await this.paginated.loadInitial();
       return;
     }
 
     await this.fetchAllData();
+  }
+
+  /** Regroup the resident flat rows with no query. */
+  setGrouping(grouping: RowGrouping | null): RowGroupingResult {
+    return this.binder.setGrouping(grouping);
   }
 
   requestVisibleRows(): void {
@@ -191,7 +180,8 @@ export class RowDataManager<TData = unknown> {
   }
 
   async refreshFromTransaction(): Promise<void> {
-    if (this.dataSource.writable === false) {
+    // A hierarchy has no flat cache to patch: it is re-bound from a full query.
+    if (this.dataSource.writable === false || this.store.getHierarchy()) {
       await this.fetchAllData();
       return;
     }
@@ -213,16 +203,14 @@ export class RowDataManager<TData = unknown> {
 
     // Keep wrapper row counts in sync without showing a loading indicator.
     this.bumpDataRevision();
-    this.options.batcher.emit({
-      type: "DATA_LOADED",
-      totalRows: this.store.getTotalRows(),
-    });
+    this.emitLoaded();
   }
 
   setDataSource(dataSource: DataSource<TData>): void {
     this.dataSource = dataSource;
     this.paginated.reset();
     this.store.setRowAccess(null);
+    this.binder.reset();
     this.loadGeneration += 1;
     this.store.setTotalRows(0);
     this.bumpDataRevision();
@@ -231,6 +219,7 @@ export class RowDataManager<TData = unknown> {
   destroy(): void {
     this.paginated.reset();
     this.store.setRowAccess(null);
+    this.binder.reset();
     this.loadGeneration += 1;
     this.store.clear();
     this.isDataLoading = false;
@@ -252,11 +241,7 @@ export class RowDataManager<TData = unknown> {
       const response = await this.dataSource.query(request);
       if (generation !== this.loadGeneration) return;
       this.applyResponse(response);
-
-      this.options.batcher.emit({
-        type: "DATA_LOADED",
-        totalRows: this.store.getTotalRows(),
-      });
+      this.emitLoaded();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       this.emitDataError(error);
@@ -267,26 +252,19 @@ export class RowDataManager<TData = unknown> {
     }
   }
 
-  /**
-   * Adopt a query response. A response with scalar access binds that access
-   * and leaves the row cache empty; otherwise the materialized rows replace it.
-   */
   private applyResponse(response: DataSourceResponse<TData>): void {
     this.bumpDataRevision();
-    if (response.access) {
-      this.store.getCachedRows().clear();
-      this.store.setRowAccess(response.access);
-      this.store.setTotalRows(response.totalRows);
+    if (this.binder.bind(response) === "rows") this.diagnostics.diagnoseLoadedRows();
+  }
+
+  /** A flat load omits `hierarchical`, so the flat payload stays exact. */
+  emitLoaded(): void {
+    const totalRows = this.store.getTotalRows();
+    if (this.store.getHierarchy()) {
+      this.options.batcher.emit({ type: "DATA_LOADED", totalRows, hierarchical: true });
       return;
     }
-    this.store.setRowAccess(null);
-    const cachedRows = this.store.getCachedRows();
-    cachedRows.clear();
-    response.rows.forEach((row, index) => {
-      cachedRows.set(index, row);
-    });
-    this.store.setTotalRows(response.totalRows);
-    this.diagnostics.diagnoseLoadedRows();
+    this.options.batcher.emit({ type: "DATA_LOADED", totalRows });
   }
 
   private emitDataError(error: unknown): void {

@@ -4,14 +4,22 @@ import {
   createColumnGroupLookup,
   createDomMeasurementHost,
   createInitialState,
+  createRowGrouping,
   defaultPinIcon,
+  formatGroupLabel,
   fragmentHeaderId,
+  isEmptyGroupCell,
+  isHierarchicalRowAccess,
   leafHeaderId,
+  resolveGridLabels,
+  resolveGroupLabelColumnId,
 } from "@gp-grid/core";
 import type {
   AutoFitOptions,
   CellBounds,
   CellRendererParams,
+  CellValue,
+  CellWriteRejectedEvent,
   ColumnDefinition,
   ColumnFitResult,
   ColumnGroupChild,
@@ -38,22 +46,49 @@ import type {
   GridIcon,
   GridInstruction,
   GridLabelOverrides,
+  GridRowGroupLabels,
+  GridRowGroupsApi,
   GridRowHeightsApi,
   GridState,
+  GridViewportApi,
+  GroupLabelRendererParams,
   HeaderBandLayout,
   HeaderFragment,
   HeaderFragments,
   HeaderRendererParams,
+  HierarchicalRowAccess,
+  HierarchyGroupRow,
+  HierarchyRecordChange,
+  HierarchyRecordRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyTotalRow,
+  InputEventAdapter,
   MeasurementHost,
   ResizeTarget,
   RowDragEndEvent,
   RowFitResult,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupResult,
+  RowGroupToggledEvent,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupingState,
   RowHeightUpdate,
   RowRegionLayout,
   RowResizeDragState,
   RowResizedEvent,
+  RowId,
+  ScrollMotionHandle,
   SetHeaderBandsInstruction,
+  SlotData,
   ViewRow,
+  WriteRejectionReason,
 } from "@gp-grid/core";
 import type {
   FreezeRowsOptions as ReactFreezeRowsOptions,
@@ -61,8 +96,22 @@ import type {
   GridProps,
   GridRef,
   ReactGroupHeaderRenderer,
+  ReactGroupLabelRenderer,
 } from "@gp-grid/react";
-import type { GpGridProps, VueGroupHeaderRenderer } from "@gp-grid/vue";
+import { createRowGrouping as createReactRowGrouping } from "@gp-grid/react";
+import { createRowGrouping as createVueRowGrouping, renderGroupLabel } from "@gp-grid/vue";
+import type {
+  GpGridProps,
+  UseGpGridOptions,
+  UseGpGridResult,
+  VueGroupHeaderRenderer,
+  VueGroupLabelRenderer,
+} from "@gp-grid/vue";
+import {
+  GroupLabelComponent,
+  GroupToggleComponent,
+  createRowGrouping as createAngularRowGrouping,
+} from "@gp-grid/angular";
 import type {
   AngularColumnDefinition,
   AngularColumnGroupChild,
@@ -71,6 +120,10 @@ import type {
   FreezeRowsOptions as AngularFreezeRowsOptions,
   FrozenRowsState as AngularFrozenRowsState,
   GridLabelOverrides as AngularGridLabelOverrides,
+  GroupLabelRendererTemplate,
+  RowGroupToggledEvent as AngularRowGroupToggledEvent,
+  RowGrouping as AngularRowGrouping,
+  RowGroupingRejection as AngularRowGroupingRejection,
   RowResizedEvent as AngularRowResizedEvent,
 } from "@gp-grid/angular";
 
@@ -104,7 +157,38 @@ const freezeRows: FreezeRowsOptions = { count: 3, maxCount: 100, minSuffixHeight
 const labelOverrides: GridLabelOverrides = {
   frozenRowsLimited: "{effective} of {requested} rows frozen",
   columnSchemaErrors: schemaErrorLabels,
+  rowGroups: { label: "{value}: {count}" },
 };
+// Row grouping (PRD 008): dimensions, measures, a custom aggregator and a total row.
+const decade: RowGroupDimension = {
+  field: "age",
+  id: "decade",
+  toKey: (value) => (typeof value === "number" ? Math.floor(value / 10) * 10 : null),
+};
+const builtIn: RowGroupBuiltInAggregate = "avg";
+// `init` returns a fresh state; `merge` leaves `from` intact.
+const distinct: RowGroupAggregator<Set<CellValue>> = {
+  init: () => new Set(),
+  add: (seen, value) => (value === null ? seen : seen.add(value)),
+  result: (seen) => seen.size,
+  merge: (into, from) => {
+    for (const value of from) into.add(value);
+    return into;
+  },
+};
+const measures: RowGroupMeasure[] = [
+  { field: "age", aggregate: builtIn },
+  { field: "name", source: "name", aggregate: distinct },
+];
+const savedExpansion: RowGroupingState = { expanded: [], collapsed: [] };
+const groupingConfig: RowGroupingConfig = {
+  dimensions: [decade, { field: "name" }],
+  measures,
+  defaultExpandedDepth: 0,
+  grandTotal: "top",
+  initialState: savedExpansion,
+};
+const rowGrouping: RowGrouping = createRowGrouping(groupingConfig);
 // The adapter kit's DOM reads; wrappers build one in the browser only.
 const measurementHost: MeasurementHost = createDomMeasurementHost(() => null);
 const core = new GridCore<Row>({
@@ -124,6 +208,13 @@ const core = new GridCore<Row>({
   rowResize: true,
   autoFit,
   measurementHost,
+  rowGrouping,
+  onRowGroupToggled: (event: RowGroupToggledEvent) => void [event.rowId, event.expanded],
+  onRowGroupingRejected: (rejection: RowGroupingRejection) => void [rejection.reason, rejection.field],
+  onWriteRejected: (event: CellWriteRejectedEvent) => {
+    const reason: WriteRejectionReason = event.reason;
+    void (reason === "not-a-record" || reason === "derived-view" || reason === "read-only-source");
+  },
   getRowId: (row) => row.id,
   onColumnResized: (event: ColumnResizedEvent) => void event.viewIndex,
   onRowResized: (event: RowResizedEvent) => void event.height,
@@ -138,6 +229,15 @@ const unsubscribe = core.onBatchInstruction((instructions: GridInstruction[]) =>
     if (instruction.type === "SET_HEADER_BANDS") {
       const bandsInstruction: SetHeaderBandsInstruction = instruction;
       void bandsInstruction.bands.totalHeight;
+    }
+    // Hierarchy publication: the row of a slot and the mode of a load.
+    if (instruction.type === "ASSIGN_SLOT") {
+      const assignedRow: HierarchyRow | undefined = instruction.row;
+      void assignedRow?.depth;
+    }
+    if (instruction.type === "DATA_LOADED") {
+      const hierarchicalLoad: boolean | undefined = instruction.hierarchical;
+      void hierarchicalLoad;
     }
   }
 });
@@ -222,7 +322,59 @@ const seededState: GridState<Row> = createInitialState<Row>({
   initialColumnGroups: columnGroups,
 });
 const seededBands: HeaderBandLayout = seededState.headerBands;
+const seededStateIsHierarchical = (): boolean => seededState.hierarchical;
 const headerIds = [leafHeaderId("grid", "name"), fragmentHeaderId("grid", "person:center:0")];
+// Row groups: commands, results, state and the view-row union (PRD 008).
+const rowGroupCommands: GridRowGroupsApi = core.rowGroups;
+const groupsActive: boolean = core.rowGroups.isActive();
+const expandAll: RowGroupResult = core.rowGroups.setExpanded(null, true);
+const collapseOne: RowGroupResult = core.rowGroups.setExpanded(["gp-total"], false);
+const toggled: RowGroupResult["status"] = core.rowGroups.toggle("gp-total").status;
+const ungrouped: RowGroupingResult = core.rowGroups.setGrouping(null);
+const regrouped: RowGroupingResult = core.rowGroups.setGrouping(rowGrouping);
+const groupingRejection: RowGroupingRejection | null =
+  regrouped.status === "rejected" ? regrouped.rejection : null;
+const expansion: RowGroupingState = rowGrouping.getState();
+const describeViewRow = (row: ViewRow<Row>): string => {
+  if (row.kind === "record") {
+    const recordRow: HierarchyRecordRow = row;
+    return `${recordRow.depth}:${row.record?.name ?? ""}`;
+  }
+  if (row.kind === "group") {
+    const groupRow: HierarchyGroupRow = row;
+    return `${groupRow.field}:${String(groupRow.value)}:${groupRow.childCount}:${groupRow.expanded}`;
+  }
+  const totalRow: HierarchyTotalRow = row;
+  return String(totalRow.leafCount);
+};
+const rowKind: HierarchyRowKind = "group";
+const recordChange: HierarchyRecordChange = { viewRow: 0, field: "name" };
+const slotRow: SlotData<Row>["row"] = undefined;
+const hierarchicalState: boolean = seededStateIsHierarchical();
+const groupLabels: GridRowGroupLabels = resolveGridLabels(labelOverrides).rowGroups;
+const labelColumnId: string | undefined = resolveGroupLabelColumnId(core.geometry.getColumnLayout(), "name");
+const groupLabelText = (row: HierarchyGroupRow | HierarchyTotalRow): string =>
+  formatGroupLabel(row, columns, resolveGridLabels(labelOverrides));
+const emptyGroupCell: boolean = isEmptyGroupCell(rowKind, null);
+const groupLabelParams = (params: GroupLabelRendererParams): string => {
+  params.toggle();
+  return `${params.viewIndex}:${params.row.kind}:${params.label}`;
+};
+
+// Scroll motion and wheel input.
+const viewportCommands: GridViewportApi = core.viewport;
+const motionHandle: ScrollMotionHandle = { isActive: () => false, interrupt: () => undefined };
+core.viewport.setScrollMotionHandle(motionHandle);
+const motionActive: boolean = core.viewport.isScrollMotionActive();
+core.viewport.interruptScrollMotion();
+core.viewport.clearScrollMotionHandle(motionHandle);
+const wheelResult: { dy: number; dx: number } | null = core.input.handleWheel(120, 0, 0.1, 0);
+const pointerToggle: RowGroupResult = core.input.handleGroupToggle(0, "mouse");
+const gestureToggle: RowGroupResult = core.input.handleGroupToggle(0);
+const adapterWheel = (adapter: InputEventAdapter<Row>, event: WheelEvent) => adapter.wheel(event, 0.1);
+const adapterGroupToggle = (adapter: InputEventAdapter<Row>, event: PointerEvent): void =>
+  adapter.groupTogglePointerDown(0, event);
+
 const fillHandle: FillHandlePosition | null = null;
 const headerPinControl = (params: HeaderRendererParams): void => {
   let nextPin: ColumnPin | null = null;
@@ -246,8 +398,15 @@ const reactRef: GridRef<Row> = { core };
 const reactFreezeRows: ReactFreezeRowsOptions = { count: 3 };
 const onReactFrozenRowsChanged = (state: ReactFrozenRowsState): void => void state.limit;
 const reactGroupRenderer: ReactGroupHeaderRenderer = (params) => params.groupId;
+const reactGroupLabel: ReactGroupLabelRenderer = (params) => params.label;
 const reactProps: GridProps<Row> = {
   columns,
+  rowGrouping: createReactRowGrouping({ dimensions: [{ field: "name" }] }),
+  groupLabelColumn: "name",
+  groupLabelRenderer: reactGroupLabel,
+  onRowGroupToggled: (event) => void event.expanded,
+  onRowGroupingRejected: (rejection) => void rejection.reason,
+  onWriteRejected: (event) => void event.reason,
   columnGroups,
   columnGroupLimits: groupLimits,
   headerBandHeights: [40],
@@ -271,8 +430,27 @@ const reactProps: GridProps<Row> = {
   pinIcon,
 };
 const vueGroupRenderer: VueGroupHeaderRenderer = (params: ColumnGroupHeaderParams) => params.groupId;
+const vueGroupLabel: VueGroupLabelRenderer = (params: GroupLabelRendererParams) => params.label;
+const vueLabelNode = (params: GroupLabelRendererParams) => renderGroupLabel(params, vueGroupLabel);
+const vueGrouping = createVueRowGrouping({ dimensions: [{ field: "name" }] });
+// `useGpGrid` takes the same grouping options and returns the expander handler.
+const vueComposableOptions: Pick<
+  UseGpGridOptions<Row>,
+  "rowGrouping" | "onRowGroupToggled" | "onRowGroupingRejected"
+> = {
+  rowGrouping: vueGrouping,
+  onRowGroupToggled: (event) => void event.rowId,
+  onRowGroupingRejected: (rejection) => void rejection.reason,
+};
+const vueExpanderHandler = (result: UseGpGridResult<Row>, event: PointerEvent): void =>
+  result.handleGroupTogglePointerDown(0, event);
 const vueProps: GpGridProps<Row> = {
   columns,
+  rowGrouping: null,
+  groupLabelColumn: "name",
+  groupLabelRenderer: vueGroupLabel,
+  onRowGroupToggled: (event) => void event.expanded,
+  onRowGroupingRejected: (rejection) => void rejection.reason,
   columnGroups,
   columnGroupLimits: groupLimits,
   headerBandHeights: [40],
@@ -306,7 +484,18 @@ const angularInputs: {
   autoFit: AngularAutoFitOptions;
   onRowResized: (event: AngularRowResizedEvent) => void;
   onColumnSchemaRejected: (error: AngularColumnSchemaError) => void;
+  rowGrouping: AngularRowGrouping;
+  groupLabelColumn: string;
+  groupLabelRenderer: GroupLabelRendererTemplate;
+  onRowGroupToggled: (event: AngularRowGroupToggledEvent) => void;
+  onRowGroupingRejected: (rejection: AngularRowGroupingRejection) => void;
 } = {
+  rowGrouping: createAngularRowGrouping({ dimensions: [{ field: "name" }] }),
+  groupLabelColumn: "name",
+  // The published input typings accept neither `null` nor `undefined`.
+  groupLabelRenderer: null as unknown as GroupLabelRendererTemplate,
+  onRowGroupToggled: (event) => void event.rowId,
+  onRowGroupingRejected: (rejection) => void rejection.field,
   freezeRows: { count: 3, maxCount: 100, minSuffixHeight: 64 },
   onFrozenRowsChanged: (state) => void state.effectiveCount,
   labels: { frozenRowsLimited: "{effective} of {requested} rows frozen", columnSchemaErrors: { cycle: "Cycle at {id}" } },
@@ -320,8 +509,51 @@ const angularInputs: {
 // `rowData` is now optional: a record-less (columnar) row has none.
 const renderName = (params: CellRendererParams<Row>): string =>
   `${params.columnId}:${String(params.rowData?.name ?? "")}`;
+// On a group or total row the cell holds an aggregate and has no `rowData`.
+const renderAggregate = (params: CellRendererParams<Row>): string =>
+  params.rowKind === "group" || params.rowKind === "total" ? `Σ ${String(params.value)}` : renderName(params);
+const angularUngrouped = null as unknown as AngularRowGrouping;
+const angularLabelParts = [GroupToggleComponent, GroupLabelComponent];
+const accessIsHierarchy = (access: HierarchicalRowAccess<Row> | { rowCount: number; getValue: () => null }): boolean =>
+  isHierarchicalRowAccess<Row>(access);
+const recordOf = (access: HierarchicalRowAccess<Row>): Row | undefined => access.getRecord?.(0);
+const idOf = (access: HierarchicalRowAccess<Row>): RowId => access.getRowId(0);
 
 void rectangle;
+void rowGroupCommands;
+void groupsActive;
+void expandAll;
+void collapseOne;
+void toggled;
+void ungrouped;
+void groupingRejection;
+void expansion;
+void describeViewRow;
+void recordChange;
+void slotRow;
+void hierarchicalState;
+void groupLabels;
+void labelColumnId;
+void groupLabelText;
+void emptyGroupCell;
+void groupLabelParams;
+void viewportCommands;
+void motionActive;
+void wheelResult;
+void pointerToggle;
+void gestureToggle;
+void adapterWheel;
+void adapterGroupToggle;
+void reactGroupLabel;
+void vueLabelNode;
+void vueComposableOptions;
+void vueExpanderHandler;
+void renderAggregate;
+void angularUngrouped;
+void angularLabelParts;
+void accessIsHierarchy;
+void recordOf;
+void idOf;
 void nameBounds;
 void contentBounds;
 void rowsBounds;

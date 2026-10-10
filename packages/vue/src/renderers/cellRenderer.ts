@@ -7,6 +7,7 @@ import type {
   RowId,
   ColumnDefinition,
   CellRendererParams,
+  HierarchyRowKind,
 } from "@gp-grid/core";
 import type { VueCellRenderer } from "../types";
 import { invokeRenderer } from "./utils";
@@ -29,6 +30,8 @@ export interface RenderCellOptions {
   rowId?: RowId;
   /** Read another field's raw value at this row without a record. */
   getValue?: (field: string) => CellValue;
+  /** Kind of the row under a hierarchy; absent while flat. */
+  rowKind?: HierarchyRowKind;
 }
 
 /**
@@ -48,6 +51,7 @@ export function renderCell(options: RenderCellOptions): VNode {
     rawValue: providedRawValue,
     rowId,
     getValue,
+    rowKind,
   } = options;
 
   const rawValue = providedRawValue ?? getFieldValue(rowData, column.field);
@@ -66,6 +70,7 @@ export function renderCell(options: RenderCellOptions): VNode {
     isActive,
     isSelected,
     isEditing,
+    rowKind,
   };
 
   // Check for column-specific renderer

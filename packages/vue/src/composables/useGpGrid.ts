@@ -16,6 +16,8 @@ import {
   TouchScrollController,
   PendingScrollLatch,
   createDomMeasurementHost,
+  isMutableDataSource,
+  resolveGridLabels,
 } from "@gp-grid/core";
 import type {
   AutoFitOptions,
@@ -36,17 +38,33 @@ import type {
   FreezeRowsOptions,
   FrozenRowsState,
   GridAnnouncement,
+  GridLabelOverrides,
   GridState,
   RowRegionLayout,
   SlotData,
   HighlightingOptions,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
 } from "@gp-grid/core";
 import { useGridState } from "../gridState";
 import { useInputHandler } from "./useInputHandler";
 import { useFillHandle } from "./useFillHandle";
 import { useColumnSchemaSync } from "./useColumnSchemaSync";
-import type { VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
+import {
+  createGroupTogglePointerDown,
+  useRowGroupCellContext,
+  useRowGroupingSync,
+  type RowGroupCellContext,
+} from "./useRowGroupingSync";
+import type {
+  VueCellRenderer,
+  VueEditRenderer,
+  VueGroupLabelRenderer,
+  VueHeaderRenderer,
+  VueHeaderRendererRegistry,
+} from "../types";
 
 // =============================================================================
 // Types
@@ -104,6 +122,18 @@ export interface UseGpGridOptions<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Clamps for the fit commands and the row resize keys. Read at creation. */
   autoFit?: AutoFitOptions;
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping?: RowGrouping | null;
+  /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+  groupLabelColumn?: string;
+  /** Renders the label of a group or total row. */
+  groupLabelRenderer?: VueGroupLabelRenderer;
+  /** Called per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+  /** Called when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
+  /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
+  labels?: GridLabelOverrides;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
@@ -141,6 +171,8 @@ export interface UseGpGridResult<TData = unknown> {
   rowRegions: ComputedRef<RowRegionLayout>;
   /** C13 live-region content, or `null` when there is nothing to announce. */
   announcement: ComputedRef<GridAnnouncement | null>;
+  /** Label column, labels and toggles of a hierarchy for `groupCellOf`; `null` while flat. */
+  rowGroupCells: ComputedRef<RowGroupCellContext | null>;
 
   // Event handlers
   handleScroll: () => void;
@@ -155,6 +187,8 @@ export interface UseGpGridResult<TData = unknown> {
   handleFilterPopupClose: () => void;
   handleCellMouseEnter: (rowIndex: number, colIndex: number) => void;
   handleCellMouseLeave: () => void;
+  /** Pointer down on a group row's expander (`span.gp-grid-group-toggle`): toggles it. */
+  handleGroupTogglePointerDown: (rowIndex: number, e: PointerEvent) => void;
 
   // Drag state
   dragState: Ref<DragState>;
@@ -210,6 +244,16 @@ export function useGpGrid<TData = unknown>(
   const slotsArray = computed(() => Array.from(state.value.slots.values()));
   const rowRegions = computed(() => state.value.rowRegions);
   const announcement = computed(() => state.value.announcement);
+  const resolvedLabels = computed(() => resolveGridLabels(options.labels));
+
+  const rowGroupCells = useRowGroupCellContext(coreRef, {
+    hierarchical: () => state.value.hierarchical,
+    layout: () => layout.value,
+    columns: () => state.value.columns,
+    labels: () => resolvedLabels.value,
+    groupLabelColumn: () => options.groupLabelColumn,
+    groupLabelRenderer: () => options.groupLabelRenderer,
+  });
 
   // Input handling
   const {
@@ -310,6 +354,10 @@ export function useGpGrid<TData = unknown>(
       onColumnPinned: (event) => options.onColumnPinned?.(event),
       onRowResized: (event) => options.onRowResized?.(event),
       onFrozenRowsChanged: (state) => options.onFrozenRowsChanged?.(state),
+      labels: options.labels,
+      rowGrouping: options.rowGrouping,
+      onRowGroupToggled: (event) => options.onRowGroupToggled?.(event),
+      onRowGroupingRejected: (rejection) => options.onRowGroupingRejected?.(rejection),
     });
 
     coreRef.value = core;
@@ -354,12 +402,16 @@ export function useGpGrid<TData = unknown>(
       });
       resizeObserver.observe(container);
 
-      onUnmounted(() => {
-        resizeObserver.disconnect();
-        unsubscribe();
-        coreRef.value = null;
-      });
+      onUnmounted(() => resizeObserver.disconnect());
     }
+
+    onUnmounted(() => {
+      unsubscribe();
+      core.destroy();
+      coreRef.value = null;
+      // A provided source belongs to the caller; only the one built from `rowData` is ours.
+      if (dataSource !== options.dataSource) dataSource.destroy?.();
+    });
   });
 
   // Apply programmatic scroll from SCROLL_TO. flush: 'post' ensures the DOM
@@ -380,17 +432,12 @@ export function useGpGrid<TData = unknown>(
   // Subscribe to data source changes
   watch(
     () => options.dataSource,
-    (dataSource) => {
-      if (dataSource) {
-        const mutableDataSource = dataSource as {
-          subscribe?: (listener: () => void) => () => void;
-        };
-        if (mutableDataSource.subscribe) {
-          const unsubscribe = mutableDataSource.subscribe(() => {
-            coreRef.value?.refresh();
-          });
-          onUnmounted(() => unsubscribe());
-        }
+    (dataSource, _previous, onCleanup) => {
+      if (dataSource !== undefined && isMutableDataSource(dataSource)) {
+        const unsubscribe = dataSource.subscribe(() => {
+          coreRef.value?.refreshFromTransaction();
+        });
+        onCleanup(unsubscribe);
       }
     },
     { immediate: true },
@@ -419,6 +466,8 @@ export function useGpGrid<TData = unknown>(
       coreRef.value?.rowHeights.setResizable(enabled ?? false);
     },
   );
+
+  useRowGroupingSync(coreRef, () => options.rowGrouping);
 
   useColumnSchemaSync(coreRef, {
     columns: () => options.columns,
@@ -462,6 +511,7 @@ export function useGpGrid<TData = unknown>(
     fillHandlePosition,
     rowRegions,
     announcement,
+    rowGroupCells,
 
     // Event handlers
     handleScroll,
@@ -476,6 +526,7 @@ export function useGpGrid<TData = unknown>(
     handleFilterPopupClose,
     handleCellMouseEnter,
     handleCellMouseLeave,
+    handleGroupTogglePointerDown: createGroupTogglePointerDown(coreRef),
 
     // Drag state
     dragState,

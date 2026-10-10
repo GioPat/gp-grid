@@ -300,6 +300,7 @@ describe("GridCore column state", () => {
     expect(grid.rows.getViewRow(1)).toEqual({
       kind: "record",
       id: 1,
+      depth: 0,
       viewIndex: 1,
       record: grid.rows.getData(1),
     });

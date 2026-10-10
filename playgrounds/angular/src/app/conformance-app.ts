@@ -1,8 +1,9 @@
-import { AfterViewInit, Component, OnDestroy, computed, effect, signal, viewChild } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, computed, effect, signal, viewChild } from '@angular/core';
 import { GpGridComponent, createColumnarDataSource } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
   AngularColumnGroupChild,
+  CellRendererTemplate,
   CellValue,
   DataSource,
   CellValueChangedEvent,
@@ -17,6 +18,8 @@ import type {
   ColumnLayoutMode,
   FreezeRowsOptions,
   GridCore,
+  GroupLabelRendererTemplate,
+  RowGrouping,
   RowLoadingOptions,
   RowDragEndEvent,
   RowId,
@@ -64,6 +67,16 @@ import {
   type ColumnGroupsMode,
   type ColumnGroupsSchema,
 } from './conformance-column-groups';
+import {
+  createRowGroupsFixture,
+  ROW_GROUPS_COLUMN_LAYOUT,
+  ROW_GROUPS_HEADER_HEIGHT,
+  ROW_GROUPS_ROW_HEIGHT,
+  ROW_KIND_PROBE,
+  type RowGroupsArm,
+  type RowGroupsColumnsVariant,
+  type RowGroupsMode,
+} from './conformance-row-groups';
 
 interface ConformanceRow {
   id: number;
@@ -84,7 +97,8 @@ type FixtureArm =
   | { fixture: 'frozen'; mode: FrozenMode }
   | { fixture: 'rowHeights'; mode: RowHeightsMode }
   | { fixture: 'autoFit'; mode: AutoFitMode }
-  | { fixture: 'columnGroups'; mode: ColumnGroupsMode };
+  | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
+  | { fixture: 'rowGroups'; mode: RowGroupsMode };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -93,6 +107,7 @@ const NO_GROUP_LIMITS: ColumnGroupLimits = {};
 
 /** Arms whose rows reach the grid through a data source take the columnar branch. */
 const isSourcedArm = (arm: FixtureArm): boolean => {
+  if (arm.fixture === 'rowGroups') return true;
   if (arm.fixture === 'frozen' || arm.fixture === 'rowHeights') return arm.mode !== 'object';
   return arm.fixture === 'autoFit' && arm.mode === 'paged';
 };
@@ -199,11 +214,24 @@ const createColumnarFixture = () => {
   selector: 'app-root',
   imports: [GpGridComponent],
   template: `
+    <!-- PRD 008: prints the renderer's rowKind, so a spec can read it. -->
+    <ng-template #rowKindProbe let-params>
+      <span class="rg-kind-probe" [attr.data-probe-kind]="params.rowKind ?? 'flat'">{{ params.value ?? '' }}</span>
+    </ng-template>
+    <!-- The external arm's label: the formatted text and a button wired to toggle. -->
+    <ng-template #externalLabel let-params>
+      <span class="rg-custom-label" [attr.data-row-kind]="params.row.kind">{{ params.label }}@if (params.row.kind === 'group') {<button
+          type="button"
+          class="rg-custom-toggle"
+          aria-label="Toggle group"
+          style="width: 14px; height: 14px; margin-inline-start: 4px"
+          (click)="params.toggle()"></button>}</span>
+    </ng-template>
     <main data-conformance-framework="angular" style="width: 620px; margin: 16px">
       <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap">
         <button data-testid="reset" (click)="reset()">Reset</button>
         <button data-testid="remount" (click)="remount()">Remount</button>
-        <button data-testid="replace-columns" (click)="replaceColumns()">Replace columns</button>
+        <button data-testid="replace-columns" (click)="rowGroupsActive() ? setRowGroupColumns('replaced') : replaceColumns()">Replace columns</button>
         <button data-testid="apply-column-state" (click)="applyColumnState()">Apply column state</button>
         <button data-testid="reset-column-state" (click)="resetColumnState()">Reset column state</button>
         <button data-testid="apply-sort" (click)="applySort()">Apply sort</button>
@@ -256,6 +284,16 @@ const createColumnarFixture = () => {
         <button data-testid="over-budget-move" (click)="overBudgetMove()">Over budget</button>
         <button data-testid="tall-band" (click)="tallBand()">Tall band</button>
         <button data-testid="freeze-three" (click)="freezeCount(3)">Freeze 3 rows</button>
+        <button data-testid="use-row-groups" (click)="armRowGroups('object')">RG</button>
+        <button data-testid="use-row-groups-columnar" (click)="armRowGroups('columnar')">RG col</button>
+        <button data-testid="use-row-groups-external" (click)="armRowGroups('external')">RG ext</button>
+        <button data-testid="use-row-groups-paged" (click)="armRowGroups('paged')">RG page</button>
+        <button data-testid="expand-all" (click)="withCore(rowGroups.expandAll)">Exp</button>
+        <button data-testid="collapse-all" (click)="withCore(rowGroups.collapseAll)">Col</button>
+        <button data-testid="tall-leaf" (click)="withCore(rowGroups.tallLeaf)">Tall</button>
+        <button data-testid="ungroup" (click)="ungroup()">Flat</button>
+        <button data-testid="replace-revision" (click)="replaceRevision()">Rev</button>
+        <button data-testid="format-country" (click)="setRowGroupColumns('formatted')">Fmt</button>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="activeHostHeight()">
@@ -273,6 +311,10 @@ const createColumnarFixture = () => {
               [rowResize]="autoFitActive()"
               [rowLoading]="activeRowLoading()"
               [getRowId]="getRowId"
+              [cellRenderers]="rowGroupRenderers"
+              [rowGrouping]="activeRowGrouping()"
+              [groupLabelColumn]="activeGroupLabelColumn()"
+              [groupLabelRenderer]="activeGroupLabelRenderer()"
               (onCellValueChanged)="onCellValueChanged($event)"
               (onWriteRejected)="onWriteRejected($event)"
               (onColumnResized)="onColumnResized($event)"
@@ -280,7 +322,9 @@ const createColumnarFixture = () => {
               (onRowDragEnd)="onRowDragEnd($event)"
               (onColumnPinned)="onColumnPinned($event)"
               (onRowResized)="onRowResized($event)"
-              (onFrozenRowsChanged)="frozen.recordFreezeEvent($event)" />
+              (onFrozenRowsChanged)="frozen.recordFreezeEvent($event)"
+              (onRowGroupToggled)="rowGroups.recordToggle($event)"
+              (onRowGroupingRejected)="rowGroups.recordRejection($event)" />
           } @else {
             <gp-grid
               [columns]="activeColumns()"
@@ -310,7 +354,7 @@ const createColumnarFixture = () => {
     </main>
   `,
 })
-export class ConformanceApp implements AfterViewInit, OnDestroy {
+export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   protected readonly grid = viewChild(GpGridComponent);
 
   private readonly fixture = createColumnarFixture();
@@ -346,6 +390,16 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   });
   protected readonly columnGroupsActive = computed(() => this.columnGroupsMode() !== 'off');
   protected readonly groupsSchema = signal<ColumnGroupsSchema>(this.columnGroups.schemaFor('off'));
+  protected readonly rowGroups = createRowGroupsFixture();
+  protected readonly rowGroupsMode = computed<RowGroupsMode>(() => {
+    const arm = this.arm();
+    return arm.fixture === 'rowGroups' ? arm.mode : 'off';
+  });
+  protected readonly rowGroupsActive = computed(() => this.rowGroupsMode() !== 'off');
+  protected readonly rowGroupsArm = signal<RowGroupsArm>({ columns: [], grouping: null });
+  @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
+  @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
+  protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
   protected readonly bandHeights = signal<readonly number[]>(NO_BAND_HEIGHTS);
   protected readonly groupLimits = signal<ColumnGroupLimits>(NO_GROUP_LIMITS);
   protected readonly mode = signal<'object' | 'columnar'>('object');
@@ -399,6 +453,10 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     return token;
   }
 
+  ngOnInit(): void {
+    this.rowGroupRenderers = { [ROW_KIND_PROBE]: this.rowKindProbe };
+  }
+
   ngAfterViewInit(): void {
     if (typeof window === 'undefined') return;
     (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
@@ -415,8 +473,9 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
       columnState: (): ColumnStateSnapshot[] => this.coreOf()?.columns.getState() ?? [],
       sortColumn: (): string | null => this.coreOf()?.sortFilter.getSortModel()[0]?.colId ?? null,
       filterCount: (): number => Object.keys(this.coreOf()?.sortFilter.getFilterModel() ?? {}).length,
-      eventCounts: () => ({ ...this.eventCounts }),
+      eventCounts: () => ({ ...this.eventCounts, ...this.rowGroups.eventCounts() }),
       resetEventCounts: (): void => {
+        this.rowGroups.resetEventCounts();
         this.eventCounts.resized = 0;
         this.eventCounts.moved = 0;
         this.eventCounts.dragged = 0;
@@ -431,6 +490,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
         setGroups: (groups) => this.groupsSchema.update((schema) => ({ columns: schema.columns, groups })),
         setBandHeights: (heights) => this.bandHeights.set(heights ?? NO_BAND_HEIGHTS),
       }),
+      ...this.rowGroups.createHooks(() => this.coreOf()),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
         if (this.autoFitActive()) return this.autoFit.requestedRanges();
@@ -511,6 +571,41 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     this.groupLimits.set(NO_GROUP_LIMITS);
     this.columnGroups.clearResult();
     this.armFixture({ fixture: 'columnGroups', mode: next });
+  }
+
+  /** Row group arms (PRD 008): fresh rows, source and grouping, then a remount. */
+  protected armRowGroups(next: RowGroupsMode): void {
+    this.rowGroupsArm.set(this.rowGroups.arm(next));
+    this.armFixture({ fixture: 'rowGroups', mode: next });
+  }
+
+  /** In place: the grid keeps its core and regroups or relabels. */
+  protected setRowGroupColumns(variant: RowGroupsColumnsVariant): void {
+    const columns = this.rowGroups.columnsFor(this.rowGroupsMode(), variant);
+    this.rowGroupsArm.update((current) => ({ ...current, columns }));
+  }
+
+  protected ungroup(): void {
+    this.rowGroupsArm.update((current) => ({ ...current, grouping: null }));
+  }
+
+  protected replaceRevision(): void {
+    this.withCore((core) => void this.rowGroups.replaceRevision(core));
+  }
+
+  // The published input typing drops `| null`, while the input takes it at runtime.
+  protected activeRowGrouping(): RowGrouping {
+    const grouping = this.rowGroupsActive() ? this.rowGroupsArm().grouping : null;
+    return grouping as RowGrouping;
+  }
+
+  protected activeGroupLabelRenderer(): GroupLabelRendererTemplate {
+    const renderer = this.rowGroupsMode() === 'external' ? this.externalLabel : null;
+    return renderer as GroupLabelRendererTemplate;
+  }
+
+  protected activeGroupLabelColumn(): string {
+    return this.rowGroupsActive() ? this.rowGroups.labelColumn() : '';
   }
 
   /** Group controls: commands go through the core, the schema through the inputs (PRD 007). */
@@ -611,6 +706,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.rowGroupsActive()) return this.rowGroups.source() ?? this.columnarSource;
     if (this.autoFitActive()) return this.autoFit.sourceFor(this.autoFitMode()) ?? this.columnarSource;
     if (this.rowHeightsActive()) return this.rowHeights.sourceFor(this.rowHeightsMode()) ?? this.columnarSource;
     if (this.frozenActive()) return this.frozen.sourceFor(this.frozenMode()) ?? this.columnarSource;
@@ -618,6 +714,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
     if (this.columnGroupsActive()) return this.groupsSchema().columns;
     const fitColumns = this.autoFitActive() ? this.autoFit.columnsFor(this.autoFitMode()) : undefined;
     if (fitColumns !== undefined) return fitColumns;
@@ -650,6 +747,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
   }
 
   protected activeRowLoading(): RowLoadingOptions {
+    if (this.rowGroupsActive()) return this.rowGroups.rowLoading() ?? NO_ROW_LOADING;
     const fitLoading = this.autoFitActive() ? this.autoFit.rowLoadingFor(this.autoFitMode()) : undefined;
     if (fitLoading !== undefined) return fitLoading;
     const heightsLoading = this.rowHeightsActive() ? this.rowHeights.rowLoadingFor(this.rowHeightsMode()) : undefined;
@@ -665,6 +763,7 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     if (this.rowHeightsActive()) return ROW_HEIGHTS_ROW_HEIGHT;
     if (this.autoFitActive()) return AUTO_FIT_ROW_HEIGHT;
     if (this.columnGroupsActive()) return COLUMN_GROUPS_ROW_HEIGHT;
+    if (this.rowGroupsActive()) return ROW_GROUPS_ROW_HEIGHT;
     return 32;
   }
 
@@ -673,11 +772,13 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     if (this.rowHeightsActive()) return ROW_HEIGHTS_HEADER_HEIGHT;
     if (this.autoFitActive()) return AUTO_FIT_HEADER_HEIGHT;
     if (this.columnGroupsActive()) return COLUMN_GROUPS_HEADER_HEIGHT;
+    if (this.rowGroupsActive()) return ROW_GROUPS_HEADER_HEIGHT;
     return 36;
   }
 
   protected activeColumnLayout(): ColumnLayoutMode {
     if (this.autoFitActive()) return AUTO_FIT_COLUMN_LAYOUT;
+    if (this.rowGroupsActive()) return ROW_GROUPS_COLUMN_LAYOUT;
     return this.columnGroupsActive() ? COLUMN_GROUPS_COLUMN_LAYOUT : this.columnLayout();
   }
 
@@ -787,7 +888,8 @@ export class ConformanceApp implements AfterViewInit, OnDestroy {
     this.editEvents.update((value) => value + 1);
   }
 
-  protected onWriteRejected(_event: CellWriteRejectedEvent): void {
+  protected onWriteRejected(event: CellWriteRejectedEvent): void {
+    this.rowGroups.recordWriteRejected(event);
     this.writeRejected.update((value) => value + 1);
   }
 

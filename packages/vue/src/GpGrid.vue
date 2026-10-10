@@ -17,16 +17,18 @@ import {
   TouchScrollController,
   PendingScrollLatch,
   defaultPinIcon,
+  isMutableDataSource,
   resolveGridLabels,
   createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { AutoFitOptions, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowGrouping, RowGroupingRejection, RowGroupToggledEvent, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
 import { useColumnSchemaSync } from "./composables/useColumnSchemaSync";
-import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
+import { useRowGroupCellContext, useRowGroupingSync } from "./composables/useRowGroupingSync";
+import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueGroupLabelRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
@@ -114,6 +116,16 @@ const props = withDefaults(
     onColumnMoved?: (event: ColumnMovedEvent) => void;
     /** Called when a column is pinned or unpinned. */
     onColumnPinned?: (event: ColumnPinnedEvent) => void;
+    /** Groups the resident rows; a new value regroups without recreating the core. */
+    rowGrouping?: RowGrouping | null;
+    /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+    groupLabelColumn?: string;
+    /** Renders the label of a group or total row. */
+    groupLabelRenderer?: VueGroupLabelRenderer;
+    /** Called per group a pointer or key gesture toggled; commands stay silent. */
+    onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+    /** Called when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+    onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
     /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
     labels?: GridLabelOverrides;
   }>(),
@@ -188,6 +200,15 @@ const displayedIndexOf = computed(() => {
   const index = new Map<string, number>();
   layout.value?.columns.forEach((column, at) => index.set(column.columnId, at));
   return (columnId: string): number => index.get(columnId) ?? 0;
+});
+
+const rowGroupCells = useRowGroupCellContext(coreRef, {
+  hierarchical: () => state.value.hierarchical,
+  layout: () => layout.value,
+  columns: () => effectiveColumns.value,
+  labels: () => resolvedLabels.value,
+  groupLabelColumn: () => props.groupLabelColumn,
+  groupLabelRenderer: () => props.groupLabelRenderer,
 });
 
 // Input handling
@@ -287,10 +308,18 @@ function handleCellMouseLeave(): void {
   coreRef.value?.input.handleCellMouseLeave();
 }
 
-// Helper to create or get data source
+// Only a source built here from `rowData` is destroyed by the grid; a provided one belongs to the caller.
+let ownedDataSource: DataSource<Row> | null = null;
+
 function getOrCreateDataSource(): DataSource<Row> {
-  return props.dataSource ??
-    (props.rowData ? createDataSourceFromArray(props.rowData) : createClientDataSource<Row>([]));
+  if (props.dataSource) {
+    ownedDataSource = null;
+    return props.dataSource;
+  }
+  ownedDataSource = props.rowData
+    ? createDataSourceFromArray(props.rowData)
+    : createClientDataSource<Row>([]);
+  return ownedDataSource;
 }
 
 /**
@@ -346,6 +375,9 @@ function initializeCore(dataSource: DataSource<Row>): void {
     onColumnMoved: (event) => props.onColumnMoved?.(event),
     onColumnPinned: (event) => props.onColumnPinned?.(event),
     onFrozenRowsChanged: (state) => props.onFrozenRowsChanged?.(state),
+    rowGrouping: props.rowGrouping,
+    onRowGroupToggled: (event) => props.onRowGroupToggled?.(event),
+    onRowGroupingRejected: (rejection) => props.onRowGroupingRejected?.(rejection),
     labels: props.labels,
   });
 
@@ -417,10 +449,9 @@ onMounted(() => {
       coreRef.value.destroy();
       coreRef.value = null;
     }
-    if (currentDataSourceRef.value) {
-      currentDataSourceRef.value.destroy?.();
-      currentDataSourceRef.value = null;
-    }
+    if (currentDataSourceRef.value === ownedDataSource) ownedDataSource?.destroy?.();
+    ownedDataSource = null;
+    currentDataSourceRef.value = null;
   });
 });
 
@@ -435,12 +466,13 @@ watch(
       );
     }
 
-    const newDataSource = getOrCreateDataSource();
     const oldDataSource = currentDataSourceRef.value;
+    const oldOwned = ownedDataSource;
+    const newDataSource = getOrCreateDataSource();
 
     if (oldDataSource && oldDataSource !== newDataSource) {
-      // Destroy old data source (terminates Web Workers)
-      oldDataSource.destroy?.();
+      // Destroy an owned old data source (terminates Web Workers)
+      if (oldDataSource === oldOwned) oldDataSource.destroy?.();
       // Update data source ref
       currentDataSourceRef.value = newDataSource;
       // Swap data source without destroying core (preserves sort, filter, scroll, selection)
@@ -455,17 +487,12 @@ watch(
 // Subscribe to data source changes
 watch(
   () => props.dataSource,
-  (dataSource) => {
-    if (dataSource) {
-      const mutableDataSource = dataSource as {
-        subscribe?: (listener: () => void) => () => void;
-      };
-      if (mutableDataSource.subscribe) {
-        const unsubscribe = mutableDataSource.subscribe(() => {
-          coreRef.value?.refreshFromTransaction();
-        });
-        onUnmounted(() => unsubscribe());
-      }
+  (dataSource, _previous, onCleanup) => {
+    if (dataSource !== undefined && isMutableDataSource(dataSource)) {
+      const unsubscribe = dataSource.subscribe(() => {
+        coreRef.value?.refreshFromTransaction();
+      });
+      onCleanup(unsubscribe);
     }
   },
   { immediate: true },
@@ -521,6 +548,8 @@ watch(
   },
 );
 
+useRowGroupingSync(coreRef, () => props.rowGrouping);
+
 useColumnSchemaSync(coreRef, {
   columns: () => props.columns as unknown as CoreColumnDefinition[],
   columnGroups: () => props.columnGroups,
@@ -546,7 +575,7 @@ defineExpose({
     ref="outerContainerRef"
     :class="['gp-grid-container', { 'gp-grid-container--dark': darkMode }]"
     style="width: 100%; height: 100%; position: relative; display: flex; flex-direction: column"
-    role="grid"
+    :role="state.hierarchical ? 'treegrid' : 'grid'"
     :aria-colcount="displayedColumnCount"
     :aria-rowcount="state.totalRows + state.headerBands.count"
     :data-layout-revision="columnWindow?.layout.revision"
@@ -618,6 +647,7 @@ defineExpose({
       :edit-renderers="editRenderers ?? {}"
       :global-cell-renderer="cellRenderer"
       :global-edit-renderer="editRenderer"
+      :row-groups="rowGroupCells"
     />
 
   <!-- Loading overlay - positioned outside scrollable area to avoid Firefox sticky issues -->

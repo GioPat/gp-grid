@@ -210,3 +210,12 @@ Angular with an effect over its input. None of them joins the core-recreation
 dependencies, so the count changes in place — no remount, no new core and no
 scroll reset. `labels` stays creation-only: `ViewSync` builds its label
 formatting once, so changing the localized wording still needs a new grid.
+
+## Row grouping
+
+Under [row grouping](./row-grouping.md) the prefix is the first `count` view
+rows, whatever their kind: group, total and record rows freeze alike. The count
+is re-resolved over the new view rows after every expand, collapse and regroup,
+with the same limits. A top total row (`grandTotal: "top"`) stays in view with
+`freezeRows: { count: 1 }`. A pinned label cell inside the frozen pin layer does
+not get the group row's background.

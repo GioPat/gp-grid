@@ -30,6 +30,8 @@ export interface BatchChangeSetters {
   setIsLoading: (v: boolean) => void;
   setErrorMessage: (v: string | null) => void;
   setTotalRows: (v: number) => void;
+  /** Whether a hierarchy is bound, with every `DATA_LOADED`. */
+  setHierarchical?: (v: boolean) => void;
   setPendingScrollTop: (v: number | null) => void;
   setPendingScrollLeft: (v: number | null) => void;
   setActiveCell: (v: CellPosition | null) => void;
@@ -141,6 +143,7 @@ const applyScalarState = (
   if (changes.isLoading !== undefined) setters.setIsLoading(changes.isLoading);
   if (changes.error !== undefined) setters.setErrorMessage(changes.error);
   if (changes.totalRows !== undefined) setters.setTotalRows(changes.totalRows);
+  if (changes.hierarchical !== undefined) setters.setHierarchical?.(changes.hierarchical);
   if (changes.pendingScrollTop !== undefined) setters.setPendingScrollTop(changes.pendingScrollTop);
   if (changes.pendingScrollLeft !== undefined) setters.setPendingScrollLeft(changes.pendingScrollLeft);
   if (changes.geometryRevision !== undefined) setters.setGeometryRevision?.(changes.geometryRevision);

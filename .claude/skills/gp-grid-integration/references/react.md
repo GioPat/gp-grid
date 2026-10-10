@@ -552,6 +552,65 @@ rejected hierarchy leaves the previous one on screen; the prop is re-applied wit
 every later `columns` change, so put a valid one back. See
 [docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
+## Row grouping
+
+```tsx
+import { useRef } from "react";
+import {
+  Grid,
+  createRowGrouping,
+  type GridRef,
+  type ReactCellRenderer,
+  type ReactGroupLabelRenderer,
+} from "@gp-grid/react";
+
+// Module scope (or useMemo): a new object regroups.
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const groupLabel: ReactGroupLabelRenderer = ({ row, label, toggle }) =>
+  row.kind === "total" ? <strong>{label}</strong> : <span onDoubleClick={toggle}>{label}</span>;
+
+// `rowData` is undefined on a group or total row: branch on `rowKind`.
+const amountCell: ReactCellRenderer = ({ value, rowKind }) =>
+  rowKind === "group" || rowKind === "total" ? <strong>{String(value)}</strong> : String(value ?? "");
+
+function SalesGrid() {
+  const gridRef = useRef<GridRef<Sale> | null>(null);
+  return (
+    <>
+      <button onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}>Expand all</button>
+      <Grid
+        columns={columns}
+        rowData={sales}
+        rowHeight={32}
+        getRowId={(row) => row.id}
+        gridRef={gridRef}
+        rowGrouping={grouping}            // reactive; null or undefined = flat
+        groupLabelColumn="country"        // default: first displayed column
+        groupLabelRenderer={groupLabel}
+        cellRenderers={{ amount: amountCell }}
+        onRowGroupToggled={({ rowId, expanded }) => console.log(rowId, expanded)}
+        onRowGroupingRejected={({ reason, field }) => console.warn(reason, field)}
+      />
+    </>
+  );
+}
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`. A
+group cell with no aggregate renders empty and calls no renderer. The grouping
+needs every row resident (`rowData`, a client source or `useGridData`); a server
+source is rejected with `partial-source`. See
+[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
@@ -587,7 +646,7 @@ every later `columns` change, so put a valid one back. See
 | `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn`, `frozenRowsLimited` and the nested `columnSchemaErrors` |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
-| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | read-only source refused a write; `e.operation` names the entry point |
+| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | a write was refused; `e.reason` is `"read-only-source"`, `"not-a-record"` (group/total row), `"derived-view"` (row drag while grouped) or `"type-mismatch"` (edit the column type cannot hold), `e.operation` names the entry point |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
 | `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |
@@ -597,6 +656,11 @@ every later `columns` change, so put a valid one back. See
 | `onFrozenRowsChanged` | `(s: FrozenRowsState) => void` | — | `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution |
 | `onRowResized` | `(e: RowResizedEvent) => void` | — | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
 | `onColumnSchemaRejected` | `(e: ColumnSchemaError) => void` | — | `{ code, source, id?, limit?, message }`; the previous schema stays |
+| `rowGrouping` | `RowGrouping \| null` | — | `createRowGrouping(...)`; reactive, regroups without a remount |
+| `groupLabelColumn` | `string` | first displayed column | column of the expander and label |
+| `groupLabelRenderer` | `ReactGroupLabelRenderer` | — | `{ row, viewIndex, label, toggle }` |
+| `onRowGroupToggled` | `(e: RowGroupToggledEvent) => void` | — | `{ rowId, expanded }`; gestures only |
+| `onRowGroupingRejected` | `(r: RowGroupingRejection) => void` | — | `{ reason, field? }`; fires on every load while rejected |
 
 ## React-specific gotchas
 

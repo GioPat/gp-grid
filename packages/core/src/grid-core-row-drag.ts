@@ -11,6 +11,7 @@ export interface GridRowDragApi {
   /**
    * Move a row when the source supports `moveRow`, then fire `onRowDragEnd`.
    * The cache is reordered in place, so only the affected slots update.
+   * Refused while a hierarchy is bound: its order is derived.
    */
   commit(sourceIndex: number, targetIndex: number): void;
   /** Whether the whole row, not only the drag handle, starts a drag. */
@@ -22,7 +23,7 @@ export interface RowDragControllerDeps<TData> {
   rowData: RowDataManager<TData>;
   slotPool: SlotPoolManager;
   highlight: HighlightManager<TData> | null;
-  /** The move changed row identity, so heights must be re-placed (D6). */
+  /** The move changed row identity, so heights must be re-placed. */
   onRowsMoved: () => void;
 }
 
@@ -35,8 +36,12 @@ export class RowDragController<TData> implements GridRowDragApi {
 
   commit(sourceIndex: number, targetIndex: number): void {
     const { rowData } = this.deps;
+    if (rowData.getHierarchy()) {
+      rowData.rejectWrite(sourceIndex, -1, "row-move", "derived-view");
+      return;
+    }
     if (rowData.isWritable() === false) {
-      rowData.rejectWrite(sourceIndex, -1, "row-move");
+      rowData.rejectWrite(sourceIndex, -1, "row-move", "read-only-source");
       return;
     }
     // Read identity first: the commit reorders the cache under these indices.

@@ -306,9 +306,14 @@ describe("GridCore.rowHeights — reset and no-ops", () => {
 });
 
 describe("RowHeightsController — after destroy", () => {
-  const unreachable = (): never => {
-    throw new Error("reached a destroyed controller");
-  };
+  const unreachable: never = new Proxy(() => undefined, {
+    apply: () => {
+      throw new Error("reached a destroyed controller");
+    },
+    get: () => {
+      throw new Error("reached a destroyed controller");
+    },
+  }) as never;
 
   const createDestroyed = () => {
     const batcher = new InstructionBatcher();
@@ -323,10 +328,9 @@ describe("RowHeightsController — after destroy", () => {
         getDataRevision: () => 0,
       }),
       getGeometry: unreachable,
-      getRowData: unreachable,
-      getView: unreachable,
-      refreshGeometry: unreachable,
-      writeScrollTop: unreachable,
+      rowData: unreachable,
+      view: unreachable,
+      viewport: unreachable,
       isDestroyed: () => true,
       fitLimits: { min: ROW_HEIGHT, max: 10 * ROW_HEIGHT },
     });

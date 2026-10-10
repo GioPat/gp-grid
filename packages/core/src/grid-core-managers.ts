@@ -25,6 +25,7 @@ import type { FrozenRowsState } from "./geometry";
 import type { HeaderBandLayout } from "./types/geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import type { CellValue, ColumnDefinition } from "./types";
+import { createRecordWrites, type RecordWrites } from "./grid-core-record-writes";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
@@ -42,9 +43,11 @@ export interface GridManagersDeps<TData> {
   /**
    * A row window arrived from a fire-and-forget load (scroll-triggered), so
    * nobody is awaiting it: the view must be synced from here. Bound lazily to
-   * the row-heights controller, which may place heights on arrival (D7).
+   * the row-heights controller, which may place heights on arrival.
    */
   onRowsLoaded: (totalRowsChanged: boolean) => void;
+  /** The view-rows applier; it reads controllers built after the managers, so it is called lazily. */
+  applyViewRowsChange: (change: () => boolean) => boolean;
 }
 
 export interface GridManagers<TData> {
@@ -58,6 +61,7 @@ export interface GridManagers<TData> {
   editManager: EditManager;
   sortFilter: SortFilterManager<TData>;
   view: ViewSync<TData>;
+  recordWrites: RecordWrites;
 }
 
 export const buildGridManagers = <TData>(
@@ -76,12 +80,35 @@ export const buildGridManagers = <TData>(
   const getCachedRows = (): Map<number, TData> => rowData.getCachedRows();
   const getCellValue = (row: number, col: number): CellValue =>
     rowData.getCellValue(row, col);
-  const setCellValue = (row: number, col: number, value: CellValue): void => {
-    rowData.setCellValue(row, col, value);
-  };
 
   // Viewport first: the scroll mapping and every later manager read it.
   viewport = new ViewportState();
+
+  const slotPool = new SlotPoolManager({
+    getRowWindow: () => getRowGeometry().getWindow(),
+    getRowCount: getTotalRows,
+    getRowRegions: () => deps.getGeometry().getRowRegions(),
+    // Region-aware rows space: frozen rows keep their content offset (C4).
+    getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
+    getRowSize: (rowIndex) => getRowGeometry().syncAxis().getSize(rowIndex),
+    getRowData: (rowIndex) => rowData.getRowData(rowIndex),
+    getRow: (rowIndex) => rowData.getHierarchyRow(rowIndex),
+    isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
+  });
+  slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
+
+  const recordWrites = createRecordWrites<TData>({
+    getRowData: () => rowData,
+    getColumns,
+    applyViewRowsChange: (change) => deps.applyViewRowsChange(change),
+    refreshSlots: () => slotPool.refreshAllSlots(),
+  });
+  const writes = {
+    setCellValue: recordWrites.setCellValue,
+    isWritable: () => rowData.isWritable(),
+    runWrites: recordWrites.run,
+    onWriteRejected: config.onWriteRejected,
+  };
 
   const scrollVirtualization = new ScrollVirtualizationManager({
     getHeaderHeight,
@@ -97,11 +124,9 @@ export const buildGridManagers = <TData>(
     getColumnCount: () => getColumns().length,
     isColumnDisplayed: (col) => getColumns()[col]?.hidden !== true,
     getCellValue,
-    getRowData: (row) => getCachedRows().get(row),
+    getRowData: (row) => rowData.getRowData(row),
     getColumn: (col) => getColumns()[col],
-    setCellValue,
-    isWritable: () => rowData.isWritable(),
-    onWriteRejected: config.onWriteRejected,
+    ...writes,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
@@ -125,30 +150,15 @@ export const buildGridManagers = <TData>(
     getColumnCount: () => getColumns().length,
     getCellValue,
     getColumn: (col) => getColumns()[col],
-    setCellValue,
-    isWritable: () => rowData.isWritable(),
-    onWriteRejected: config.onWriteRejected,
+    ...writes,
   });
   fill.onInstruction((instruction) => batcher.emit(instruction));
-
-  const slotPool = new SlotPoolManager({
-    getRowWindow: () => getRowGeometry().getWindow(),
-    getRowCount: getTotalRows,
-    getRowRegions: () => deps.getGeometry().getRowRegions(),
-    // Region-aware rows space: frozen rows keep their content offset (C4).
-    getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
-    getRowSize: (rowIndex) => getRowGeometry().syncAxis().getSize(rowIndex),
-    getRowData: (rowIndex) => getCachedRows().get(rowIndex),
-    isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
-  });
-  slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
   const editManager = new EditManager({
     getColumn: (col) => getColumns()[col],
     getCellValue,
-    setCellValue,
-    isWritable: () => rowData.isWritable(),
-    onWriteRejected: config.onWriteRejected,
+    ...writes,
+    isRowWritable: (row) => rowData.isRowWritable(row),
     onCommit: (row) => slotPool.updateSlot(row),
     getSlotGeneration: (row) => slotPool.getSlotGeneration(row),
     getRowId: (row) => rowData.getRowId(row),
@@ -237,6 +247,8 @@ export const buildGridManagers = <TData>(
     onCellValueChanged: config.onCellValueChanged,
     onWriteRejected: config.onWriteRejected,
     getRowId: config.getRowId,
+    rowGrouping: config.rowGrouping,
+    onRowGroupingRejected: config.onRowGroupingRejected,
     onRowsLoaded: (totalRowsChanged) => deps.onRowsLoaded(totalRowsChanged),
   });
 
@@ -251,5 +263,6 @@ export const buildGridManagers = <TData>(
     editManager,
     sortFilter,
     view,
+    recordWrites,
   };
 };

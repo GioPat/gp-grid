@@ -5,6 +5,7 @@ import "./App.css";
 import {
   Grid,
   useGridData,
+  createRowGrouping,
   type ColumnDefinition,
   type ColumnGroupChild,
   type CellRendererParams,
@@ -98,14 +99,13 @@ const cellRenderers = {
   statusBadge: (params: CellRendererParams) => {
     // Raw value drives the color variant; params.value may be the formatted
     // display string when the column declares a valueFormatter.
-    const rawStatus = (params.rowData as Person)[
-      params.column.field as keyof Person
-    ] as Person["status"];
+    const rawStatus = (params.rowData as Person | undefined)?.status;
     const colors = {
       active: { bg: "#dcfce7", text: "#166534" },
       inactive: { bg: "#fee2e2", text: "#991b1b" },
       pending: { bg: "#fef3c7", text: "#92400e" },
     };
+    if (rawStatus === undefined) return null;
     const color = colors[rawStatus];
 
     return (
@@ -391,6 +391,17 @@ const demoColumnGroups: ColumnGroupChild[] = [
   },
 ];
 
+// Row grouping (PRD 008): two dimensions, one `sum` and one `avg`.
+const createDemoRowGrouping = () =>
+  createRowGrouping({
+    dimensions: [{ field: "status" }, { field: "name" }],
+    measures: [
+      { field: "salary", aggregate: "sum" },
+      { field: "age", aggregate: "avg" },
+    ],
+    grandTotal: "top",
+  });
+
 const DEMO_HEADER_HEIGHT = 40;
 const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
 
@@ -429,6 +440,11 @@ function MainDemo() {
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
   const [grouped, setGrouped] = useState(false);
   const [tallBand, setTallBand] = useState(false);
+  const [groupRows, setGroupRows] = useState(false);
+  const rowGrouping = useMemo(
+    () => (groupRows ? createDemoRowGrouping() : null),
+    [groupRows],
+  );
   const gridRef = useRef<GridRef<Person> | null>(null);
   const showTouchDebug = shouldShowTouchDebug();
 
@@ -642,6 +658,34 @@ function MainDemo() {
         >
           Tall band
         </button>
+        <button
+          onClick={() => setGroupRows((value) => !value)}
+          aria-pressed={groupRows}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: groupRows ? "#3b82f6" : "#374151",
+            color: groupRows ? "white" : "#9ca3af",
+          }}
+        >
+          Group rows
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
+          disabled={groupRows === false}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: groupRows ? "pointer" : "not-allowed",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Expand all
+        </button>
       </div>
 
       {showTouchDebug && <DebugOverlay totalRows={1500000} />}
@@ -660,6 +704,7 @@ function MainDemo() {
           columns={columns}
           columnGroups={grouped ? demoColumnGroups : undefined}
           headerBandHeights={tallBand ? tallBandHeights : undefined}
+          rowGrouping={rowGrouping}
           labels={gridLabels}
           overscan={12}
           dataSource={dataSource}

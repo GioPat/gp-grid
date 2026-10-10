@@ -21,7 +21,7 @@ export {
 
 export type { NormalizedRange } from "./classNames";
 
-export { getFieldValue, setFieldValue } from "../indexed-data-store/field-helpers";
+export { createFieldReader, getFieldValue, setFieldValue } from "../indexed-data-store/field-helpers";
 
 export {
   createInstructionEmitter,
@@ -55,7 +55,7 @@ export type { BuildRequestOptions } from "./data-source-request";
 export { reorderCachedRows } from "./cached-rows";
 
 
-export { readCell, writeCell } from "./cell-access";
+export { readCell, writeCell, writeRecordCell } from "./cell-access";
 export type { WriteCellDeps } from "./cell-access";
 
 export { createWriteRejection } from "./write-rejection";

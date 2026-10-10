@@ -36,6 +36,10 @@ export class FlingAnimator<TData = unknown> {
     return this.frame === null ? 0 : this.velocity;
   }
 
+  get active(): boolean {
+    return this.frame !== null;
+  }
+
   /** Cancel the in-flight fling; the caller decides about the override. */
   stop(): void {
     this.frame = cancelFrame(this.frame);
@@ -112,7 +116,7 @@ export class FlingAnimator<TData = unknown> {
 
   /**
    * A row size change corrects the top through the viewport override while a
-   * fling is in flight (D5). Adopting it keeps the motion from replaying the
+   * fling is in flight. Adopting it keeps the motion from replaying the
    * position the correction just replaced.
    */
   private adoptCorrection(

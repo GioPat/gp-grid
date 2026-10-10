@@ -44,6 +44,15 @@ const PACKAGE_ENTRY_SOURCES = {
   `,
 };
 
+// PRD 008 D12: the flat gp-grid entry above must shake the row grouping engine out.
+const ENGINE_MARKER = "gp-group:";
+
+export const assertFlatConsumerHoldsNoEngine = (contents) => {
+  if (contents.some((content) => content.includes(ENGINE_MARKER))) {
+    throw new Error(`The gp-grid package-size bundle contains the row grouping engine ("${ENGINE_MARKER}").`);
+  }
+};
+
 const isReactPeer = (source) => {
   return source === "react" ||
     source.startsWith("react/") ||
@@ -111,6 +120,7 @@ const measurePackageGroup = async (grid, source, benchmarkSource) => {
     },
   });
   const contents = outputContents(buildResult);
+  if (grid === "gp-grid") assertFlatConsumerHoldsNoEngine(contents);
 
   return {
     minifiedBytes: contents.reduce((total, content) => total + content.length, 0),

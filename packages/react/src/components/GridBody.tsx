@@ -18,6 +18,7 @@ import { GridRow } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
 import { GridFrozenRows } from "./GridFrozenRows";
 import type { ResizeHandleActions } from "./ResizeHandle";
+import type { RowGroupCellContext } from "../hooks/useRowGroups";
 import type { ReactCellRenderer, ReactEditRenderer } from "../types";
 
 export interface GridBodyProps<TData = unknown> {
@@ -56,6 +57,8 @@ export interface GridBodyProps<TData = unknown> {
   editRenderers: Record<string, ReactEditRenderer>;
   globalCellRenderer?: ReactCellRenderer;
   globalEditRenderer?: ReactEditRenderer;
+  /** Label column, labels and toggles of a hierarchy; `null` while flat. */
+  rowGroups: RowGroupCellContext | null;
 }
 
 const GridBodyInner = <TData = unknown>(
@@ -95,6 +98,7 @@ const GridBodyInner = <TData = unknown>(
     editRenderers,
     globalCellRenderer,
     globalEditRenderer,
+    rowGroups,
   } = props;
 
   const contentWidthPx = Math.max(contentWidth, totalWidth);
@@ -115,6 +119,7 @@ const GridBodyInner = <TData = unknown>(
     editRenderers,
     globalCellRenderer,
     globalEditRenderer,
+    rowGroups,
     onCellMouseDown,
     onCellDoubleClick,
     onCellMouseEnter,

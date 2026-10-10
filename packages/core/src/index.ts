@@ -14,7 +14,8 @@ export type { GridHeaderApi } from "./grid-core-header";
 export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
 export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
-export type { GridViewportApi } from "./grid-core-viewport";
+export type { GridRowGroupsApi } from "./grid-core-row-groups";
+export type { GridViewportApi, ScrollMotionHandle } from "./grid-core-viewport";
 
 /** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";
@@ -29,8 +30,12 @@ export {
   createDataSourceFromArray,
   createMutableClientDataSource,
   createColumnarDataSource,
+  isMutableDataSource,
 } from "./data-source";
-export { isColumnarDataSource } from "./types";
+export { isColumnarDataSource, isHierarchicalRowAccess } from "./types";
+
+/** Local row grouping engine (PRD 008) */
+export { createRowGrouping } from "./row-grouping";
 export type {
   ColumnarField,
   ColumnarDataSourceOptions,
@@ -131,6 +136,26 @@ export type {
   /** View row identity */
   ViewRow,
 
+  /** Hierarchical rows and row grouping (PRD 008) */
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+
   /** Interaction events */
   ColumnResizedEvent,
   ColumnMovedEvent,
@@ -163,6 +188,7 @@ export type {
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteRejectionOperation,
+  WriteRejectionReason,
   SlotState,
   /** Application-set row height by identity (PRD 006) */
   RowHeightUpdate,
@@ -215,6 +241,7 @@ export type {
 
   // Renderer params (for adapters)
   CellRendererParams,
+  GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
   ColumnGroupHeaderParams,
@@ -348,6 +375,17 @@ export type {
 export { createColumnGroupLookup } from "./column-groups/group-lookup";
 export type { ColumnGroupLookup } from "./column-groups/group-lookup";
 
+/** Group label column, text and markup (PRD 008) */
+export { resolveGroupLabelColumnId, formatGroupLabel, isEmptyGroupCell } from "./row-group-layout";
+export {
+  hierarchyRowAttributes,
+  groupCellOf,
+  groupToggleClassName,
+  groupLabelParams,
+  GROUP_DEPTH_PROPERTY,
+} from "./row-group-cells";
+export type { HierarchyRowAttributes, GroupCell, GroupCellInput } from "./row-group-cells";
+
 /** Localization: shared label model and helpers */
 export {
   defaultGridLabels,
@@ -360,6 +398,7 @@ export {
 export type {
   GridLabels,
   GridLabelOverrides,
+  GridRowGroupLabels,
   GridFilterOperatorLabels,
   GridColumnSchemaErrorLabels,
   FilterOperatorOption,
@@ -402,5 +441,6 @@ export type {
   DragEndResult,
 } from "./adapter";
 
-/** Shared pointer-interaction thresholds */
-export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS } from "./input";
+/** Shared pointer-interaction thresholds and the group expander's pointer down */
+export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS, groupTogglePointerDown } from "./input";
+export type { GroupTogglePointerEvent } from "./input";

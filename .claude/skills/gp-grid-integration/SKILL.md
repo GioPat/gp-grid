@@ -1,6 +1,6 @@
 ---
 name: gp-grid-integration
-description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
+description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
 ---
 
 # gp-grid integration
@@ -68,7 +68,7 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | `minWidth` / `maxWidth` | `50` / unlimited | Resize bounds. |
 | `rowDrag` | `false` | This column acts as the row drag handle. |
 | `cellRenderer` / `editRenderer` / `headerRenderer` | none | Custom rendering — exact type **differs per framework**, see references. This takes the value formatted data from the `valueFormatter` field. |
-| `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. |
+| `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. **Numbers are displayed unrounded**: a computed value (a group `avg`, a division, a float sum such as `0.1 + 0.2`) can print many decimals, so give every numeric column that may hold one a formatter that rounds it (`toFixed`, `Intl.NumberFormat`). |
 | `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the row height (rows do **not** auto-grow; a row fit grows one once). Only affects the default text renderer, not custom `cellRenderer` output. |
 | `wrapHeaderText` | `false` | Wrap the header text inside its band; a header taller than its band is clipped. |
 | `computeRowClasses` / `computeColumnClasses` / `computeCellClasses` | none | Per-column/row/cell highlighting overrides — see Highlighting below. |
@@ -271,6 +271,91 @@ const columnGroups: ColumnGroupChild[] = [
   `aria-rowcount` are offset by the band count.
   See [docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
+### Row grouping (`rowGrouping`, `createRowGrouping`)
+
+```ts
+import { createRowGrouping } from "@gp-grid/react"; // or /vue, /angular, /core
+
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],   // ordered; { field, id?, toKey? }
+  measures: [
+    { field: "amount", aggregate: "sum" },                 // shown under the `amount` column
+    { field: "score", aggregate: "avg" },                  // { field, source?, aggregate }
+  ],
+  defaultExpandedDepth: 0,                                 // default: every group collapsed
+  grandTotal: "top",                                       // "top" | "bottom"; omit for none
+});
+// rowGrouping={grouping} groupLabelColumn="country"
+// onRowGroupToggled={(e) => ...} onRowGroupingRejected={(r) => ...}
+```
+
+- **Create it once** (module constant, `useMemo`, `shallowRef`, class field). The
+  prop is reactive: a new object regroups through `rowGroups.setGrouping`, with no
+  remount and no query. One `RowGrouping` serves one grid. Column definitions take
+  no grouping flag.
+- **Needs every row resident:** `rowData`, `createClientDataSource`, the mutable
+  hook/helper or a columnar source. A paginated/server source, a response shorter
+  than its `totalRows`, an unknown `field`, or an object value without `toKey` is
+  **rejected**: the grid renders the source's rows, calls
+  `onRowGroupingRejected({ reason, field? })` (`"partial-source"`,
+  `"hierarchical-source"`, `"unknown-field"`, `"object-key"`) on every load and
+  warns once. An invalid config throws a `RangeError` from `createRowGrouping`.
+- **Keys:** `null`/`undefined`/missing share one bucket (labelled `labels.blanks`);
+  `0`, `"0"`, `""` and `false` are distinct; a `Date` groups by timestamp. `toKey`
+  buckets a value (`string | number | boolean | null`); give two bucketings of one
+  field different `id`s. Group ids (`"gp-group:…"`, total row `"gp-total"`) are
+  opaque and independent of labels: read them from `rows.getViewRow(i)?.id`, the
+  toggle event or `grouping.getState()`.
+- **Order:** a sorted dimension column orders its groups by key; otherwise a
+  measure column sorted first orders groups by that aggregate; otherwise keys
+  ascend. Mixed types order number, date, boolean, string, object, null last.
+  Leaves keep the sorted order. Filters apply before grouping.
+- **Aggregates:** `"sum"` / `"avg"` (finite numbers, `null` for none), `"count"`
+  (non-null values), `"min"` / `"max"`, or a custom
+  `RowGroupAggregator<S> = { init, add, result, merge? }`. `init()` must return a
+  **fresh state** (states are retained per group) and `merge(into, from)` must
+  **leave `from` intact**. Aggregates print unrounded: give the measure's column a
+  rounding `valueFormatter` (see the `valueFormatter` row above).
+- **Group rows are rows of cells.** The expander and label sit in
+  `groupLabelColumn` (default: first displayed column); the label is
+  `labels.rowGroups.label` (`"{value} ({count})"`) with the key through the
+  dimension column's `valueFormatter`, and the total row prints
+  `labels.rowGroups.grandTotal`. **Renderer context:**
+  - `groupLabelRenderer` gets `GroupLabelRendererParams = { row, viewIndex, label, toggle }`
+    (`row.kind` is `"group"` or `"total"`; `toggle()` is a no-op on the total row)
+    — a function in React, a function or component in Vue, a `TemplateRef` in Angular.
+  - A column's `cellRenderer` gets `rowKind` (`"record" | "group" | "total"`, absent
+    while flat). On an aggregate cell `value` is the aggregate and **`rowData` is
+    undefined** — guard `params.rowData?.x`. A group/total cell with no aggregate
+    (`null`) renders empty and calls **no** renderer; the peek does not open on it.
+- **Input:** click the expander, double-click a group row, or press Enter/Space on
+  it. `onRowGroupToggled({ rowId, expanded })` fires for gestures only; the commands
+  `core.rowGroups.setExpanded(ids | null, expanded)`, `toggle(id)` and
+  `setGrouping(grouping | null)` are silent and return
+  `{ status: "applied" | "unchanged" | "unsupported" }` (`setGrouping` also
+  `{ status: "rejected", rejection }`).
+- **Editing:** leaves edit as usual. A measure edit refolds the aggregates on its
+  path; a dimension edit moves the record, **expands its new ancestor groups** (no
+  `onRowGroupToggled`) and keeps the active cell on it. Group/total rows never open
+  an editor; paste and fill skip them (`onWriteRejected`, `reason: "not-a-record"`).
+  Row drag is disabled while grouped (`reason: "derived-view"`). Columnar leaves stay
+  read-only.
+- **State:** `grouping.getState()` → `{ expanded, collapsed, expandedDepth? }` (ids
+  toggled away from the expansion depth; `expandedDepth` appears once
+  `setExpanded(null, …)` moved it); pass it back as `initialState`. Expansion survives sort,
+  filter, transactions and refresh.
+- **Already-grouped data:** a data source returns a `HierarchicalRowAccess`
+  (`hierarchical: true`, `rowCount`, `getRowId`, `getRow`, `getValue`, `locate`,
+  optional `setExpanded` / `getRecord` / `recordsChanged`) as
+  `DataSourceResponse.access` with `rows: []`. No `rowGrouping` and no engine
+  import; do not combine the two (`"hierarchical-source"`).
+- **A11y/DOM:** root `role="treegrid"`, rows `aria-level` + `data-row-kind`, group
+  rows `aria-expanded` and `.gp-grid-row--group`, total row `.gp-grid-row--total`;
+  indent step is the CSS variable `--gp-grid-group-indent` (20px).
+- **SSR:** React and Vue render the flat shell on the server; Angular may already
+  serialize the collapsed group rows.
+  See [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+
 ### Data sources — pick one
 
 | Use when… | Factory | Mutability |
@@ -434,7 +519,7 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 
 - **Sorting:** per-column `sortable: true` (default). Global kill switch: `sortingEnabled={false}`. Click to sort, Shift+click to add to multi-column sort.
 - **Filtering:** per-column `filterable: true` (default). Click the filter icon on the header for the popup. Server data sources receive the filter model in the request.
-- **Editing:** per-column `editable: true`. Default editor is plain text/number/boolean; pass an `editRenderer` for selects, datepickers, multi-selects. Listen with `onCellValueChanged` (requires `getRowId`). Double-click, Enter, F2, or any character starts editing.
+- **Editing:** per-column `editable: true`. Default editor is plain text/number/boolean; pass an `editRenderer` for selects, datepickers, multi-selects. Listen with `onCellValueChanged` (requires `getRowId`). Double-click, Enter, F2, or any character starts editing. A commit is coerced by the column's `cellDataType`, like paste: `"60000"` typed into a `number` column stores the number `60000`, a draft the type cannot hold writes nothing, and a value a custom `editRenderer` already typed is stored unchanged.
 
   `CellValueChangedEvent` shape (every framework — don't paraphrase, the field names are easy to misremember):
 
@@ -453,17 +538,19 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
   `columnId` is the normalized `colId ?? field`; `field` is still the source field. There is no `event.colId`.
 - **Fill handle (Excel-style):** automatic on editable columns when a single cell is active or a range is selected. Drag the small square at the bottom-right of the active cell.
 - **Copy / paste:** Ctrl+C copies the selected range to clipboard as TSV; Ctrl+V pastes clipboard values across the active selection. Works automatically.
-- **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })` — **the consumer must reorder the underlying data**, the grid does not mutate it.
+- **Row dragging:** `rowDragEntireRow={true}` to drag from any cell, OR set `rowDrag: true` on a specific column to make that column the handle. Listen with `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })` — **the consumer must reorder the underlying data**, the grid does not mutate it. Disabled while rows are grouped.
 - **Column resize / move:** on by default. Drag the inline-end edge of a header to resize (double-click it to fit), drag the header body to reorder. Listen with `onColumnResized({ columnId, width, viewIndex })` and `onColumnMoved({ columnId, fromViewIndex, toViewIndex })` to persist user state.
 - **Column hide:** set `hidden: true` as the column's initial default (keeps it in the definition array); after mount, toggle visibility through `columns.setState` or the wrapper's `columnState` input.
 - **Column pin:** `pinned: "start"` / `"end"` on the column, or `columns.setPinned`. Pinned columns stay visible while the rest scroll; the header toggle (`pinIcon`) does the same. Listen with `onColumnPinned({ columnId, pinned })` to persist. A pin that does not fit renders in the center — check `region` in `columns.getState()`.
 - **Frozen rows:** `freezeRows={{ count: 3 }}` keeps the first displayed rows below the header; a changed prop applies in place through `frozenRows.set` (no remount). Read `core.frozenRows.get()` for the effective count and its `limit`, and listen with `onFrozenRowsChanged(state)`. See [Frozen rows](#frozen-rows-freezerows).
 - **Highlighting (row / column / cell, incl. crosshair):** pass `highlighting={{ computeRowClasses, computeColumnClasses, computeCellClasses }}`. Each callback gets a context with `isHovered`, `isActive`, `isSelected`, etc., and returns CSS class names. Combine `computeRowClasses` + `computeColumnClasses` for an Excel-style crosshair. Define the highlight CSS classes globally (not scoped) — gp-grid renders cells outside any per-component CSS scope. Apply translucent row backgrounds through `.gp-grid-row.<class> .gp-grid-cell`; a translucent background on the row itself lets horizontally scrolling content show through pinned regions.
 - **Dark mode:** `darkMode={true}` adds a `.gp-grid-container--dark` modifier; the grid's CSS handles the rest.
-- **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste), Alt+Arrow (resize), Alt+Shift+Arrow (move column), Alt+Enter / Alt+Shift+Enter (fit column / row). All wired automatically.
+- **Keyboard:** Arrows, Shift+Arrow (extend), Tab/Shift+Tab, Enter (start/commit edit), Esc (cancel), F2 (edit), Delete/Backspace (clear), Ctrl+A (select all), Ctrl+C/V (copy/paste), Alt+Arrow (resize), Alt+Shift+Arrow (move column), Alt+Enter / Alt+Shift+Enter (fit column / row), Enter/Space on a group row (expand/collapse). All wired automatically.
+- **Row grouping:** `rowGrouping={createRowGrouping({ dimensions, measures })}` groups resident rows with aggregates and expand/collapse. See [Row grouping](#row-grouping-rowgrouping-createrowgrouping).
+- **Scrolling:** a press while a touch fling or a wheel glide is still moving the content only stops it; it selects, sorts and toggles nothing. `wheelDampening` (0-1) applies to the vertical wheel on very large (scaled) grids only.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), the column-group rejection messages (nested `columnSchemaErrors.*`, tokens `{id}` and `{limit}`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level, nested operator and nested schema-error labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), the column-group rejection messages (nested `columnSchemaErrors.*`, tokens `{id}` and `{limit}`), the group and total row labels (nested `rowGroups.label`, tokens `{value}` and `{count}`, and `rowGroups.grandTotal`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level, nested operator and nested schema-error labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.
@@ -479,7 +566,7 @@ Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 
 
 ### Programmatic API (`GridCore`)
 
-Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Features live on namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowHeights`, `header`, `rowDrag`, `sortFilter`, `viewport`); the root keeps lifecycle and data loading. Common members:
+Every wrapper exposes the underlying `GridCore` instance — same surface in every framework. Features live on namespaces (`rows`, `cells`, `edit`, `columns`, `frozenRows`, `rowHeights`, `header`, `rowGroups`, `rowDrag`, `sortFilter`, `viewport`); the root keeps lifecycle and data loading. Common members:
 
 | Method | Purpose |
 |---|---|
@@ -492,7 +579,7 @@ Every wrapper exposes the underlying `GridCore` instance — same surface in eve
 | `rows.getCount()` | Displayed view-row count |
 | `rows.getData(viewIndex)` | Source record at a view index, or `undefined` when record-less/unloaded |
 | `rows.has(viewIndex)` | Whether the view row exists (a `null` cell is a value) |
-| `rows.getViewRow(viewIndex)` | `{ kind: "record", id, viewIndex, record? }` or `undefined` |
+| `rows.getViewRow(viewIndex)` | `{ kind: "record", id, depth, viewIndex, record? }`, a group row (`kind: "group"`, `expanded`, `childCount`, `leafCount`, `field`, `value`) or the total row under grouping, or `undefined` |
 | `rows.getRecordById(rowId)` | Source record for a stable id (resident rows / source lookup only) |
 | `columns.setState(updates)` / `columns.resetState(ids?)` / `columns.getState()` | Column width / hidden / order / pin state |
 | `columns.setPinned(columnId, pinned)` | Pin to `"start"`/`"end"` or unpin with `null`; raises `onColumnPinned` |
@@ -500,6 +587,9 @@ Every wrapper exposes the underlying `GridCore` instance — same surface in eve
 | `rowHeights.fit(rowIds?)` / `columns.fit(columnIds?)` | One-shot fit of mounted rows / columns; fit after the render |
 | `columns.setGroups(groups)` / `columns.getGroup(id)` | Replace the header hierarchy (`null` = flat) / read one group |
 | `header.setBandHeights(heights)` / `header.getBands()` | Header band heights |
+| `rowGroups.setExpanded(ids \| null, expanded)` / `rowGroups.toggle(id)` | Expand or collapse groups (`null` = all); silent, returns `{ status }` |
+| `rowGroups.setGrouping(grouping \| null)` / `rowGroups.isActive()` | Regroup the resident rows with no query (`null` = flat) / whether a hierarchy is bound |
+| `viewport.isScrollMotionActive()` / `viewport.interruptScrollMotion()` | Whether a fling or wheel glide is moving the content / stop it where it is |
 | `rows.getSlotGeneration(viewIndex)` / `rows.isSlotGenerationCurrent(viewIndex, gen)` | Slot recycle guard for async renderers |
 | `cells.getValue(row, col)` / `cells.setValue(row, col, value)` / `cells.getBounds(rowId, columnId, space?)` | Cell values by position, bounds by identity |
 | `selection` (manager) | `startSelection`, `extendTo`, etc. |
@@ -529,6 +619,10 @@ How to get the ref:
 - **Expecting a pinned column to always render pinned** → a pin that does not fit the viewport renders in the scrolling center and is admitted again on widening. Read `region` from `columns.getState()` instead of assuming the request took effect.
 - **Fitting in the same task as a column change** → `"stale"`, nothing applied. Fit after the render (a later frame).
 - **A `columnGroups` that misses a column, or a column added without its reference** → rejected (`missingLeaf` / `unknownLeaf`); every column, hidden ones included, needs exactly one reference.
+- **`createRowGrouping(...)` inline in a render/template** → a new object every render regroups every time. Create it once.
+- **Grouping a server/paginated source** → rejected with `partial-source`, the grid stays flat. Group on the server and return a `HierarchicalRowAccess`, or load the rows in full.
+- **A cell renderer that reads `params.rowData.x` under grouping** → throws on aggregate cells, where `rowData` is undefined. Branch on `params.rowKind`.
+- **Group averages with long decimals** → aggregates are unrounded; add a `valueFormatter`.
 - **Flipping `dir` on an existing grid** → the wrappers read direction at mount and on resize, so a flip without a size change needs a remount (change the `key`).
 
 ## What this skill does NOT do
