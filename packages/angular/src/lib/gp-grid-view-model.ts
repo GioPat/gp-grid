@@ -188,6 +188,7 @@ export class GpGridViewModel {
       setHeaderBands: (v) => this.headerBands.set(v),
       setAnnouncement: (v) => this.announcement.set(v),
       setGeometryRevision: (v) => this.geometryRevision.set(v),
+      setHierarchical: (v) => this.hierarchical.set(v),
       onFilterPopupChange: (v) => this.materializeFilterPopup(v),
     };
   }

@@ -4,20 +4,10 @@ import { resolveGroupLabelColumnId } from '@gp-grid/core';
 import type {
   ColumnDefinition,
   ColumnLayoutSnapshot,
-  GridInstruction,
   GridLabels,
 } from '@gp-grid/core';
 import type { RowGroupCellContext } from './components/row-group-cells';
 import type { GroupLabelRendererTemplate } from './types';
-
-/** `GridState.hierarchical` as the reducer derives it; `null` when the batch loads nothing. */
-export const hierarchicalOf = (instructions: readonly GridInstruction[]): boolean | null => {
-  let hierarchical: boolean | null = null;
-  for (const instruction of instructions) {
-    if (instruction.type === 'DATA_LOADED') hierarchical = instruction.hierarchical === true;
-  }
-  return hierarchical;
-};
 
 export interface RowGroupCellDeps {
   hierarchical: Signal<boolean>;

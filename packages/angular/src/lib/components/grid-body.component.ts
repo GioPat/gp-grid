@@ -9,6 +9,8 @@ import {
   isCellInFillPreview,
   isCellSelected,
   isEmptyGroupCell,
+  groupCellOf,
+  hierarchyRowAttributes,
   SlotData,
   ColumnWindowSnapshot,
   ResolvedColumn,
@@ -23,7 +25,9 @@ import {
   DragState,
   GridCore,
   GridLabels,
+  GroupCell,
   HierarchyRow,
+  HierarchyRowAttributes,
   HierarchyRowKind,
   RowRegionLayout,
   ResizeTarget,
@@ -32,14 +36,7 @@ import {
 import { GRID_BODY_TEMPLATE } from "./grid-body.template";
 import { ResizeHandleComponent } from "./resize-handle.component";
 import { GroupLabelComponent, GroupToggleComponent } from "./group-label-cell.component";
-import {
-  groupCellClassName,
-  groupCellOf,
-  rowAriaExpanded,
-  rowAriaLevel,
-  rowKindClassName,
-} from "./row-group-cells";
-import type { GroupCell, RowGroupCellContext } from "./row-group-cells";
+import type { RowGroupCellContext } from "./row-group-cells";
 import type { ResizeHandlePointerDownEvent } from "./resize-handle.component";
 
 export type RowClassFn = (rowIndex: number, rowData: unknown) => string[];
@@ -222,12 +219,16 @@ export class GridBodyComponent {
   protected wrapperTransform = computed(() =>
     `translateY(${this.rowsWrapperOffset()}px)`);
 
-  protected readonly rowAriaLevel = rowAriaLevel;
-
-  protected readonly rowAriaExpanded = rowAriaExpanded;
+  protected readonly rowAttributes = hierarchyRowAttributes;
 
   protected groupCell(row: HierarchyRow | undefined, columnId: string): GroupCell {
     return groupCellOf(row, columnId, this.rowGroups());
+  }
+
+  /** Only a label cell carries a tooltip; the input shows its own value while editing. */
+  protected cellTitle(column: ColumnDefinition, editing: boolean, cell: GroupCell): string | null {
+    if (column.tooltip === false || editing || cell.label === '') return null;
+    return cell.label;
   }
 
   protected onScroll(): void {
@@ -281,8 +282,9 @@ export class GridBodyComponent {
     };
   }
 
-  protected emptyGroupCell(rowData: unknown, column: ColumnDefinition, rowIndex: number, colIndex: number, rowKind?: HierarchyRowKind): boolean {
-    return isEmptyGroupCell(rowKind, this.rawValueAt(rowData, column, rowIndex, colIndex));
+  protected emptyGroupCell(slot: SlotData, entry: ResolvedColumn): boolean {
+    const value = this.rawValueAt(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex);
+    return isEmptyGroupCell(slot.row?.kind, value);
   }
 
   protected cellTemplate(column: ColumnDefinition): CellRendererTemplate | null {
@@ -371,7 +373,6 @@ export class GridBodyComponent {
     rowData: unknown,
     group: GroupCell,
   ): string {
-    const editingCell = this.editingCell();
     // Read hoverPosition to register this signal as a dep so Angular re-renders on hover change.
     this.hoverPosition();
     const ds = this.dragState();
@@ -382,38 +383,34 @@ export class GridBodyComponent {
       ds?.fillSourceRange ?? null,
       ds?.fillTarget ?? null,
     );
-    const editing = isCellEditing(rowIndex, colIndex, editingCell);
-    const base = buildCellClasses(
-      isCellActive(rowIndex, colIndex, this.activeCell()),
-      isCellSelected(rowIndex, colIndex, this.selectionRange()),
-      editing,
-      inFillPreview,
-    );
-    const withHandle = column.rowDrag === true
-      ? `${base} gp-grid-cell--row-drag-handle`
-      : base;
+    const editing = isCellEditing(rowIndex, colIndex, this.editingCell());
     // Wrap only affects the default text content, so skip it in edit mode.
-    const withWrap = column.wrapText === true && !editing
-      ? `${withHandle} gp-grid-cell--wrap`
-      : withHandle;
-    const groupClass = groupCellClassName(group);
-    const withGroup = groupClass === '' ? withWrap : `${withWrap} ${groupClass}`;
-    const fn = this.computeCellClasses();
-    if (fn === null) return withGroup;
-    const extra = fn(rowIndex, colIndex, column, rowData);
-    if (extra.length === 0) return withGroup;
-    return `${withGroup} ${extra.join(' ')}`;
+    const wrap = column.wrapText === true && editing === false;
+    return [
+      buildCellClasses(
+        isCellActive(rowIndex, colIndex, this.activeCell()),
+        isCellSelected(rowIndex, colIndex, this.selectionRange()),
+        editing,
+        inFillPreview,
+      ),
+      column.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
+      wrap ? "gp-grid-cell--wrap" : "",
+      group.className,
+      ...(this.computeCellClasses()?.(rowIndex, colIndex, column, rowData) ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
 
-  protected rowClass(rowIndex: number, rowData: unknown, row?: HierarchyRow): string {
+  protected rowClass(rowIndex: number, rowData: unknown, hierarchy: HierarchyRowAttributes): string {
     this.hoverPosition();
-    const kindClass = rowKindClassName(row);
-    const base = kindClass === '' ? 'gp-grid-row' : `gp-grid-row ${kindClass}`;
-    const fn = this.computeRowClasses();
-    if (fn === null) return base;
-    const extra = fn(rowIndex, rowData);
-    if (extra.length === 0) return base;
-    return `${base} ${extra.join(' ')}`;
+    return [
+      'gp-grid-row',
+      hierarchy.className,
+      ...(this.computeRowClasses()?.(rowIndex, rowData) ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
 
   protected isEditing(rowIndex: number, colIndex: number): boolean {

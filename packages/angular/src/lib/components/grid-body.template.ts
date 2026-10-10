@@ -12,6 +12,7 @@ export const GRID_BODY_TEMPLATE = `<div
       <ng-template #cellTpl let-slot="slot" let-entry="entry">
         @let editing = isEditing(slot.rowIndex, entry.layoutIndex);
         @let group = groupCell(slot.row, entry.columnId);
+        @let groups = rowGroups();
         <div
           [class]="cellClass(slot.rowIndex, entry.layoutIndex, entry.column, slot.rowData, group)"
           role="gridcell"
@@ -19,7 +20,7 @@ export const GRID_BODY_TEMPLATE = `<div
           [attr.data-cell-row]="slot.rowIndex"
           [attr.data-cell-col]="entry.layoutIndex"
           [attr.data-cell-region]="entry.region"
-          [attr.title]="entry.column.tooltip === false || editing ? null : group.label"
+          [attr.title]="cellTitle(entry.column, editing, group)"
           [attr.aria-readonly]="group.readOnly ? 'true' : null"
           style="position: absolute; top: 0;"
           [style.inset-inline-start.px]="entry.regionOffset"
@@ -29,17 +30,17 @@ export const GRID_BODY_TEMPLATE = `<div
           (mouseleave)="cellPointerLeave.emit()"
           (dblclick)="cellDoubleClick.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
         >
-          @if (group.labelRow !== null && rowGroups() !== null) {
+          @if (group.labelRow !== null && groups !== null) {
             <span gpGridGroupToggle
               [row]="group.labelRow"
               [rowIndex]="slot.rowIndex"
-              [context]="rowGroups()!"></span>
+              [context]="groups"></span>
             <span gpGridGroupLabel
               [row]="group.labelRow"
               [rowIndex]="slot.rowIndex"
-              [label]="group.label ?? ''"
-              [context]="rowGroups()!"></span>
-          } @else if (emptyGroupCell(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind)) {
+              [label]="group.label"
+              [context]="groups"></span>
+          } @else if (emptyGroupCell(slot, entry)) {
           } @else if (editing) {
             @let etpl = editTemplate(entry.column);
             @if (etpl) {
@@ -156,13 +157,14 @@ export const GRID_BODY_TEMPLATE = `<div
                   [style.height.px]="slot.height">
                 </div>
               } @else {
+                @let hierarchy = rowAttributes(slot.row);
                 <div
-                  [class]="rowClass(slot.rowIndex, slot.rowData, slot.row)"
+                  [class]="rowClass(slot.rowIndex, slot.rowData, hierarchy)"
                   role="row"
                   [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
-                  [attr.data-row-kind]="slot.row?.kind"
-                  [attr.aria-level]="rowAriaLevel(slot.row)"
-                  [attr.aria-expanded]="rowAriaExpanded(slot.row)"
+                  [attr.data-row-kind]="hierarchy['data-row-kind']"
+                  [attr.aria-level]="hierarchy['aria-level']"
+                  [attr.aria-expanded]="hierarchy['aria-expanded']"
                   [style.--gp-grid-group-depth]="slot.row?.depth"
                   style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                   [style.transform]="'translateY(' + slot.translateY + 'px)'"
@@ -237,13 +239,14 @@ export const GRID_BODY_TEMPLATE = `<div
         [style.transform]="wrapperTransform()">
         @for (slot of suffixSlots(); track slot.slotId) {
           @if (slot.rowIndex >= 0) {
+            @let hierarchy = rowAttributes(slot.row);
             <div
-              [class]="rowClass(slot.rowIndex, slot.rowData, slot.row)"
+              [class]="rowClass(slot.rowIndex, slot.rowData, hierarchy)"
               role="row"
               [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
-              [attr.data-row-kind]="slot.row?.kind"
-              [attr.aria-level]="rowAriaLevel(slot.row)"
-              [attr.aria-expanded]="rowAriaExpanded(slot.row)"
+              [attr.data-row-kind]="hierarchy['data-row-kind']"
+              [attr.aria-level]="hierarchy['aria-level']"
+              [attr.aria-expanded]="hierarchy['aria-expanded']"
               [style.--gp-grid-group-depth]="slot.row?.depth"
               style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
               [style.transform]="'translateY(' + slot.translateY + 'px)'"

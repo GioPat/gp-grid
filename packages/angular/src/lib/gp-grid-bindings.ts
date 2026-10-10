@@ -7,6 +7,7 @@ import {
   PendingRowDragController,
   TouchScrollController,
   applyBatchInstructions,
+  isMutableDataSource,
   readIsRtl,
   scrollCellIntoView,
   toInlineX,
@@ -23,12 +24,6 @@ import type {
   RowGrouping,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
-import { hierarchicalOf } from './gp-grid-row-groups';
-
-const isSubscribable = (
-  dataSource: object | null | undefined,
-): dataSource is { subscribe: (listener: () => void) => () => void } =>
-  typeof (dataSource as { subscribe?: unknown } | null | undefined)?.subscribe === 'function';
 
 export interface GpGridBindingsDeps {
   vm: GpGridViewModel;
@@ -113,8 +108,6 @@ export class GpGridBindings<TData = unknown> {
       );
       vm.slots.set(maps.slots);
       vm.headerState.set(maps.headers);
-      const hierarchical = hierarchicalOf(instructions);
-      if (hierarchical !== null) vm.hierarchical.set(hierarchical);
     });
 
     core.initialize();
@@ -198,7 +191,7 @@ export class GpGridBindings<TData = unknown> {
   /** A `MutableDataSource` announces its transactions; refresh the visible window on each. */
   private watchSource(dataSource: DataSource<TData>): void {
     this.unsubscribeSource?.();
-    this.unsubscribeSource = isSubscribable(dataSource)
+    this.unsubscribeSource = isMutableDataSource(dataSource)
       ? dataSource.subscribe(() => void this.coreRef?.refreshFromTransaction())
       : null;
   }
