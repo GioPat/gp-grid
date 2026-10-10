@@ -49,8 +49,12 @@ const cycleSortDirection = (
 // InputHandler Class
 // =============================================================================
 
+/** Longest gap between the two presses of a double-click on common platforms. */
+const MOTION_STOP_GUARD_MS = 500;
+
 export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
+  private motionStoppedAt = Number.NEGATIVE_INFINITY;
 
   readonly columnResize: ColumnResizeDrag<TData>;
   readonly rowResize: RowResizeDrag<TData>;
@@ -139,7 +143,7 @@ export class InputHandler<TData = unknown> {
 
   /** A double-click on a column or row edge handle fits that target once. */
   handleResizeDoubleClick(target: ResizeTarget): void {
-    if (this.stopsScrollMotion()) return;
+    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
     const action = resolveHandleFit(this.core, target);
     if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
@@ -244,6 +248,7 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
+    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
     if (isGroupRow(this.core, rowIndex)) {
       this.commands.toggleGroupAt(rowIndex);
       return;
@@ -280,7 +285,7 @@ export class InputHandler<TData = unknown> {
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
-    if (this.stopsScrollMotion()) return;
+    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
@@ -295,7 +300,13 @@ export class InputHandler<TData = unknown> {
     const viewport = this.core.viewport;
     if (viewport.isScrollMotionActive() === false) return false;
     if (event?.pointerType !== "touch") viewport.interruptScrollMotion();
+    this.motionStoppedAt = Date.now();
     return true;
+  }
+
+  /** The click and double-click of the press that stopped the motion arrive after it ended. */
+  private justStoppedMotion(): boolean {
+    return Date.now() - this.motionStoppedAt < MOTION_STOP_GUARD_MS;
   }
 
   // ---------------------------------------------------------------------------

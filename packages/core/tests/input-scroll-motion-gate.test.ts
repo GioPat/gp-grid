@@ -1,6 +1,6 @@
 // A press while a fling or wheel glide moves the content only stops it.
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GridCore } from "../src/grid-core";
 import { createClientDataSource } from "../src/data-source";
 import type { ColumnDefinition, InputResult, PointerEventData } from "../src/types";
@@ -44,6 +44,7 @@ describe("InputHandler scroll motion gate", () => {
       rowResize: true,
     });
     await grid.initialize();
+    vi.useFakeTimers({ toFake: ["Date"] });
     motion = { active: true, interrupts: 0 };
     grid.viewport.setScrollMotionHandle({
       isActive: () => motion.active,
@@ -52,6 +53,10 @@ describe("InputHandler scroll motion gate", () => {
         motion.interrupts += 1;
       },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const pointerEntries: Array<[string, (g: GridCore<Row>) => InputResult, InputResult["startDrag"]]> = [
@@ -86,8 +91,23 @@ describe("InputHandler scroll motion gate", () => {
     expect(motion.interrupts).toBe(1);
     expect(grid.sortFilter.getSortModel()).toEqual([]);
 
+    vi.advanceTimersByTime(500);
     grid.input.handleHeaderClick("id", false);
     expect(grid.sortFilter.getSortModel()).toEqual([{ colId: "id", direction: "asc" }]);
+  });
+
+  it("ignores the click and double-click of the press that stopped the motion", () => {
+    expect(grid.input.handleHeaderMouseDown(0, 50, 40, press())).toEqual(swallowed);
+    grid.input.handleHeaderClick("id", false);
+    expect(grid.sortFilter.getSortModel()).toEqual([]);
+
+    grid.input.handleCellMouseDown(0, 1, press());
+    grid.input.handleCellDoubleClick(0, 1);
+    expect(grid.edit.getPeekState()).toBeNull();
+
+    vi.advanceTimersByTime(500);
+    grid.input.handleCellDoubleClick(0, 1);
+    expect(grid.edit.getPeekState()).toEqual({ row: 0, col: 1 });
   });
 
   it("swallows a resize double-click that stops the motion", () => {
