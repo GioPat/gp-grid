@@ -86,7 +86,7 @@ export class KeyboardHandler<TData = unknown> {
     return { preventDefault: true };
   }
 
-  /** D5: Enter and Space on a group row toggle it instead of opening an editor. */
+  /** Enter and Space on a group row toggle it instead of opening an editor. */
   private toggleGroup(key: string, activeCell: CellPosition | null, editingCell: EditingCell): boolean {
     if (editingCell !== null || activeCell === null) return false;
     if (key !== "Enter" && key !== " ") return false;

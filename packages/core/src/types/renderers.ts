@@ -51,7 +51,7 @@ export interface CellRendererParams<TData = unknown> {
   rowKind?: HierarchyRowKind;
 }
 
-/** Group label renderer params: the label cell of a group or total row (PRD 008 D10). */
+/** Group label renderer params: the label cell of a group or total row. */
 export interface GroupLabelRendererParams {
   row: HierarchyGroupRow | HierarchyTotalRow;
   viewIndex: number;

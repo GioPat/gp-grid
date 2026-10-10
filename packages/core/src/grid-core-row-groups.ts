@@ -1,5 +1,5 @@
 // packages/core/src/grid-core-row-groups.ts
-// `GridCore.rowGroups` (D3): expansion commands over the bound hierarchy.
+// `GridCore.rowGroups`: expansion commands over the bound hierarchy.
 
 import type {
   HierarchicalRowAccess,

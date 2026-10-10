@@ -1,7 +1,7 @@
 // packages/core/src/grid-core-row-heights.ts
 // `GridCore.rowHeights`: application-set row heights, the one-shot row fit,
 // and the atomic size change that keeps the suffix row at the clip top where
-// it was (D5).
+// it was.
 
 import type { RowHeightUpdate, RowId, RowResizedEvent } from "./types";
 import type { MeasurementHost, RowFitResult, RowFitSkip } from "./types/measurement";
@@ -180,7 +180,7 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
     this.deps.overrides.clear();
   }
 
-  /** One atomic size change: anchor, geometry, scroll correction, rows (D5). */
+  /** One atomic size change: anchor, geometry, scroll correction, rows. */
   private applySizeChange(mutate: () => boolean): boolean {
     const { batcher } = this.deps;
     const anchor = captureSizeAnchor(this.deps);

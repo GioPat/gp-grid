@@ -23,7 +23,7 @@ export interface SlotPlanInput {
   /** Kind and depth of a hierarchy row; `undefined` while flat. */
   getRow: (rowIndex: number) => HierarchyRow | undefined;
   getRowOffset: (rowIndex: number) => number;
-  /** Row height from the synced row axis (D8). */
+  /** Row height from the synced row axis. */
   getRowSize: (rowIndex: number) => number;
 }
 

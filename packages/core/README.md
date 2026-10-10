@@ -256,7 +256,9 @@ const grid = new GridCore({
   dataSource: source,
   rowHeight: 32,
   onWriteRejected: (event) => {
-    // event.reason is always "read-only-source".
+    // event.reason is "read-only-source" here; a grouped grid also reports
+    // "not-a-record" and "derived-view", and an edit commit the column type
+    // cannot hold reports "type-mismatch".
     // event.operation is one of:
     //   "setCellValue" | "edit" | "paste" | "fill" | "row-move"
     console.warn(`Refused ${event.operation} on row ${event.row}, col ${event.col}`);

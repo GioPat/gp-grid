@@ -1,5 +1,5 @@
 // packages/core/src/grid-core-hierarchy-change.ts
-// D4: the one applier for a change of the view rows. Expansion, a regroup and
+// The one applier for a change of the view rows. Expansion, a regroup and
 // a transaction refresh under a hierarchy keep the anchor row and the active
 // cell by identity across the change.
 

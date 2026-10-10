@@ -85,7 +85,7 @@ export interface RowControllersDeps<TData> {
   getGeometry: () => GridGeometryService;
   geometry: GridGeometry;
   retainEditColumn: (columnId: string | null) => void;
-  /** The move changed row identity, so heights must be re-placed (D6). */
+  /** The move changed row identity, so heights must be re-placed. */
   onRowsMoved: () => void;
   isDestroyed: () => boolean;
 }
@@ -96,7 +96,7 @@ export interface RowControllers<TData> {
   edit: EditController<TData>;
   rowDrag: RowDragController<TData>;
   rowGroups: RowGroupsController<TData>;
-  /** The D4 applier's inputs, shared with a transaction refresh. */
+  /** The view-rows applier's inputs, shared with a transaction refresh. */
   hierarchyChange: HierarchyChangeDeps<TData>;
 }
 

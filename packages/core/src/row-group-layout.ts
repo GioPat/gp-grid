@@ -1,5 +1,5 @@
 // packages/core/src/row-group-layout.ts
-// The label column and the label text of group and total rows (PRD 008 D10).
+// The label column and the label text of group and total rows.
 
 import type {
   CellValue,

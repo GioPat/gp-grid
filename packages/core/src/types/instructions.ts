@@ -66,7 +66,7 @@ export interface MoveSlotInstruction {
   type: "MOVE_SLOT";
   slotId: string;
   translateY: number;
-  /** Row height from the row axis (D8). */
+  /** Row height from the row axis. */
   height: number;
 }
 

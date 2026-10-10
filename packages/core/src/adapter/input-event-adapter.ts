@@ -115,7 +115,7 @@ export class InputEventAdapter<TData = unknown> {
     };
   }
 
-  /** The expander toggles its group; the cell beneath sees no pointer down (D5). */
+  /** The expander toggles its group; the cell beneath sees no pointer down. */
   groupTogglePointerDown(rowIndex: number, event: PointerEvent): void {
     toggleGroupOnPointerDown(this.deps.getCore(), rowIndex, event);
   }

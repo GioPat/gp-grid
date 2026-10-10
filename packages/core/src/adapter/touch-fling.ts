@@ -116,7 +116,7 @@ export class FlingAnimator<TData = unknown> {
 
   /**
    * A row size change corrects the top through the viewport override while a
-   * fling is in flight (D5). Adopting it keeps the motion from replaying the
+   * fling is in flight. Adopting it keeps the motion from replaying the
    * position the correction just replaced.
    */
   private adoptCorrection(

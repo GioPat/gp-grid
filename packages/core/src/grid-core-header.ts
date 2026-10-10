@@ -101,7 +101,7 @@ export class HeaderController<TData> implements GridHeaderApi {
 
   /**
    * Run `change` in one batch; when it moved the bands, adopt them atomically
-   * with the body height, the anchor and the rows (D8). Column commands that
+   * with the body height, the anchor and the rows. Column commands that
    * can change the band count run their guard in here.
    *
    * @internal

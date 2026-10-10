@@ -18,7 +18,7 @@ export interface SlotPoolManagerOptions {
   getRowRegions: () => RowRegionLayout;
   /** `translateY` of a row inside the rows wrapper (rows space). */
   getRowOffset: (rowIndex: number) => number;
-  /** Row height from the row axis (D8). */
+  /** Row height from the row axis. */
   getRowSize: (rowIndex: number) => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;

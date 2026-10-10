@@ -5,7 +5,7 @@ import type { GridCore } from "../grid-core";
 /** A pointer down on a group row's expander, as the DOM delivers it. */
 export type GroupTogglePointerEvent = Pick<PointerEvent, "button" | "pointerType" | "stopPropagation">;
 
-/** The expander toggles its group; the cell beneath sees no pointer down (D5). */
+/** The expander toggles its group; the cell beneath sees no pointer down. */
 export const groupTogglePointerDown = <TData>(
   core: GridCore<TData> | null,
   rowIndex: number,

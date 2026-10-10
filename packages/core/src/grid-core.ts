@@ -250,7 +250,7 @@ export class GridCore<TData = unknown> {
   /**
    * Fast-path refresh after `MutableDataSource` transactions: only the
    * visible window is re-fetched. Under a hierarchy the anchor and the active
-   * row follow their identity (D4).
+   * row follow their identity.
    */
   async refreshFromTransaction(): Promise<void> {
     const reload = () => this.rowData.refreshFromTransaction();

@@ -23,7 +23,7 @@ export interface RowDragControllerDeps<TData> {
   rowData: RowDataManager<TData>;
   slotPool: SlotPoolManager;
   highlight: HighlightManager<TData> | null;
-  /** The move changed row identity, so heights must be re-placed (D6). */
+  /** The move changed row identity, so heights must be re-placed. */
   onRowsMoved: () => void;
 }
 
