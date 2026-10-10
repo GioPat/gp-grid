@@ -33,6 +33,7 @@
     "bench:start": "node scripts/start-run.js",
     "bench:candidate": "cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid pnpm bench:start && cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid playwright test initial-render scroll-performance sort-filter memory-usage --grep gp-grid && cross-env BENCH_SOURCE=candidate pnpm bench:report",
     "bench:candidate:wide": "cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid pnpm bench:start && cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid playwright test wide-grid && cross-env BENCH_SOURCE=candidate pnpm bench:report",
+    "bench:candidate:groups": "cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid pnpm bench:start && cross-env BENCH_SOURCE=candidate BENCH_GRID=gp-grid playwright test row-grouping",
     "bench": "pnpm bench:start && pnpm bench:gp-grid && pnpm bench:cooldown && pnpm bench:ag-grid && pnpm bench:cooldown && pnpm bench:tanstack && pnpm bench:cooldown && pnpm bench:handsontable && pnpm bench:cooldown && pnpm bench:smart-grid && pnpm bench:report",
     "bench:cooldown": "node scripts/cooldown.js",
     "bench:gp-grid": "cross-env BENCH_GRID=gp-grid playwright test --grep gp-grid",
