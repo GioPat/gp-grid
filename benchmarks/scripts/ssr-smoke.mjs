@@ -19,6 +19,20 @@ import {
   groupRows,
 } from "./ssr-column-groups.mjs";
 
+import {
+  checkEngineGrouping,
+  checkExternalHierarchy,
+  createColumnarSource,
+  createExternalSource,
+  createGrouping,
+  createObjectSource,
+  expectAngularRowGroupShell,
+  expectFlatShell,
+  renderWithoutErrors,
+  rowGroupColumns,
+  rowGroupRows,
+} from "./ssr-row-groups.mjs";
+
 const importFrom = async (specifier, packageFile) => {
   const requireFromPackage = createRequire(packageFile);
   return import(pathToFileURL(requireFromPackage.resolve(specifier)).href);
@@ -300,6 +314,30 @@ await check("core rejected column groups stay flat", async () => {
   return `warned once (${warnings[0]}); core and seed flat in definition order, one ${BAND_HEIGHTS[0]}px band`;
 });
 
+await check("core row grouping over object rows", () =>
+  checkEngineGrouping(coreArtifact, createObjectSource(coreArtifact), "object rows"));
+
+await check("core row grouping over columnar rows", () =>
+  checkEngineGrouping(coreArtifact, createColumnarSource(coreArtifact), "columnar rows"));
+
+await check("core binds a source-supplied hierarchy", () => checkExternalHierarchy(coreArtifact));
+
+/** The two PRD 008 server renders of one wrapper: the local engine, then a hierarchy from the source. */
+const rowGroupArms = () => [
+  ["rowGrouping", { rowData: rowGroupRows, rowGrouping: createGrouping(coreArtifact) }],
+  ["external hierarchy", { dataSource: createExternalSource() }],
+];
+const rowGroupShellProps = { columns: rowGroupColumns, rowHeight: 32, columnLayout: "fixed" };
+
+const checkRowGroupShells = async (label, render, expectShell = expectFlatShell) => {
+  const details = [];
+  for (const [arm, props] of rowGroupArms()) {
+    const html = await renderWithoutErrors(() => render(props));
+    details.push(expectShell(html, `${label} ${arm}`));
+  }
+  return details.join("; ");
+};
+
 await check("React native server render", async () => {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
@@ -496,6 +534,20 @@ await check("React grouped header follows the seeded window", async () => {
   return expectGroupedHeader(html, { label: "React", mounted: seededWindowLeaves() });
 });
 
+await check("React row groups server render", async () => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  return checkRowGroupShells("React", (props) =>
+    renderToString(React.createElement(Grid, {
+      ...rowGroupShellProps,
+      initialWidth: 500,
+      initialHeight: 300,
+      getRowId: (row) => row.id,
+      ...props,
+    })));
+});
+
 const vuePackage = path.join(REPOSITORY_ROOT, "playgrounds/vite-vue/package.json");
 
 /** Vue pins are declared on the columns, so the same shell rules apply. */
@@ -609,6 +661,19 @@ await check("Vue grouped header server render", async () => {
 await check("Vue grouped header follows the seeded window", async () => {
   const html = await renderVueGroups({ initialWidth: SEEDED_WINDOW_WIDTH });
   return expectGroupedHeader(html, { label: "Vue", mounted: seededWindowLeaves() });
+});
+
+await check("Vue row groups server render", async () => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  return checkRowGroupShells("Vue", (props) => {
+    const app = createSSRApp({
+      render: () => h(GpGrid, { ...rowGroupShellProps, initialWidth: 500, initialHeight: 300, ...props }),
+    });
+    return renderToString(app);
+  });
 });
 
 const angularPackage = path.join(REPOSITORY_ROOT, "playgrounds/angular/package.json");
@@ -781,6 +846,32 @@ await check("Angular grouped header server render", async () => {
   return `${detail}; ${expectHeaderClipRules(css, "Angular")}`;
 });
 
+await check("Angular row groups server render", async () => {
+  await importFrom("@angular/compiler", angularPackage);
+  const { Component } = await importFrom("@angular/core", angularPackage);
+  const { bootstrapApplication } = await importFrom("@angular/platform-browser", angularPackage);
+  const { provideServerRendering, renderApplication } = await importFrom("@angular/platform-server", angularPackage);
+  const angularArtifact = path.join(REPOSITORY_ROOT, "packages/angular/dist/angular/fesm2022/gp-grid-angular.mjs");
+  const { GpGridComponent } = await import(pathToFileURL(angularArtifact).href);
+  // One template per arm: the `dataSource` input takes a source or `null`, never an unset property.
+  const dataInputs = (props) =>
+    props.dataSource === undefined ? '[rows]="rowData" [rowGrouping]="rowGrouping"' : '[dataSource]="dataSource"';
+  return checkRowGroupShells("Angular", (props) => {
+    class SsrRowGroupsComponent {}
+    Component({
+      selector: "app-root",
+      standalone: true,
+      imports: [GpGridComponent],
+      template: `<gp-grid [columns]="columns" [rowHeight]="32" columnLayout="fixed" ${dataInputs(props)} />`,
+    })(SsrRowGroupsComponent);
+    Object.assign(SsrRowGroupsComponent.prototype, { columns: rowGroupColumns, ...props });
+    return renderApplication(
+      (context) => bootstrapApplication(SsrRowGroupsComponent, { providers: [provideServerRendering()] }, context),
+      { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
+    );
+  }, expectAngularRowGroupShell);
+});
+
 const report = {
   timestamp: new Date().toISOString(),
   commit: provenance.commit,
@@ -790,6 +881,10 @@ const report = {
     serverRendersShellOnly: true,
     browserGlobalsRequired: false,
     note: "The columnar query is asynchronous; the server renders the shell and does not await rows.",
+  },
+  rowGroups: {
+    browserGlobalsRequired: false,
+    note: "A grid is flat until its first load: React and Vue serialize role=\"grid\"; Angular serializes the collapsed hierarchy when its first load arrives before serialization.",
   },
   results,
 };
