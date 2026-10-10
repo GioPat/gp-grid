@@ -16,6 +16,9 @@ export type {
   UseGpGridResult,
 } from "./composables/useGpGrid";
 
+export { useRowGroupCellContext, useRowGroupingSync } from "./composables/useRowGroupingSync";
+export type { RowGroupCellContext } from "./composables/useRowGroupingSync";
+
 export { useGridData } from "./composables/useGridData";
 export type {
   UseGridDataOptions,

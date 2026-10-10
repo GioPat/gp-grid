@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import type { ColumnRegion, ColumnWindowSnapshot, ResolvedColumn, SlotData } from "@gp-grid/core";
+import { hierarchyRowAttributes } from "@gp-grid/core";
 import GridCell from "./GridCell.vue";
 import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
-import { groupDepthStyle, rowGroupAttributes, rowKindClass } from "./row-group-attributes";
+import { groupDepthStyle } from "./group-depth-style";
 import type { Row } from "../types";
 
 const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
@@ -37,14 +38,19 @@ const hoverPosition = inject(HOVER_POSITION, null);
 const boxStyle = computed(() =>
   `position: absolute; top: 0; inset-inline-start: 0; transform: translateY(${props.slot.translateY}px); width: ${props.width}px; height: ${props.slot.height}px; display: flex;`);
 const rowStyle = computed(() => `${boxStyle.value}${groupDepthStyle(props.slot.row)}`);
-const groupAttributes = computed(() => rowGroupAttributes(props.slot.row));
+const hierarchyAttributes = computed(() => hierarchyRowAttributes(props.slot.row));
+// `className` would land on the element as a DOM property and clobber `class`.
+const rowAttributes = computed(() => {
+  const { className: _className, ...attributes } = hierarchyAttributes.value;
+  return attributes;
+});
 
 const rowClasses = computed(() => {
   void hoverPosition?.value;
   void props.cellContext.renderToken;
   const highlightRowClasses =
     props.cellContext.coreRef?.highlight?.computeRowClasses(props.slot.rowIndex, props.slot.rowData) ?? [];
-  return ["gp-grid-row", rowKindClass(props.slot.row), ...highlightRowClasses]
+  return ["gp-grid-row", hierarchyAttributes.value.className, ...highlightRowClasses]
     .filter(Boolean)
     .join(" ");
 });
@@ -75,9 +81,7 @@ const cellProps = (column: ResolvedColumn) => ({
     :class="rowClasses"
     role="row"
     :aria-rowindex="ariaRowIndex"
-    :data-row-kind="groupAttributes['data-row-kind']"
-    :aria-level="groupAttributes['aria-level']"
-    :aria-expanded="groupAttributes['aria-expanded']"
+    v-bind="rowAttributes"
     :style="rowStyle"
   >
     <GridCell

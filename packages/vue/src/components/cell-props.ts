@@ -14,7 +14,7 @@ import type {
 } from "@gp-grid/core";
 import type { InjectionKey, Ref } from "vue";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
-import type { RowGroupCellContext } from "./row-group-attributes";
+import type { RowGroupCellContext } from "../composables/useRowGroupingSync";
 
 /**
  * Hover position for the highlight classes. Injected rather than passed as a

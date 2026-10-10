@@ -17,6 +17,7 @@ import {
   TouchScrollController,
   PendingScrollLatch,
   defaultPinIcon,
+  isMutableDataSource,
   resolveGridLabels,
   createDomMeasurementHost,
 } from "@gp-grid/core";
@@ -487,16 +488,11 @@ watch(
 watch(
   () => props.dataSource,
   (dataSource, _previous, onCleanup) => {
-    if (dataSource) {
-      const mutableDataSource = dataSource as {
-        subscribe?: (listener: () => void) => () => void;
-      };
-      if (mutableDataSource.subscribe) {
-        const unsubscribe = mutableDataSource.subscribe(() => {
-          coreRef.value?.refreshFromTransaction();
-        });
-        onCleanup(unsubscribe);
-      }
+    if (dataSource !== undefined && isMutableDataSource(dataSource)) {
+      const unsubscribe = dataSource.subscribe(() => {
+        coreRef.value?.refreshFromTransaction();
+      });
+      onCleanup(unsubscribe);
     }
   },
   { immediate: true },

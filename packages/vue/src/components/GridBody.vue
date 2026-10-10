@@ -18,7 +18,7 @@ import { formatLabel } from "@gp-grid/core";
 import GridRow from "./GridRow.vue";
 import GridFrozenRows from "./GridFrozenRows.vue";
 import { HOVER_POSITION, type GridRowCellContext } from "./cell-props";
-import type { RowGroupCellContext } from "./row-group-attributes";
+import type { RowGroupCellContext } from "../composables/useRowGroupingSync";
 import type { Row, VueCellRenderer, VueEditRenderer } from "../types";
 
 const props = defineProps<{

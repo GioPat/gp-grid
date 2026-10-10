@@ -3,7 +3,7 @@ import { computed, inject } from "vue";
 import type { CellValue, ColumnDefinition } from "@gp-grid/core";
 import {
   buildCellClasses,
-  formatGroupLabel,
+  groupCellOf,
   isCellActive,
   isCellEditing,
   isCellInFillPreview,
@@ -15,20 +15,15 @@ import { renderEditCell } from "../renderers/editRenderer";
 import { HOVER_POSITION, type GridCellProps } from "./cell-props";
 import ResizeHandle from "./ResizeHandle.vue";
 import GroupLabelCell from "./GroupLabelCell.vue";
-import { groupCellClassName, groupCellOf } from "./row-group-attributes";
 
 const props = defineProps<GridCellProps>();
 const hoverPosition = inject(HOVER_POSITION, null);
 
 const groupCell = computed(() => groupCellOf(props.row, props.column.columnId, props.rowGroups));
-const groupLabel = computed(() => {
-  const labelRow = groupCell.value.labelRow;
-  const context = props.rowGroups;
-  if (labelRow === null || context === null) return null;
-  return formatGroupLabel(labelRow, context.columns, context.labels);
+const labelTitle = computed(() => {
+  if (props.column.column.tooltip === false || groupCell.value.labelRow === null) return undefined;
+  return groupCell.value.label;
 });
-const labelTitle = computed(() =>
-  props.column.column.tooltip === false ? undefined : groupLabel.value ?? undefined);
 
 const getCellClasses = (): string => {
   const { rowIndex, column, rowData } = props;
@@ -66,7 +61,7 @@ const getCellClasses = (): string => {
     ...highlightCellClasses,
     definition.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
     wrapText ? "gp-grid-cell--wrap" : "",
-    groupCellClassName(groupCell.value),
+    groupCell.value.className,
   ].filter(Boolean).join(" ");
 };
 
@@ -165,10 +160,10 @@ const cellContent = () => {
     @mouseleave="props.onCellMouseLeave"
   >
     <GroupLabelCell
-      v-if="groupCell.labelRow !== null && groupLabel !== null && props.rowGroups !== null"
+      v-if="groupCell.labelRow !== null && props.rowGroups !== null"
       :row="groupCell.labelRow"
       :row-index="props.rowIndex"
-      :label="groupLabel"
+      :label="groupCell.label"
       :context="props.rowGroups"
     />
     <template v-else-if="isEmptyCell()"></template>

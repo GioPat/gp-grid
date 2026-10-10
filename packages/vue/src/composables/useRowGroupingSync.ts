@@ -7,13 +7,20 @@ import type {
   ColumnLayoutSnapshot,
   GridCore,
   GridLabels,
+  GroupCellInput,
   RowGrouping,
 } from "@gp-grid/core";
 import { groupTogglePointerDown, resolveGroupLabelColumnId } from "@gp-grid/core";
-import type { RowGroupCellContext } from "../components/row-group-attributes";
 import type { VueGroupLabelRenderer } from "../types";
 
 type CoreRef<TData> = Readonly<ShallowRef<GridCore<TData> | null>>;
+
+/** Shared by every cell while a hierarchy is bound; `null` while flat. */
+export type RowGroupCellContext = GroupCellInput & {
+  renderer?: VueGroupLabelRenderer;
+  onTogglePointerDown: (rowIndex: number, e: PointerEvent) => void;
+  onToggle: (rowIndex: number) => void;
+};
 
 /** A later `rowGrouping` reaches the current core through `setGrouping`, never a new core. */
 export const useRowGroupingSync = <TData>(

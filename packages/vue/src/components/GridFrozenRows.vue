@@ -11,7 +11,7 @@ import type {
 import GridCell from "./GridCell.vue";
 import GridRow from "./GridRow.vue";
 import type { GridRowCellContext } from "./cell-props";
-import { groupDepthStyle } from "./row-group-attributes";
+import { groupDepthStyle } from "./group-depth-style";
 import type { Row } from "../types";
 
 const CENTER_REGIONS: readonly ColumnRegion[] = ["center"];
