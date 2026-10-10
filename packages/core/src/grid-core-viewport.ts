@@ -7,6 +7,12 @@ import type { InstructionBatcher, ScrollVirtualizationManager, ViewportState } f
 import type { RowDataManager } from "./managers/row-data-manager";
 import type { ViewSync } from "./grid-core-view-sync";
 
+/** The adapter's synthetic scroll motion (fling or wheel glide). */
+export interface ScrollMotionHandle {
+  isActive(): boolean;
+  interrupt(): void;
+}
+
 /** Scroll hooks for adapters that drive a synthetic touch scroller. */
 export interface GridViewportApi {
   /**
@@ -28,6 +34,13 @@ export interface GridViewportApi {
   /** Maximum accumulated touch-fling velocity, logical px/ms. */
   getMaxFlingVelocity(): number;
   getRowHeight(): number;
+  /** Whether a fling or wheel glide is still moving the content. */
+  isScrollMotionActive(): boolean;
+  /** Stop the fling or wheel glide in flight, leaving the content where it is. */
+  interruptScrollMotion(): void;
+  /** The adapter registers its motion; `clear` drops it only while it is still the registered one. */
+  setScrollMotionHandle(handle: ScrollMotionHandle): void;
+  clearScrollMotionHandle(handle: ScrollMotionHandle): void;
 }
 
 export interface ViewportControllerDeps<TData> {
@@ -44,6 +57,7 @@ export interface ViewportControllerDeps<TData> {
 export class ViewportController<TData> implements GridViewportApi {
   private readonly deps: ViewportControllerDeps<TData>;
   private topOverride: number | null = null;
+  private motion: ScrollMotionHandle | null = null;
 
   constructor(deps: ViewportControllerDeps<TData>) {
     this.deps = deps;
@@ -71,6 +85,22 @@ export class ViewportController<TData> implements GridViewportApi {
 
   getRowHeight(): number {
     return this.deps.rowHeight;
+  }
+
+  isScrollMotionActive(): boolean {
+    return this.motion?.isActive() === true;
+  }
+
+  interruptScrollMotion(): void {
+    this.motion?.interrupt();
+  }
+
+  setScrollMotionHandle(handle: ScrollMotionHandle): void {
+    this.motion = handle;
+  }
+
+  clearScrollMotionHandle(handle: ScrollMotionHandle): void {
+    if (this.motion === handle) this.motion = null;
   }
 
   /** Effective DOM scroll sample: the touch override when one is active. */

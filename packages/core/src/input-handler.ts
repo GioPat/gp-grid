@@ -29,6 +29,7 @@ import {
   applyGridResizeAction,
   resolveHandleFit,
   isGroupRow,
+  wheelDeltaToPx,
   type InputCommands,
 } from "./input";
 
@@ -113,6 +114,7 @@ export class InputHandler<TData = unknown> {
     colHeight: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.stopsScrollMotion(event)) return swallowedResult;
     return this.columnMove.start(colIndex, colWidth, colHeight, event);
   }
 
@@ -121,6 +123,7 @@ export class InputHandler<TData = unknown> {
     colWidth: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.stopsScrollMotion(event)) return swallowedResult;
     return this.columnResize.start(colIndex, colWidth, event);
   }
 
@@ -129,12 +132,14 @@ export class InputHandler<TData = unknown> {
     rowHeight: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.stopsScrollMotion(event)) return swallowedResult;
     if (this.core.rowHeights.isResizable() === false) return noopResult;
     return this.rowResize.start(rowIndex, rowHeight, event);
   }
 
   /** A double-click on a column or row edge handle fits that target once. */
   handleResizeDoubleClick(target: ResizeTarget): void {
+    if (this.stopsScrollMotion()) return;
     const action = resolveHandleFit(this.core, target);
     if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
@@ -144,6 +149,7 @@ export class InputHandler<TData = unknown> {
     colIndex: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.stopsScrollMotion(event)) return swallowedResult;
     if (event.button !== 0) return noopResult;
     if (this.core.edit.getState() !== null) return noopResult;
 
@@ -251,7 +257,8 @@ export class InputHandler<TData = unknown> {
   }
 
   /** A pointer down on a group row's expander (D5). */
-  handleGroupToggle(rowIndex: number): RowGroupResult {
+  handleGroupToggle(rowIndex: number, pointerType?: string): RowGroupResult {
+    if (this.stopsScrollMotion({ pointerType })) return { status: "unchanged" };
     return this.commands.toggleGroupAt(rowIndex);
   }
 
@@ -266,16 +273,29 @@ export class InputHandler<TData = unknown> {
   handleFillHandleMouseDown(
     activeCell: CellPosition | null,
     selectionRange: CellRange | null,
-    _event: PointerEventData,
+    event: PointerEventData,
   ): InputResult {
+    if (this.stopsScrollMotion(event)) return swallowedResult;
     return this.fillDrag.start(activeCell, selectionRange);
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
+    if (this.stopsScrollMotion()) return;
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
     this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
+  }
+
+  /**
+   * A press while a fling or wheel glide moves the content only stops it. Touch
+   * leaves the stop to touchstart, which carries the fling's velocity into a flick.
+   */
+  private stopsScrollMotion(event?: Pick<PointerEventData, "pointerType">): boolean {
+    const viewport = this.core.viewport;
+    if (viewport.isScrollMotionActive() === false) return false;
+    if (event?.pointerType !== "touch") viewport.interruptScrollMotion();
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -357,13 +377,18 @@ export class InputHandler<TData = unknown> {
   // Wheel
   // ---------------------------------------------------------------------------
 
+  /** Only the vertical axis is scaled, so only `dy` is dampened. */
   handleWheel(
     deltaY: number,
     deltaX: number,
     dampening: number,
+    deltaMode = 0,
   ): { dy: number; dx: number } | null {
-    if (!this.core.viewport.isScaling()) return null;
-    return { dy: deltaY * dampening, dx: deltaX * dampening };
+    if (this.core.viewport.isScaling() === false) return null;
+    return {
+      dy: wheelDeltaToPx(deltaY, deltaMode) * dampening,
+      dx: wheelDeltaToPx(deltaX, deltaMode),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -381,3 +406,4 @@ export class InputHandler<TData = unknown> {
 }
 
 const noopResult: InputResult = { preventDefault: false, stopPropagation: false };
+const swallowedResult: InputResult = { preventDefault: true, stopPropagation: true };

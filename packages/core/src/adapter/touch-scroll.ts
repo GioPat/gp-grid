@@ -1,4 +1,5 @@
 import type { GridCore } from "../grid-core";
+import type { ScrollMotionHandle } from "../grid-core-viewport";
 import {
   combineFlingVelocities,
   computeReleaseVelocity,
@@ -66,6 +67,10 @@ export class TouchScrollController<TData = unknown> {
   private gestureCleanup: (() => void) | null = null;
   private dragFrame: number | null = null;
   private pendingDragTarget: DragTarget | null = null;
+  private readonly motion: ScrollMotionHandle = {
+    isActive: () => this.fling.active || this.wheel.pending,
+    interrupt: () => this.interrupt(),
+  };
 
   constructor(deps: TouchScrollDeps<TData>) {
     this.deps = deps;
@@ -81,7 +86,7 @@ export class TouchScrollController<TData = unknown> {
     this.attachedEl = el;
     this.scroll.resetDirection();
     this.policy = new TouchPolicy(el, this.deps.getCore);
-    this.policy.sync();
+    this.syncCore();
     el.addEventListener("touchstart", this.onTouchStart, { passive: true });
     el.addEventListener("wheel", this.onWheel, { passive: true });
   }
@@ -91,6 +96,7 @@ export class TouchScrollController<TData = unknown> {
     this.clearGesture();
     const el = this.attachedEl;
     if (el === null) return;
+    this.deps.getCore()?.viewport.clearScrollMotionHandle(this.motion);
     this.attachedEl = null;
     el.removeEventListener("touchstart", this.onTouchStart);
     el.removeEventListener("wheel", this.onWheel);
@@ -101,6 +107,7 @@ export class TouchScrollController<TData = unknown> {
   /** Rebind policy updates after the host replaces its GridCore instance. */
   syncCore(): void {
     this.policy?.sync();
+    if (this.attachedEl !== null) this.deps.getCore()?.viewport.setScrollMotionHandle(this.motion);
   }
 
   /**
@@ -115,6 +122,13 @@ export class TouchScrollController<TData = unknown> {
   stop(): void {
     this.fling.stop();
     this.wheel.stop();
+    this.scroll.release();
+  }
+
+  /** Stop a fling or wheel glide where it is; the rest of that wheel sequence is dropped. */
+  interrupt(): void {
+    this.fling.stop();
+    this.wheel.interrupt();
     this.scroll.release();
   }
 
@@ -146,7 +160,7 @@ export class TouchScrollController<TData = unknown> {
     // The wrapper's dampened handler continues from the fling's position, so
     // the override is kept; the idle release covers a handler that is not wired.
     this.fling.stop();
-    this.wheel.scheduleRelease();
+    this.wheel.noteWheel();
   };
 
   private readonly onTouchStart = (event: Event): void => {

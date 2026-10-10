@@ -28,3 +28,4 @@ export {
   DRAG_THRESHOLD,
   calculateAutoScroll,
 } from "./auto-scroll-util";
+export { WHEEL_LINE_PX, WHEEL_PAGE_PX, wheelDeltaToPx } from "./wheel-delta";

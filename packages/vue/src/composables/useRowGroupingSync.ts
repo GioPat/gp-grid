@@ -30,7 +30,7 @@ export const createGroupTogglePointerDown = <TData>(coreRef: CoreRef<TData>) =>
   (rowIndex: number, e: PointerEvent): void => {
     e.stopPropagation();
     if (e.button !== 0) return;
-    coreRef.value?.input.handleGroupToggle(rowIndex);
+    coreRef.value?.input.handleGroupToggle(rowIndex, e.pointerType);
   };
 
 export interface RowGroupCellSources {

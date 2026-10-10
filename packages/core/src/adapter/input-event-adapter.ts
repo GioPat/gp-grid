@@ -118,7 +118,7 @@ export class InputEventAdapter<TData = unknown> {
   groupTogglePointerDown(rowIndex: number, event: PointerEvent): void {
     event.stopPropagation();
     if (event.button !== 0) return;
-    this.deps.getCore()?.input.handleGroupToggle(rowIndex);
+    this.deps.getCore()?.input.handleGroupToggle(rowIndex, event.pointerType);
   }
 
   cellPointerEnter(rowIndex: number, colIndex: number): void {
@@ -184,10 +184,10 @@ export class InputEventAdapter<TData = unknown> {
     return { wasRowDrag };
   }
 
-  wheel(deltaY: number, deltaX: number, dampening: number): { dy: number; dx: number } | null {
+  wheel(event: WheelEvent, dampening: number): { dy: number; dx: number } | null {
     const core = this.deps.getCore();
     if (core === null) return null;
-    return core.input.handleWheel(deltaY, deltaX, dampening);
+    return core.input.handleWheel(event.deltaY, event.deltaX, dampening, event.deltaMode);
   }
 
   keyDown(

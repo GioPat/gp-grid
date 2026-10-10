@@ -260,6 +260,8 @@ describe("synthetic-scroll direction", () => {
         getRowHeight: () => 32,
         getTopOverride: () => null,
         setTopOverride: vi.fn(),
+        setScrollMotionHandle: vi.fn(),
+        clearScrollMotionHandle: vi.fn(),
       },
       setViewport: vi.fn(),
       onBatchInstruction: () => () => {},

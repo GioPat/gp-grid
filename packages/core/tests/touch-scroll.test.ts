@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GridCore } from "../src/grid-core";
 import { TouchScrollController } from "../src/adapter/touch-scroll";
+import { createMotionSlot } from "./motion-slot";
 import { MAX_FLING_VELOCITY } from "../src/utils/touch-scroll-physics";
 
 interface MockCoreOptions {
@@ -35,6 +36,7 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
       getRowHeight: () => state.rowHeight,
       getTopOverride: () => state.topOverride,
       setTopOverride,
+      ...createMotionSlot(),
     },
     setTopOverride,
     setViewport: vi.fn(),

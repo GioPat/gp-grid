@@ -13,3 +13,11 @@ export const cancelFrame = (frame: number | null): null => {
   }
   return null;
 };
+
+let reducedMotionQuery: MediaQueryList | null | undefined;
+
+/** Live `prefers-reduced-motion: reduce`; false where `matchMedia` is missing (SSR, tests). */
+export const prefersReducedMotion = (): boolean => {
+  reducedMotionQuery ??= globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
+  return reducedMotionQuery?.matches === true;
+};

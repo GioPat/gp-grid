@@ -86,15 +86,21 @@ export class SyntheticScroll<TData = unknown> {
     this.overrideActive = false;
     const core = this.getCore();
     if (core === null) return;
+    const override = core.viewport.getTopOverride();
     core.viewport.setTopOverride(null);
     const el = this.getEl();
-    if (el !== null) {
-      core.setViewport(
-        el.scrollTop,
-        toInlineX(el.scrollLeft, this.isRtl(el)),
-        el.clientWidth,
-        el.clientHeight,
-      );
-    }
+    if (el === null) return;
+    core.setViewport(
+      settledTop(override, el.scrollTop),
+      toInlineX(el.scrollLeft, this.isRtl(el)),
+      el.clientWidth,
+      el.clientHeight,
+    );
   }
 }
+
+/** Keep the fractional top the DOM still agrees with; snapping to the rounded one shifts rows. */
+const settledTop = (override: number | null, domTop: number): number => {
+  if (override !== null && Math.abs(override - domTop) <= 1) return override;
+  return domTop;
+};

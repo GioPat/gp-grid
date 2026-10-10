@@ -15,7 +15,7 @@ export type { GridFrozenRowsApi } from "./grid-core-frozen-rows";
 export type { GridRowHeightsApi } from "./grid-core-row-heights";
 export type { GridRowDragApi } from "./grid-core-row-drag";
 export type { GridRowGroupsApi } from "./grid-core-row-groups";
-export type { GridViewportApi } from "./grid-core-viewport";
+export type { GridViewportApi, ScrollMotionHandle } from "./grid-core-viewport";
 
 /** Input handler (wired by the framework wrappers) */
 export { InputHandler } from "./input-handler";

@@ -430,12 +430,12 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   protected onWheel(event: WheelEvent): void {
     const bodyEl = this.body?.scrollContainer?.nativeElement;
     if (!bodyEl) return;
-    const dampened = this.bindings.input.wheel(event.deltaY, event.deltaX, this.wheelDampening());
+    const dampened = this.bindings.input.wheel(event, this.wheelDampening());
     if (dampened) {
       event.preventDefault();
       if (this.bindings.touchScroll.scrollByWheel(dampened.dy) === false) bodyEl.scrollTop += dampened.dy;
       // Wheel deltaX is physical, unlike the inline-relative deltas core emits.
-      bodyEl.scrollLeft += dampened.dx;
+      if (dampened.dx !== 0) bodyEl.scrollLeft += dampened.dx;
     }
   }
 

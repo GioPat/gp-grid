@@ -54,7 +54,7 @@ export const useRowGroupCellContext = <TData>(
     (rowIndex: number, e: React.PointerEvent): void => {
       e.stopPropagation();
       if (e.button !== 0) return;
-      coreRef.current?.input.handleGroupToggle(rowIndex);
+      coreRef.current?.input.handleGroupToggle(rowIndex, e.pointerType);
     },
     [coreRef],
   );

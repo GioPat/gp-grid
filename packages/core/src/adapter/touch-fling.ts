@@ -36,6 +36,10 @@ export class FlingAnimator<TData = unknown> {
     return this.frame === null ? 0 : this.velocity;
   }
 
+  get active(): boolean {
+    return this.frame !== null;
+  }
+
   /** Cancel the in-flight fling; the caller decides about the override. */
   stop(): void {
     this.frame = cancelFrame(this.frame);
