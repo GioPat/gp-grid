@@ -26,9 +26,9 @@ import type { GpGridViewModel } from './gp-grid-view-model';
 import { hierarchicalOf } from './gp-grid-row-groups';
 
 const isSubscribable = (
-  dataSource: object,
+  dataSource: object | null | undefined,
 ): dataSource is { subscribe: (listener: () => void) => () => void } =>
-  typeof (dataSource as { subscribe?: unknown }).subscribe === 'function';
+  typeof (dataSource as { subscribe?: unknown } | null | undefined)?.subscribe === 'function';
 
 export interface GpGridBindingsDeps {
   vm: GpGridViewModel;
