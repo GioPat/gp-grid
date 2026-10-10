@@ -198,6 +198,16 @@ core.isColumnFilterable(colIndex: number): boolean;
 core.sortFilter.hasActiveFilter(colId: string): boolean;
 ```
 
+## Row grouping
+
+Filters apply before [row grouping](./row-grouping.md): groups, counts,
+aggregates and the total row describe the filtered rows, and a group with no
+remaining row disappears. A filter change rebuilds the grouping and keeps the
+expansion of the groups that survive. The popup lists the distinct values of the
+flat rows. A hierarchy supplied by a data source has no flat rows: it receives
+the filter model in its query request, and a filterable column lists its values
+through `ColumnDefinition.distinctValues`.
+
 ## Keyboard Shortcuts
 
 - **Escape**: Close filter popup without applying

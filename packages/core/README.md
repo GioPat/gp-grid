@@ -141,7 +141,7 @@ The core emits these instruction types:
 | --------------------------------------------- | --------------------------------- |
 | `CREATE_SLOT`                                 | Create a new slot in the DOM pool |
 | `DESTROY_SLOT`                                | Remove a slot from the pool       |
-| `ASSIGN_SLOT`                                 | Assign row data to a slot         |
+| `ASSIGN_SLOT`                                 | Assign row data to a slot; `row` carries the hierarchy row under row grouping |
 | `MOVE_SLOT`                                   | Update slot position (translateY) |
 | `SET_ACTIVE_CELL`                             | Update active cell highlight      |
 | `SET_SELECTION_RANGE`                         | Update selection range            |
@@ -149,7 +149,7 @@ The core emits these instruction types:
 | `COMMIT_EDIT`                                 | Commit edited value               |
 | `UPDATE_HEADER`                               | Update header with sort state     |
 | `SET_HEADER_BANDS`                            | Publish the header bands (`GridState.headerBands`) |
-| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle              |
+| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle; `DATA_LOADED.hierarchical` is `true` while a hierarchy is bound |
 
 ## Data Sources
 
@@ -414,6 +414,14 @@ interface CellRendererParams<TData = unknown> {
   isActive: boolean;
   isSelected: boolean;
   isEditing: boolean;
+  rowKind?: "record" | "group" | "total"; // under row grouping; absent while flat
+}
+
+interface GroupLabelRendererParams {
+  row: HierarchyGroupRow | HierarchyTotalRow;
+  viewIndex: number;
+  label: string; // formatted from labels.rowGroups
+  toggle: () => void; // a no-op on the total row
 }
 
 interface EditRendererParams extends CellRendererParams {
@@ -745,6 +753,84 @@ fragments in `columnWindow.groups`, takes the header height from
 `resolveHeaderAssociations`. See
 [Column groups and header bands](../../docs/features/column-groups.md).
 
+### Row grouping and aggregation
+
+`createRowGrouping(config)` groups the resident rows of a source loaded in full
+by ordered dimensions, with aggregates under their own columns and an optional
+total row. Group rows are ordinary rows of cells; every group starts collapsed.
+
+```typescript
+import { GridCore, createRowGrouping } from "@gp-grid/core";
+
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const grid = new GridCore({
+  columns,
+  dataSource,
+  rowHeight: 32,
+  rowGrouping: grouping,
+  onRowGroupToggled: ({ rowId, expanded }) => console.log(rowId, expanded),
+  onRowGroupingRejected: (rejection) => console.warn(rejection.reason),
+});
+
+grid.rowGroups.setExpanded(null, true); // expand every group
+grid.rowGroups.setGrouping(null);       // back to the flat rows, no query
+```
+
+- Keys are typed: `null` and `undefined` share one bucket, `0`, `"0"`, `""` and
+  `false` are distinct, a `Date` groups by timestamp and an object needs `toKey`.
+  Group ids (`"gp-group:…"`, `"gp-total"`) never depend on labels.
+- Aggregates are `"sum"`, `"count"`, `"avg"`, `"min"`, `"max"` or a
+  `RowGroupAggregator` (`init`, `add`, `result`, optional `merge`). `init()`
+  returns a fresh state and `merge` leaves `from` intact. Numbers are displayed
+  unrounded: round them with the column's `valueFormatter`.
+- A sorted dimension column orders its groups, a measure column sorted first
+  orders groups by its aggregate, and filters apply before grouping.
+- A measure edit refolds its path; a dimension edit regroups, expands the
+  record's new groups and moves the active cell with it. Group and total rows
+  refuse writes (`reason: "not-a-record"`), and row drag is disabled.
+- A paginated or partial source, a source that already returns a hierarchy, an
+  unknown field or an object key without `toKey` is rejected
+  (`onRowGroupingRejected`); the grid renders the source's rows.
+- A data source can supply rows it grouped itself by returning a
+  `HierarchicalRowAccess` (`hierarchical: true`, `getRow`, `getRowId`,
+  `getValue`, `locate`, optional `setExpanded`, `getRecord`, `recordsChanged`)
+  as `DataSourceResponse.access`, with no import of the engine.
+- An adapter renders `SlotData.row` and `GridState.hierarchical`
+  (`role="treegrid"`, `aria-level`, `aria-expanded`), places the label cell with
+  `resolveGroupLabelColumnId` and `formatGroupLabel`, skips renderers when
+  `isEmptyGroupCell(rowKind, value)`, and routes the expander to
+  `input.handleGroupToggle(rowIndex, pointerType?)`.
+
+See [Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+### Editing and scroll motion
+
+An editor commit is coerced by the column's `cellDataType`, like paste:
+`"60000"` on a `number` column stores `60000`, and a draft the type cannot hold
+writes nothing. A value a custom editor already typed is stored unchanged.
+
+While a touch fling or a wheel glide moves the content
+(`viewport.isScrollMotionActive()`), a press only stops it: the `InputHandler`
+pointer entry points return `{ preventDefault: true, stopPropagation: true }`
+and select, drag or toggle nothing. `viewport.interruptScrollMotion()` stops the
+motion on demand. `TouchScrollController` registers itself; an adapter with its
+own scroller registers a `ScrollMotionHandle` (`isActive()`, `interrupt()`)
+through `viewport.setScrollMotionHandle` and drops it with
+`clearScrollMotionHandle`.
+
+`input.handleWheel(deltaY, deltaX, dampening, deltaMode?)` returns `null` unless
+the grid is scaled, else `{ dy, dx }` in pixels: `dy` dampened, `dx` not, and
+line or page deltas converted first. `InputEventAdapter.wheel(event, dampening)`
+forwards a `WheelEvent`.
+
 ## Creating a Framework Adapter
 
 To integrate @gp-grid/core with any UI framework:
@@ -852,9 +938,10 @@ class MyGridAdapter {
 | `frozenRows` | `set(config?)`, `freezeThrough(viewIndex)`, `get()` |
 | `rowHeights` | `set(updates)`, `reset(rowIds?)`, `getOverrides()`, `fit(rowIds?)`, `setResizable(enabled)`, `isResizable()` |
 | `header`     | `getBands()`, `setBandHeights(heights)` |
+| `rowGroups`  | `isActive()`, `setExpanded(ids, expanded)`, `toggle(id)`, `setGrouping(grouping)` |
 | `rowDrag`    | `commit(from, to)`, `isEntireRow()` |
 | `sortFilter` | `setSort(colId, direction, addToExisting?)`, `setFilter(colId, filter)`, `getSortModel()`, `getFilterModel()`, `hasActiveFilter(colId)`, `openFilterPopup(colIndex, anchorRect, computeDistinctValues?)`, `closeFilterPopup()`; ignored while a load is in flight |
-| `viewport`   | Touch-scroller hooks: `setTopOverride(domScrollTop)`, `isScaling()`, `getScrollRatio()`, `getMaxFlingVelocity()`, `getRowHeight()` |
+| `viewport`   | Touch-scroller hooks: `setTopOverride(domScrollTop)`, `isScaling()`, `getScrollRatio()`, `getTopOverride()`, `getMaxFlingVelocity()`, `getRowHeight()`, `isScrollMotionActive()`, `interruptScrollMotion()`, `setScrollMotionHandle(handle)`, `clearScrollMotionHandle(handle)` |
 
 ### GridCore Properties
 

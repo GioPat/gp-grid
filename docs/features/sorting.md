@@ -82,3 +82,13 @@ core.sortingEnabled; // boolean
 // Check if column is sortable
 core.isColumnSortable(colIndex: number): boolean;
 ```
+
+## Row grouping
+
+Under [row grouping](./row-grouping.md) the sort model drives three orders: a
+sorted dimension column orders the groups of its level by key, a sorted measure
+column that comes first in the model orders groups by that aggregate, and leaves
+keep the order of the sorted flat result inside their group. Without either,
+group keys ascend. A sort change rebuilds the grouping and keeps the expanded
+groups. A hierarchy supplied by a data source receives the sort model in its
+query request and orders its own rows.

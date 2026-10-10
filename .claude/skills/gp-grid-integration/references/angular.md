@@ -552,6 +552,81 @@ hierarchy leaves the previous one on screen; the input is re-applied with every
 later `columns` change, so put a valid one back. See
 [docs/features/column-groups.md](../../../docs/features/column-groups.md).
 
+## Row grouping
+
+```ts
+import { Component, ViewChild } from "@angular/core";
+import {
+  GpGridComponent,
+  createRowGrouping,
+  type RowGroupToggledEvent,
+  type RowGroupingRejection,
+} from "@gp-grid/angular";
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  templateUrl: "./sales.component.html",
+})
+export class SalesComponent {
+  @ViewChild(GpGridComponent) private grid?: GpGridComponent;
+
+  // A field, created once: a new object regroups.
+  protected readonly grouping = createRowGrouping({
+    dimensions: [{ field: "country" }, { field: "city" }],
+    measures: [
+      { field: "amount", aggregate: "sum" },
+      { field: "score", aggregate: "avg" },
+    ],
+    grandTotal: "top",
+  });
+
+  protected expandAll(): void {
+    this.grid?.core?.rowGroups.setExpanded(null, true);
+  }
+
+  protected onToggled(event: RowGroupToggledEvent): void {
+    console.log(event.rowId, event.expanded);
+  }
+
+  protected onRejected(rejection: RowGroupingRejection): void {
+    console.warn(rejection.reason, rejection.field);
+  }
+}
+```
+
+```html
+<ng-template #groupLabel let-params>
+  <strong>{{ params.label }}</strong>
+</ng-template>
+
+<button (click)="expandAll()">Expand all</button>
+<gp-grid
+  [columns]="columns"
+  [rows]="sales"
+  [rowHeight]="32"
+  [getRowId]="getRowId"
+  [rowGrouping]="grouping"
+  groupLabelColumn="country"
+  [groupLabelRenderer]="groupLabel"
+  (onRowGroupToggled)="onToggled($event)"
+  (onRowGroupingRejected)="onRejected($event)"
+/>
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`.
+`[groupLabelRenderer]` is a `GroupLabelRendererTemplate` whose `$implicit` is
+`{ row, viewIndex, label, toggle }`. A cell template gets `rowKind` on an
+aggregate cell, where `rowData` is undefined, and is not rendered for a group
+cell with no aggregate. `[rowGrouping]` is reactive, but its published typing
+does not accept `null`: cast to ungroup (`null as unknown as RowGrouping`). The
+grouping needs every row resident (`[rows]`, a client source or
+`createGridData`); a server source is rejected with `partial-source`.
+`GroupToggleComponent` and `GroupLabelComponent`, the label cell's parts, are
+exported. See
+[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+
 ## Highlighting
 
 ```ts
@@ -612,6 +687,9 @@ Inputs:
 | `[rowLoading]` | `RowLoadingOptions \| null` | `null` |
 | `[sortingEnabled]` | `boolean` | `true` |
 | `[wheelDampening]` | `number` | `0.1` |
+| `[rowGrouping]` | `RowGrouping` | `undefined` (flat) |
+| `[groupLabelColumn]` | `string` | `undefined` (first displayed column) |
+| `[groupLabelRenderer]` | `GroupLabelRendererTemplate` | `null` |
 | `[labels]` | `GridLabelOverrides` | English defaults |
 
 Outputs:
@@ -627,6 +705,8 @@ Outputs:
 | `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
 | `(onRowResized)` | `{ rowId: RowId; height: number; viewIndex: number }` |
 | `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
+| `(onRowGroupToggled)` | `{ rowId: RowId; expanded: boolean }` |
+| `(onRowGroupingRejected)` | `RowGroupingRejection` — `{ reason, field? }` |
 
 ## Angular-specific gotchas
 
@@ -634,8 +714,8 @@ Outputs:
 - **Edit renderer doesn't capture keys** → call `event.stopPropagation()` in the `(keydown)` handler so the grid's global key handler doesn't fire while the user types.
 - **Highlight CSS in component-scoped stylesheet with default encapsulation** → won't apply to grid cells. Move to a global stylesheet or set `encapsulation: ViewEncapsulation.None` on the component.
 - **`provideGridData` registered at the root injector** → all `<gp-grid>` instances share one data source. Register it on each consuming component instead.
-- **SSR (Angular Universal)**: the wrapper checks `isPlatformBrowser` before touching `document` and `ResizeObserver`. Just don't try to use the imperative `core` API during SSR.
-- **Strict templates and optional inputs**: the published input typings drop `undefined` (ng-packagr builds them without `strictNullChecks`). Cast an absent `columnGroups` (`undefined as unknown as AngularColumnGroupChild[]`) and bind `[]` for no `headerBandHeights` — an empty `columnGroups` array is a hierarchy that misses every column and is rejected.
+- **SSR (Angular Universal)**: the wrapper checks `isPlatformBrowser` before touching `document` and `ResizeObserver`. Just don't try to use the imperative `core` API during SSR. The core is created in `ngOnInit`, so a server render can already contain loaded rows, including collapsed group rows (`role="treegrid"`) under row grouping.
+- **Strict templates and optional inputs**: the published input typings drop `undefined` (ng-packagr builds them without `strictNullChecks`). Cast an absent `columnGroups` (`undefined as unknown as AngularColumnGroupChild[]`) and bind `[]` for no `headerBandHeights` — an empty `columnGroups` array is a hierarchy that misses every column and is rejected. `rowGrouping` and `groupLabelRenderer` drop `null` the same way: cast (`null as unknown as RowGrouping`) to ungroup.
 - **OnPush change detection**: the component uses `ChangeDetectionStrategy.OnPush` and signals internally. Mutating an array passed to `[columns]` won't trigger CD — replace it (`this.columns = [...this.columns, newCol]`) or use a signal.
 
 ## Working playground
