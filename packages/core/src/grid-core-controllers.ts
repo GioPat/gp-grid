@@ -18,7 +18,6 @@ import { CellsController } from "./grid-core-cells";
 import { EditController } from "./grid-core-edit";
 import { RowDragController } from "./grid-core-row-drag";
 import { RowGroupsController } from "./grid-core-row-groups";
-import { isEmptyGroupCell } from "./row-group-layout";
 import type { HierarchyChangeDeps } from "./grid-core-hierarchy-change";
 
 export interface ColumnControllersDeps<TData> {
@@ -49,12 +48,11 @@ export const buildColumnControllers = <TData>(
   const header = new HeaderController<TData>({
     batcher,
     config,
-    viewport: managers.viewport,
+    viewportState: managers.viewport,
     getGeometry,
-    getRowData: () => managers.rowData,
-    getView: () => managers.view,
-    refreshGeometry,
-    writeScrollTop: (domScrollTop) => viewportController.writeScrollTop(domScrollTop),
+    rowData: managers.rowData,
+    view: managers.view,
+    viewport: viewportController,
     isDestroyed,
   });
   const columns = new ColumnsController<TData>({
@@ -95,7 +93,7 @@ export interface RowControllersDeps<TData> {
 export interface RowControllers<TData> {
   rows: RowsController<TData>;
   cells: CellsController<TData>;
-  edit: EditController;
+  edit: EditController<TData>;
   rowDrag: RowDragController<TData>;
   rowGroups: RowGroupsController<TData>;
   /** The D4 applier's inputs, shared with a transaction refresh. */
@@ -110,10 +108,9 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
     selection,
     editManager,
     getGeometry: deps.getGeometry,
-    getRowData: () => rowData,
-    getView: () => managers.view,
-    refreshGeometry: () => viewportController.refreshGeometry(),
-    writeScrollTop: (domScrollTop) => viewportController.writeScrollTop(domScrollTop),
+    rowData,
+    view: managers.view,
+    viewport: viewportController,
   };
   return {
     rows: new RowsController({ rowData, slotPool }),
@@ -123,10 +120,9 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
       editManager,
       columnModel: deps.columnModel,
       selection,
+      rowData,
+      slotPool,
       retainEditColumn: deps.retainEditColumn,
-      refreshSlotData: () => slotPool.refreshAllSlots(),
-      isEmptyGroupCell: (row, col) =>
-        isEmptyGroupCell(rowData.getHierarchyRow(row)?.kind, rowData.getCellValue(row, col)),
     }),
     rowDrag: new RowDragController({
       config,

@@ -1,10 +1,15 @@
 import {
   isHierarchicalRowAccess,
+  type ColumnDefinition,
+  type DataSource,
   type DataSourceResponse,
   type HierarchicalRowAccess,
+  type RowAccess,
   type RowGrouping,
+  type RowGroupingHost,
   type RowGroupingRejection,
   type RowGroupingResult,
+  type RowId,
   type SortModel,
 } from "../types";
 import type { RowStore } from "./row-store";
@@ -43,27 +48,36 @@ export const bindResponse = <TData>(
 const isShort = (response: DataSourceResponse<unknown>): boolean =>
   (response.access?.rowCount ?? response.rows.length) < response.totalRows;
 
-export interface RowViewBinderOptions {
+export interface RowViewBinderOptions<TData> {
   rowGrouping?: RowGrouping | null;
   getSortModel: () => readonly SortModel[];
+  getColumns: () => ColumnDefinition[];
+  getDataSource: () => DataSource<TData>;
+  getRowId?: (row: TData) => RowId;
   onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
 }
 
-/** Binds responses and, with a grouping, the engine's hierarchy over the flat rows (D7). */
-export class RowViewBinder<TData> {
+/**
+ * Binds responses and, with a grouping, the hierarchy the engine builds over the
+ * flat rows (D7). The binder is the grouping's host: what it sees of this grid.
+ */
+export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   private readonly store: RowStore<TData>;
-  private readonly options: RowViewBinderOptions;
+  private readonly options: RowViewBinderOptions<TData>;
   private readonly isPaginated: () => boolean;
   private grouping: RowGrouping | null;
   private sourceHierarchy = false;
   private partial = false;
-  private readonly warned = new Set<RowGroupingRejection["reason"]>();
+  readonly getRowId?: (row: TData) => RowId;
+  readonly onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
 
-  constructor(store: RowStore<TData>, options: RowViewBinderOptions, isPaginated: () => boolean) {
+  constructor(store: RowStore<TData>, options: RowViewBinderOptions<TData>, isPaginated: () => boolean) {
     this.store = store;
     this.options = options;
     this.isPaginated = isPaginated;
     this.grouping = options.rowGrouping ?? null;
+    this.getRowId = options.getRowId;
+    this.onRowGroupingRejected = options.onRowGroupingRejected;
   }
 
   bind(response: DataSourceResponse<TData>): RowViewBinding {
@@ -93,16 +107,43 @@ export class RowViewBinder<TData> {
     return rejection ? { status: "rejected", rejection } : { status: "applied" };
   }
 
+  hasSourceHierarchy(): boolean {
+    return this.sourceHierarchy;
+  }
+
+  isPartial(): boolean {
+    return this.partial || this.isPaginated();
+  }
+
+  getSortModel(): readonly SortModel[] {
+    return this.options.getSortModel();
+  }
+
+  getColumns(): readonly ColumnDefinition[] {
+    return this.options.getColumns();
+  }
+
+  getDataSource(): DataSource<TData> {
+    return this.options.getDataSource();
+  }
+
+  getRowAccess(): RowAccess | null {
+    return this.store.getRowAccess();
+  }
+
+  getCachedRows(): ReadonlyMap<number, TData> {
+    return this.store.getCachedRows();
+  }
+
   private regroup(): RowGroupingRejection | null {
     const { grouping, store } = this;
     if (grouping === null) {
       this.unbindEngine();
       return null;
     }
-    const built = this.check() ?? grouping.build(store.toFlatRowSource(this.options.getSortModel()));
+    const built = grouping.regroup(this);
     if ("reason" in built) {
       this.unbindEngine();
-      this.reject(built);
       return built;
     }
     store.bindHierarchy(built as HierarchicalRowAccess<TData>);
@@ -113,19 +154,5 @@ export class RowViewBinder<TData> {
   private unbindEngine(): void {
     if (this.sourceHierarchy) return;
     this.store.bindHierarchy(null);
-  }
-
-  private check(): RowGroupingRejection | null {
-    if (this.sourceHierarchy) return { reason: "hierarchical-source" };
-    if (this.partial || this.isPaginated()) return { reason: "partial-source" };
-    return null;
-  }
-
-  private reject(rejection: RowGroupingRejection): void {
-    this.options.onRowGroupingRejected?.(rejection);
-    if (this.warned.has(rejection.reason)) return;
-    this.warned.add(rejection.reason);
-    const field = rejection.field === undefined ? "" : ` (${rejection.field})`;
-    console.warn(`[gp-grid] rowGrouping rejected: ${rejection.reason}${field}; the grouping is not applied.`);
   }
 }

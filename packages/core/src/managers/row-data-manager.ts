@@ -75,14 +75,15 @@ export class RowDataManager<TData = unknown> {
       onRowsLoaded: options.onRowsLoaded,
       bumpDataRevision: () => this.bumpDataRevision(),
     });
-    this.binder = new RowViewBinder(this.store, options, () => this.paginated.isPaginatedLoading());
+    this.binder = new RowViewBinder(
+      this.store,
+      { ...options, getDataSource: () => this.dataSource },
+      () => this.paginated.isPaginatedLoading(),
+    );
   }
 
   getCachedRows(): Map<number, TData> {
     return this.store.getCachedRows();
-  }
-  setCachedRows(rows: Map<number, TData>): void {
-    this.store.setCachedRows(rows);
   }
   getTotalRows(): number {
     return this.store.getTotalRows();

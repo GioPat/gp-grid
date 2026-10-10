@@ -4,8 +4,10 @@
 import type { FlatRowSource, RowGrouping, RowGroupingConfig, RowGroupingRejection } from "../types";
 import { isBuiltInAggregate } from "./aggregators";
 import { createExpansionState } from "./expansion-state";
+import { toFlatRowSource } from "./flat-row-source";
 import { createGroupedAccess } from "./grouped-access";
 import { buildGroupedView, type GroupingSpec } from "./grouped-view";
+import { checkHost, reportRejection } from "./rejections";
 
 const invalid = (path: string, value: unknown): RangeError =>
   new RangeError(`Invalid rowGrouping.${path}: ${value}`);
@@ -47,13 +49,19 @@ export const createRowGrouping = (config: RowGroupingConfig): RowGrouping => {
     grandTotal: config.grandTotal,
   };
   const expansion = createExpansionState(config.defaultExpandedDepth ?? 0, config.initialState);
+  const build: RowGrouping["build"] = (source) => {
+    const unknown = unknownField(spec, source);
+    if (unknown) return unknown;
+    const view = buildGroupedView(source, spec, expansion);
+    return "reason" in view ? view : createGroupedAccess(source, spec, expansion, view);
+  };
   return {
     getState: expansion.snapshot,
-    build: (source) => {
-      const unknown = unknownField(spec, source);
-      if (unknown) return unknown;
-      const view = buildGroupedView(source, spec, expansion);
-      return "reason" in view ? view : createGroupedAccess(source, spec, expansion, view);
+    build,
+    regroup: (host) => {
+      const built = checkHost(host) ?? build(toFlatRowSource(host));
+      if ("reason" in built) reportRejection(host, built);
+      return built;
     },
   };
 };

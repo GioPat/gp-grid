@@ -83,7 +83,7 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
 
   /** One resident scan, for arrivals and re-placements after a revision. */
   private readonly scanRows: LocateRowIds = (ids) =>
-    this.deps.getRowData().locateRowIds(ids);
+    this.deps.rowData.locateRowIds(ids);
 
   constructor(deps: RowHeightsControllerDeps<TData>) {
     this.deps = deps;
@@ -158,19 +158,19 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
       const placed = this.applySizeChange(() => this.deps.overrides.placePending(this.scanRows));
       if (placed) return;
     }
-    this.deps.getView().syncVisibleRows(totalRowsChanged);
+    this.deps.view.syncVisibleRows(totalRowsChanged);
   }
 
   /** D6: a moved row keeps its height by identity, with no anchor correction. */
   onRowsMoved(): void {
     if (this.deps.isDestroyed()) return;
-    const { overrides, getRowData } = this.deps;
-    getRowData().bumpDataRevision();
+    const { overrides, rowData } = this.deps;
+    rowData.bumpDataRevision();
     if (overrides.size === 0) return;
     this.deps.batcher.start();
     try {
-      this.deps.refreshGeometry();
-      this.deps.getView().syncVisibleRows(true);
+      this.deps.viewport.refreshGeometry();
+      this.deps.view.syncVisibleRows(true);
     } finally {
       this.deps.batcher.flush();
     }
@@ -232,7 +232,7 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
 
   /** Identity of a loaded row; its view index when the source exposes none. */
   private rowIdAt(viewIndex: number): RowId | undefined {
-    const rowData = this.deps.getRowData();
+    const rowData = this.deps.rowData;
     if (rowData.hasRow(viewIndex) === false) return undefined;
     return rowData.getRowId(viewIndex) ?? viewIndex;
   }
@@ -249,7 +249,7 @@ export class RowHeightsController<TData> implements GridRowHeightsApi {
   ): void {
     const missing = missingIds(ids, found);
     if (missing.size === 0) return;
-    for (const [rowId, index] of this.deps.getRowData().locateRowIds(missing, range)) {
+    for (const [rowId, index] of this.deps.rowData.locateRowIds(missing, range)) {
       found.set(rowId, index);
     }
   }

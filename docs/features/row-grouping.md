@@ -53,6 +53,8 @@ name or a negative depth.
 One `RowGrouping` serves one grid, and a new configuration is a new
 `createRowGrouping` call. Keep the object referentially stable (a module
 constant, `useMemo`, a `shallowRef`, a class field): a new object regroups.
+Core drives it through `RowGrouping.regroup(host)` on every full load and on
+`setGrouping`; `regroup` and `build` are core's, an application calls neither.
 
 ```tsx
 // React
@@ -474,7 +476,8 @@ record rows; a flat row is a record row of depth 0. `rows.getData(viewIndex)` is
 A custom adapter reads the row from `ASSIGN_SLOT.row` (`SlotData.row`, absent
 while flat) and the mode from `DATA_LOADED.hierarchical`
 (`GridState.hierarchical`), and routes the expander through
-`InputEventAdapter.groupTogglePointerDown(rowIndex, event)` or
+`InputEventAdapter.groupTogglePointerDown(rowIndex, event)`, the standalone
+`groupTogglePointerDown(core, rowIndex, event)` (what React and Vue use) or
 `core.input.handleGroupToggle(rowIndex, pointerType?)`.
 
 ## Wrapper surface

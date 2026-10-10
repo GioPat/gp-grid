@@ -9,7 +9,7 @@ import type {
   GridLabels,
   RowGrouping,
 } from "@gp-grid/core";
-import { resolveGroupLabelColumnId } from "@gp-grid/core";
+import { groupTogglePointerDown, resolveGroupLabelColumnId } from "@gp-grid/core";
 import type { RowGroupCellContext } from "../components/row-group-attributes";
 import type { VueGroupLabelRenderer } from "../types";
 
@@ -25,12 +25,9 @@ export const useRowGroupingSync = <TData>(
   });
 };
 
-/** Mirrors `InputEventAdapter.groupTogglePointerDown`: the cell beneath sees no pointer down. */
 export const createGroupTogglePointerDown = <TData>(coreRef: CoreRef<TData>) =>
   (rowIndex: number, e: PointerEvent): void => {
-    e.stopPropagation();
-    if (e.button !== 0) return;
-    coreRef.value?.input.handleGroupToggle(rowIndex, e.pointerType);
+    groupTogglePointerDown(coreRef.value, rowIndex, e);
   };
 
 export interface RowGroupCellSources {

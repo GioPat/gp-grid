@@ -146,6 +146,7 @@ export type {
   RowGroupResult,
   RowGrouping,
   RowGroupingConfig,
+  RowGroupingHost,
   FlatRowSource,
   RowGroupDimension,
   RowGroupMeasure,
@@ -433,5 +434,6 @@ export type {
   DragEndResult,
 } from "./adapter";
 
-/** Shared pointer-interaction thresholds */
-export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS } from "./input";
+/** Shared pointer-interaction thresholds and the group expander's pointer down */
+export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS, groupTogglePointerDown } from "./input";
+export type { GroupTogglePointerEvent } from "./input";

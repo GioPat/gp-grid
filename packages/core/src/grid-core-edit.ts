@@ -5,7 +5,10 @@ import type { CellValue, EditState } from "./types";
 import type { EditManager } from "./edit-manager";
 import type { ColumnModel } from "./column-model";
 import type { InstructionBatcher } from "./managers";
+import type { RowDataManager } from "./managers/row-data-manager";
 import type { SelectionManager } from "./selection";
+import type { SlotPoolManager } from "./slot-pool";
+import { isEmptyGroupCell } from "./row-group-layout";
 
 export interface GridEditApi {
   /** Open an editor; false when the cell is not editable. */
@@ -26,21 +29,20 @@ export interface GridEditApi {
   paste(text: string): boolean;
 }
 
-export interface EditControllerDeps {
+export interface EditControllerDeps<TData> {
   batcher: InstructionBatcher;
   editManager: EditManager;
   columnModel: ColumnModel;
   selection: SelectionManager;
+  rowData: RowDataManager<TData>;
+  slotPool: SlotPoolManager;
   retainEditColumn: (columnId: string | null) => void;
-  refreshSlotData: () => void;
-  /** An empty group or total cell has nothing to peek. */
-  isEmptyGroupCell: (row: number, col: number) => boolean;
 }
 
-export class EditController implements GridEditApi {
-  private readonly deps: EditControllerDeps;
+export class EditController<TData> implements GridEditApi {
+  private readonly deps: EditControllerDeps<TData>;
 
-  constructor(deps: EditControllerDeps) {
+  constructor(deps: EditControllerDeps<TData>) {
     this.deps = deps;
   }
 
@@ -77,11 +79,13 @@ export class EditController implements GridEditApi {
     return this.deps.editManager.getState();
   }
 
+  /** An empty group or total cell has nothing to peek. */
   startPeek(row: number, col: number): boolean {
-    const column = this.deps.columnModel.columnAt(col);
+    const { columnModel, rowData, editManager } = this.deps;
+    const column = columnModel.columnAt(col);
     if (column === undefined || column.peekable === false) return false;
-    if (this.deps.isEmptyGroupCell(row, col)) return false;
-    return this.deps.editManager.startPeek(row, col);
+    if (isEmptyGroupCell(rowData.getHierarchyRow(row)?.kind, rowData.getCellValue(row, col))) return false;
+    return editManager.startPeek(row, col);
   }
 
   stopPeek(): void {
@@ -95,7 +99,7 @@ export class EditController implements GridEditApi {
   paste(text: string): boolean {
     if (this.deps.editManager.getState()) return false;
     const result = this.deps.selection.pasteClipboardText(text);
-    if (result.changedCells.length > 0) this.deps.refreshSlotData();
+    if (result.changedCells.length > 0) this.deps.slotPool.refreshAllSlots();
     return result.handled;
   }
 }

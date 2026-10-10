@@ -7,12 +7,9 @@ import {
   resolveRegionScrollCorrection,
   type FrozenRowsRequest,
   type FrozenRowsState,
-  type GridGeometryService,
 } from "./geometry";
 import type { EditManager } from "./edit-manager";
-import type { InstructionBatcher } from "./managers";
-import type { RowDataManager } from "./managers/row-data-manager";
-import type { ViewSync } from "./grid-core-view-sync";
+import type { SizeChangeDeps } from "./grid-core-size-change";
 import { resolveFreezeRowsOptions } from "./grid-core-config";
 
 type ResolvedFreezeRows = Readonly<Required<FreezeRowsOptions>>;
@@ -33,17 +30,9 @@ export interface GridFrozenRowsApi {
   get(): FrozenRowsState;
 }
 
-export interface FrozenRowsControllerDeps<TData> {
+export interface FrozenRowsControllerDeps<TData> extends SizeChangeDeps<TData> {
   initial: ResolvedFreezeRows;
-  batcher: InstructionBatcher;
-  getGeometry: () => GridGeometryService;
-  getRowData: () => RowDataManager<TData>;
-  getView: () => ViewSync<TData>;
-  getEditManager: () => EditManager;
-  /** Commits geometry and emits any clamp correction inside the open batch. */
-  refreshGeometry: () => void;
-  /** Writes a corrected DOM scroll top to whichever sample is in charge. */
-  writeScrollTop: (domScrollTop: number) => void;
+  editManager: EditManager;
   isDestroyed: () => boolean;
 }
 
@@ -81,7 +70,7 @@ export class FrozenRowsController<TData> implements GridFrozenRowsApi {
     if (this.request === null) return null;
     return {
       ...this.request,
-      admitsPrefix: this.request.admitsPrefix ?? this.deps.getRowData().getPrefixAdmission(),
+      admitsPrefix: this.request.admitsPrefix ?? this.deps.rowData.getPrefixAdmission(),
     };
   }
 
@@ -123,7 +112,7 @@ export class FrozenRowsController<TData> implements GridFrozenRowsApi {
     this.request = request;
     batcher.start();
     try {
-      this.deps.refreshGeometry();
+      this.deps.viewport.refreshGeometry();
       // Before the slot sync: a region flip must not invalidate the open
       // edit's assignment first (mirrors commitHiddenEdit).
       this.commitRegionChangedEdit(previous.frozenCount);
@@ -132,8 +121,8 @@ export class FrozenRowsController<TData> implements GridFrozenRowsApi {
       this.applyScrollCorrection(previous.frozenExtent);
       // Freezing fetches the prefix and unfreezing releases it without a
       // scroll sample; a non-paginated source keeps this a no-op.
-      this.deps.getRowData().requestVisibleRows();
-      this.deps.getView().syncVisibleRows(true);
+      this.deps.rowData.requestVisibleRows();
+      this.deps.view.syncVisibleRows(true);
     } finally {
       batcher.flush();
     }
@@ -148,13 +137,13 @@ export class FrozenRowsController<TData> implements GridFrozenRowsApi {
       previousFrozenExtent,
     });
     if (corrected === null) return;
-    this.deps.writeScrollTop(corrected);
+    this.deps.viewport.writeScrollTop(corrected);
     this.deps.batcher.emit({ type: "SCROLL_TO", scrollTop: corrected });
   }
 
   /** A row that stays in its region keeps its editor and draft. */
   private commitRegionChangedEdit(previousFrozenCount: number): void {
-    const editManager = this.deps.getEditManager();
+    const editManager = this.deps.editManager;
     const edit = editManager.getState();
     if (edit === null) return;
     const wasFrozen = edit.row < previousFrozenCount;

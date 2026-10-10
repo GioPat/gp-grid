@@ -13,16 +13,15 @@ import {
 import type { InstructionBatcher } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
 import type { ViewSync } from "./grid-core-view-sync";
+import type { ViewportController } from "./grid-core-viewport";
 
 export interface SizeChangeDeps<TData> {
   batcher: InstructionBatcher;
   getGeometry: () => GridGeometryService;
-  getRowData: () => RowDataManager<TData>;
-  getView: () => ViewSync<TData>;
-  /** Commits geometry and emits any clamp correction inside the open batch. */
-  refreshGeometry: () => void;
-  /** Writes a corrected DOM scroll top to whichever sample is in charge. */
-  writeScrollTop: (domScrollTop: number) => void;
+  rowData: RowDataManager<TData>;
+  view: ViewSync<TData>;
+  /** Commits geometry inside the open batch and writes a corrected scroll top to whichever sample is in charge. */
+  viewport: Pick<ViewportController<TData>, "refreshGeometry" | "writeScrollTop">;
 }
 
 /** C5 frame at the live sample: hits, clips and the anchor all read it. */
@@ -41,13 +40,13 @@ export const resyncAfterSizeChange = <TData>(
   anchor: RowAnchor | null,
   sync: "rows" | "reconcile" = "rows",
 ): void => {
-  deps.refreshGeometry();
+  deps.viewport.refreshGeometry();
   const corrected = anchor === null ? null : resolveAnchoredScrollTop(anchor, regionInput(deps));
   if (corrected !== null) {
-    deps.writeScrollTop(corrected);
+    deps.viewport.writeScrollTop(corrected);
     deps.batcher.emit({ type: "SCROLL_TO", scrollTop: corrected });
   }
-  deps.getRowData().requestVisibleRows();
-  if (sync === "reconcile") deps.getView().reconcile();
-  else deps.getView().syncVisibleRows(true);
+  deps.rowData.requestVisibleRows();
+  if (sync === "reconcile") deps.view.reconcile();
+  else deps.view.syncVisibleRows(true);
 };

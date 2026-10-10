@@ -32,14 +32,14 @@ const locateRow = <TData>(rowData: RowDataManager<TData>, id: RowId): number =>
 const captureAnchor = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture["anchor"] => {
   const anchor = captureSizeAnchor(deps);
   if (anchor === null) return null;
-  const id = deps.getRowData().getRowId(anchor.index);
+  const id = deps.rowData.getRowId(anchor.index);
   return id === undefined ? null : { id, intra: anchor.intra };
 };
 
 const captureActive = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture["active"] => {
   const cell = deps.selection.getActiveCell();
   if (cell === null) return null;
-  const id = deps.getRowData().getRowId(cell.row);
+  const id = deps.rowData.getRowId(cell.row);
   return id === undefined ? null : { id, col: cell.col };
 };
 
@@ -68,7 +68,7 @@ const restoreActive = <TData>(
     if (selection.getSelectionRange()) selection.clearSelectionRange();
     return;
   }
-  const row = locateRow(deps.getRowData(), active.id);
+  const row = locateRow(deps.rowData, active.id);
   if (row < 0) selection.clearSelection();
   else selection.setActiveCell(row, active.col);
 };
@@ -78,7 +78,7 @@ export const restoreViewRows = <TData>(
   deps: HierarchyChangeDeps<TData>,
   capture: ViewRowsCapture,
 ): void => {
-  resyncAfterSizeChange(deps, resolveAnchor(deps.getRowData(), capture.anchor), "reconcile");
+  resyncAfterSizeChange(deps, resolveAnchor(deps.rowData, capture.anchor), "reconcile");
   restoreActive(deps, capture.active);
 };
 
@@ -94,7 +94,7 @@ export const applyViewRowsChange = <TData>(
     if (edit) editManager.commit(edit.editId);
     const capture = captureViewRows(deps);
     if (change() === false) return false;
-    const rowData = deps.getRowData();
+    const rowData = deps.rowData;
     rowData.bumpDataRevision();
     rowData.emitLoaded();
     restoreViewRows(deps, capture);

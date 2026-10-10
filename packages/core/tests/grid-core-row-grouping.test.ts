@@ -229,6 +229,19 @@ describe("row grouping — partial sources (AC-008-07)", () => {
     expect(grid.rows.getCount()).toBe(6);
     expect(rejections).toEqual([{ reason: "partial-source" }]);
   });
+
+  it("reports every rejected load and warns once per reason per grid, across groupings", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const short: DataSource<Sale> = {
+      query: async () => ({ rows: copySales().slice(0, 4), totalRows: 6 }),
+    };
+    const { grid, rejections } = await mount(short);
+    await grid.refresh();
+    grid.rowGroups.setGrouping(createRowGrouping({ dimensions: [{ field: "city" }] }));
+
+    expect(rejections).toEqual(Array(3).fill({ reason: "partial-source" }));
+    expect(warn).toHaveBeenCalledOnce();
+  });
 });
 
 describe("row grouping — other rejections and setGrouping", () => {

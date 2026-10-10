@@ -76,6 +76,7 @@ import type {
   RowGroupToggledEvent,
   RowGrouping,
   RowGroupingConfig,
+  RowGroupingHost,
   RowGroupingRejection,
   RowGroupingResult,
   RowGroupingState,
@@ -335,6 +336,11 @@ const regrouped: RowGroupingResult = core.rowGroups.setGrouping(rowGrouping);
 const groupingRejection: RowGroupingRejection | null =
   regrouped.status === "rejected" ? regrouped.rejection : null;
 const expansion: RowGroupingState = rowGrouping.getState();
+// Core's hook and what it hands the grouping; an application calls neither.
+const regroup: RowGrouping["regroup"] = rowGrouping.regroup;
+const hostMembers: (keyof RowGroupingHost<Row>)[] = [
+  "hasSourceHierarchy", "isPartial", "getSortModel", "getColumns", "getDataSource", "getRowAccess", "getCachedRows",
+];
 const describeViewRow = (row: ViewRow<Row>): string => {
   if (row.kind === "record") {
     const recordRow: HierarchyRecordRow = row;

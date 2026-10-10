@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FlatRowStore, type FlatRowStoreOptions } from "../src/managers/flat-row-store";
-import { RowStore } from "../src/managers/row-store";
+import { RowStore, type RowStoreOptions } from "../src/managers/row-store";
 import type {
   CellValue,
   CellWriteRejectedEvent,
@@ -30,8 +29,8 @@ const dataSource: DataSource<Row> = {
 };
 
 const createOptions = (
-  overrides: Partial<FlatRowStoreOptions<Row>> = {},
-): FlatRowStoreOptions<Row> => ({
+  overrides: Partial<RowStoreOptions<Row>> = {},
+): RowStoreOptions<Row> => ({
   getColumns: () => columns,
   getDataSource: () => dataSource,
   isWritable: () => true,
@@ -39,8 +38,9 @@ const createOptions = (
   ...overrides,
 });
 
-const loadRows = (store: FlatRowStore<Row> | RowStore<Row>): void => {
-  store.setCachedRows(new Map(rows.map((row, index) => [index, { ...row }])));
+const loadRows = (store: RowStore<Row>): void => {
+  const cached = store.getCachedRows();
+  rows.forEach((row, index) => cached.set(index, { ...row }));
   store.setTotalRows(rows.length);
 };
 
@@ -51,11 +51,13 @@ const columnarAccess = (release = vi.fn()): RowAccess => ({
   release,
 });
 
-describe("FlatRowStore", () => {
+describe("RowStore over flat rows", () => {
   it("reads records, cells and identities by flat position", () => {
-    const store = new FlatRowStore<Row>(createOptions());
+    const store = new RowStore<Row>(createOptions());
     loadRows(store);
+    store.bumpRevision();
 
+    expect(store.getRevision()).toBe(1);
     expect(store.getTotalRows()).toBe(3);
     expect(store.getRowData(1)?.name).toBe("Bo");
     expect(store.hasRow(2)).toBe(true);
@@ -68,10 +70,13 @@ describe("FlatRowStore", () => {
     expect(store.findViewIndexById("z")).toBe(-1);
     expect(store.getRecordById("a")?.name).toBe("Ada");
     expect(store.hasStableIdentity()).toBe(true);
+    expect(store.getRowAccess()).toBeNull();
+    expect(store.getHierarchy()).toBeNull();
+    expect(store.getHierarchyRow(0)).toBeUndefined();
   });
 
   it("locates identities within a range and stops once all are found", () => {
-    const store = new FlatRowStore<Row>(createOptions());
+    const store = new RowStore<Row>(createOptions());
     loadRows(store);
 
     const ids = new Set(["a", "c"]);
@@ -81,7 +86,7 @@ describe("FlatRowStore", () => {
 
   it("reads scalar access instead of the cache and releases it on rebind", () => {
     const release = vi.fn();
-    const store = new FlatRowStore<Row>(createOptions());
+    const store = new RowStore<Row>(createOptions());
     store.setRowAccess(columnarAccess(release));
 
     expect(store.getCellValue(1, 1)).toBe("name-1");
@@ -91,6 +96,7 @@ describe("FlatRowStore", () => {
     expect(store.getRowId(1)).toBe("r1");
     expect(store.getRowId(5)).toBeUndefined();
     expect(store.hasRow(1)).toBe(true);
+    expect(store.hasStableIdentity()).toBe(true);
     expect([...store.locateIds(new Set(["r1"]))]).toEqual([["r1", 1]]);
 
     store.setRowAccess(null);
@@ -101,7 +107,7 @@ describe("FlatRowStore", () => {
     const onCellValueChanged = vi.fn();
     const rejected: CellWriteRejectedEvent[] = [];
     let writable = true;
-    const store = new FlatRowStore<Row>(
+    const store = new RowStore<Row>(
       createOptions({
         isWritable: () => writable,
         onCellValueChanged,
@@ -123,26 +129,10 @@ describe("FlatRowStore", () => {
   });
 
   it("clears the cache and the count", () => {
-    const store = new FlatRowStore<Row>(createOptions());
+    const store = new RowStore<Row>(createOptions());
     loadRows(store);
     store.clear();
     expect(store.getTotalRows()).toBe(0);
     expect(store.getRowData(0)).toBeUndefined();
-  });
-});
-
-describe("RowStore over a flat store", () => {
-  it("answers by view index straight through the flat rows", () => {
-    const store = new RowStore<Row>(createOptions());
-    loadRows(store);
-    store.bumpRevision();
-
-    expect(store.getRevision()).toBe(1);
-    expect(store.getTotalRows()).toBe(3);
-    expect(store.getRowData(2)?.id).toBe("c");
-    expect(store.getCellValue(1, 0)).toBe("b");
-    expect(store.findViewIndexById("b")).toBe(1);
-    expect([...store.locateIds(new Set(["a"]))]).toEqual([["a", 0]]);
-    expect(store.getRowAccess()).toBeNull();
   });
 });

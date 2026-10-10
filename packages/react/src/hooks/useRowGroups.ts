@@ -9,7 +9,7 @@ import type {
   GridLabels,
   RowGrouping,
 } from "@gp-grid/core";
-import { resolveGroupLabelColumnId } from "@gp-grid/core";
+import { groupTogglePointerDown, resolveGroupLabelColumnId } from "@gp-grid/core";
 import type { RowGroupCellContext } from "../components/row-group-attributes";
 import type { ReactGroupLabelRenderer } from "../types";
 
@@ -49,12 +49,9 @@ export const useRowGroupCellContext = <TData>(
 ): RowGroupCellContext | null => {
   const { hierarchical, layout, columns, labels, groupLabelColumn, groupLabelRenderer } = options;
 
-  // Mirrors `InputEventAdapter.groupTogglePointerDown`: the cell beneath sees no pointer down.
   const onTogglePointerDown = useCallback(
     (rowIndex: number, e: React.PointerEvent): void => {
-      e.stopPropagation();
-      if (e.button !== 0) return;
-      coreRef.current?.input.handleGroupToggle(rowIndex, e.pointerType);
+      groupTogglePointerDown(coreRef.current, rowIndex, e);
     },
     [coreRef],
   );

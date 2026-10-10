@@ -143,7 +143,7 @@ export class InputHandler<TData = unknown> {
 
   /** A double-click on a column or row edge handle fits that target once. */
   handleResizeDoubleClick(target: ResizeTarget): void {
-    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
+    if (this.swallowsClick()) return;
     const action = resolveHandleFit(this.core, target);
     if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
@@ -248,7 +248,7 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
-    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
+    if (this.swallowsClick()) return;
     if (isGroupRow(this.core, rowIndex)) {
       this.commands.toggleGroupAt(rowIndex);
       return;
@@ -285,7 +285,7 @@ export class InputHandler<TData = unknown> {
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
-    if (this.stopsScrollMotion() || this.justStoppedMotion()) return;
+    if (this.swallowsClick()) return;
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
@@ -304,9 +304,9 @@ export class InputHandler<TData = unknown> {
     return true;
   }
 
-  /** The click and double-click of the press that stopped the motion arrive after it ended. */
-  private justStoppedMotion(): boolean {
-    return Date.now() - this.motionStoppedAt < MOTION_STOP_GUARD_MS;
+  /** A click or double-click during the motion, or from the press that stopped it, does nothing. */
+  private swallowsClick(): boolean {
+    return this.stopsScrollMotion() || Date.now() - this.motionStoppedAt < MOTION_STOP_GUARD_MS;
   }
 
   // ---------------------------------------------------------------------------

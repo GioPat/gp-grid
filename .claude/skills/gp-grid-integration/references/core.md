@@ -174,8 +174,9 @@ demand. `TouchScrollController` registers itself; a custom scroller registers a
 `clearScrollMotionHandle(handle)`.
 
 **Group expander.** Route its pointer down to
-`adapter.groupTogglePointerDown(rowIndex, event)` or call
-`grid.input.handleGroupToggle(rowIndex, event.pointerType)` after
+`adapter.groupTogglePointerDown(rowIndex, event)`, to the standalone
+`groupTogglePointerDown(grid, rowIndex, event)` when you hold the core yourself,
+or call `grid.input.handleGroupToggle(rowIndex, event.pointerType)` after
 `event.stopPropagation()`, and stop its `dblclick` too: a double-click on a group
 row already toggles through `handleCellDoubleClick`.
 

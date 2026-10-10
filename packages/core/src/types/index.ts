@@ -121,6 +121,7 @@ export type {
   RowGroupingConfig,
   RowGroupResult,
   RowGrouping,
+  RowGroupingHost,
   RowGroupingState,
   RowGroupingRejection,
   RowGroupingResult,

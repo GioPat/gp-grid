@@ -39,7 +39,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
   }
 
   isActive(): boolean {
-    return this.deps.getRowData().getHierarchy() !== null;
+    return this.deps.rowData.getHierarchy() !== null;
   }
 
   setExpanded(ids: readonly RowId[] | null, expanded: boolean): RowGroupResult {
@@ -60,7 +60,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
 
   setGrouping(grouping: RowGrouping | null): RowGroupingResult {
     if (this.deps.isDestroyed()) return UNSUPPORTED;
-    const rowData = this.deps.getRowData();
+    const rowData = this.deps.rowData;
     let result: RowGroupingResult = UNCHANGED;
     applyViewRowsChange(this.deps, () => {
       const bound = rowData.getHierarchy();
@@ -77,7 +77,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
    */
   toggleAt(viewIndex: number): RowGroupResult {
     if (this.expandable() === null) return UNSUPPORTED;
-    const row = this.deps.getRowData().getHierarchyRow(viewIndex);
+    const row = this.deps.rowData.getHierarchyRow(viewIndex);
     if (row?.kind !== "group") return UNCHANGED;
     const expanded = row.expanded === false;
     const result = this.setExpanded([row.id], expanded);
@@ -88,7 +88,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
   /** The bound hierarchy when it can expand, else `null`. */
   private expandable(): HierarchicalRowAccess | null {
     if (this.deps.isDestroyed()) return null;
-    const hierarchy = this.deps.getRowData().getHierarchy();
+    const hierarchy = this.deps.rowData.getHierarchy();
     return hierarchy?.setExpanded === undefined ? null : hierarchy;
   }
 }

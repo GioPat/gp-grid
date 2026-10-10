@@ -30,7 +30,7 @@ export interface GridHeaderApi {
 
 export interface HeaderControllerDeps<TData> extends SizeChangeDeps<TData> {
   config: Pick<GridCoreConfig<TData>, "headerHeight" | "headerBandHeights">;
-  viewport: ViewportState;
+  viewportState: ViewportState;
   isDestroyed: () => boolean;
 }
 
@@ -125,7 +125,7 @@ export class HeaderController<TData> implements GridHeaderApi {
     const { deps } = this;
     deps.batcher.replacing(RESYNC_REPLACES, () => {
       // The body is what a fixed container leaves below the header.
-      deps.viewport.setViewportHeight(normalizeSize(deps.viewport.getViewportHeight() - growth));
+      deps.viewportState.setViewportHeight(normalizeSize(deps.viewportState.getViewportHeight() - growth));
       resyncAfterSizeChange(deps, anchor);
     });
   }
