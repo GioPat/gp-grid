@@ -1,6 +1,7 @@
 // FlatRowSource helpers for the engine tests: object rows and columnar arrays.
 
-import type { CellValue, FlatRowSource, RowId, SortModel } from "../src/types";
+import type { CellValue, RowId, SortModel } from "../src/types";
+import type { FlatRowSource } from "../src/types/row-grouping-engine";
 
 type Row = Record<string, CellValue | undefined>;
 

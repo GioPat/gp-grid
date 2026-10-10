@@ -1,14 +1,9 @@
 // packages/core/src/row-grouping/aggregators.ts
-// The built-in aggregators and the fold of a group's leaf range (D9).
+// The built-in aggregators and the fold of a group's leaf range.
 
 import { compareValues } from "../indexed-data-store/sorting";
-import type {
-  CellValue,
-  FlatRowSource,
-  RowGroupAggregator,
-  RowGroupBuiltInAggregate,
-  RowGroupMeasure,
-} from "../types";
+import type { CellValue, RowGroupAggregator, RowGroupBuiltInAggregate, RowGroupMeasure } from "../types";
+import type { FlatRowSource } from "../types/row-grouping-engine";
 import type { GroupTree } from "./group-layout";
 
 interface Mean {

@@ -1,5 +1,5 @@
 // packages/core/src/row-grouping/visible-rows.ts
-// The visible index: visible group rows and their first view index (D9).
+// The visible index: visible group rows and their first view index.
 
 import type { GroupTree } from "./group-layout";
 

@@ -1,5 +1,5 @@
 // packages/core/src/row-grouping/keys.ts
-// Typed dimension keys and the group id encoding (D8).
+// Typed dimension keys and the group id encoding.
 
 import type { CellValue, RowId } from "../types";
 

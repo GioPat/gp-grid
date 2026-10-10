@@ -1,7 +1,8 @@
 // packages/core/src/row-grouping/rejections.ts
-// The host-side rejections of a grouping and their report (D7).
+// The host-side rejections of a grouping and their report.
 
-import type { RowGroupingHost, RowGroupingRejection } from "../types";
+import type { RowGroupingRejection } from "../types";
+import type { RowGroupingHost } from "../types/row-grouping-engine";
 
 type Reason = RowGroupingRejection["reason"];
 

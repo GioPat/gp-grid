@@ -1,12 +1,8 @@
 // packages/core/src/row-grouping/group-tree.ts
-// Buckets flat rows into groups, one pass per dimension (D9).
+// Buckets flat rows into groups, one pass per dimension.
 
-import type {
-  CellValue,
-  FlatRowSource,
-  RowGroupDimension,
-  RowGroupingRejection,
-} from "../types";
+import type { CellValue, RowGroupDimension, RowGroupingRejection } from "../types";
+import type { FlatRowSource } from "../types/row-grouping-engine";
 import {
   layoutTree,
   levelsFromTree,

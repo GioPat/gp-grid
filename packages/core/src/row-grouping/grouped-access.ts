@@ -1,14 +1,8 @@
 // packages/core/src/row-grouping/grouped-access.ts
-// The engine's HierarchicalRowAccess over a grouped view and its flat source (D1, D9).
+// The engine's HierarchicalRowAccess over a grouped view and its flat source.
 
-import type {
-  CellValue,
-  FlatRowSource,
-  HierarchicalRowAccess,
-  HierarchyRecordChange,
-  HierarchyRow,
-  RowId,
-} from "../types";
+import type { CellValue, HierarchicalRowAccess, HierarchyRecordChange, HierarchyRow, RowId } from "../types";
+import type { FlatRowSource } from "../types/row-grouping-engine";
 import type { ExpansionState } from "./expansion-state";
 import { findGroup } from "./group-lookup";
 import { groupIdOf } from "./group-tree";
@@ -119,16 +113,25 @@ export const createGroupedAccess = <TData = unknown>(
     return true;
   };
 
-  const setExpanded = (ids: readonly RowId[] | null, open: boolean): boolean => {
+  const setAll = (open: boolean): boolean => {
+    const bit = open ? 1 : 0;
+    const changed = view.expanded.some((current) => current !== bit);
+    view.expanded.fill(bit);
+    expansion.setAll(view.tree, open);
+    return changed;
+  };
+
+  const setEach = (ids: readonly RowId[], open: boolean): boolean => {
     let changed = false;
-    if (ids === null) {
-      for (let group = 0; group < view.tree.groupCount; group++) changed = setGroup(group, open) || changed;
-    } else {
-      for (const id of ids) {
-        const group = findGroup(view.tree, id);
-        changed = (group >= 0 && setGroup(group, open)) || changed;
-      }
+    for (const id of ids) {
+      const group = findGroup(view.tree, id);
+      changed = (group >= 0 && setGroup(group, open)) || changed;
     }
+    return changed;
+  };
+
+  const setExpanded = (ids: readonly RowId[] | null, open: boolean): boolean => {
+    const changed = ids === null ? setAll(open) : setEach(ids, open);
     if (changed) view.visible.rebuild();
     return changed;
   };

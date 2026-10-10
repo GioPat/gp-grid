@@ -1,9 +1,8 @@
 // packages/core/src/types/row-groups.ts
 // Hierarchical row access: the contract a grouping provider hands the grid.
 
-import type { CellValue, RowId, SortModel } from "./basic";
-import type { ColumnDefinition } from "./columns";
-import type { DataSource, RowAccess } from "./data-source";
+import type { CellValue, RowId } from "./basic";
+import type { RowAccess } from "./data-source";
 
 export interface HierarchyRecordRow {
   kind: "record";
@@ -67,10 +66,12 @@ export const isHierarchicalRowAccess = <TData = unknown>(
 ): access is HierarchicalRowAccess<TData> =>
   (access as { hierarchical?: unknown }).hierarchical === true;
 
-/** Groups toggled away from the default expansion depth. */
+/** Groups toggled away from the expansion depth. */
 export interface RowGroupingState {
   readonly expanded: readonly RowId[];
   readonly collapsed: readonly RowId[];
+  /** Set by `setExpanded(null, …)`, which replaces the configured `defaultExpandedDepth`. */
+  readonly expandedDepth?: number;
 }
 
 /** One grouping level. `id`, `field` by default, names the bucketing and enters the group id. */
@@ -78,21 +79,6 @@ export interface RowGroupDimension {
   field: string;
   id?: string;
   toKey?: (value: CellValue) => string | number | boolean | null;
-}
-
-/** The flat rows a local grouping engine reads, addressed by flat position. */
-export interface FlatRowSource {
-  readonly rowCount: number;
-  /** Resolves the field once; the reader takes a flat position. */
-  reader(field: string): (row: number) => CellValue;
-  /** A row without a source identity answers its flat position. */
-  getRowId(row: number): RowId;
-  getRecord?(row: number): unknown;
-  readonly sort: readonly SortModel[];
-  /** Source field of a column, or `undefined` for an unknown column. */
-  fieldOf(columnId: string): string | undefined;
-  /** Declared column fields and, for a columnar source, its fields. */
-  readonly fields: readonly string[];
 }
 
 export type RowGroupBuiltInAggregate = "sum" | "count" | "avg" | "min" | "max";
@@ -122,35 +108,9 @@ export interface RowGroupingConfig {
   initialState?: RowGroupingState;
 }
 
-/**
- * What core hands a grouping on every full load and `setGrouping`: one grid's
- * flat rows, and why it may not group them. One host serves one grid.
- */
-export interface RowGroupingHost<TData = unknown> {
-  /** The source returned its own hierarchy; it stays bound. */
-  hasSourceHierarchy(): boolean;
-  /** Paginated loading, or a response shorter than its total. */
-  isPartial(): boolean;
-  getSortModel(): readonly SortModel[];
-  getColumns(): readonly ColumnDefinition[];
-  getDataSource(): DataSource<TData>;
-  getRowAccess(): RowAccess | null;
-  getCachedRows(): ReadonlyMap<number, TData>;
-  getRowId?: (row: TData) => RowId;
-  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
-}
-
-/** A grouping configuration; one serves one grid. */
+/** A grouping configuration from `createRowGrouping`; one serves one grid. */
 export interface RowGrouping {
   getState(): RowGroupingState;
-  /** Groups `source`'s rows, or rejects a field it lacks or an object key. */
-  build(source: FlatRowSource): HierarchicalRowAccess | RowGroupingRejection;
-  /**
-   * Core's hook: the hierarchy over `host`'s flat rows, or the rejection it
-   * reported through `onRowGroupingRejected` and warned once per reason and host.
-   * An application does not call it.
-   */
-  regroup<TData>(host: RowGroupingHost<TData>): HierarchicalRowAccess | RowGroupingRejection;
 }
 
 /** `"unsupported"`: no hierarchy, a provider without `setExpanded`, or a destroyed core. */

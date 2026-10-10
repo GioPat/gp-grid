@@ -1,8 +1,9 @@
 // packages/core/src/row-grouping/create-row-grouping.ts
-// The grouping configuration: validation, expansion state and builds (D7).
+// The grouping configuration: validation, expansion state and builds.
 
-import type { FlatRowSource, RowGrouping, RowGroupingConfig, RowGroupingRejection } from "../types";
+import type { RowGroupingConfig, RowGroupingRejection } from "../types";
 import { isBuiltInAggregate } from "./aggregators";
+import type { FlatRowSource, RowGroupingEngine } from "../types/row-grouping-engine";
 import { createExpansionState } from "./expansion-state";
 import { toFlatRowSource } from "./flat-row-source";
 import { createGroupedAccess } from "./grouped-access";
@@ -41,7 +42,7 @@ const unknownField = (spec: GroupingSpec, source: FlatRowSource): RowGroupingRej
   return field === undefined ? undefined : { reason: "unknown-field", field };
 };
 
-export const createRowGrouping = (config: RowGroupingConfig): RowGrouping => {
+export const createRowGrouping = (config: RowGroupingConfig): RowGroupingEngine => {
   validate(config);
   const spec: GroupingSpec = {
     dimensions: [...config.dimensions],
@@ -49,7 +50,7 @@ export const createRowGrouping = (config: RowGroupingConfig): RowGrouping => {
     grandTotal: config.grandTotal,
   };
   const expansion = createExpansionState(config.defaultExpandedDepth ?? 0, config.initialState);
-  const build: RowGrouping["build"] = (source) => {
+  const build: RowGroupingEngine["build"] = (source) => {
     const unknown = unknownField(spec, source);
     if (unknown) return unknown;
     const view = buildGroupedView(source, spec, expansion);

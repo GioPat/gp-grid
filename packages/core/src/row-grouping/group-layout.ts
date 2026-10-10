@@ -1,5 +1,5 @@
 // packages/core/src/row-grouping/group-layout.ts
-// Numbers bucketed groups in display pre-order and lays their leaves out (D9).
+// Numbers bucketed groups in display pre-order and lays their leaves out.
 
 import type { GroupKey } from "./keys";
 

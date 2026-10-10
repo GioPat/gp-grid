@@ -1,7 +1,8 @@
 // packages/core/src/row-grouping/grouped-view.ts
-// One build of the engine: the tree, its aggregates, expansion bits and visible index (D9).
+// One build of the engine: the tree, its aggregates, expansion bits and visible index.
 
-import type { CellValue, FlatRowSource, RowGroupDimension, RowGroupMeasure, RowGroupingRejection, RowId } from "../types";
+import type { CellValue, RowGroupDimension, RowGroupMeasure, RowGroupingRejection, RowId } from "../types";
+import type { FlatRowSource } from "../types/row-grouping-engine";
 import { foldMeasure, type MeasureFold } from "./aggregators";
 import type { ExpansionState } from "./expansion-state";
 import { buildGroupTree, type GroupTree, type MeasureValues } from "./group-tree";
@@ -97,8 +98,8 @@ const RECENT_IDS = 512;
 
 /**
  * A position that is its own id, or one of the last ids read, answers at once;
- * any other id scans the flat rows. The D4 applier locates ids it read just
- * before the change, so a toggle does not scan.
+ * any other id scans the flat rows. A view-rows change locates the ids it read
+ * just before it, so a toggle does not scan.
  */
 export const createPositionFinder = (source: FlatRowSource): PositionFinder => {
   const ids = new Array<RowId | undefined>(RECENT_IDS);

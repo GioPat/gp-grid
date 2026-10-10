@@ -6,12 +6,12 @@ import {
   type HierarchicalRowAccess,
   type RowAccess,
   type RowGrouping,
-  type RowGroupingHost,
   type RowGroupingRejection,
   type RowGroupingResult,
   type RowId,
   type SortModel,
 } from "../types";
+import { asRowGroupingEngine, type RowGroupingEngine, type RowGroupingHost } from "../types/row-grouping-engine";
 import type { RowStore } from "./row-store";
 
 /** What a response bound: the source's hierarchy, its scalar access, or its rows. */
@@ -45,6 +45,9 @@ export const bindResponse = <TData>(
   return "rows";
 };
 
+const toEngine = (grouping: RowGrouping | null | undefined): RowGroupingEngine | null =>
+  grouping == null ? null : asRowGroupingEngine(grouping);
+
 const isShort = (response: DataSourceResponse<unknown>): boolean =>
   (response.access?.rowCount ?? response.rows.length) < response.totalRows;
 
@@ -59,13 +62,13 @@ export interface RowViewBinderOptions<TData> {
 
 /**
  * Binds responses and, with a grouping, the hierarchy the engine builds over the
- * flat rows (D7). The binder is the grouping's host: what it sees of this grid.
+ * flat rows. The binder is the grouping's host: what it sees of this grid.
  */
 export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   private readonly store: RowStore<TData>;
   private readonly options: RowViewBinderOptions<TData>;
   private readonly isPaginated: () => boolean;
-  private grouping: RowGrouping | null;
+  private grouping: RowGroupingEngine | null;
   private sourceHierarchy = false;
   private partial = false;
   readonly getRowId?: (row: TData) => RowId;
@@ -75,7 +78,7 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
     this.store = store;
     this.options = options;
     this.isPaginated = isPaginated;
-    this.grouping = options.rowGrouping ?? null;
+    this.grouping = toEngine(options.rowGrouping);
     this.getRowId = options.getRowId;
     this.onRowGroupingRejected = options.onRowGroupingRejected;
   }
@@ -102,7 +105,7 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
 
   setGrouping(next: RowGrouping | null): RowGroupingResult {
     if (next === this.grouping) return { status: "unchanged" };
-    this.grouping = next;
+    this.grouping = toEngine(next);
     const rejection = this.regroup();
     return rejection ? { status: "rejected", rejection } : { status: "applied" };
   }

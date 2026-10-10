@@ -4,10 +4,10 @@ import { TAG_STRING, TOTAL_ROW_ID, encodeGroupId } from "../src/row-grouping/key
 import {
   isHierarchicalRowAccess,
   type CellValue,
-  type FlatRowSource,
   type HierarchicalRowAccess,
   type RowGroupingConfig,
 } from "../src/types";
+import type { FlatRowSource } from "../src/types/row-grouping-engine";
 import { columnarSource, objectSource, toColumns } from "./row-grouping-source";
 
 type Row = Record<string, CellValue | undefined>;
@@ -147,6 +147,19 @@ describe("grouped row access", () => {
     expect(ids(restored)).toEqual(ids(access));
     access.setExpanded!([countryId("IT")], true);
     expect(ids(restored)).not.toEqual(ids(access));
+  });
+
+  it("expand-all moves the depth instead of listing every group, and round trips", () => {
+    const { grouping, access } = setup();
+    access.setExpanded!([countryId("FR")], true);
+    expect(access.setExpanded!(null, true)).toBe(true);
+    expect(grouping.getState()).toEqual({ expanded: [], collapsed: [], expandedDepth: 2 });
+    access.setExpanded!([countryId("FR")], false);
+    expect(grouping.getState()).toEqual({ expanded: [], collapsed: [countryId("FR")], expandedDepth: 2 });
+    const restored = buildAccess(objectSource(rowsFixture(), { idField: "id" }), { ...CONFIG, initialState: grouping.getState() });
+    expect(ids(restored)).toEqual(ids(access));
+    expect(access.setExpanded!(null, false)).toBe(true);
+    expect(grouping.getState()).toEqual({ expanded: [], collapsed: [], expandedDepth: 0 });
   });
 
   it("refolds a measure edit and regroups a dimension edit, keeping expansion and opening the new group", () => {
