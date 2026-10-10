@@ -7,6 +7,7 @@ import type {
   SelectionState,
   CellValue,
   ColumnDefinition,
+  WriteRejectionOperation,
 } from "./types";
 import {
   createInstructionEmitter,
@@ -15,12 +16,12 @@ import {
   formatCellValue,
 } from "./utils";
 import {
-  coerceClipboardValue,
   normalizeClipboardText,
   parseClipboardText,
   type ClipboardCell,
   type ClipboardMatrix,
 } from "./utils/clipboard-helpers";
+import { coerceCellValue } from "./utils/cell-coercion";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -32,15 +33,13 @@ export interface SelectionManagerOptions {
   getCellValue: (row: number, col: number) => CellValue;
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
-  setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the cell refused the write, which it reports itself. */
+  setCellValue: (row: number, col: number, value: CellValue, operation: WriteRejectionOperation) => boolean | void;
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
-  /** False for a group or total row (D6). */
-  isRowWritable?: (row: number) => boolean;
-  /** Open and close one write command, so its writes are reported together. */
-  beginWrites?: () => void;
-  endWrites?: () => void;
-  /** Called when a paste is refused, or skips a cell. */
+  /** Runs one write command, so its writes are reported together. */
+  runWrites?: <T>(command: () => T) => T;
+  /** Called when a paste is refused before any cell is written. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
@@ -346,17 +345,11 @@ export class SelectionManager {
       return { handled: false, changedCells: [] };
     }
 
-    this.options.beginWrites?.();
-    try {
-      const changedCells = this.applyPasteSource(
-        sourceCells,
-        effectiveRange,
-        this.state.range !== null,
-      );
-      return { handled: true, changedCells };
-    } finally {
-      this.options.endWrites?.();
-    }
+    const run = this.options.runWrites ?? ((command) => command());
+    const changedCells = run(() =>
+      this.applyPasteSource(sourceCells, effectiveRange, this.state.range !== null),
+    );
+    return { handled: true, changedCells };
   }
 
   // ===========================================================================
@@ -492,17 +485,11 @@ export class SelectionManager {
     if (column === undefined) return;
     if (column.hidden === true) return;
     if (column.editable !== true) return;
-    if (this.options.isRowWritable?.(row) === false) {
-      this.options.onWriteRejected?.(
-        createWriteRejection(row, col, column.field, "paste", "not-a-record"),
-      );
-      return;
-    }
 
-    const coerced = coerceClipboardValue(sourceCell, column);
+    const coerced = coerceCellValue(sourceCell, column);
     if (coerced.ok === false) return;
 
-    this.options.setCellValue(row, col, coerced.value);
+    if (this.options.setCellValue(row, col, coerced.value, "paste") === false) return;
     changedCells.push({ row, col, value: coerced.value });
   }
 

@@ -37,12 +37,7 @@ export class CellsController<TData> implements GridCellsApi {
 
   setValue(row: number, col: number, value: CellValue): void {
     const { writes } = this.deps;
-    writes.begin();
-    try {
-      writes.setCellValue(row, col, value);
-    } finally {
-      writes.end();
-    }
+    writes.run(() => writes.setCellValue(row, col, value));
   }
 
   getFieldValue(viewIndex: number, field: string): CellValue {

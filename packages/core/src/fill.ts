@@ -1,6 +1,7 @@
 // @gp-grid/core/src/fill.ts
 
 import type {
+  WriteRejectionOperation,
   CellRange,
   CellValue,
   CellWriteRejectedEvent,
@@ -18,15 +19,13 @@ export interface FillManagerOptions {
   getColumnCount: () => number;
   getCellValue: (row: number, col: number) => CellValue;
   getColumn: (col: number) => ColumnDefinition | undefined;
-  setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the cell refused the write, which it reports itself. */
+  setCellValue: (row: number, col: number, value: CellValue, operation: WriteRejectionOperation) => boolean | void;
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
-  /** False for a group or total row (D6). */
-  isRowWritable?: (row: number) => boolean;
-  /** Open and close one write command, so its writes are reported together. */
-  beginWrites?: () => void;
-  endWrites?: () => void;
-  /** Called when a fill drag is refused, or skips a cell. */
+  /** Runs one write command, so its writes are reported together. */
+  runWrites?: <T>(command: () => T) => T;
+  /** Called when a fill drag is refused before any cell is written. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
@@ -110,25 +109,13 @@ export class FillManager {
 
     const { sourceRange, targetRow } = this.state;
     const targets = this.calculateFilledCells(sourceRange, targetRow);
-    this.options.beginWrites?.();
-    try {
-      const filledCells = targets.filter((cell) => this.writeFillCell(cell));
-      this.emit({ type: "COMMIT_FILL", filledCells });
-      this.state = null;
-    } finally {
-      this.options.endWrites?.();
-    }
-  }
-
-  /** A group or total target is skipped and reported (D6). */
-  private writeFillCell({ row, col, value }: { row: number; col: number; value: CellValue }): boolean {
-    if (this.options.isRowWritable?.(row) === false) {
-      const field = this.options.getColumn(col)?.field ?? "";
-      this.options.onWriteRejected?.(createWriteRejection(row, col, field, "fill", "not-a-record"));
-      return false;
-    }
-    this.options.setCellValue(row, col, value);
-    return true;
+    const run = this.options.runWrites ?? ((command) => command());
+    // A refused target (a group or total row) is left out of the commit.
+    const filledCells = run(() =>
+      targets.filter(({ row, col, value }) => this.options.setCellValue(row, col, value, "fill") !== false),
+    );
+    this.emit({ type: "COMMIT_FILL", filledCells });
+    this.state = null;
   }
 
   /**

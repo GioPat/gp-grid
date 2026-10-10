@@ -395,17 +395,25 @@ describe("FillManager", () => {
     });
   });
 
-  describe("commitFillDrag - row writability", () => {
-    it("skips a non-record row, reports it and lists written cells only", () => {
-      const onWriteRejected = vi.fn();
+  describe("commitFillDrag - refused cells", () => {
+    it("lists written cells only and runs the fill as one write command", () => {
       const calls: string[] = [];
       options = createMockOptions(4, 1, [["A"], [null], [null], [null]]);
       manager = new FillManager({
         ...options,
-        isRowWritable: (row) => row !== 2,
-        onWriteRejected,
-        beginWrites: () => calls.push("begin"),
-        endWrites: () => calls.push("end"),
+        setCellValue: (row, col, value) => {
+          if (row === 2) return false;
+          options.setCellValue(row, col, value);
+          return true;
+        },
+        runWrites: (command) => {
+          calls.push("begin");
+          try {
+            return command();
+          } finally {
+            calls.push("end");
+          }
+        },
       });
       manager.onInstruction((i) => emittedInstructions.push(i));
 
@@ -421,10 +429,7 @@ describe("FillManager", () => {
           { row: 3, col: 0, value: "A" },
         ],
       });
-      expect(onWriteRejected).toHaveBeenCalledExactlyOnceWith({
-        row: 2, col: 0, field: "col0", reason: "not-a-record", operation: "fill",
-      });
-      expect(calls).toEqual(["begin", "end"]);
+            expect(calls).toEqual(["begin", "end"]);
       expect(manager.isActive()).toBe(false);
     });
 

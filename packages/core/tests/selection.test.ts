@@ -692,8 +692,7 @@ describe("SelectionManager", () => {
       ]);
     });
 
-    it("skips a non-record row, reports each skipped cell and brackets the writes", () => {
-      const onWriteRejected = vi.fn();
+    it("leaves a refused cell out of the result and runs the paste as one write command", () => {
       const calls: string[] = [];
       const base = createPasteOptions(
         [[null, null], [null, null], [null, null]],
@@ -701,10 +700,19 @@ describe("SelectionManager", () => {
       );
       const pasteOptions: SelectionManagerOptions = {
         ...base,
-        isRowWritable: (row) => row !== 1,
-        onWriteRejected,
-        beginWrites: () => calls.push("begin"),
-        endWrites: () => calls.push("end"),
+        setCellValue: (row, col, value, operation) => {
+          if (row === 1) return false;
+          base.setCellValue(row, col, value, operation);
+          return true;
+        },
+        runWrites: (command) => {
+          calls.push("begin");
+          try {
+            return command();
+          } finally {
+            calls.push("end");
+          }
+        },
       };
       manager = new SelectionManager(pasteOptions);
       manager.startSelection({ row: 0, col: 0 });
@@ -715,10 +723,6 @@ describe("SelectionManager", () => {
         [0, 0], [0, 1], [2, 0], [2, 1],
       ]);
       expect(base.getData()[1]).toEqual([null, null]);
-      expect(onWriteRejected.mock.calls.map(([event]) => event)).toEqual([
-        { row: 1, col: 0, field: "a", reason: "not-a-record", operation: "paste" },
-        { row: 1, col: 1, field: "b", reason: "not-a-record", operation: "paste" },
-      ]);
       expect(calls).toEqual(["begin", "end"]);
     });
 

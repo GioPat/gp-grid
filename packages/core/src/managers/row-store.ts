@@ -34,17 +34,19 @@ const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?
 const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
   Math.min(Math.trunc(range?.end ?? extent), extent);
 
-/** Reads ids straight from the hierarchy: this loop runs over every view row after a toggle. */
+/** Asks the hierarchy for each id; a hidden row answers its ancestor, which is not a match. */
 const locateInHierarchy = (
   hierarchy: HierarchicalRowAccess<unknown>,
   ids: ReadonlySet<RowId>,
   range?: AxisBounds,
 ): Map<RowId, number> => {
   const found = new Map<RowId, number>();
+  const first = rangeStart(range);
   const end = rangeEnd(range, hierarchy.rowCount);
-  for (let index = rangeStart(range); index < end && found.size < ids.size; index += 1) {
-    const rowId = hierarchy.getRowId(index);
-    if (ids.has(rowId)) found.set(rowId, index);
+  for (const id of ids) {
+    const index = hierarchy.locate(id);
+    if (index < first || index >= end || hierarchy.getRowId(index) !== id) continue;
+    found.set(id, index);
   }
   return found;
 };
@@ -52,7 +54,7 @@ const locateInHierarchy = (
 /**
  * Owns the row cache, the bound scalar access, the row count and the bound
  * hierarchy, and answers every row read and write by view index: through the
- * hierarchy while one is bound, through the flat rows otherwise (D2).
+ * hierarchy while one is bound, through the flat rows otherwise.
  */
 export class RowStore<TData = unknown> {
   private readonly options: RowStoreOptions<TData>;
@@ -82,7 +84,7 @@ export class RowStore<TData = unknown> {
     this.totalRows = count;
   }
 
-  /** Bumped whenever row order or membership may have changed (D6). */
+  /** Bumped whenever row order or membership may have changed. */
   getRevision(): number {
     return this.revision;
   }
@@ -123,7 +125,7 @@ export class RowStore<TData = unknown> {
     return this.hierarchy !== null && viewIndex >= 0 && viewIndex < this.hierarchy.rowCount;
   }
 
-  /** Whether the bound source exposes a stable row identity (D2). */
+  /** Whether the bound source exposes a stable row identity. */
   hasStableIdentity(): boolean {
     if (this.hierarchy) return true;
     if (this.rowAccess) return this.rowAccess.getRowId !== undefined;
@@ -238,15 +240,20 @@ export class RowStore<TData = unknown> {
     return row === undefined ? null : readRowFieldValue(row, field);
   }
 
-  /** D6: under a hierarchy only a record row with a record takes a write. */
+  /** Under a hierarchy only a record row with a record takes a write. */
   isRowWritable(viewIndex: number): boolean {
     return this.hierarchy === null || this.getRowData(viewIndex) !== undefined;
   }
 
-  /** False when the write was refused, and reported. */
-  setCellValue(row: number, col: number, value: CellValue): boolean {
+  /** The one write gate: false when the write was refused, and reported as `operation`. */
+  setCellValue(
+    row: number,
+    col: number,
+    value: CellValue,
+    operation: WriteRejectionOperation = "setCellValue",
+  ): boolean {
     if (this.options.isWritable() === false) {
-      this.rejectWrite(row, col, "setCellValue", "read-only-source");
+      this.rejectWrite(row, col, operation, "read-only-source");
       return false;
     }
     const hierarchy = this.hierarchy;
@@ -259,7 +266,7 @@ export class RowStore<TData = unknown> {
     }
     const record = this.getRowData(row);
     if (record === undefined) {
-      this.rejectWrite(row, col, "setCellValue", "not-a-record");
+      this.rejectWrite(row, col, operation, "not-a-record");
       return false;
     }
     const column = this.options.getColumns()[col];

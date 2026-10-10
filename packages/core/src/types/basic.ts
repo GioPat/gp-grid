@@ -117,9 +117,10 @@ export type WriteRejectionOperation =
 
 /**
  * Why a write was refused: the source is read-only, the row is a group or
- * total row, or row order is derived from a hierarchy.
+ * total row, row order is derived from a hierarchy, or an edit draft cannot be
+ * converted to the column's `cellDataType`.
  */
-export type WriteRejectionReason = "read-only-source" | "not-a-record" | "derived-view";
+export type WriteRejectionReason = "read-only-source" | "not-a-record" | "derived-view" | "type-mismatch";
 
 /** Emitted when a write is refused. */
 export interface CellWriteRejectedEvent {
@@ -157,7 +158,7 @@ export interface SlotState {
   generation: number;
   /** Translate Y position of the slot, we use translateY to optimize the rendering of the slots (Relies on the GP) */
   translateY: number;
-  /** Row height from the row axis (D8). */
+  /** Row height from the row axis. */
   height: number;
   /** Region the slot's row renders in (C7). */
   region: RowRegion;

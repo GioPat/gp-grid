@@ -36,7 +36,7 @@ export interface RowDataManagerOptions<TData> {
   getRowId?: (row: TData) => RowId;
   /** Called when a write is refused because the source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
-  /** Groups the flat rows of every full load (D7). */
+  /** Groups the flat rows of every full load. */
   rowGrouping?: RowGrouping | null;
   onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   /**

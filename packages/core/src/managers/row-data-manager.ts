@@ -119,13 +119,13 @@ export class RowDataManager<TData = unknown> {
   findViewIndexById(rowId: RowId): number {
     return this.store.findViewIndexById(rowId);
   }
-  /** Whether the bound source exposes a stable row identity (D2). */
+  /** Whether the bound source exposes a stable row identity. */
   hasStableIdentity(): boolean { return this.store.hasStableIdentity(); }
   /** View indices of the requested identities, within `range` when given. */
   locateRowIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
     return this.store.locateIds(ids, range);
   }
-  /** Changes whenever row order or membership may have changed (D6). */
+  /** Changes whenever row order or membership may have changed. */
   getDataRevision(): number { return this.store.getRevision(); }
   bumpDataRevision(): void { this.store.bumpRevision(); }
 
@@ -143,12 +143,14 @@ export class RowDataManager<TData = unknown> {
   getFieldValue(viewIndex: number, field: string): CellValue {
     return this.store.getFieldValue(viewIndex, field);
   }
-  /** False when the write was refused, and reported. */
-  setCellValue(row: number, col: number, value: CellValue): boolean {
-    return this.store.setCellValue(row, col, value);
+  /** False when the write was refused, and reported as `operation`. */
+  setCellValue(row: number, col: number, value: CellValue, operation?: WriteRejectionOperation): boolean {
+    return this.store.setCellValue(row, col, value, operation);
   }
-  /** D6: a group or total row takes no write. */
-  isRowWritable(row: number): boolean { return this.store.isRowWritable(row); }
+  /** A group or total row takes no write. */
+  isRowWritable(row: number): boolean {
+    return this.store.isRowWritable(row);
+  }
   rejectWrite(row: number, col: number, operation: WriteRejectionOperation, reason: WriteRejectionReason): void {
     this.store.rejectWrite(row, col, operation, reason);
   }
@@ -163,7 +165,7 @@ export class RowDataManager<TData = unknown> {
     await this.fetchAllData();
   }
 
-  /** Regroup the resident flat rows with no query (D3). */
+  /** Regroup the resident flat rows with no query. */
   setGrouping(grouping: RowGrouping | null): RowGroupingResult {
     return this.binder.setGrouping(grouping);
   }

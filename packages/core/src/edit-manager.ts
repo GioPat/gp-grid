@@ -9,7 +9,7 @@ import type {
   RowId,
 } from "./types";
 import { createInstructionEmitter, createWriteRejection } from "./utils";
-import { coerceEditValue } from "./utils/clipboard-helpers";
+import { coerceEditValue } from "./utils/cell-coercion";
 
 export interface EditManagerOptions {
   /** Get column definition by index */
@@ -24,11 +24,10 @@ export interface EditManagerOptions {
   isWritable?: () => boolean;
   /** Called when an editable cell refuses a write because the source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
-  /** False for a group or total row, which never opens an editor (D6). */
+  /** False for a group or total row, which never opens an editor. */
   isRowWritable?: (row: number) => boolean;
-  /** Open and close one write command, so its writes are reported together. */
-  beginWrites?: () => void;
-  endWrites?: () => void;
+  /** Runs one write command, so its writes are reported together. */
+  runWrites?: <T>(command: () => T) => T;
   /**
    * Current slot-assignment generation for a view row, or -1 when no slot
    * serves it. Used to drop a commit that belongs to a recycled assignment.
@@ -221,20 +220,22 @@ export class EditManager {
     if (!this.editState || this.isStaleSession(editId)) return;
 
     const { row, col, currentValue } = this.editState;
-
-    const coerced = coerceEditValue(currentValue, this.options.getColumn(col));
-    // Like paste, a draft the column type cannot hold is dropped, not written.
-    if (coerced.ok === false || this.isEditAssignmentCurrent(row) === false) {
+    if (this.isEditAssignmentCurrent(row) === false) {
       this.cancel();
       return;
     }
 
-    this.options.beginWrites?.();
-    try {
-      this.commitValue(row, col, coerced.value);
-    } finally {
-      this.options.endWrites?.();
+    const column = this.options.getColumn(col);
+    const coerced = coerceEditValue(currentValue, column);
+    // Like paste, a value the column type cannot hold is dropped, not written; unlike paste, it is reported.
+    if (coerced.ok === false) {
+      this.options.onWriteRejected?.(createWriteRejection(row, col, column?.field ?? "", "edit", "type-mismatch"));
+      this.cancel();
+      return;
     }
+
+    const run = this.options.runWrites ?? ((command) => command());
+    run(() => this.commitValue(row, col, coerced.value));
   }
 
   private commitValue(row: number, col: number, currentValue: CellValue): void {

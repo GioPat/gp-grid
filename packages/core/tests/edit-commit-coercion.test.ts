@@ -10,24 +10,27 @@ import type { CellDataType, CellValue, ColumnDefinition } from "../src/types";
 const commitDraft = (cellDataType: CellDataType, draft: CellValue, initial: CellValue = null) => {
   const column: ColumnDefinition = { field: "f", cellDataType, width: 100, editable: true };
   const setCellValue = vi.fn();
+  const onWriteRejected = vi.fn();
   const manager = new EditManager({
     getColumn: () => column,
     getCellValue: () => initial,
     setCellValue,
+    onWriteRejected,
   });
   manager.startEdit(0, 0);
   manager.updateValue(draft);
   manager.commit();
-  return { setCellValue, manager };
+  return { setCellValue, onWriteRejected, manager };
 };
 
 const committed = (cellDataType: CellDataType, draft: CellValue) =>
   commitDraft(cellDataType, draft).setCellValue.mock.calls[0]?.[2];
 
 describe("edit commit — coercion by cellDataType", () => {
-  it("keeps text as typed, blank included", () => {
+  it("keeps text as typed and collapses a blank draft to the empty string, like paste", () => {
     expect(committed("text", " a b ")).toBe(" a b ");
     expect(committed("text", "")).toBe("");
+    expect(committed("text", "   ")).toBe("");
   });
 
   it("parses numbers and stores a blank as null", () => {
@@ -64,17 +67,22 @@ describe("edit commit — coercion by cellDataType", () => {
     expect(committed("text", 7)).toBe(7);
   });
 
-  it("drops an unconvertible draft: nothing is written and the editor closes", () => {
+  it("drops an unconvertible value: nothing is written, the editor closes and the host hears why", () => {
     for (const [type, draft] of [
       ["number", "abc"],
       ["boolean", "yes"],
       ["date", "not a date"],
       ["dateString", "not a date"],
       ["object", "{bad"],
+      ["number", Number.NaN],
+      ["date", new Date("not a date")],
     ] as const) {
-      const { setCellValue, manager } = commitDraft(type, draft, "old");
+      const { setCellValue, onWriteRejected, manager } = commitDraft(type, draft, "old");
       expect(setCellValue).not.toHaveBeenCalled();
       expect(manager.isEditing()).toBe(false);
+      expect(onWriteRejected).toHaveBeenCalledExactlyOnceWith({
+        row: 0, col: 0, field: "f", reason: "type-mismatch", operation: "edit",
+      });
     }
   });
 });
