@@ -1,13 +1,13 @@
 import type { GridCore } from "../grid-core";
 import type { SyntheticScroll } from "./synthetic-scroll";
-import { cancelFrame, clamp, prefersReducedMotion } from "./touch-scroll-helpers";
+import { agreedTop, cancelFrame, clamp, prefersReducedMotion } from "./touch-scroll-helpers";
 
 /** Idle time after the last wheel event before native scroll owns the top again. */
 export const WHEEL_RELEASE_MS = 150;
 /** Remaining DOM px applied in one frame; a larger remainder glides over a few frames. */
-export const WHEEL_SPREAD_MIN_STEP_PX = 4;
+const WHEEL_SPREAD_MIN_STEP_PX = 4;
 /** Share of the remaining glide each frame applies. */
-export const WHEEL_SPREAD_FRACTION = 0.35;
+const WHEEL_SPREAD_FRACTION = 0.35;
 
 interface WheelTarget<TData> {
   core: GridCore<TData>;
@@ -41,11 +41,16 @@ export class WheelScroll<TData = unknown> {
     return this.target !== null;
   }
 
+  /** A frame is still carrying the content towards the wheel's target. */
+  get gliding(): boolean {
+    return this.frame !== null;
+  }
+
   scrollBy(core: GridCore<TData>, el: HTMLElement, domDy: number): void {
     this.noteWheel();
     if (this.dropping) return;
-    if (this.target === null) this.current = startTop(core, el);
-    const base = this.target?.top ?? this.current;
+    const base = this.target?.top ?? agreedTop(core.viewport.getTopOverride(), el.scrollTop);
+    if (this.target === null) this.current = base;
     const top = clamp(base + domDy, 0, el.scrollHeight - el.clientHeight);
     this.target = { core, el, top };
     this.scheduleFrame();
@@ -59,9 +64,11 @@ export class WheelScroll<TData = unknown> {
 
   /** Stop where the content is and drop wheel input until the wheel rests. */
   interrupt(): void {
-    const wasPending = this.pending;
+    if (this.pending === false) {
+      this.stop();
+      return;
+    }
     this.stop();
-    if (wasPending === false) return;
     this.dropping = true;
     this.noteWheel();
   }
@@ -113,11 +120,4 @@ const glideTowards = (current: number, top: number): number => {
   const size = Math.abs(remaining);
   if (size <= WHEEL_SPREAD_MIN_STEP_PX) return top;
   return current + Math.sign(remaining) * Math.max(WHEEL_SPREAD_MIN_STEP_PX, size * WHEEL_SPREAD_FRACTION);
-};
-
-/** Continue from an override (a stopped fling or earlier wheel) the DOM still agrees with. */
-const startTop = <TData>(core: GridCore<TData>, el: HTMLElement): number => {
-  const override = core.viewport.getTopOverride();
-  if (override !== null && Math.abs(override - el.scrollTop) <= 1) return override;
-  return el.scrollTop;
 };

@@ -1,10 +1,11 @@
 // WheelEvent.deltaMode values.
+export const DOM_DELTA_PIXEL = 0;
 const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
 
 /** Pixels per wheel line and page, the conventional line-mode (Firefox) equivalents. */
-export const WHEEL_LINE_PX = 40;
-export const WHEEL_PAGE_PX = 800;
+const WHEEL_LINE_PX = 40;
+const WHEEL_PAGE_PX = 800;
 
 /** A wheel delta in pixels whatever unit the browser reported it in. */
 export const wheelDeltaToPx = (delta: number, deltaMode: number): number => {

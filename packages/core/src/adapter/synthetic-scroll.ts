@@ -1,5 +1,6 @@
 import type { GridCore } from "../grid-core";
 import { readIsRtl, toInlineX } from "./inline-axis";
+import { agreedTop } from "./touch-scroll-helpers";
 import { updateRenderIntervalEma } from "../utils/touch-scroll-physics";
 
 /**
@@ -91,16 +92,10 @@ export class SyntheticScroll<TData = unknown> {
     const el = this.getEl();
     if (el === null) return;
     core.setViewport(
-      settledTop(override, el.scrollTop),
+      agreedTop(override, el.scrollTop),
       toInlineX(el.scrollLeft, this.isRtl(el)),
       el.clientWidth,
       el.clientHeight,
     );
   }
 }
-
-/** Keep the fractional top the DOM still agrees with; snapping to the rounded one shifts rows. */
-const settledTop = (override: number | null, domTop: number): number => {
-  if (override !== null && Math.abs(override - domTop) <= 1) return override;
-  return domTop;
-};

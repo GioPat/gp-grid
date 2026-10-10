@@ -88,13 +88,15 @@ describe("scroll motion", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reports a wheel glide until the wheel rests, and forgets the controller on detach", () => {
+  it("reports a wheel glide only while a frame is in flight, and forgets the controller on detach", () => {
     const { core, controller } = setup();
     expect(core.viewport.isScrollMotionActive()).toBe(false);
 
     controller.scrollByWheel(2);
     expect(core.viewport.isScrollMotionActive()).toBe(true);
     pump();
+    // Landed, but not yet released: a click here is a click, not a stop.
+    expect(core.viewport.isScrollMotionActive()).toBe(false);
     vi.advanceTimersByTime(WHEEL_RELEASE_MS);
     expect(core.viewport.isScrollMotionActive()).toBe(false);
 

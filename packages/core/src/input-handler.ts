@@ -30,6 +30,8 @@ import {
   resolveHandleFit,
   isGroupRow,
   wheelDeltaToPx,
+  DOM_DELTA_PIXEL,
+  MotionGate,
   type InputCommands,
 } from "./input";
 
@@ -49,12 +51,9 @@ const cycleSortDirection = (
 // InputHandler Class
 // =============================================================================
 
-/** Longest gap between the two presses of a double-click on common platforms. */
-const MOTION_STOP_GUARD_MS = 500;
-
 export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
-  private motionStoppedAt = Number.NEGATIVE_INFINITY;
+  private readonly motion: MotionGate;
 
   readonly columnResize: ColumnResizeDrag<TData>;
   readonly rowResize: RowResizeDrag<TData>;
@@ -70,6 +69,7 @@ export class InputHandler<TData = unknown> {
   constructor(core: GridCore<TData>, commands: InputCommands) {
     this.core = core;
     this.commands = commands;
+    this.motion = new MotionGate(core.viewport);
     this.columnResize = new ColumnResizeDrag(core);
     this.rowResize = new RowResizeDrag(core, commands);
     this.columnMove = new ColumnMoveDrag(core);
@@ -118,7 +118,7 @@ export class InputHandler<TData = unknown> {
     colHeight: number,
     event: PointerEventData,
   ): InputResult {
-    if (this.stopsScrollMotion(event)) return swallowedResult;
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnMove.start(colIndex, colWidth, colHeight, event);
   }
 
@@ -127,7 +127,7 @@ export class InputHandler<TData = unknown> {
     colWidth: number,
     event: PointerEventData,
   ): InputResult {
-    if (this.stopsScrollMotion(event)) return swallowedResult;
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnResize.start(colIndex, colWidth, event);
   }
 
@@ -136,14 +136,14 @@ export class InputHandler<TData = unknown> {
     rowHeight: number,
     event: PointerEventData,
   ): InputResult {
-    if (this.stopsScrollMotion(event)) return swallowedResult;
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     if (this.core.rowHeights.isResizable() === false) return noopResult;
     return this.rowResize.start(rowIndex, rowHeight, event);
   }
 
   /** A double-click on a column or row edge handle fits that target once. */
   handleResizeDoubleClick(target: ResizeTarget): void {
-    if (this.swallowsClick()) return;
+    if (this.motion.absorbClick()) return;
     const action = resolveHandleFit(this.core, target);
     if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
@@ -153,7 +153,7 @@ export class InputHandler<TData = unknown> {
     colIndex: number,
     event: PointerEventData,
   ): InputResult {
-    if (this.stopsScrollMotion(event)) return swallowedResult;
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     if (event.button !== 0) return noopResult;
     if (this.core.edit.getState() !== null) return noopResult;
 
@@ -161,7 +161,7 @@ export class InputHandler<TData = unknown> {
     this.core.edit.stopPeek();
 
     const column = this.core.columns.get()[colIndex];
-    // A hierarchy's order is derived, so no row drag starts (D6).
+    // A hierarchy's order is derived, so no row drag starts.
     const wantsRowDrag =
       (column?.rowDrag === true || this.core.rowDrag.isEntireRow()) &&
       !event.shiftKey &&
@@ -248,7 +248,7 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
-    if (this.swallowsClick()) return;
+    if (this.motion.absorbClick()) return;
     if (isGroupRow(this.core, rowIndex)) {
       this.commands.toggleGroupAt(rowIndex);
       return;
@@ -261,9 +261,9 @@ export class InputHandler<TData = unknown> {
     this.core.edit.startPeek(rowIndex, colIndex);
   }
 
-  /** A pointer down on a group row's expander (D5). */
+  /** A pointer down on a group row's expander. */
   handleGroupToggle(rowIndex: number, pointerType?: string): RowGroupResult {
-    if (this.stopsScrollMotion({ pointerType })) return { status: "unchanged" };
+    if (this.motion.absorbPress(pointerType)) return { status: "unchanged" };
     return this.commands.toggleGroupAt(rowIndex);
   }
 
@@ -280,33 +280,16 @@ export class InputHandler<TData = unknown> {
     selectionRange: CellRange | null,
     event: PointerEventData,
   ): InputResult {
-    if (this.stopsScrollMotion(event)) return swallowedResult;
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.fillDrag.start(activeCell, selectionRange);
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
-    if (this.swallowsClick()) return;
+    if (this.motion.absorbClick()) return;
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
     this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
-  }
-
-  /**
-   * A press while a fling or wheel glide moves the content only stops it. Touch
-   * leaves the stop to touchstart, which carries the fling's velocity into a flick.
-   */
-  private stopsScrollMotion(event?: Pick<PointerEventData, "pointerType">): boolean {
-    const viewport = this.core.viewport;
-    if (viewport.isScrollMotionActive() === false) return false;
-    if (event?.pointerType !== "touch") viewport.interruptScrollMotion();
-    this.motionStoppedAt = Date.now();
-    return true;
-  }
-
-  /** A click or double-click during the motion, or from the press that stopped it, does nothing. */
-  private swallowsClick(): boolean {
-    return this.stopsScrollMotion() || Date.now() - this.motionStoppedAt < MOTION_STOP_GUARD_MS;
   }
 
   // ---------------------------------------------------------------------------
@@ -393,7 +376,7 @@ export class InputHandler<TData = unknown> {
     deltaY: number,
     deltaX: number,
     dampening: number,
-    deltaMode = 0,
+    deltaMode = DOM_DELTA_PIXEL,
   ): { dy: number; dx: number } | null {
     if (this.core.viewport.isScaling() === false) return null;
     return {

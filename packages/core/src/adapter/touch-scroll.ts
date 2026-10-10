@@ -68,7 +68,7 @@ export class TouchScrollController<TData = unknown> {
   private dragFrame: number | null = null;
   private pendingDragTarget: DragTarget | null = null;
   private readonly motion: ScrollMotionHandle = {
-    isActive: () => this.fling.active || this.wheel.pending,
+    isActive: () => this.fling.active || this.wheel.gliding,
     interrupt: () => this.interrupt(),
   };
 
