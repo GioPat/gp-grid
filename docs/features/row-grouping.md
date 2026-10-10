@@ -53,8 +53,9 @@ name or a negative depth.
 One `RowGrouping` serves one grid, and a new configuration is a new
 `createRowGrouping` call. Keep the object referentially stable (a module
 constant, `useMemo`, a `shallowRef`, a class field): a new object regroups.
-Core drives it through `RowGrouping.regroup(host)` on every full load and on
-`setGrouping`; `regroup` and `build` are core's, an application calls neither.
+`getState()` is its only public member; core regroups through it on every full
+load and on `setGrouping`, and refuses an object that did not come from
+`createRowGrouping` with a `TypeError`.
 
 ```tsx
 // React
@@ -86,6 +87,9 @@ const core = new GridCore({ columns, dataSource, rowHeight: 32, rowGrouping: gro
 core.rowGroups.setGrouping(null);     // back to the flat rows, no query
 core.rowGroups.setGrouping(grouping); // regroup the resident rows, no query
 ```
+
+A rejected `setGrouping` both returns `{ status: "rejected", rejection }` and
+reports the rejection through `onRowGroupingRejected`, like a rejected load.
 
 `rowGrouping` is reactive in every wrapper: a changed value reaches the core
 through `rowGroups.setGrouping`, never a new core. Angular's published input
@@ -293,11 +297,13 @@ A collapse that hides the active cell moves it to the collapsed ancestor, in the
 same column, and a row that no longer exists clears the selection. No query is
 issued and unchanged records are not re-sorted.
 
-`grouping.getState()` returns `RowGroupingState = { expanded, collapsed }`: the
-group ids toggled away from `defaultExpandedDepth`. Pass it as `initialState` to
-a new `createRowGrouping` to restore it. Expansion is kept by group id, so a
-group that survives a filter, a sort, a transaction or a refresh keeps its
-state.
+`grouping.getState()` returns `RowGroupingState = { expanded, collapsed,
+expandedDepth? }`: the group ids toggled away from the expansion depth, and the
+depth itself once `setExpanded(null, …)` moved it (expand all sets it to the
+dimension count, collapse all to 0, and either forgets the toggled ids). Pass
+it as `initialState` to a new `createRowGrouping` to restore it. Expansion is
+kept by group id, so a group that survives a filter, a sort, a transaction or a
+refresh keeps its state.
 
 ## Writes
 
@@ -311,9 +317,11 @@ state.
 - No row drag starts while a hierarchy is bound, and `rowDrag.commit` reports
   `reason: "derived-view"` with `operation: "row-move"`.
 - `CellWriteRejectedEvent.reason` is
-  `"read-only-source" | "not-a-record" | "derived-view"`.
+  `"read-only-source" | "not-a-record" | "derived-view" | "type-mismatch"`.
 - An editor commit is coerced by the column's `cellDataType`, like paste, so an
-  edited `number` measure enters `sum` and `avg` as a number.
+  edited `number` measure enters `sum` and `avg` as a number. A draft or typed
+  value the column cannot hold writes nothing and is reported with
+  `reason: "type-mismatch"`, `operation: "edit"`.
 - **A measure edit** refolds the aggregates on the edited row's path, the total
   row included.
 - **A dimension edit** regroups. The record moves to its group, every collapsed

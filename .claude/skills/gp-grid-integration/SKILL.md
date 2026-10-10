@@ -340,8 +340,9 @@ const grouping = createRowGrouping({
   an editor; paste and fill skip them (`onWriteRejected`, `reason: "not-a-record"`).
   Row drag is disabled while grouped (`reason: "derived-view"`). Columnar leaves stay
   read-only.
-- **State:** `grouping.getState()` → `{ expanded, collapsed }` (ids toggled away
-  from the default depth); pass it back as `initialState`. Expansion survives sort,
+- **State:** `grouping.getState()` → `{ expanded, collapsed, expandedDepth? }` (ids
+  toggled away from the expansion depth; `expandedDepth` appears once
+  `setExpanded(null, …)` moved it); pass it back as `initialState`. Expansion survives sort,
   filter, transactions and refresh.
 - **Already-grouped data:** a data source returns a `HierarchicalRowAccess`
   (`hierarchical: true`, `rowCount`, `getRowId`, `getRow`, `getValue`, `locate`,

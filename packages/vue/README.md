@@ -806,7 +806,7 @@ The public website documentation for this package lives outside this repository 
 | `onRowGroupingRejected` | `(rejection: RowGroupingRejection) => void` | - | Called with `{ reason, field? }` when `rowGrouping` cannot apply; the grid renders the source's rows |
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -         | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
-| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused: `reason` is `"read-only-source"`, `"not-a-record"` (a group or total row) or `"derived-view"` (a row drag under grouping) |
+| `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused: `reason` is `"read-only-source"`, `"not-a-record"` (a group or total row), `"derived-view"` (a row drag under grouping) or `"type-mismatch"` (an edit commit the column type cannot hold) |
 
 ### ColumnDefinition
 

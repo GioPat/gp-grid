@@ -646,7 +646,7 @@ source is rejected with `partial-source`. See
 | `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn`, `frozenRowsLimited` and the nested `columnSchemaErrors` |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
-| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | a write was refused; `e.reason` is `"read-only-source"`, `"not-a-record"` (group/total row) or `"derived-view"` (row drag while grouped), `e.operation` names the entry point |
+| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | a write was refused; `e.reason` is `"read-only-source"`, `"not-a-record"` (group/total row), `"derived-view"` (row drag while grouped) or `"type-mismatch"` (edit the column type cannot hold), `e.operation` names the entry point |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
 | `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |
