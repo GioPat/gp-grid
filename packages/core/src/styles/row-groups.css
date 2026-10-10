@@ -1,7 +1,8 @@
 /* =============================================================================
-   Row Groups (PRD 008): group and total rows, the label cell and its expander.
-   The row sets --gp-grid-group-depth; the label column's cell indents by it on
-   every row of a hierarchy.
+   Row Groups: group and total rows, the label cell and its expander. The row
+   sets --gp-grid-group-depth; the label column's cell indents by it on every
+   row of a hierarchy. Only the expander's geometry is unconditional; every
+   other rule is :where so a theme can override it at zero specificity.
    ============================================================================= */
 
 :where(.gp-grid-row--group) {
@@ -16,15 +17,15 @@
 
 :where(.gp-grid-cell--group-indent) {
   padding-inline-start: calc(
-    12px + var(--gp-grid-group-depth, 0) * var(--gp-grid-group-indent, 20px)
+    var(--gp-grid-cell-padding-inline) + var(--gp-grid-group-depth, 0) * var(--gp-grid-group-indent)
   );
 }
 
-.gp-grid-cell--group-label {
+:where(.gp-grid-cell--group-label) {
   gap: 4px;
 }
 
-.gp-grid-group-label {
+:where(.gp-grid-group-label) {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;

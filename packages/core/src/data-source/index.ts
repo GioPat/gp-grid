@@ -18,6 +18,7 @@ export {
 // Mutable data source
 export {
   createMutableClientDataSource,
+  isMutableDataSource,
   type MutableDataSource,
   type MutableClientDataSourceOptions,
   type DataChangeListener,

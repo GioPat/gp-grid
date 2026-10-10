@@ -30,6 +30,7 @@ export {
   createDataSourceFromArray,
   createMutableClientDataSource,
   createColumnarDataSource,
+  isMutableDataSource,
 } from "./data-source";
 export { isColumnarDataSource, isHierarchicalRowAccess } from "./types";
 
@@ -374,8 +375,16 @@ export type {
 export { createColumnGroupLookup } from "./column-groups/group-lookup";
 export type { ColumnGroupLookup } from "./column-groups/group-lookup";
 
-/** Group label column and text (PRD 008) */
+/** Group label column, text and markup (PRD 008) */
 export { resolveGroupLabelColumnId, formatGroupLabel, isEmptyGroupCell } from "./row-group-layout";
+export {
+  hierarchyRowAttributes,
+  groupCellOf,
+  groupToggleClassName,
+  groupLabelParams,
+  GROUP_DEPTH_PROPERTY,
+} from "./row-group-cells";
+export type { HierarchyRowAttributes, GroupCell, GroupCellInput } from "./row-group-cells";
 
 /** Localization: shared label model and helpers */
 export {

@@ -41,6 +41,10 @@
   --gp-grid-scrollbar-track: #f1f3f5;
   --gp-grid-scrollbar-thumb: #ced4da;
   --gp-grid-scrollbar-thumb-hover: #adb5bd;
+
+  /* Sizing */
+  --gp-grid-cell-padding-inline: 12px;
+  --gp-grid-group-indent: 20px;
 }
 
 /* Dark Mode */
