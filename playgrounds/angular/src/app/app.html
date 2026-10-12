@@ -58,7 +58,7 @@
       [headerBandHeights]="headerBandHeights()"
       [labels]="gridLabels"
       [overscan]="12"
-      [dataSource]="grid.dataSource"
+      [dataSource]="dataSource()"
       [darkMode]="darkMode()"
       [highlighting]="highlighting"
       [rowDragEntireRow]="true"
@@ -124,7 +124,16 @@
     <button
       type="button"
       class="update-btn"
-      [disabled]="groupRows() === false"
+      [attr.aria-pressed]="serverGroups()"
+      [style.opacity]="serverGroups() ? 1 : 0.5"
+      (click)="toggleServerGroups()"
+    >
+      Server groups
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [disabled]="grouping() === false"
       (click)="expandAllGroups()"
     >
       Expand all

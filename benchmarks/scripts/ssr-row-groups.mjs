@@ -123,6 +123,39 @@ export const createExternalSource = () => {
   };
 };
 
+const sumAmounts = (rows) => rows.reduce((sum, row) => sum + row.amount, 0);
+const onPath = (row, path) => path.every(([field, , key]) => row[field] === key);
+
+/** PRD 009 over the same six rows: an inline service that answers at once, with no engine import. */
+export const createServerSource = (coreArtifact) => {
+  const service = {
+    fetchChildren: async ({ grouping, path, range }) => {
+      const field = grouping.dimensions[path.length].field;
+      const below = grouping.dimensions[path.length + 1];
+      const members = rowGroupRows.filter((row) => onPath(row, path));
+      const keys = [...new Set(members.map((row) => row[field]))].sort();
+      const children = keys.map((key) => {
+        const rows = members.filter((row) => row[field] === key);
+        const childCount = below === undefined ? rows.length : new Set(rows.map((row) => row[below.field])).size;
+        return { key, childCount, leafCount: rows.length, aggregates: { amount: sumAmounts(rows) } };
+      });
+      const page = children.slice(range.startRow, range.endRow);
+      if (path.length > 0) return { revision: 1, totalCount: children.length, children: page };
+      return { revision: 1, totalCount: children.length, children: page, totals: { amount: sumAmounts(members) } };
+    },
+    fetchLeaves: async ({ path, range }) => {
+      const rows = rowGroupRows.filter((row) => onPath(row, path));
+      return { revision: 1, totalCount: rows.length, rows: rows.slice(range.startRow, range.endRow) };
+    },
+  };
+  return coreArtifact.createServerGroupingSource(service, {
+    dimensions: [{ field: "country" }, { field: "city" }],
+    measures: [{ field: "amount", aggregate: "sum" }],
+    grandTotal: "top",
+    getRowId: (row) => row.id,
+  });
+};
+
 const expectEqual = (actual, expected, label) => {
   if (actual !== expected) throw new Error(`${label}: expected ${String(expected)}, got ${String(actual)}`);
 };

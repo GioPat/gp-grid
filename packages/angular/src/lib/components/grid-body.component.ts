@@ -228,7 +228,7 @@ export class GridBodyComponent {
   /** Only a label cell carries a tooltip; the input shows its own value while editing. */
   protected cellTitle(column: ColumnDefinition, editing: boolean, cell: GroupCell): string | null {
     if (column.tooltip === false || editing || cell.label === '') return null;
-    return cell.label;
+    return cell.title ?? cell.label;
   }
 
   protected onScroll(): void {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
@@ -18,6 +18,7 @@ import {
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
 import { DebugOverlay } from "./DebugOverlay";
+import { createDemoServerSource } from "./demo-server-groups";
 
 type DemoPage = "main" | "live-insert";
 
@@ -402,6 +403,16 @@ const createDemoRowGrouping = () =>
     grandTotal: "top",
   });
 
+// Server grouping (PRD 009): the same groups and measures, asked of the mock service.
+const DEMO_SERVER_ROWS = 100_000;
+const demoServerGrouping = {
+  dimensions: [{ field: "status" }, { field: "name" }],
+  measures: [
+    { field: "salary", aggregate: "sum" },
+    { field: "age", aggregate: "avg" },
+  ],
+};
+
 const DEMO_HEADER_HEIGHT = 40;
 const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
 
@@ -445,6 +456,12 @@ function MainDemo() {
     () => (groupRows ? createDemoRowGrouping() : null),
     [groupRows],
   );
+  const [serverGroups, setServerGroups] = useState(false);
+  const serverSource = useMemo(
+    () => (serverGroups ? createDemoServerSource(initialRowData.slice(0, DEMO_SERVER_ROWS), demoServerGrouping) : null),
+    [serverGroups],
+  );
+  useEffect(() => () => serverSource?.destroy(), [serverSource]);
   const gridRef = useRef<GridRef<Person> | null>(null);
   const showTouchDebug = shouldShowTouchDebug();
 
@@ -673,13 +690,27 @@ function MainDemo() {
           Group rows
         </button>
         <button
-          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
-          disabled={groupRows === false}
+          onClick={() => setServerGroups((value) => !value)}
+          aria-pressed={serverGroups}
           style={{
             padding: "6px 12px",
             borderRadius: "4px",
             border: "none",
-            cursor: groupRows ? "pointer" : "not-allowed",
+            cursor: "pointer",
+            backgroundColor: serverGroups ? "#3b82f6" : "#374151",
+            color: serverGroups ? "white" : "#9ca3af",
+          }}
+        >
+          Server groups
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
+          disabled={groupRows === false && serverGroups === false}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: groupRows || serverGroups ? "pointer" : "not-allowed",
             backgroundColor: "#374151",
             color: "#9ca3af",
           }}
@@ -704,10 +735,10 @@ function MainDemo() {
           columns={columns}
           columnGroups={grouped ? demoColumnGroups : undefined}
           headerBandHeights={tallBand ? tallBandHeights : undefined}
-          rowGrouping={rowGrouping}
+          rowGrouping={serverSource === null ? rowGrouping : null}
           labels={gridLabels}
           overscan={12}
-          dataSource={dataSource}
+          dataSource={serverSource ?? dataSource}
           rowHeight={36}
           rowResize
           darkMode={true}

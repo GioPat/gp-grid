@@ -723,6 +723,26 @@ it grouped itself as a `HierarchicalRowAccess`. On the server the grid renders
 the flat shell and groups after the first client load. See
 [Row grouping and aggregation](../../docs/features/row-grouping.md).
 
+Server grouping: for a dataset that stays on a server, pass
+`createServerGroupingSource(service, config)` as `dataSource`, and no `rowGrouping`. The grid asks your service for one group's
+children or leaves a page at a time and never loads a collapsed group's leaves.
+Rows not loaded yet render as loading rows, and a group whose page failed
+collapses with an error and retries when expanded again. The source is read-only
+unless created with `writable: true`. See
+[Server grouping](../../docs/features/server-grouping.md).
+
+```tsx
+import { Grid, createServerGroupingSource } from "@gp-grid/react";
+
+const source = createServerGroupingSource(service, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  getRowId: (row) => row.id,
+});
+
+<Grid columns={columns} dataSource={source} rowHeight={32} groupLabelColumn="country" />;
+```
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference

@@ -3,7 +3,7 @@
 
 import type { RowId } from "../types";
 import type { GroupTree } from "./group-layout";
-import { decodeGroupId, type GroupKey } from "./keys";
+import { decodeTaggedId, type GroupKey } from "../hierarchy/keys";
 
 interface PathNode {
   ids: RowId[];
@@ -16,7 +16,7 @@ type Visit = (id: RowId, group: number) => void;
 const newNode = (): PathNode => ({ ids: [], children: [] });
 
 const insertPath = (root: PathNode, tree: GroupTree, id: RowId): void => {
-  const path = decodeGroupId(id);
+  const path = decodeTaggedId(id);
   if (path === undefined || path.length > tree.dimensions.length) return;
   let node = root;
   for (const [depth, [dimensionId, tag, key]] of path.entries()) {

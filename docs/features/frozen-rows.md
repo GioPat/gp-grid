@@ -131,7 +131,8 @@ A frozen row never needs vertical movement, so `getScrollTarget` omits
 `scrollTop` for it. The public helper `isRowVisible(row, range, frozenCount = 0)`
 treats `[0, frozenCount)` as visible for any range. `SlotData.region` says which
 container a slot belongs to, and `SlotData.loading` marks an unavailable frozen
-row (a suffix slot is never `loading`).
+row (a flat suffix slot is never `loading`; a hierarchy's placeholder is, in
+either region, see [Row grouping](#row-grouping)).
 
 The rendered contract has two layers inside the existing sizer, before the rows
 wrapper, and both render only while `effectiveCount > 0`:
@@ -219,3 +220,10 @@ is re-resolved over the new view rows after every expand, collapse and regroup,
 with the same limits. A top total row (`grandTotal: "top"`) stays in view with
 `freezeRows: { count: 1 }`. A pinned label cell inside the frozen pin layer does
 not get the group row's background.
+
+A hierarchy that loads on demand, such as [server grouping](./server-grouping.md),
+asks for the prefix `[0, count)` before the overscan window and never for the
+rows between them. A frozen row it has not loaded yet is a placeholder and
+renders as the loading row above, re-planned when its page arrives; a
+placeholder in the suffix renders the same box. Server grouping never evicts a
+page while a frozen row needs it.

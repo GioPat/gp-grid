@@ -1,6 +1,6 @@
 ---
 name: gp-grid-integration
-description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
+description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, server-side grouping, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createServerGroupingSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
 ---
 
 # gp-grid integration
@@ -356,6 +356,99 @@ const grouping = createRowGrouping({
   serialize the collapsed group rows.
   See [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
 
+### Server grouping (`createServerGroupingSource`)
+
+For grouped data that stays on a server: the grid asks an application service
+for one group's children or leaves a page at a time, never loads a collapsed
+group's leaves, and computes no aggregate.
+
+```ts
+import { createServerGroupingSource, encodeGroupId } from "@gp-grid/react"; // or /vue, /angular, /core
+
+const source = createServerGroupingSource(service, {      // create once; one source per grid
+  dimensions: [{ field: "country" }, { field: "city" }],   // { field, id? }; no toKey
+  measures: [{ field: "amount", aggregate: "sum" }],       // aggregate names go to the server as is
+  getRowId: (row) => row.id,                               // required: the leaf id
+  grandTotal: "top",                                       // filled by the root response's `totals`
+  initialState: { expanded: [encodeGroupId([["country", "s", "Italy"]])], collapsed: [] },
+  cache: { pageSize: 100, prefetchPages: 0 },              // RowCacheOptions; balanced preset by default
+  maxConcurrentRequests: 4,                                // default 4
+  writable: false,                                         // default: read-only
+});
+// React dataSource={source}, Vue :data-source="source", Angular [dataSource]="source". No new props.
+```
+
+- **The service** (`ServerGroupingService<TData>`, both methods required):
+  - `fetchChildren({ revision, grouping, path, range, sort?, filter?, signal? })` →
+    `{ revision, totalCount, children, totals? }`, each child a
+    `ServerGroupNode = { key, childCount, leafCount, aggregates? }`. `path: []` is
+    the root; the children are groups of dimension `path.length`; `children[i]` is
+    child `range.startRow + i` of the parent, counted from 0 in the requested
+    order (`range` is half-open, `endRow` excluded); `totals` at the root fill
+    the total row. `childCount` counts immediate children, `leafCount` records.
+  - `fetchLeaves({ revision, grouping, path, range, sort?, filter?, signal? })` →
+    `{ revision, totalCount, rows }`, for a group of the last dimension.
+  - `revision` is `null` on a query's root request; the root response's revision
+    goes in every later request of that view.
+  - Every request carries the grid's sort and filter; the server groups, orders,
+    filters and aggregates. A missing or `null` aggregate renders empty.
+- **Protocol:** a response with another revision, a `totalCount` that is not a
+  non-negative integer or differs from the parent's `childCount`, a page that is
+  not exactly the range clipped to `totalCount`, or an object key that is not a
+  `Date` fails its branch, as a rejected promise does: the group collapses with
+  `error`. A failed root request rejects the query: the grid's data error.
+- **What a transport must encode** (the service runs in the browser):
+  - `Date` keys arrive as `["d", <timestamp>]` path steps and must leave as
+    `Date` node keys. A key returned as a number is keyed as a number: its group
+    gets another id and its children another path.
+  - `FilterModel` carries `Date` values (date conditions and values-mode
+    selections) and `Set` `selectedValues`. `JSON.stringify` writes a `Set` as
+    `{}`: convert it to an array. A `Date` becomes its ISO string.
+  - Path steps (`[dimensionId, "z" | "s" | "n" | "b" | "d", key]`) and aggregate
+    names travel as is. A non-finite number key stays a number in a step, which
+    JSON writes as `null`.
+  - `signal` stays on the client: pass it to `fetch`. A service may ignore it.
+  - The mock is the reference service: `packages/core/tests/server-grouping-mock.ts`
+    with `mock-grouping-fold.ts`; an abridged runnable copy and a `fetch`
+    transport are in the docs page.
+- **Integration rules:**
+  - Pass the source as `dataSource`. Never also set `rowGrouping`: it is
+    rejected as `hierarchical-source`.
+  - Counts must be exact: no estimated or unknown counts, no cursor paging.
+  - `prefetchPages` affects request counts: on the default balanced preset an
+    expanded group of more than one page sends two leaf requests, and a root of
+    more than `pageSize` groups a second root request. Use `prefetchPages: 0`
+    when a test counts requests.
+  - `maxConcurrentRequests` (default 4) caps the page requests in flight.
+    Wanted pages queue in view order; a queued page scrolled past is never
+    sent; a page in flight is not aborted by a scroll, only by a collapse, a
+    new query or `destroy()`. Lower it for a rate-limited API, raise it for a
+    fast backend; it changes load and latency, never correctness.
+  - Read-only by default. `writable: true` writes the cached leaf only: no
+    aggregate changes and nothing is sent. Persist the change, then
+    `core.refresh()`. `onCellValueChanged` still needs the grid's `getRowId`.
+  - One source per grid, kept stable. No wrapper destroys a source passed as
+    `dataSource`: call `source.destroy()` when you drop it; a later query still
+    works.
+- **Rows:** an unloaded row is a placeholder: `rows.getViewRow(i)` is undefined,
+  `rows.has(i)` is false, `rows.getId(i)` is `gp-pending:<position>@<parentId>`. It
+  renders as `.gp-grid-row--loading` with a skeleton bar (a `::before` in `:where` rules,
+  static under `prefers-reduced-motion`) and takes no input. A failed group has
+  `row.error`, `.gp-grid-row--error`, `data-row-error` and a label `title` from
+  `labels.rowGroups.loadFailed` (`"Loading failed. Expand again to retry."`);
+  expanding it again retries. Ids: groups `encodeGroupId(path)` (the local
+  engine's ids; `decodeGroupId(id)` reads a path), leaves `getRowId`, total
+  `"gp-total"`.
+- **State:** `source.getState()` → `RowGroupingState`, by id, kept across
+  refresh, sort and filter. Expand all (`setExpanded(null, true)`) opens the
+  loaded groups and the rest as their pages arrive.
+- **Limits:** no page survives a query; `rows.getRecordById` finds loaded
+  leaves only (`undefined` for an unloaded leaf or a group id); after a refresh
+  the active cell and the anchor follow their row by id when the new view has
+  it at once, else keep their index on the placeholder there, which may load as
+  another row; no pivot.
+  See [docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
 ### Data sources — pick one
 
 | Use when… | Factory | Mutability |
@@ -364,6 +457,7 @@ const grouping = createRowGrouping({
 | Static array with sort/filter, but the array won't change | `createClientDataSource(array)` | one-shot |
 | Client-side data that changes after first render (most apps) | `useGridData` (React/Vue) or `createGridData` / `provideGridData` (Angular) | mutable, transactional |
 | Data is too big for memory; server handles paging/sort/filter | `createServerDataSource(async (req) => ...)` | server-driven |
+| Grouped rows too big for memory; server groups and aggregates | `createServerGroupingSource(service, config)` (see Server grouping) | read-only unless `writable: true` |
 | Your own column-oriented/typed-array storage is already resident | `createColumnarDataSource({ fields, rowCount, getRowId? })` | read-only (1.0) |
 
 **Why `useGridData` / `createGridData` matters:** if you replace the `rowData` prop with a fresh array on every state change, the grid rebuilds the entire pipeline (sort indices, filter caches, virtualization). Above 10,000 rows the library logs a dev warning. The mutable hook/helper batches updates as transactions instead. Always prefer it when data changes.
@@ -550,7 +644,7 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 - **Scrolling:** a press while a touch fling or a wheel glide is still moving the content only stops it; it selects, sorts and toggles nothing. `wheelDampening` (0-1) applies to the vertical wheel on very large (scaled) grids only.
 - **SSR:** the wrappers are SSR-safe (no `ResizeObserver` use during SSR). Pass `initialWidth` / `initialHeight` (pixels) so the first server-rendered paint isn't 0×0.
 - **Styling:** the global default gp-grid styling defines most of the aesthetics classes with `:where`, this means that you can override the styling. Please consider using also CSS variables to make sure the look and feel of gp-grid is the same as the entire application.
-- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), the column-group rejection messages (nested `columnSchemaErrors.*`, tokens `{id}` and `{limit}`), the group and total row labels (nested `rowGroups.label`, tokens `{value}` and `{count}`, and `rowGroups.grandTotal`), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level, nested operator and nested schema-error labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
+- **Localization (`labels` prop):** every user-visible string can be overridden by passing `labels={{ ... }}` (typed as `GridLabelOverrides`) to the grid. Covers the filter popup title (`filterTitle`, token `{column}`), the AND/OR toggles (`and`, `or`), buttons (`apply`, `clear`, `addCondition`, `removeCondition`, `addGroup`, `removeGroup`, `selectAll`, `deselectAll`), pin controls (`pinLeftColumn`, `pinRightColumn`, `unpinColumn`), the frozen-prefix announcement (`frozenRowsLimited`, tokens `{effective}` and `{requested}`), the column-group rejection messages (nested `columnSchemaErrors.*`, tokens `{id}` and `{limit}`), the group and total row labels (nested `rowGroups.label`, tokens `{value}` and `{count}`, `rowGroups.grandTotal`, and `rowGroups.loadFailed`, the title of a server group whose page failed), placeholders (`valuePlaceholder`, `searchPlaceholder`, `betweenSeparator`), mode toggles (`valuesMode`, `conditionMode`), messages (`tooManyValues` token `{count}`, `emptyState`, `errorPrefix` token `{message}`), and the nested `operators.*` dropdown labels (contains, startsWith, between, …). Top-level, nested operator and nested schema-error labels are independently optional; unspecified labels fall back to English defaults. `GridLabels` and `GridLabelOverrides` are re-exported by every wrapper. See each framework reference for the exact prop syntax.
 - **Long cell text:** the default renderer truncates overflow with an ellipsis (`…`) and shows the full value via a native `title` tooltip. Set `wrapText: true` on a column to wrap onto new lines instead — the extra lines are clipped to the fixed row height, so pair it with the built-in tooltip or the double-click `peekable` overlay to read the full value.
 
 Interaction events are object-shaped in all wrappers — a deliberate 0.x→1.0 break with no compatibility adapter.

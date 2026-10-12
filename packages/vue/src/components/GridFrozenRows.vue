@@ -8,6 +8,7 @@ import type {
   RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
+import { hierarchyRowAttributes } from "@gp-grid/core";
 import GridCell from "./GridCell.vue";
 import GridRow from "./GridRow.vue";
 import type { GridRowCellContext } from "./cell-props";
@@ -115,6 +116,7 @@ const cellProps = (slot: SlotData<Row>, column: ResolvedColumn) => ({
           class="gp-grid-frozen-pin-row"
           role="presentation"
           :data-row-kind="slot.row?.kind"
+          :data-row-error="hierarchyRowAttributes(slot.row)['data-row-error']"
           :style="pinRowStyle(slot)"
         >
           <div

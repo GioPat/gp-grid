@@ -92,6 +92,10 @@ export {
   // Row grouping
   createRowGrouping,
   isHierarchicalRowAccess,
+  // Server grouping
+  createServerGroupingSource,
+  encodeGroupId,
+  decodeGroupId,
   // Utils
   calculateColumnPositions,
   getTotalWidth,
@@ -131,6 +135,18 @@ export type {
   RowGroupingRejection,
   RowGroupingResult,
   RowGroupToggledEvent,
+  HierarchyChange,
+  // Server grouping (PRD 009)
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+  ServerGroupingConfig,
+  ServerGroupingSource,
   GridRowGroupsApi,
   GroupLabelRendererParams,
   SortDirection,

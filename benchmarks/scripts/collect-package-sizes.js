@@ -17,6 +17,11 @@ const PACKAGE_ENTRY_SOURCES = {
     export { Grid, createClientDataSource } from "@gp-grid/react";
     import "@gp-grid/react/dist/styles.css";
   `,
+  "gp-grid-server-grouping": `
+    export { Grid } from "@gp-grid/react";
+    export { createServerGroupingSource } from "@gp-grid/core";
+    import "@gp-grid/react/dist/styles.css";
+  `,
   "ag-grid": `
     export { AgGridReact } from "ag-grid-react";
     export { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
@@ -44,12 +49,21 @@ const PACKAGE_ENTRY_SOURCES = {
   `,
 };
 
-// PRD 008 D12: the flat gp-grid entry above must shake the row grouping engine out.
-const ENGINE_MARKER = "gp-group:";
+// Both gp-grid entries resolve to the benchmark source's artifacts.
+const GP_GRID_ENTRIES = new Set(["gp-grid", "gp-grid-server-grouping"]);
 
-export const assertFlatConsumerHoldsNoEngine = (contents) => {
+// Measured beside "gp-grid" from candidate artifacts only: the published packages
+// predate server grouping.
+const CANDIDATE_COMPANIONS = { "gp-grid": ["gp-grid-server-grouping"] };
+
+// PRD 008 D12 and PRD 009 D7: no gp-grid entry may keep the local grouping engine.
+// The marker is the engine's RangeError text, which only `row-grouping/` holds;
+// "gp-group:" now lives in the ids both engines share.
+const ENGINE_MARKER = "Invalid rowGrouping.";
+
+export const assertConsumerHoldsNoEngine = (grid, contents) => {
   if (contents.some((content) => content.includes(ENGINE_MARKER))) {
-    throw new Error(`The gp-grid package-size bundle contains the row grouping engine ("${ENGINE_MARKER}").`);
+    throw new Error(`The ${grid} package-size bundle contains the row grouping engine ("${ENGINE_MARKER}").`);
   }
 };
 
@@ -102,7 +116,7 @@ const measurePackageGroup = async (grid, source, benchmarkSource) => {
     logLevel: "silent",
     plugins: [packageEntryPlugin(grid, source)],
     resolve: {
-      alias: grid === "gp-grid" ? getGpGridAliases(benchmarkSource) : [],
+      alias: GP_GRID_ENTRIES.has(grid) ? getGpGridAliases(benchmarkSource) : [],
       dedupe: ["react", "react-dom"],
     },
     build: {
@@ -120,7 +134,7 @@ const measurePackageGroup = async (grid, source, benchmarkSource) => {
     },
   });
   const contents = outputContents(buildResult);
-  if (grid === "gp-grid") assertFlatConsumerHoldsNoEngine(contents);
+  if (GP_GRID_ENTRIES.has(grid)) assertConsumerHoldsNoEngine(grid, contents);
 
   return {
     minifiedBytes: contents.reduce((total, content) => total + content.length, 0),
@@ -138,27 +152,35 @@ const readMeasuredVersion = (packageName) => {
   return JSON.parse(fs.readFileSync(manifestPath, "utf-8")).version;
 };
 
+const measureEntry = async (grid, packages, artifactProvenance, benchmarkSource) => {
+  const source = PACKAGE_ENTRY_SOURCES[grid];
+  if (source === undefined) {
+    throw new Error(`No package-size entry is configured for ${grid}.`);
+  }
+
+  return {
+    packages,
+    versions: Object.fromEntries(
+      packages.map((pkg) => {
+        const artifact = artifactProvenance.packages.find((item) => item.name === pkg);
+        return [pkg, artifact?.version ?? readMeasuredVersion(pkg)];
+      }),
+    ),
+    source: GP_GRID_ENTRIES.has(grid) ? benchmarkSource : "published",
+    ...(await measurePackageGroup(grid, source, benchmarkSource)),
+  };
+};
+
 export const collectPackageSizes = async (gridPackages, benchmarkSource = readBenchmarkSource()) => {
   const sizes = {};
   const artifactProvenance = collectArtifactProvenance(benchmarkSource);
 
   for (const [grid, packages] of Object.entries(gridPackages)) {
-    const source = PACKAGE_ENTRY_SOURCES[grid];
-    if (source === undefined) {
-      throw new Error(`No package-size entry is configured for ${grid}.`);
+    sizes[grid] = await measureEntry(grid, packages, artifactProvenance, benchmarkSource);
+    if (benchmarkSource !== "candidate") continue;
+    for (const companion of CANDIDATE_COMPANIONS[grid] ?? []) {
+      sizes[companion] = await measureEntry(companion, packages, artifactProvenance, benchmarkSource);
     }
-
-    sizes[grid] = {
-      packages,
-      versions: Object.fromEntries(
-        packages.map((pkg) => {
-          const artifact = artifactProvenance.packages.find((item) => item.name === pkg);
-          return [pkg, artifact?.version ?? readMeasuredVersion(pkg)];
-        }),
-      ),
-      source: grid === "gp-grid" ? benchmarkSource : "published",
-      ...(await measurePackageGroup(grid, source, benchmarkSource)),
-    };
   }
 
   return sizes;

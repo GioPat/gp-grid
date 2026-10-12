@@ -6,6 +6,7 @@
 import type { GridInstruction, HierarchyRow, SlotState } from "./types";
 import type { RowRegion } from "./types/geometry";
 import type { RowRegionLayout } from "./geometry";
+import { regionOfRow, requiredRows, slotRegionFields } from "./slot-pool-regions";
 
 export interface SlotPlanInput {
   slots: Map<string, SlotState>;
@@ -19,6 +20,8 @@ export interface SlotPlanInput {
   rowCount: number;
   regions: RowRegionLayout;
   isRowAvailable: (rowIndex: number) => boolean;
+  /** A hierarchy's unavailable rows are placeholders, mounted as loading slots. */
+  isHierarchical: () => boolean;
   getRowData: (rowIndex: number) => unknown;
   /** Kind and depth of a hierarchy row; `undefined` while flat. */
   getRow: (rowIndex: number) => HierarchyRow | undefined;
@@ -39,18 +42,6 @@ interface PoolCursors {
   frozen: number;
   dead: number;
 }
-
-const regionOfRow = (rowIndex: number, regions: RowRegionLayout): RowRegion =>
-  rowIndex < regions.frozenCount ? "frozen" : "suffix";
-
-/** Only the non-default fields: the flat instruction payload stays exact. */
-const slotRegionFields = (region: RowRegion, loading: boolean, row?: HierarchyRow) => {
-  const fields: { region?: RowRegion; loading?: boolean; row?: HierarchyRow } = {};
-  if (region === "frozen") fields.region = region;
-  if (loading) fields.loading = loading;
-  if (row) fields.row = row;
-  return fields;
-};
 
 const takeRecycled = (
   pools: SlotPools,
@@ -74,25 +65,15 @@ const leftoverSlots = (pools: SlotPools, cursors: PoolCursors): string[] => [
   ...pools.dead.slice(cursors.dead),
 ];
 
-/** Frozen prefix plus the overscanned suffix window, ascending (C7). */
-const requiredRows = (input: SlotPlanInput): Set<number> => {
-  const { window, rowCount, regions } = input;
-  const frozenCount = Math.min(Math.max(regions.frozenCount, 0), rowCount);
-  const rows = new Set<number>();
-  for (let row = 0; row < frozenCount; row++) {
-    rows.add(row);
-  }
-  for (let row = Math.max(window.start, frozenCount); row < window.end && row < rowCount; row++) {
-    rows.add(row);
-  }
-  return rows;
-};
+/** A flat unavailable suffix row keeps no slot: the grid overlay covers it. */
+const keepsNoSlot = (input: SlotPlanInput, region: RowRegion, available: boolean): boolean =>
+  region === "suffix" && available === false && input.isHierarchical() === false;
 
-/** A mounted slot stays while its row is required and its region matches. */
+/** A mounted slot stays while its row is required and its region matches; outside a flat suffix, its loading state too. */
 const isSlotCurrent = (input: SlotPlanInput, slot: SlotState): boolean => {
   const region = regionOfRow(slot.rowIndex, input.regions);
   if (slot.region !== region) return false;
-  if (region === "suffix") return true;
+  if (region === "suffix" && input.isHierarchical() === false) return true;
   const loading = input.isRowAvailable(slot.rowIndex) === false;
   return slot.loading === loading;
 };
@@ -204,8 +185,7 @@ export const planSlotSync = (input: SlotPlanInput): GridInstruction[] => {
   for (const rowIndex of required) {
     const region = regionOfRow(rowIndex, input.regions);
     const available = input.isRowAvailable(rowIndex);
-    // An unavailable suffix row keeps no slot: the grid overlay covers it.
-    if (region === "suffix" && available === false) continue;
+    if (keepsNoSlot(input, region, available)) continue;
     const rowData = available ? input.getRowData(rowIndex) : undefined;
     assignSlot(
       input,
@@ -237,7 +217,7 @@ export const planSlotRefresh = (input: SlotPlanInput): GridInstruction[] => {
     if (slot.rowIndex < 0 || slot.rowIndex >= input.rowCount) continue;
     const region = regionOfRow(slot.rowIndex, input.regions);
     const available = input.isRowAvailable(slot.rowIndex);
-    if (region === "suffix" && available === false) continue;
+    if (keepsNoSlot(input, region, available)) continue;
     const rowData = available ? input.getRowData(slot.rowIndex) : undefined;
     const loading = available === false;
 
@@ -274,7 +254,7 @@ export const planSlotUpdate = (input: SlotPlanInput, rowIndex: number): GridInst
   if (slotId === undefined) return [];
   const region = regionOfRow(rowIndex, input.regions);
   const available = input.isRowAvailable(rowIndex);
-  if (region === "suffix" && available === false) return [];
+  if (keepsNoSlot(input, region, available)) return [];
   const loading = available === false;
 
   const slot = input.slots.get(slotId);

@@ -7,8 +7,9 @@ column it belongs to. There is no full-width group row and no generated column.
 
 The grid renders a **hierarchy**: view rows of kind `record`, `group` or
 `total`. A hierarchy comes from the local engine (`createRowGrouping`, over rows
-loaded in full) or from the data source itself (rows the application grouped).
-Both reach the grid through one contract, `HierarchicalRowAccess`.
+loaded in full) or from the data source itself (rows the application grouped,
+or [server grouping](./server-grouping.md), which loads them page by page). All
+reach the grid through one contract, `HierarchicalRowAccess`.
 
 `@gp-grid/core` owns the view index, focus, the scroll anchor and the write
 guards; the provider owns membership and aggregate values; a wrapper renders
@@ -249,8 +250,9 @@ Every other cell of a group or total row:
 absent while the grid is flat, so a renderer that reads `rowData` should branch
 on it.
 
-Group and total labels are `GridLabels.rowGroups` (`label`, `grandTotal`),
-merged one level deep from `labels`.
+Group and total labels are `GridLabels.rowGroups` (`label`, `grandTotal`, and
+`loadFailed` for a [failed group](#loading-on-demand)), merged one level deep
+from `labels`.
 
 ## Pointer and keyboard
 
@@ -364,22 +366,29 @@ imports types only: no engine, no `createRowGrouping`.
 ```ts
 interface HierarchicalRowAccess<TData = unknown> extends RowAccess {
   readonly hierarchical: true;            // the flag the grid detects
-  readonly rowCount: number;              // view rows; every index in [0, rowCount) is resident
+  readonly rowCount: number;              // view rows, placeholders included
   readonly revision?: number;
-  getRowId(viewRow: number): RowId;       // cheap, unique within the hierarchy
-  getRow(viewRow: number): HierarchyRow | undefined;
+  getRowId(viewRow: number): RowId;       // cheap, unique within the hierarchy, a placeholder's too
+  getRow(viewRow: number): HierarchyRow | undefined; // undefined: a placeholder
   getValue(viewRow: number, field: string): CellValue; // an aggregate or null on group and total rows
   locate(id: RowId): number;              // the row, its nearest visible ancestor when hidden, or -1
   setExpanded?(ids: readonly RowId[] | null, expanded: boolean): boolean; // whether view rows changed
   getRecord?(viewRow: number): TData | undefined;                         // source record of a record row
   recordsChanged?(changes: readonly HierarchyRecordChange[]): boolean;    // whether view rows moved
+  requestRows?(ranges: readonly AxisBounds[]): void;                      // the view rows about to show
+  subscribe?(listener: (change: HierarchyChange) => void): () => void;   // returns the unsubscribe
   release?(): void;
 }
 
 type HierarchyRow =
   | { kind: "record"; id: RowId; depth: number }
-  | { kind: "group"; id: RowId; depth: number; expanded: boolean; childCount: number; leafCount: number; field: string; value: CellValue }
+  | { kind: "group"; id: RowId; depth: number; expanded: boolean; childCount: number; leafCount: number; field: string; value: CellValue; error?: string }
   | { kind: "total"; id: RowId; depth: 0; leafCount: number };
+
+type HierarchyChange =
+  | { kind: "rows"; start: number; end: number } // applied: [start, end) changed in place
+  | { kind: "view"; apply(): void }              // pending: the rows move inside apply()
+  | { kind: "error"; message: string };          // a failure no group row shows
 ```
 
 ```ts
@@ -443,13 +452,60 @@ the anchor on the group row.
   filterable column's values in `ColumnDefinition.distinctValues`.
 - A new query (a refresh, `refreshFromTransaction`, a sort or filter) replaces
   the access; the previous one is released through `release?.()`.
-- Every row a hierarchy declares is resident. Placeholder rows, loading state
-  per branch and paged children are not part of this contract.
+- A hierarchy may leave rows unloaded and load them as they come into view; see
+  [Loading on demand](#loading-on-demand). [Server grouping](./server-grouping.md)
+  is the built-in provider that does, over an application service.
 
 `isHierarchicalRowAccess(access)` tests the flag. `rows.getViewRow(viewIndex)`
 returns `ViewRow<TData>`: the `HierarchyRow` plus `viewIndex`, with `record?` on
 record rows; a flat row is a record row of depth 0. `rows.getData(viewIndex)` is
 `undefined` on a group or total row.
+
+### Loading on demand
+
+A row whose `getRow` answers `undefined` is a *placeholder*: a row the
+hierarchy counts but has not loaded.
+
+- `getRowId` still answers for it, and `locate` finds that id. Keep the id
+  stable until the row loads: the scroll anchor and a row height follow it.
+- `rows.has(i)` is `false`, and `rows.getViewRow(i)` and `rows.getData(i)` are
+  `undefined`. Its slot is `loading` (`SlotData.loading`) in the frozen prefix
+  and in the suffix alike, and it renders as the cell-less loading row,
+  `.gp-grid-row--loading`.
+- It takes no input: `edit.start` returns `false`, Enter, Space and a
+  double-click do nothing, and paste and fill report `reason: "not-a-record"`.
+- After `refresh()` or `refreshFromTransaction()`, an anchor or active row
+  whose id `locate` cannot find keeps its old index when that index now holds a
+  placeholder: the row there is unknown, not gone.
+- `rows.getRecordById(id)` asks the data source's own `getRecordById` first,
+  then answers the record row `locate` finds through `getRecord`. A placeholder
+  or a group id answers `undefined`.
+
+`requestRows(ranges)` names the view rows the grid is about to show:
+`[0, frozenCount)` first when rows are frozen, then the overscan window, never
+the rows between them. The grid calls it after every full load (`initialize`,
+`refresh`, `setDataSource`, a sort or filter reload), after every change of the
+view rows, on every vertical scroll or viewport resize, and when the frozen rows
+change. A hierarchy with `requestRows` gets no flat page requests.
+
+`subscribe(listener)` reports a change after the fact. The grid subscribes when
+it binds the hierarchy and unsubscribes when it binds another or is destroyed.
+Never notify inside a call from the grid; notify in a later task.
+
+| `HierarchyChange` | Means | The grid |
+|---|---|---|
+| `{ kind: "rows", start, end }` | Rows in `[start, end)` changed in place, already applied: placeholders loaded or went back to placeholders. No row moved. | Bumps the data revision and re-syncs the mounted rows as a flat page arrival does, placing waiting row heights by id. No `DATA_LOADED`. |
+| `{ kind: "view", apply }` | Rows will move or the count will change. Nothing has changed yet. | Commits an open edit, captures the anchor and the active row by id, calls `apply()`, restores both by id and emits `DATA_LOADED`. |
+| `{ kind: "error", message }` | A failure no group row can show. | Emits `DATA_ERROR`, the grid's data error. |
+
+`apply()` is synchronous and runs once: the provider changes its rows inside it.
+The listener calls it at once; a provider with no listener calls it itself.
+
+A group whose children failed to load carries `error`, a message. Its row gets
+`.gp-grid-row--error` and `data-row-error`, and its label cell's `title` is
+`labels.rowGroups.loadFailed`. The grid only renders it; the provider decides
+when it clears (server grouping clears it and retries when the group is
+expanded again).
 
 ## Sorting, filtering, frozen rows and row heights
 
@@ -469,7 +525,8 @@ record rows; a flat row is a record row of depth 0. `rows.getData(viewIndex)` is
 - Every row of a hierarchy carries `aria-level` (`depth + 1`),
   `data-row-kind` (`record`, `group` or `total`) and `--gp-grid-group-depth`. A
   group row adds `aria-expanded` and `.gp-grid-row--group`; a total row
-  `.gp-grid-row--total`.
+  `.gp-grid-row--total`. A group row with `error` adds `.gp-grid-row--error` and
+  `data-row-error`.
 - The label column's cell is `.gp-grid-cell--group-indent` on every row; its
   inline-start padding grows by `--gp-grid-group-indent` (default `20px`) per
   depth.
@@ -535,5 +592,6 @@ released.
 - A pinned label cell inside the frozen pin layer does not get the group row's
   background.
 - Not included: full-width group rows, grouping flags on `ColumnDefinition`,
-  built-in date or number buckets, sticky total rows, group selection, record
-  reordering in a grouped view, and remote or paged groups.
+  built-in date or number buckets, sticky total rows, group selection and
+  record reordering in a grouped view. Remote, paged groups are
+  [server grouping](./server-grouping.md).

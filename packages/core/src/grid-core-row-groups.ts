@@ -3,6 +3,7 @@
 
 import type {
   HierarchicalRowAccess,
+  HierarchyChange,
   RowGroupResult,
   RowGrouping,
   RowGroupingResult,
@@ -24,6 +25,8 @@ export interface GridRowGroupsApi {
 
 export interface RowGroupsControllerDeps<TData> extends HierarchyChangeDeps<TData> {
   isDestroyed: () => boolean;
+  /** The loaded-window path of a flat page: pending heights by id, then the slots. */
+  onRowsLoaded: (totalRowsChanged: boolean) => void;
   onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
 }
 
@@ -83,6 +86,33 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
     const result = this.setExpanded([row.id], expanded);
     if (result.status === "applied") this.deps.onRowGroupToggled?.({ rowId: row.id, expanded });
     return result;
+  }
+
+  /**
+   * PRD 009 D4: a change the bound hierarchy reported outside any core call.
+   *
+   * @internal
+   */
+  applyHierarchyChange(change: HierarchyChange): void {
+    if (this.deps.isDestroyed()) {
+      // The provider's rows move only through `apply()`, with or without a live core.
+      if (change.kind === "view") change.apply();
+      return;
+    }
+    switch (change.kind) {
+      case "rows":
+        this.deps.rowData.bumpDataRevision();
+        this.deps.onRowsLoaded(false);
+        return;
+      case "view":
+        applyViewRowsChange(this.deps, () => {
+          change.apply();
+          return true;
+        });
+        return;
+      case "error":
+        this.deps.batcher.emit({ type: "DATA_ERROR", error: change.message });
+    }
   }
 
   /** The bound hierarchy when it can expand, else `null`. */

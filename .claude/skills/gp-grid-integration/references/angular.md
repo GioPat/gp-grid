@@ -627,6 +627,50 @@ grouping needs every row resident (`[rows]`, a client source or
 exported. See
 [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
 
+## Server grouping
+
+```ts
+import { Component, OnDestroy } from "@angular/core";
+import { GpGridComponent, createServerGroupingSource } from "@gp-grid/angular";
+import { salesService } from "./sales-service"; // a ServerGroupingService<Sale>
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  // No [rowGrouping]: it would be rejected as hierarchical-source.
+  template: `
+    <gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" groupLabelColumn="country" />
+  `,
+})
+export class SalesComponent implements OnDestroy {
+  protected readonly columns = columns;
+
+  // A field, created once: one source per grid.
+  protected readonly source = createServerGroupingSource(salesService, {
+    dimensions: [{ field: "country" }, { field: "city" }],
+    measures: [
+      { field: "amount", aggregate: "sum" },
+      { field: "score", aggregate: "avg" },
+    ],
+    getRowId: (row) => row.id,
+    grandTotal: "top",
+  });
+
+  // The grid never destroys a source bound to [dataSource].
+  ngOnDestroy(): void {
+    this.source.destroy();
+  }
+}
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `grid.core?.rowGroups` and
+`(onRowGroupToggled)` work as for local grouping. See
+[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
 ## Highlighting
 
 ```ts

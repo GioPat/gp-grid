@@ -26,6 +26,7 @@ import {
   createExternalSource,
   createGrouping,
   createObjectSource,
+  createServerSource,
   expectAngularRowGroupShell,
   expectFlatShell,
   renderWithoutErrors,
@@ -322,10 +323,11 @@ await check("core row grouping over columnar rows", () =>
 
 await check("core binds a source-supplied hierarchy", () => checkExternalHierarchy(coreArtifact));
 
-/** The two PRD 008 server renders of one wrapper: the local engine, then a hierarchy from the source. */
+/** The server renders of one wrapper: the local engine, a hierarchy from the source, then server grouping (PRD 009). */
 const rowGroupArms = () => [
   ["rowGrouping", { rowData: rowGroupRows, rowGrouping: createGrouping(coreArtifact) }],
   ["external hierarchy", { dataSource: createExternalSource() }],
+  ["server grouping", { dataSource: createServerSource(coreArtifact) }],
 ];
 const rowGroupShellProps = { columns: rowGroupColumns, rowHeight: 32, columnLayout: "fixed" };
 

@@ -137,6 +137,12 @@ stays stored while its group is collapsed and is placed again when the leaf
 returns; a height on a group row stays with the group. The toggle is anchored
 like a height change: the row at the clip top keeps its viewport position.
 
+A hierarchy that loads on demand, such as [server grouping](./server-grouping.md),
+shows unloaded rows as placeholders. A height set by a record id waits while its
+row is a placeholder and is placed when the row loads, in the same batch. A
+height set on a placeholder belongs to its pending id, so the row loses it when
+it loads.
+
 ## Geometry and DOM contract
 
 The core publishes the height with the row it belongs to:

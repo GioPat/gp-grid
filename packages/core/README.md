@@ -528,7 +528,7 @@ Column and row interaction events are object-shaped.
 On `grid.rows`:
 
 - `getViewRow(viewIndex): ViewRow<TData> | undefined` — `ViewRow` is `{ kind: "record"; id: RowId; viewIndex: number; record?: TData }`, built on request. `id` falls back to the source position when no `getRowId` is configured.
-- `getRecordById(rowId): TData | undefined` — answers for resident rows and for sources that provide a direct lookup; columnar and server windows outside the resident set are not searched.
+- `getRecordById(rowId): TData | undefined` — answers for resident rows and for sources that provide a direct lookup; columnar and server windows outside the resident set are not searched. Under a hierarchy it also answers the loaded record row `locate` finds, so a server grouping source finds its loaded leaves; a group id answers `undefined`.
 - `has(viewIndex)` — whether the view row exists; a `null` cell is a value, not an unloaded row.
 - `getSlotGeneration(viewIndex)` / `isSlotGenerationCurrent(viewIndex, generation)` — tag async renderer callbacks so stale slot assignments can be dropped.
 - `getData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
@@ -812,6 +812,27 @@ grid.rowGroups.setGrouping(null);       // back to the flat rows, no query
   `input.handleGroupToggle(rowIndex, pointerType?)`.
 
 See [Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+Server grouping: `createServerGroupingSource(service, config)` returns a data
+source over an application `ServerGroupingService` (`fetchChildren`,
+`fetchLeaves`). The grid asks for one group's children or leaves a page at a
+time, shows unloaded rows as loading rows, and never loads a collapsed group's
+leaves; the server owns membership, order, filtering and aggregates. A failed
+page collapses its group with `error`, and expanding it again retries.
+`encodeGroupId`/`decodeGroupId` convert group ids and paths, and the optional
+`HierarchicalRowAccess.requestRows`/`subscribe` let any supplied hierarchy load
+on demand. See [Server grouping](../../docs/features/server-grouping.md).
+
+```typescript
+import { GridCore, createServerGroupingSource } from "@gp-grid/core";
+
+const source = createServerGroupingSource(service, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  getRowId: (row) => row.id,
+});
+const grid = new GridCore({ columns, dataSource: source, rowHeight: 32 });
+```
 
 ### Editing and scroll motion
 

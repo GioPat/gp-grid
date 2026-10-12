@@ -3,6 +3,7 @@
 
 import type { CellValue, RowId } from "./basic";
 import type { RowAccess } from "./data-source";
+import type { AxisBounds } from "./geometry";
 
 export interface HierarchyRecordRow {
   kind: "record";
@@ -23,6 +24,8 @@ export interface HierarchyGroupRow {
   field: string;
   /** The group's key. */
   value: CellValue;
+  /** Why loading the group's children failed; expanding it again retries. */
+  error?: string;
 }
 
 export interface HierarchyTotalRow {
@@ -43,8 +46,20 @@ export interface HierarchyRecordChange {
 }
 
 /**
- * View rows of record, group and total kind. Every index in `[0, rowCount)`
- * is resident; `getValue` answers an aggregate, or `null`, on group and total rows.
+ * `rows` is already applied: `[start, end)` changed in place and no row moved. `view` is pending
+ * until the listener calls `apply()`, synchronously, and the rows move inside it; a provider with
+ * no listener applies at once. `error` is a failure no group row shows.
+ */
+export type HierarchyChange =
+  | { kind: "rows"; start: number; end: number }
+  | { kind: "view"; apply(): void }
+  | { kind: "error"; message: string };
+
+/**
+ * View rows of record, group and total kind. A row whose `getRow` is `undefined`
+ * is a placeholder: it renders as a loading row and takes no input, while
+ * `getRowId` still answers for it. `getValue` answers an aggregate, or `null`,
+ * on group and total rows.
  */
 export interface HierarchicalRowAccess<TData = unknown> extends RowAccess {
   readonly hierarchical: true;
@@ -59,6 +74,10 @@ export interface HierarchicalRowAccess<TData = unknown> extends RowAccess {
   getRecord?(viewRow: number): TData | undefined;
   /** The grid wrote these records in place; returns whether view rows moved. */
   recordsChanged?(changes: readonly HierarchyRecordChange[]): boolean;
+  /** The view rows the grid is about to show: the frozen prefix, then the overscan window. */
+  requestRows?(ranges: readonly AxisBounds[]): void;
+  /** Never notifies inside a call into the access; returns the unsubscribe. */
+  subscribe?(listener: (change: HierarchyChange) => void): () => void;
 }
 
 export const isHierarchicalRowAccess = <TData = unknown>(

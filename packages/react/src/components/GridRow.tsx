@@ -137,7 +137,7 @@ export const GridRow = <TData = unknown>(
   } = props;
   const ariaRowIndex = slot.rowIndex + headerRowCount + 1;
 
-  // C7: an unavailable frozen row has no data and renders no cells.
+  // C7 and PRD 009: an unavailable frozen row or a hierarchy placeholder renders no cells.
   if (slot.loading) {
     return (
       <div

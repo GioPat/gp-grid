@@ -611,6 +611,51 @@ needs every row resident (`rowData`, a client source or `useGridData`); a server
 source is rejected with `partial-source`. See
 [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
 
+## Server grouping
+
+```tsx
+import { useEffect, useMemo } from "react";
+import { Grid, createServerGroupingSource, type ServerGroupingService } from "@gp-grid/react";
+
+function SalesGrid({ service }: { service: ServerGroupingService<Sale> }) {
+  // One source per grid, created once: a new source is a new data source.
+  const source = useMemo(
+    () =>
+      createServerGroupingSource(service, {
+        dimensions: [{ field: "country" }, { field: "city" }],
+        measures: [
+          { field: "amount", aggregate: "sum" },
+          { field: "score", aggregate: "avg" },
+        ],
+        getRowId: (row) => row.id,
+        grandTotal: "top",
+      }),
+    [service],
+  );
+  // The grid never destroys a source passed as `dataSource`. destroy() only
+  // releases the current view, so StrictMode's second mount still works.
+  useEffect(() => () => source.destroy(), [source]);
+
+  return (
+    <Grid
+      columns={columns}
+      dataSource={source}            // no rowGrouping: it would be rejected as hierarchical-source
+      rowHeight={32}
+      groupLabelColumn="country"
+      labels={{ rowGroups: { loadFailed: "Could not load. Expand to retry." } }}
+    />
+  );
+}
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `gridRef.current?.core?.rowGroups`
+and `onRowGroupToggled` work as for local grouping. See
+[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |

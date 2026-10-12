@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareValues } from "../src/indexed-data-store/sorting";
 import { buildGroupTree, groupIdOf, type GroupTree, type MeasureValues } from "../src/row-grouping/group-tree";
-import { TAG_BOOLEAN, TAG_DATE, TAG_NULL, TAG_NUMBER, TAG_STRING, keyOf, keyTagOf, keyValue } from "../src/row-grouping/keys";
+import { TAG_BOOLEAN, TAG_DATE, TAG_NULL, TAG_NUMBER, TAG_STRING, keyOf, keyTagOf, keyValue } from "../src/hierarchy/keys";
 import type { CellValue, RowGroupDimension, SortModel } from "../src/types";
 import { columnarSource, objectSource, seededRandom, toColumns } from "./row-grouping-source";
 

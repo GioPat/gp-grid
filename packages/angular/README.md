@@ -265,6 +265,18 @@ server render may already contain the collapsed group rows (`role="treegrid"`).
 The label cell's parts, `GroupToggleComponent` and `GroupLabelComponent`, are
 exported. See [Row grouping and aggregation](../../docs/features/row-grouping.md).
 
+Server grouping: for a dataset that stays on a server, bind
+`createServerGroupingSource(service, config)` to `[dataSource]`, and no `[rowGrouping]`. The grid asks your service for one
+group's children or leaves a page at a time and never loads a collapsed group's
+leaves. Rows not loaded yet render as loading rows, and a group whose page failed
+collapses with an error and retries when expanded again. The source is read-only
+unless created with `writable: true`; keep it in a field. See
+[Server grouping](../../docs/features/server-grouping.md).
+
+```html
+<gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" groupLabelColumn="country" />
+```
+
 An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
 typed into a `number` column stores `60000`, and a draft the type cannot hold
 writes nothing.

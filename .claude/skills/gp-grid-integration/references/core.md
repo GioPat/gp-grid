@@ -323,6 +323,52 @@ unique and stable across queries. Sort and filter arrive in the request; the
 grid never regroups or re-aggregates a supplied hierarchy. See
 [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
 
+A hierarchy may also count rows it has not loaded: `getRow` answers `undefined`
+for such a *placeholder* (rendered as the loading row, no input) while `getRowId`
+and `locate` still answer its id. Two optional members carry the exchange:
+`requestRows(ranges)` receives the view rows about to show (the frozen prefix,
+then the overscan window, never the gap), and `subscribe(listener)` reports a
+`HierarchyChange` in a later task, never inside a call from the grid:
+`{ kind: "rows", start, end }` (changed in place, already applied),
+`{ kind: "view", apply }` (pending; the listener calls `apply()` at once and the
+rows move inside it) or `{ kind: "error", message }` (the grid's data error). A
+group row whose children failed to load carries `error`.
+
+### Server grouping
+
+`createServerGroupingSource(service, config)` is the built-in provider that loads
+on demand, over an application service. Pass it as `dataSource`, and no
+`rowGrouping` (rejected as `hierarchical-source`).
+
+```ts
+import { GridCore, createServerGroupingSource, type ServerGroupingService } from "@gp-grid/core";
+
+const service: ServerGroupingService<Sale> = {
+  // `path` [] is the root; the children are groups of dimension `path.length`.
+  fetchChildren: async ({ revision, grouping, path, range, sort, filter, signal }) => api.groups(/* … */),
+  // A group of the last dimension: its records, `rows[i]` being record `range.startRow + i` of the group.
+  fetchLeaves: async ({ revision, grouping, path, range, sort, filter, signal }) => api.leaves(/* … */),
+};
+
+const source = createServerGroupingSource(service, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  getRowId: (row) => row.id,
+  cache: { pageSize: 100, prefetchPages: 0 }, // exact request counts
+});
+const core = new GridCore({ columns, dataSource: source, rowHeight: 32 });
+// …
+core.destroy();
+source.destroy(); // the core never destroys its data source
+```
+
+Responses carry exact counts and echo the view's revision; anything else fails
+the branch, which collapses its group with `error`. What a transport must encode
+(`Date` keys, `Set` and `Date` filter values) is in SKILL.md's "Server grouping"
+section. The reference implementation is the mock in
+`packages/core/tests/server-grouping-mock.ts`. See
+[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
 ## Building a wrapper for a new framework
 
 The minimal wrapper does five things, in order:

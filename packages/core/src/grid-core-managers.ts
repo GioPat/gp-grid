@@ -24,7 +24,7 @@ import type { GridGeometryService } from "./geometry/grid-geometry";
 import type { FrozenRowsState } from "./geometry";
 import type { HeaderBandLayout } from "./types/geometry";
 import type { GridCoreConfig } from "./grid-core-config";
-import type { CellValue, ColumnDefinition } from "./types";
+import type { CellValue, ColumnDefinition, HierarchyChange } from "./types";
 import { createRecordWrites, type RecordWrites } from "./grid-core-record-writes";
 
 export interface GridManagersDeps<TData> {
@@ -48,6 +48,8 @@ export interface GridManagersDeps<TData> {
   onRowsLoaded: (totalRowsChanged: boolean) => void;
   /** The view-rows applier; it reads controllers built after the managers, so it is called lazily. */
   applyViewRowsChange: (change: () => boolean) => boolean;
+  /** PRD 009 D4; bound lazily to the row-groups controller. */
+  onHierarchyChange: (change: HierarchyChange) => void;
 }
 
 export interface GridManagers<TData> {
@@ -94,6 +96,7 @@ export const buildGridManagers = <TData>(
     getRowData: (rowIndex) => rowData.getRowData(rowIndex),
     getRow: (rowIndex) => rowData.getHierarchyRow(rowIndex),
     isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
+    isHierarchical: () => rowData.getHierarchy() !== null,
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
@@ -183,7 +186,7 @@ export const buildGridManagers = <TData>(
       batcher.start();
       try {
         batcher.emit({ type: "SCROLL_TO", scrollTop: 0 });
-        view.reconcile();
+        view.reconcileAfterLoad();
       } finally {
         batcher.flush();
       }
@@ -210,6 +213,7 @@ export const buildGridManagers = <TData>(
     getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
     onFrozenRowsChanged: config.onFrozenRowsChanged,
     getHeaderBands: deps.getHeaderBands,
+    requestHierarchyRows: () => rowData.requestHierarchyRows(),
   });
 
   // C8 paging context. The budget input deliberately reads no region layout:
@@ -249,6 +253,7 @@ export const buildGridManagers = <TData>(
     getRowId: config.getRowId,
     rowGrouping: config.rowGrouping,
     onRowGroupingRejected: config.onRowGroupingRejected,
+    onHierarchyChange: (change) => deps.onHierarchyChange(change),
     onRowsLoaded: (totalRowsChanged) => deps.onRowsLoaded(totalRowsChanged),
   });
 

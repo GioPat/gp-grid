@@ -77,6 +77,14 @@ import {
   type RowGroupsColumnsVariant,
   type RowGroupsMode,
 } from './conformance-row-groups';
+import {
+  createServerGroupsFixture,
+  SERVER_GROUPS_COLUMN_LAYOUT,
+  SERVER_GROUPS_HEADER_HEIGHT,
+  SERVER_GROUPS_LABEL_COLUMN,
+  SERVER_GROUPS_ROW_HEIGHT,
+  type ServerGroupsMode,
+} from './conformance-server-groups';
 
 interface ConformanceRow {
   id: number;
@@ -98,7 +106,8 @@ type FixtureArm =
   | { fixture: 'rowHeights'; mode: RowHeightsMode }
   | { fixture: 'autoFit'; mode: AutoFitMode }
   | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
-  | { fixture: 'rowGroups'; mode: RowGroupsMode };
+  | { fixture: 'rowGroups'; mode: RowGroupsMode }
+  | { fixture: 'serverGroups'; mode: ServerGroupsMode };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -107,7 +116,7 @@ const NO_GROUP_LIMITS: ColumnGroupLimits = {};
 
 /** Arms whose rows reach the grid through a data source take the columnar branch. */
 const isSourcedArm = (arm: FixtureArm): boolean => {
-  if (arm.fixture === 'rowGroups') return true;
+  if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups') return true;
   if (arm.fixture === 'frozen' || arm.fixture === 'rowHeights') return arm.mode !== 'object';
   return arm.fixture === 'autoFit' && arm.mode === 'paged';
 };
@@ -294,6 +303,13 @@ const createColumnarFixture = () => {
         <button data-testid="ungroup" (click)="ungroup()">Flat</button>
         <button data-testid="replace-revision" (click)="replaceRevision()">Rev</button>
         <button data-testid="format-country" (click)="setRowGroupColumns('formatted')">Fmt</button>
+        <button data-testid="use-server-groups" (click)="armServerGroups('immediate')">SG</button>
+        <button data-testid="use-server-groups-held" (click)="armServerGroups('held')">SGh</button>
+        <button data-testid="use-server-groups-frozen" (click)="armServerGroups('frozen')">SGf</button>
+        <button data-testid="release-responses" (click)="serverGroups.releaseResponses()">Rel</button>
+        <button data-testid="fail-next-leaves" (click)="serverGroups.failNextLeaves()">Fail</button>
+        <button data-testid="collapse-first-group" (click)="withCore(serverGroups.collapseFirstGroup)">C1</button>
+        <button data-testid="scroll-deep" (click)="withCore(serverGroups.scrollDeep)">Dp</button>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="activeHostHeight()">
@@ -397,6 +413,12 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   });
   protected readonly rowGroupsActive = computed(() => this.rowGroupsMode() !== 'off');
   protected readonly rowGroupsArm = signal<RowGroupsArm>({ columns: [], grouping: null });
+  protected readonly serverGroups = createServerGroupsFixture();
+  protected readonly serverGroupsMode = computed<ServerGroupsMode>(() => {
+    const arm = this.arm();
+    return arm.fixture === 'serverGroups' ? arm.mode : 'off';
+  });
+  protected readonly serverGroupsActive = computed(() => this.serverGroupsMode() !== 'off');
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
@@ -491,6 +513,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
         setBandHeights: (heights) => this.bandHeights.set(heights ?? NO_BAND_HEIGHTS),
       }),
       ...this.rowGroups.createHooks(() => this.coreOf()),
+      ...this.serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
         if (this.autoFitActive()) return this.autoFit.requestedRanges();
@@ -579,6 +602,12 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.armFixture({ fixture: 'rowGroups', mode: next });
   }
 
+  /** Server group arms (PRD 009): a fresh mock and source, then a remount. */
+  protected armServerGroups(next: ServerGroupsMode): void {
+    this.serverGroups.arm(next);
+    this.armFixture({ fixture: 'serverGroups', mode: next });
+  }
+
   /** In place: the grid keeps its core and regroups or relabels. */
   protected setRowGroupColumns(variant: RowGroupsColumnsVariant): void {
     const columns = this.rowGroups.columnsFor(this.rowGroupsMode(), variant);
@@ -605,6 +634,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeGroupLabelColumn(): string {
+    if (this.serverGroupsActive()) return SERVER_GROUPS_LABEL_COLUMN;
     return this.rowGroupsActive() ? this.rowGroups.labelColumn() : '';
   }
 
@@ -706,6 +736,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.serverGroupsActive()) return this.serverGroups.source() ?? this.columnarSource;
     if (this.rowGroupsActive()) return this.rowGroups.source() ?? this.columnarSource;
     if (this.autoFitActive()) return this.autoFit.sourceFor(this.autoFitMode()) ?? this.columnarSource;
     if (this.rowHeightsActive()) return this.rowHeights.sourceFor(this.rowHeightsMode()) ?? this.columnarSource;
@@ -714,6 +745,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    if (this.serverGroupsActive()) return this.serverGroups.columns();
     if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
     if (this.columnGroupsActive()) return this.groupsSchema().columns;
     const fitColumns = this.autoFitActive() ? this.autoFit.columnsFor(this.autoFitMode()) : undefined;
@@ -737,7 +769,9 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   protected activeFreezeRows(): FreezeRowsOptions | undefined {
     if (this.freezeOverride() !== null) return this.freezeOverride() ?? undefined;
-    return this.frozen.freezeRowsFor(this.frozenMode());
+    return this.serverGroupsActive()
+      ? this.serverGroups.freezeRowsFor(this.serverGroupsMode())
+      : this.frozen.freezeRowsFor(this.frozenMode());
   }
 
   // The emitted input type drops `| undefined` (ng-packagr), so the binding
@@ -747,6 +781,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeRowLoading(): RowLoadingOptions {
+    if (this.serverGroupsActive()) return NO_ROW_LOADING;
     if (this.rowGroupsActive()) return this.rowGroups.rowLoading() ?? NO_ROW_LOADING;
     const fitLoading = this.autoFitActive() ? this.autoFit.rowLoadingFor(this.autoFitMode()) : undefined;
     if (fitLoading !== undefined) return fitLoading;
@@ -764,6 +799,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.autoFitActive()) return AUTO_FIT_ROW_HEIGHT;
     if (this.columnGroupsActive()) return COLUMN_GROUPS_ROW_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_ROW_HEIGHT;
+    if (this.serverGroupsActive()) return SERVER_GROUPS_ROW_HEIGHT;
     return 32;
   }
 
@@ -773,12 +809,14 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.autoFitActive()) return AUTO_FIT_HEADER_HEIGHT;
     if (this.columnGroupsActive()) return COLUMN_GROUPS_HEADER_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_HEADER_HEIGHT;
+    if (this.serverGroupsActive()) return SERVER_GROUPS_HEADER_HEIGHT;
     return 36;
   }
 
   protected activeColumnLayout(): ColumnLayoutMode {
     if (this.autoFitActive()) return AUTO_FIT_COLUMN_LAYOUT;
     if (this.rowGroupsActive()) return ROW_GROUPS_COLUMN_LAYOUT;
+    if (this.serverGroupsActive()) return SERVER_GROUPS_COLUMN_LAYOUT;
     return this.columnGroupsActive() ? COLUMN_GROUPS_COLUMN_LAYOUT : this.columnLayout();
   }
 
