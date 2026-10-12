@@ -50,7 +50,7 @@ type Listener = (change: HierarchyChange) => void;
 const createNotifier = () => {
   const listeners = new Set<{ listener: Listener }>();
   const notify = (change: HierarchyChange) => {
-    for (const { listener } of [...listeners]) listener(change);
+    for (const { listener } of listeners) listener(change);
   };
   return {
     notify,

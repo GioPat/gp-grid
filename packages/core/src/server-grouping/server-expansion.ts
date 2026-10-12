@@ -97,7 +97,8 @@ export const createServerExpansion = <TData>(deps: ServerExpansionDeps<TData>): 
 
   const collapseAll = (): boolean => {
     let changed = false;
-    for (const { ordinal } of [...root.expanded]) changed = collapse(root, ordinal) || changed;
+    const ordinals = root.expanded.map((child) => child.ordinal);
+    for (const ordinal of ordinals) changed = collapse(root, ordinal) || changed;
     return changed;
   };
 

@@ -53,7 +53,7 @@ export const createGroupNode = (
 ): GroupNode => {
   const tag = keyTagOf(node.key);
   const name = TAG_NAMES[tag];
-  if (name === undefined) throw new RangeError(`Invalid group key: ${String(node.key)}`);
+  if (name === undefined) throw new RangeError(`Invalid group key of type ${typeof node.key}`);
   const key = keyOf(node.key, tag);
   const path: GroupPathStep[] = [...parentPath, [dimensionId, name, key]];
   return {
@@ -244,9 +244,9 @@ export class Branch<TData> {
   }
 
   #invalidate(): void {
-    for (let branch: Branch<TData> | undefined = this; branch !== undefined; branch = branch.#parent?.branch) {
-      branch.#rowsBefore = undefined;
-    }
+    this.#rowsBefore = undefined;
+    const parent = this.#parent;
+    if (parent !== null) parent.branch.#invalidate();
   }
 
   #prefix(): number[] {

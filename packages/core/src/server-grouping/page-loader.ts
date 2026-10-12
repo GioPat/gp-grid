@@ -123,7 +123,7 @@ const planPages = <TData>(index: ViewIndex<TData>, ranges: readonly AxisBounds[]
     visitPagesIn(index, range, require);
   };
   for (const range of ranges) requireRange(range);
-  for (const ref of [...required.values()]) addNeighbours(ref, prefetchPages, wanted);
+  for (const ref of required.values()) addNeighbours(ref, prefetchPages, wanted);
   return { required, wanted };
 };
 
