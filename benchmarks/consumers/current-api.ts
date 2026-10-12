@@ -5,7 +5,9 @@ import {
   createDomMeasurementHost,
   createInitialState,
   createRowGrouping,
+  decodeGroupId,
   defaultPinIcon,
+  encodeGroupId,
   formatGroupLabel,
   fragmentHeaderId,
   isEmptyGroupCell,
@@ -52,11 +54,13 @@ import type {
   GridState,
   GridViewportApi,
   GroupLabelRendererParams,
+  GroupPathStep,
   HeaderBandLayout,
   HeaderFragment,
   HeaderFragments,
   HeaderRendererParams,
   HierarchicalRowAccess,
+  HierarchyChange,
   HierarchyGroupRow,
   HierarchyRecordChange,
   HierarchyRecordRow,
@@ -157,7 +161,7 @@ const freezeRows: FreezeRowsOptions = { count: 3, maxCount: 100, minSuffixHeight
 const labelOverrides: GridLabelOverrides = {
   frozenRowsLimited: "{effective} of {requested} rows frozen",
   columnSchemaErrors: schemaErrorLabels,
-  rowGroups: { label: "{value}: {count}" },
+  rowGroups: { label: "{value}: {count}", loadFailed: "Loading failed" },
 };
 // Row grouping (PRD 008): dimensions, measures, a custom aggregator and a total row.
 const decade: RowGroupDimension = {
@@ -518,6 +522,27 @@ const accessIsHierarchy = (access: HierarchicalRowAccess<Row> | { rowCount: numb
   isHierarchicalRowAccess<Row>(access);
 const recordOf = (access: HierarchicalRowAccess<Row>): Row | undefined => access.getRecord?.(0);
 const idOf = (access: HierarchicalRowAccess<Row>): RowId => access.getRowId(0);
+// Loading on demand (PRD 009): the rows the grid asks for, the changes a hierarchy
+// notifies, a placeholder (an id but no row) and a group whose children failed.
+const askForRows = (access: HierarchicalRowAccess<Row>): void =>
+  access.requestRows?.([
+    { start: 0, end: 3 },
+    { start: 40, end: 80 },
+  ]);
+const listen = (access: HierarchicalRowAccess<Row>): (() => void) | undefined =>
+  access.subscribe?.((change: HierarchyChange) => {
+    if (change.kind === "view") change.apply();
+    if (change.kind === "rows") void [change.start, change.end];
+    if (change.kind === "error") void change.message;
+  });
+const isPlaceholder = (access: HierarchicalRowAccess<Row>): boolean =>
+  access.getRow(0) === undefined && core.rows.has(0) === false && core.rows.getId(0) !== undefined;
+const loadError = (row: HierarchyGroupRow): string | undefined => row.error;
+const loadFailedLabel: string = groupLabels.loadFailed;
+// Group ids over named-tag path steps, the same ids the local engine writes.
+const groupPath: GroupPathStep[] = [["name", "s", "Ada"]];
+const groupId: string = encodeGroupId(groupPath);
+const decodedPath: GroupPathStep[] | undefined = decodeGroupId(groupId);
 
 void rectangle;
 void rowGroupCommands;
@@ -554,6 +579,12 @@ void angularLabelParts;
 void accessIsHierarchy;
 void recordOf;
 void idOf;
+void askForRows;
+void listen;
+void isPlaceholder;
+void loadError;
+void loadFailedLabel;
+void decodedPath;
 void nameBounds;
 void contentBounds;
 void rowsBounds;
