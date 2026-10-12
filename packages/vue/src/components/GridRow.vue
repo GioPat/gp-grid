@@ -81,7 +81,9 @@ const cellProps = (column: ResolvedColumn) => ({
     :class="rowClasses"
     role="row"
     :aria-rowindex="ariaRowIndex"
-    v-bind="rowAttributes"
+    :data-row-kind="rowAttributes['data-row-kind']"
+    :aria-level="rowAttributes['aria-level']"
+    :aria-expanded="rowAttributes['aria-expanded']"
     :style="rowStyle"
   >
     <GridCell
