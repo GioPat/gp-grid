@@ -554,6 +554,47 @@ binds to its expander's `pointerdown`; `renderGroupLabel(params, renderer?)`
 renders the label. See
 [docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
 
+## Server grouping
+
+```vue
+<script setup lang="ts">
+import { onUnmounted } from "vue";
+import { GpGrid, createServerGroupingSource } from "@gp-grid/vue";
+import { salesService } from "./sales-service"; // a ServerGroupingService<Sale>
+
+// Created once in setup, outside reactive state: one source per grid.
+const source = createServerGroupingSource(salesService, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  getRowId: (row) => row.id,
+  grandTotal: "top",
+});
+// GpGrid never destroys a source passed as `data-source`.
+onUnmounted(() => source.destroy());
+</script>
+
+<template>
+  <!-- No :row-grouping: it would be rejected as hierarchical-source. -->
+  <GpGrid
+    :columns="columns"
+    :data-source="source"
+    :row-height="32"
+    group-label-column="country"
+  />
+</template>
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `grid.value?.core?.rowGroups`
+and `:on-row-group-toggled` work as for local grouping. See
+[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |

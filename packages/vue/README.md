@@ -759,6 +759,30 @@ the flat shell and groups after the first client load. See
 and returns `handleGroupTogglePointerDown(rowIndex, event)` for the expander of a
 custom grid; `renderGroupLabel(params, renderer?)` renders the label.
 
+Server grouping: for a dataset that stays on a server, pass
+`createServerGroupingSource(service, config)` as `data-source`, and no `row-grouping`. The grid asks your service for one group's
+children or leaves a page at a time and never loads a collapsed group's leaves.
+Rows not loaded yet render as loading rows, and a group whose page failed
+collapses with an error and retries when expanded again. The source is read-only
+unless created with `writable: true`. Create it once, like a grouping. See
+[Server grouping](../../docs/features/server-grouping.md).
+
+```vue
+<script setup lang="ts">
+import { GpGrid, createServerGroupingSource } from "@gp-grid/vue";
+
+const source = createServerGroupingSource(service, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  getRowId: (row) => row.id,
+});
+</script>
+
+<template>
+  <GpGrid :columns="columns" :data-source="source" :row-height="32" group-label-column="country" />
+</template>
+```
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference

@@ -97,6 +97,16 @@ All notable changes to gp-grid will be documented in this file.
 - `isMutableDataSource(source)` tells a wrapper whether a source notifies transactions
 - See [Row grouping and aggregation](./features/row-grouping.md)
 
+#### Server grouping (PRD 009)
+- `createServerGroupingSource(service, config): ServerGroupingSource<TData>` in `@gp-grid/core`: a data source (`loadMode: "all"`) whose every query builds a view over an application `ServerGroupingService` and binds as a supplied hierarchy. `ServerGroupingConfig`: `dimensions`, `measures` (aggregate names sent as is), `getRowId`, `defaultExpandedDepth` (default `0`), `grandTotal`, `initialState`, `cache` (`RowCacheOptions`), `maxConcurrentRequests` (default `4`) and `writable` (default `false`). An invalid configuration throws `RangeError("Invalid serverGrouping.<field>: <value>")`. `getState()` returns the expansion by id, kept across queries, and `destroy()` releases the current view. An application that groups on the server bundles none of the local engine. React, Vue and Angular re-export it with `encodeGroupId`, `decodeGroupId`, `HierarchyChange` and the service types.
+- The service types: `ServerGroupingService<TData>` (`fetchChildren`, `fetchLeaves`), `ServerGroupChildrenRequest`, `ServerGroupChildrenResponse`, `ServerGroupNode`, `ServerLeavesRequest`, `ServerLeavesResponse<TData>`, `ServerGroupingSpec` and `GroupPathStep` (`[dimensionId, tag, key]`, tags `z`, `s`, `n`, `b`, `d`). A request carries the view's revision, the parent path, a half-open range, the grid's sort and filter and an `AbortSignal`; a response carries exact counts. A stale revision, a wrong count, a page of the wrong length or an object key fails the response's branch.
+- `encodeGroupId(path)` and `decodeGroupId(id)`: group ids from named-tag path steps and back, the ids the local engine writes, so an application builds `initialState` and reads a group row's path
+- Lazy loading: expanding a loaded group inserts its counted placeholders at once and requests only the pages that come into view, the frozen prefix first and never the rows between it and a deep window. Requests in flight are bounded by `maxConcurrentRequests`, required pages start before prefetch, and loaded pages above `maxPages` are evicted, never a required page or one holding an expanded group. A late response never reopens a collapsed group or lands in a newer query.
+- The loading row for placeholders: an unloaded row of a hierarchy renders the cell-less `.gp-grid-row--loading` row in the frozen prefix and in the suffix, shows a skeleton bar, takes no input and keeps a deterministic pending id (`gp-pending:<position>@<parentId>`)
+- The error state: a group whose page failed collapses and carries `error`; its row gets `.gp-grid-row--error` and `data-row-error`, and its label cell's `title` is `labels.rowGroups.loadFailed`. Expanding it again retries. A failed root request is the grid's data error.
+- `pnpm test:server-groups` runs `benchmarks/scripts/server-grouping-smoke.mjs` on the production core over 1,000,000 leaves and asserts the placeholder memory, the request counts and the page and concurrency budgets
+- See [Server grouping](./features/server-grouping.md)
+
 #### Scroll motion
 - `GridCore.viewport.isScrollMotionActive()` and `interruptScrollMotion()`: whether a touch fling or a wheel glide is still moving the content, and a command that stops it where it is. An adapter registers its motion with `viewport.setScrollMotionHandle(handle)` / `clearScrollMotionHandle(handle)` (`ScrollMotionHandle`: `isActive()`, `interrupt()`); `TouchScrollController` does so on attach and exposes `interrupt()`.
 - `InputHandler.handleWheel(deltaY, deltaX, dampening, deltaMode?)` takes the `WheelEvent.deltaMode`: line and page deltas (modes 1 and 2) are converted to pixels (40 and 800 per unit) before dampening
@@ -206,6 +216,17 @@ All notable changes to gp-grid will be documented in this file.
 - A group or total row cell without an aggregate renders empty and calls no cell renderer, and `edit.startPeek` returns `false` on it; an aggregate cell calls the renderer with `rowKind` and no `rowData`
 - No row drag starts while a hierarchy is bound
 - A transaction refresh under a hierarchy reloads through the full query path and keeps the active record and the scroll anchor by row id
+
+#### Server grouping (PRD 009)
+- `HierarchicalRowAccess` gains two optional members. `requestRows(ranges)` receives the view rows the grid is about to show, the frozen prefix and then the overscan window, after every full load, change of the view rows, vertical scroll, viewport resize and frozen-rows change; a hierarchy with it gets no flat page requests. `subscribe(listener)` reports a `HierarchyChange` and returns the unsubscribe; the grid subscribes when it binds the hierarchy and unsubscribes when it binds another or is destroyed.
+- `HierarchyChange`: `{ kind: "rows", start, end }` is already applied, and the grid bumps the data revision and re-syncs the mounted rows without `DATA_LOADED`, placing waiting row heights by id; `{ kind: "view", apply }` is pending, and the grid captures the anchor and the active row by id, calls `apply()` and restores both; `{ kind: "error", message }` emits `DATA_ERROR`
+- `HierarchyGroupRow.error` (optional): why loading the group's children failed. `hierarchyRowAttributes` adds `.gp-grid-row--error` and `data-row-error` (`HierarchyRowAttributes["data-row-error"]`), `groupCellOf` sets `GroupCell.title` on the label cell, and the stylesheet colors that label with `--gp-grid-error-text`.
+- `GridRowGroupLabels.loadFailed`, default `"Loading failed. Expand again to retry."`. A full `GridRowGroupLabels` literal must include it; `GridLabelOverrides` stays partial.
+- A hierarchy row whose `getRow` is `undefined` is a placeholder: `rows.has(i)` is `false` and `rows.getViewRow(i)` is `undefined`, while `rows.getId(i)` answers its id
+- Under a hierarchy a suffix row that is not available gets a `loading` slot, as a frozen one does, and the slot is re-planned when its loading state changes. A flat paged grid's unavailable suffix row still has no slot.
+- Under a hierarchy `refresh()` keeps the scroll anchor and the active row by id, as `refreshFromTransaction()` does. After either, an anchor or active row whose id the view cannot locate keeps its old index when that index now holds a placeholder.
+- Under a hierarchy `rows.getRecordById(id)` also answers the loaded record row `locate` finds, after the data source's own `getRecordById`; a group or placeholder id answers `undefined`
+- Group ids and their typed key paths come from a module both engines share, so a server group and a local group over the same path have the same id
 
 #### Vue rendering
 - Scrolling no longer re-renders every mounted row and cell. A cell re-renders when its row is re-assigned (`slot.generation`) or when a batch can change core-backed content; a batch that only places rows and columns leaves it alone. `useGpGrid().renderToken` still bumps once per batch.
@@ -396,6 +417,7 @@ core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl)
 - `sortFilter.setFilter()` accepts canonical grouped filters plus legacy flat/string inputs for migration
 
 ### Fixed
+- Vue no longer rewrites a grouped row's inline style on every re-render: `GridRow.vue` binds `data-row-kind`, `data-row-error`, `aria-level` and `aria-expanded` one by one again instead of spreading them with `v-bind` beside the string `:style`
 - Angular refreshes the grid after a `MutableDataSource` transaction (`updateRow`, `addRows`, `removeRows`, `updateCell`), as React and Vue do
 - `GpGrid.vue` no longer destroys a caller-provided `dataSource` on unmount or when the prop changes; only a source it built from `rowData` is destroyed. A replaced source's transaction subscription is released.
 - Vue's `useGpGrid` destroys its core, and a source it built from `rowData`, on unmount, and applies transactions through `refreshFromTransaction`
