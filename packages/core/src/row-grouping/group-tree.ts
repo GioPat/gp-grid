@@ -12,7 +12,7 @@ import {
   type TreeLevel,
 } from "./group-layout";
 import { keyComparator, measureComparator, resolveLevelOrders, type LevelOrder } from "./group-order";
-import { TAG_DATE, TAG_OBJECT, childGroupId, keyOf, keyTagOf, type GroupKey } from "./keys";
+import { TAG_DATE, TAG_OBJECT, childGroupId, keyOf, keyTagOf, type GroupKey } from "../hierarchy/keys";
 
 export type { GroupTree } from "./group-layout";
 

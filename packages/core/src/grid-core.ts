@@ -95,6 +95,7 @@ export class GridCore<TData = unknown> {
       onRowsLoaded: (totalRowsChanged) =>
         this.rowHeightsController.onRowsLoaded(totalRowsChanged),
       applyViewRowsChange: (change) => applyViewRowsChange(this.hierarchyChange, change),
+      onHierarchyChange: (change) => this.rowGroupsController.applyHierarchyChange(change),
     });
     this.rowData = managers.rowData;
     this.rowHeightOverrides = new RowHeightOverrides({
@@ -194,6 +195,7 @@ export class GridCore<TData = unknown> {
       geometry: this.geometry,
       retainEditColumn: (columnId) => this.retainEditColumn(columnId),
       onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
+      onRowsLoaded: (changed) => this.rowHeightsController.onRowsLoaded(changed),
       isDestroyed: () => this.isDestroyed,
     });
     this.rows = rowControllers.rows;
@@ -221,7 +223,7 @@ export class GridCore<TData = unknown> {
   /** Load the initial data. */
   async initialize(): Promise<void> {
     await this.rowData.loadInitial();
-    this.view.reconcile();
+    this.view.reconcileAfterLoad();
   }
 
   /**
@@ -243,23 +245,12 @@ export class GridCore<TData = unknown> {
 
   /** Reload everything from the data source. */
   async refresh(): Promise<void> {
-    await this.rowData.loadInitial();
-    this.view.reconcile();
+    await this.reload(() => this.rowData.loadInitial());
   }
 
-  /**
-   * Fast-path refresh after `MutableDataSource` transactions: only the
-   * visible window is re-fetched. Under a hierarchy the anchor and the active
-   * row follow their identity.
-   */
+  /** Fast-path refresh after `MutableDataSource` transactions: only the visible window is re-fetched. */
   async refreshFromTransaction(): Promise<void> {
-    const reload = () => this.rowData.refreshFromTransaction();
-    if (this.rowData.getHierarchy()) {
-      await reloadViewRows(this.hierarchyChange, reload);
-      return;
-    }
-    await reload();
-    this.view.reconcile();
+    await this.reload(() => this.rowData.refreshFromTransaction());
   }
 
   /**
@@ -286,6 +277,16 @@ export class GridCore<TData = unknown> {
     this.sortFilter.destroy();
     this.rowData.destroy();
     this.batcher.clearListeners();
+  }
+
+  /** Under a hierarchy the anchor and the active row follow their identity. */
+  private async reload(load: () => Promise<void>): Promise<void> {
+    if (this.rowData.getHierarchy()) {
+      await reloadViewRows(this.hierarchyChange, load);
+      return;
+    }
+    await load();
+    this.view.reconcileAfterLoad();
   }
 
   /** Bounded keep-alive for the edited column (B7), published as a batch. */

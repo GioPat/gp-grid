@@ -5,7 +5,7 @@ import { compareValues } from "../indexed-data-store/sorting";
 import type { CellValue, SortDirection } from "../types";
 import type { FlatRowSource } from "../types/row-grouping-engine";
 import type { TreeLevel } from "./group-layout";
-import { keyTagOf } from "./keys";
+import { keyTagOf } from "../hierarchy/keys";
 
 type Direction = 1 | -1;
 

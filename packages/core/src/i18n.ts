@@ -67,6 +67,8 @@ export interface GridRowGroupLabels {
   label: string;
   /** Grand total row label. Token: `{count}`. */
   grandTotal: string;
+  /** Title of a group's label cell after its children failed to load (PRD 009). */
+  loadFailed: string;
 }
 
 /**
@@ -204,6 +206,7 @@ export const defaultGridLabels: GridLabels = {
   rowGroups: {
     label: "{value} ({count})",
     grandTotal: "Grand total",
+    loadFailed: "Loading failed. Expand again to retry.",
   },
 };
 

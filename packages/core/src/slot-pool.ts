@@ -29,6 +29,8 @@ export interface SlotPoolManagerOptions {
    * columnar row renders with no source record.
    */
   isRowAvailable: (rowIndex: number) => boolean;
+  /** Whether a hierarchy is bound, whose unavailable rows mount as loading slots; flat when omitted. */
+  isHierarchical?: () => boolean;
 }
 
 interface SlotPoolState {
@@ -169,6 +171,7 @@ export class SlotPoolManager {
       rowCount: options.getRowCount(),
       regions: options.getRowRegions(),
       isRowAvailable: (rowIndex) => options.isRowAvailable(rowIndex),
+      isHierarchical: () => options.isHierarchical?.() ?? false,
       getRowData: (rowIndex) => options.getRowData(rowIndex),
       getRow: (rowIndex) => options.getRow?.(rowIndex),
       getRowOffset: (rowIndex) => options.getRowOffset(rowIndex),

@@ -15,6 +15,12 @@
   font-weight: 700;
 }
 
+/* A group whose children failed to load; the label cell's title says so too. The
+   attribute, not the class, reaches the frozen pin layer's row as well. */
+:where([data-row-error] .gp-grid-cell--group-label) {
+  color: var(--gp-grid-error-text);
+}
+
 :where(.gp-grid-cell--group-indent) {
   padding-inline-start: calc(
     var(--gp-grid-cell-padding-inline) + var(--gp-grid-group-depth, 0) * var(--gp-grid-group-indent)
@@ -80,8 +86,36 @@
   content: none;
 }
 
+/* A placeholder of a hierarchy shows a skeleton bar; the flat frozen placeholder stays static. */
+:where([role="treegrid"] .gp-grid-row--loading)::before {
+  content: "";
+  position: absolute;
+  top: 35%;
+  bottom: 35%;
+  inset-inline-start: var(--gp-grid-cell-padding-inline);
+  width: min(40%, 240px);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gp-grid-border-light), var(--gp-grid-border), var(--gp-grid-border-light));
+  background-size: 200% 100%;
+  animation: gp-grid-skeleton 1.2s linear infinite;
+}
+
+@keyframes gp-grid-skeleton {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :where(.gp-grid-group-toggle)::before {
     transition: none;
+  }
+
+  :where([role="treegrid"] .gp-grid-row--loading)::before {
+    animation: none;
   }
 }

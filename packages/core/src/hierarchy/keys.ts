@@ -1,4 +1,4 @@
-// packages/core/src/row-grouping/keys.ts
+// packages/core/src/hierarchy/keys.ts
 // Typed dimension keys and the group id encoding.
 
 import type { CellValue, RowId } from "../types";
@@ -13,13 +13,14 @@ export const TAG_OBJECT = -1;
 /** Scalar part of a key; a date is keyed by its timestamp. */
 export type GroupKey = string | number | boolean | null;
 
-/** One level of a group path: the dimension id, the key's tag and the key. */
-export type GroupPathStep = readonly [dimensionId: string, tag: number, key: GroupKey];
+/** One level of a group path: the dimension id, the key's numeric tag and the key. */
+export type TaggedStep = readonly [dimensionId: string, tag: number, key: GroupKey];
 
 export const GROUP_ID_PREFIX = "gp-group:";
 export const TOTAL_ROW_ID = "gp-total";
 
-const TAG_NAMES = ["z", "s", "n", "b", "d"] as const;
+/** Tag names by numeric tag, as written inside a group id. */
+export const TAG_NAMES = ["z", "s", "n", "b", "d"] as const;
 
 /** Tag of a raw value or a `toKey` result; `TAG_OBJECT` needs a `toKey`. */
 export const keyTagOf = (value: unknown): number => {
@@ -54,7 +55,7 @@ const jsonKey = (key: GroupKey): GroupKey =>
 const stepJson = (dimensionId: string, tag: number, key: GroupKey): string =>
   JSON.stringify([dimensionId, TAG_NAMES[tag], jsonKey(key)]);
 
-export const encodeGroupId = (path: readonly GroupPathStep[]): string =>
+export const encodeTaggedId = (path: readonly TaggedStep[]): string =>
   `${GROUP_ID_PREFIX}[${path.map((step) => stepJson(...step)).join(",")}]`;
 
 /** Id of a child group from its parent's id, `null` under the root. */
@@ -75,7 +76,7 @@ const keyMatchesTag = (tag: number, key: unknown): boolean => {
   return typeof key === "number";
 };
 
-const decodeStep = (step: unknown): GroupPathStep | undefined => {
+const decodeStep = (step: unknown): TaggedStep | undefined => {
   if (!Array.isArray(step) || step.length !== 3) return undefined;
   const [dimensionId, name, raw] = step as unknown[];
   const tag = TAG_NAMES.indexOf(name as (typeof TAG_NAMES)[number]);
@@ -94,11 +95,11 @@ const parseJson = (text: string): unknown => {
 };
 
 /** The path of a group id, or `undefined` when `id` is not one. */
-export const decodeGroupId = (id: RowId): GroupPathStep[] | undefined => {
+export const decodeTaggedId = (id: RowId): TaggedStep[] | undefined => {
   if (typeof id !== "string" || !id.startsWith(GROUP_ID_PREFIX)) return undefined;
   const parsed = parseJson(id.slice(GROUP_ID_PREFIX.length));
   if (!Array.isArray(parsed)) return undefined;
-  const path: GroupPathStep[] = [];
+  const path: TaggedStep[] = [];
   for (const step of parsed) {
     const decoded = decodeStep(step);
     if (decoded === undefined) return undefined;

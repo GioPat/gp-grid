@@ -15,6 +15,7 @@ import { formatGroupLabel } from "./row-group-layout";
 export interface HierarchyRowAttributes {
   className: string;
   "data-row-kind"?: HierarchyRowKind;
+  "data-row-error"?: boolean;
   "aria-level"?: number;
   "aria-expanded"?: boolean;
 }
@@ -27,14 +28,22 @@ const ROW_KIND_CLASS: Record<HierarchyRowKind, string> = {
 
 const FLAT_ROW: HierarchyRowAttributes = { className: "" };
 
+/** A group whose children failed to load; expanding it again retries. */
+const hasLoadError = (row: HierarchyRow): boolean => row.kind === "group" && row.error !== undefined;
+
 export const hierarchyRowAttributes = (row: HierarchyRow | undefined): HierarchyRowAttributes => {
   if (row === undefined) return FLAT_ROW;
-  return {
+  const attributes: HierarchyRowAttributes = {
     className: ROW_KIND_CLASS[row.kind],
     "data-row-kind": row.kind,
     "aria-level": row.depth + 1,
     "aria-expanded": row.kind === "group" ? row.expanded : undefined,
   };
+  if (hasLoadError(row)) {
+    attributes.className += " gp-grid-row--error";
+    attributes["data-row-error"] = true;
+  }
+  return attributes;
 };
 
 /** The custom property the label column's indent reads. */
@@ -49,6 +58,8 @@ export interface GroupCell {
   label: string;
   readOnly: boolean;
   className: string;
+  /** The label cell's title on a group whose children failed to load. */
+  title?: string;
 }
 
 const FLAT_CELL: GroupCell = { indent: false, labelRow: null, label: "", readOnly: false, className: "" };
@@ -77,6 +88,7 @@ export const groupCellOf = (
     label: formatGroupLabel(row, input.columns, input.labels),
     readOnly: true,
     className: "gp-grid-cell--group-indent gp-grid-cell--group-label",
+    ...(hasLoadError(row) && { title: input.labels.rowGroups.loadFailed }),
   };
 };
 

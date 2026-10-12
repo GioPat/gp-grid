@@ -7,14 +7,15 @@ import {
   TAG_NUMBER,
   TAG_STRING,
   childGroupId,
-  decodeGroupId,
-  encodeGroupId,
+  decodeTaggedId,
+  encodeTaggedId,
   keyOf,
   keyTagOf,
   keyValue,
-  type GroupPathStep,
-} from "../src/row-grouping/keys";
-import type { CellValue, RowGroupDimension } from "../src/types";
+  type TaggedStep,
+} from "../src/hierarchy/keys";
+import { decodeGroupId, encodeGroupId } from "../src/hierarchy/group-path";
+import type { CellValue, GroupPathStep, RowGroupDimension } from "../src/types";
 import { columnarSource, objectSource, seededRandom } from "./row-grouping-source";
 
 const build = (rows: Record<string, CellValue | undefined>[], dimensions: RowGroupDimension[]) =>
@@ -77,25 +78,25 @@ describe("row grouping keys", () => {
   });
 
   it("encodes a path as JSON triples and decodes it back", () => {
-    const path: GroupPathStep[] = [
+    const path: TaggedStep[] = [
       ["country", TAG_STRING, "IT"],
       ["year", TAG_NUMBER, 2024],
     ];
-    const id = encodeGroupId(path);
+    const id = encodeTaggedId(path);
     expect(id).toBe('gp-group:[["country","s","IT"],["year","n",2024]]');
-    expect(decodeGroupId(id)).toEqual(path);
+    expect(decodeTaggedId(id)).toEqual(path);
     expect(childGroupId(childGroupId(null, ...path[0]!), ...path[1]!)).toBe(id);
   });
 
   it("writes a non-finite number as a string", () => {
-    const id = encodeGroupId([["k", TAG_NUMBER, Number.NaN]]);
+    const id = encodeTaggedId([["k", TAG_NUMBER, Number.NaN]]);
     expect(id).toBe('gp-group:[["k","n","NaN"]]');
-    expect(decodeGroupId(id)).toEqual([["k", TAG_NUMBER, Number.NaN]]);
+    expect(decodeTaggedId(id)).toEqual([["k", TAG_NUMBER, Number.NaN]]);
   });
 
   it("decodes nothing that is not a group id", () => {
     for (const id of [1, "gp-total", "gp-group:", "gp-group:{}", 'gp-group:[["k","x",1]]', 'gp-group:[["k","s",1]]']) {
-      expect(decodeGroupId(id)).toBeUndefined();
+      expect(decodeTaggedId(id)).toBeUndefined();
     }
   });
 
@@ -117,17 +118,57 @@ describe("row grouping keys", () => {
     };
     for (let i = 0; i < 300; i++) {
       const depth = 1 + Math.floor(random() * 3);
-      const path: GroupPathStep[] = Array.from({ length: depth }, (_, level) => {
+      const path: TaggedStep[] = Array.from({ length: depth }, (_, level) => {
         const value = pick();
         const tag = keyTagOf(value);
         return [`dim${level}`, tag, keyOf(value, tag)];
       });
-      expect(decodeGroupId(encodeGroupId(path))).toEqual(path);
+      expect(decodeTaggedId(encodeTaggedId(path))).toEqual(path);
     }
   });
 
   it("tags booleans and folds -0 into 0", () => {
     expect(keyTagOf(true)).toBe(TAG_BOOLEAN);
     expect(Object.is(keyOf(-0, TAG_NUMBER), 0)).toBe(true);
+  });
+});
+
+describe("public group ids (PRD 009 D1)", () => {
+  const path: GroupPathStep[] = [
+    ["none", "z", null],
+    ["country", "s", "IT"],
+    ["year", "n", 2024],
+    ["active", "b", false],
+    ["day", "d", 1_700_000_000_000],
+  ];
+
+  it("round-trips a path over every tag and matches the engine's id", () => {
+    const id = encodeGroupId(path);
+    expect(id).toBe(
+      'gp-group:[["none","z",null],["country","s","IT"],["year","n",2024],["active","b",false],["day","d",1700000000000]]',
+    );
+    expect(decodeGroupId(id)).toEqual(path);
+    expect(id).toBe(
+      encodeTaggedId([
+        ["none", TAG_NULL, null],
+        ["country", TAG_STRING, "IT"],
+        ["year", TAG_NUMBER, 2024],
+        ["active", TAG_BOOLEAN, false],
+        ["day", TAG_DATE, 1_700_000_000_000],
+      ]),
+    );
+  });
+
+  it("encodes the root and a non-finite number as the engine writes them", () => {
+    expect(decodeGroupId(encodeGroupId([]))).toEqual([]);
+    const id = encodeGroupId([["k", "n", "NaN"]]);
+    expect(id).toBe('gp-group:[["k","n","NaN"]]');
+    expect(decodeGroupId(id)).toEqual([["k", "n", Number.NaN]]);
+  });
+
+  it("decodes nothing from a foreign id", () => {
+    for (const id of ["r1", 7, "gp-total", "gp-pending:0@gp-group:[]", 'gp-group:[["k","x",1]]']) {
+      expect(decodeGroupId(id)).toBeUndefined();
+    }
   });
 });

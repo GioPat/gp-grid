@@ -14,7 +14,7 @@ import {
   type GroupedView,
   type GroupingSpec,
 } from "./grouped-view";
-import { GROUP_ID_PREFIX, TOTAL_ROW_ID, keyValue } from "./keys";
+import { GROUP_ID_PREFIX, TOTAL_ROW_ID, keyValue } from "../hierarchy/keys";
 
 type Reader = (row: number) => CellValue;
 

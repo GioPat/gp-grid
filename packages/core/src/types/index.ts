@@ -112,6 +112,7 @@ export type {
   HierarchyRow,
   HierarchyRowKind,
   HierarchyRecordChange,
+  HierarchyChange,
   HierarchicalRowAccess,
   RowGroupDimension,
   RowGroupAggregator,
@@ -126,6 +127,18 @@ export type {
   RowGroupToggledEvent,
 } from "./row-groups";
 export { isHierarchicalRowAccess } from "./row-groups";
+
+// Server grouping service
+export type {
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+} from "./server-grouping";
 
 // Columnar source types
 export type {

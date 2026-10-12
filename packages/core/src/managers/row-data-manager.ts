@@ -17,6 +17,7 @@ import { PaginatedRowLoader } from "./paginated-row-loader";
 import { RowIdDiagnostics } from "./row-id-diagnostics";
 import { RowStore } from "./row-store";
 import { RowViewBinder } from "./row-view-binder";
+import { hierarchyLoadRanges } from "./hierarchy-load-ranges";
 import { refreshTransactionData } from "../grid-core-operations";
 import type { RowDataManagerOptions } from "./row-data-manager-options";
 
@@ -170,8 +171,20 @@ export class RowDataManager<TData = unknown> {
     return this.binder.setGrouping(grouping);
   }
 
+  /** A hierarchy that loads its own rows is asked for them instead of any page. */
   requestVisibleRows(): void {
+    if (this.store.getHierarchy()?.requestRows) {
+      this.requestHierarchyRows();
+      return;
+    }
     this.paginated.requestVisibleRows();
+  }
+
+  /** The hierarchy branch of `requestVisibleRows` alone; a no-op without a self-loading hierarchy. */
+  requestHierarchyRows(): void {
+    const hierarchy = this.store.getHierarchy();
+    if (hierarchy?.requestRows === undefined) return;
+    hierarchy.requestRows(hierarchyLoadRanges(this.options.getLoadContext(), hierarchy.rowCount));
   }
 
   /** C2's prefix budget for a paginated source; see C8's cache predicate. */

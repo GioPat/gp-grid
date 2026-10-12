@@ -6,6 +6,7 @@ import type {
   ColumnDefinition,
   DataSource,
   FilterModel,
+  HierarchyChange,
   RowGrouping,
   RowGroupingRejection,
   RowId,
@@ -39,6 +40,8 @@ export interface RowDataManagerOptions<TData> {
   /** Groups the flat rows of every full load. */
   rowGrouping?: RowGrouping | null;
   onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
+  /** A bound hierarchy reported loaded rows, moved rows or a failure. */
+  onHierarchyChange?: (change: HierarchyChange) => void;
   /**
    * A row window arrived from a fire-and-forget load (scroll-triggered), so
    * nobody is awaiting it: the view must be synced from here.

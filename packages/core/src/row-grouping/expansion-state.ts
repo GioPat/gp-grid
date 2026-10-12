@@ -1,7 +1,8 @@
 // packages/core/src/row-grouping/expansion-state.ts
-// Groups toggled away from the expansion depth, kept by id across builds.
+// Seeds a group tree's expansion bits from the shared expansion by id.
 
 import type { RowGroupingState, RowId } from "../types";
+import { createExpansionIds } from "../hierarchy/expansion-state";
 import type { GroupTree } from "./group-layout";
 import { findGroups } from "./group-lookup";
 import { createExpansion } from "./visible-rows";
@@ -16,38 +17,21 @@ export interface ExpansionState {
 }
 
 export const createExpansionState = (configuredDepth: number, initial?: RowGroupingState): ExpansionState => {
-  let depth = initial?.expandedDepth ?? configuredDepth;
-  const expanded = new Set<RowId>(initial?.expanded);
-  const collapsed = new Set<RowId>(initial?.collapsed);
-  for (const id of collapsed) expanded.delete(id);
+  const ids = createExpansionIds(configuredDepth, initial);
 
   return {
     seed: (tree) => {
-      const bits = createExpansion(tree, depth);
-      findGroups(tree, collapsed, (_, group) => {
+      const bits = createExpansion(tree, ids.depth());
+      findGroups(tree, ids.collapsed, (_, group) => {
         bits[group] = 0;
       });
-      findGroups(tree, expanded, (_, group) => {
+      findGroups(tree, ids.expanded, (_, group) => {
         bits[group] = 1;
       });
       return bits;
     },
-    record: (id, groupDepth, open) => {
-      expanded.delete(id);
-      collapsed.delete(id);
-      const openByDefault = groupDepth < depth;
-      if (open === openByDefault) return;
-      (open ? expanded : collapsed).add(id);
-    },
-    setAll: (tree, open) => {
-      depth = open ? tree.dimensions.length : 0;
-      expanded.clear();
-      collapsed.clear();
-    },
-    snapshot: () => ({
-      expanded: [...expanded],
-      collapsed: [...collapsed],
-      ...(depth !== configuredDepth && { expandedDepth: depth }),
-    }),
+    record: ids.record,
+    setAll: (tree, open) => ids.setAll(open ? tree.dimensions.length : 0),
+    snapshot: ids.snapshot,
   };
 };

@@ -36,6 +36,13 @@ export { isColumnarDataSource, isHierarchicalRowAccess } from "./types";
 
 /** Local row grouping engine (PRD 008) */
 export { createRowGrouping } from "./row-grouping";
+
+/** Server grouping source (PRD 009) */
+export { createServerGroupingSource } from "./server-grouping";
+export type { ServerGroupingConfig, ServerGroupingSource } from "./server-grouping";
+
+/** Group ids over named-tag paths (PRD 009) */
+export { encodeGroupId, decodeGroupId } from "./hierarchy/group-path";
 export type {
   ColumnarField,
   ColumnarDataSourceOptions,
@@ -143,6 +150,7 @@ export type {
   HierarchyRow,
   HierarchyRowKind,
   HierarchyRecordChange,
+  HierarchyChange,
   HierarchicalRowAccess,
   RowGroupResult,
   RowGrouping,
@@ -155,6 +163,16 @@ export type {
   RowGroupingRejection,
   RowGroupingResult,
   RowGroupToggledEvent,
+
+  /** Server grouping service (PRD 009) */
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
 
   /** Interaction events */
   ColumnResizedEvent,

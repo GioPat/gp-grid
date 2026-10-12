@@ -87,6 +87,8 @@ export interface RowControllersDeps<TData> {
   retainEditColumn: (columnId: string | null) => void;
   /** The move changed row identity, so heights must be re-placed. */
   onRowsMoved: () => void;
+  /** Rows a self-loading hierarchy filled in place, synced as a loaded page. */
+  onRowsLoaded: (totalRowsChanged: boolean) => void;
   isDestroyed: () => boolean;
 }
 
@@ -134,6 +136,7 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
     rowGroups: new RowGroupsController({
       ...hierarchyChange,
       isDestroyed: deps.isDestroyed,
+      onRowsLoaded: deps.onRowsLoaded,
       onRowGroupToggled: config.onRowGroupToggled,
     }),
     hierarchyChange,

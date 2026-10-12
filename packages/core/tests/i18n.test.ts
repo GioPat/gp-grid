@@ -88,14 +88,23 @@ describe("resolveGridLabels", () => {
 });
 
 describe("rowGroups", () => {
-  it("defaults the group and grand total labels", () => {
-    expect(defaultGridLabels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Grand total" });
+  const loadFailed = "Loading failed. Expand again to retry.";
+
+  it("defaults the group, grand total and load failure labels", () => {
+    expect(defaultGridLabels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Grand total", loadFailed });
   });
 
   it("merges one level deep without mutating the defaults", () => {
     const labels = resolveGridLabels({ rowGroups: { grandTotal: "Totale" } });
-    expect(labels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Totale" });
+    expect(labels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Totale", loadFailed });
     expect(defaultGridLabels.rowGroups.grandTotal).toBe("Grand total");
+  });
+
+  it("overrides the load failure title alone", () => {
+    const labels = resolveGridLabels({ rowGroups: { loadFailed: "Caricamento fallito" } });
+    expect(labels.rowGroups.loadFailed).toBe("Caricamento fallito");
+    expect(labels.rowGroups.label).toBe("{value} ({count})");
+    expect(defaultGridLabels.rowGroups.loadFailed).toBe(loadFailed);
   });
 });
 

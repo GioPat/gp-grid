@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRowGrouping } from "../src/row-grouping/create-row-grouping";
-import { TAG_STRING, TOTAL_ROW_ID, encodeGroupId } from "../src/row-grouping/keys";
+import { TAG_STRING, TOTAL_ROW_ID, encodeTaggedId } from "../src/hierarchy/keys";
 import {
   isHierarchicalRowAccess,
   type CellValue,
@@ -29,9 +29,9 @@ const CONFIG: RowGroupingConfig = {
   grandTotal: "bottom",
 };
 
-const countryId = (country: string) => encodeGroupId([["country", TAG_STRING, country]]);
+const countryId = (country: string) => encodeTaggedId([["country", TAG_STRING, country]]);
 const cityId = (country: string, city: string) =>
-  encodeGroupId([
+  encodeTaggedId([
     ["country", TAG_STRING, country],
     ["city", TAG_STRING, city],
   ]);
@@ -96,7 +96,7 @@ describe("grouped row access", () => {
     expect(access.locate("r4")).toBe(7);
     expect(access.locate("r9")).toBe(-1);
     expect(access.locate(countryId("DE"))).toBe(-1);
-    expect(access.locate(encodeGroupId([["city", TAG_STRING, "IT"]]))).toBe(-1);
+    expect(access.locate(encodeTaggedId([["city", TAG_STRING, "IT"]]))).toBe(-1);
   });
 
   it("locates records by flat position when the source has no identity", () => {

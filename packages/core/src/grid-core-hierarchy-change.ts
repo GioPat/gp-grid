@@ -19,28 +19,34 @@ export interface HierarchyChangeDeps<TData> extends SizeChangeDeps<TData> {
   editManager: EditManager;
 }
 
-/** The anchor row and the active cell's row, by identity. */
+/** The anchor row and the active cell's row, by identity and by their index at the capture. */
 export interface ViewRowsCapture {
-  anchor: { id: RowId; intra: number } | null;
-  active: { id: RowId; col: number } | null;
+  anchor: { id: RowId; index: number; intra: number } | null;
+  active: { id: RowId; row: number; col: number } | null;
 }
 
 /** A hidden row answers its nearest visible ancestor; a flat grid only finds the row. */
 const locateRow = <TData>(rowData: RowDataManager<TData>, id: RowId): number =>
   rowData.getHierarchy()?.locate(id) ?? rowData.findViewIndexById(id);
 
+/** A hierarchy placeholder at `index`: its identity is unknown until it loads, so a row not found may be there. */
+const holdsPlaceholder = <TData>(rowData: RowDataManager<TData>, index: number): boolean =>
+  rowData.getHierarchy() !== null &&
+  index < rowData.getTotalRows() &&
+  rowData.getHierarchyRow(index) === undefined;
+
 const captureAnchor = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture["anchor"] => {
   const anchor = captureSizeAnchor(deps);
   if (anchor === null) return null;
   const id = deps.rowData.getRowId(anchor.index);
-  return id === undefined ? null : { id, intra: anchor.intra };
+  return id === undefined ? null : { id, index: anchor.index, intra: anchor.intra };
 };
 
 const captureActive = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture["active"] => {
   const cell = deps.selection.getActiveCell();
   if (cell === null) return null;
   const id = deps.rowData.getRowId(cell.row);
-  return id === undefined ? null : { id, col: cell.col };
+  return id === undefined ? null : { id, row: cell.row, col: cell.col };
 };
 
 export const captureViewRows = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture => ({
@@ -48,15 +54,21 @@ export const captureViewRows = <TData>(deps: HierarchyChangeDeps<TData>): ViewRo
   active: captureActive(deps),
 });
 
-/** The intra-row offset survives only when the anchor row itself is still shown. */
+/** The intra-row offset survives when the anchor row itself is still shown, or may be the placeholder at its index. */
 const resolveAnchor = <TData>(
   rowData: RowDataManager<TData>,
   anchor: ViewRowsCapture["anchor"],
 ): RowAnchor | null => {
   if (anchor === null) return null;
   const index = locateRow(rowData, anchor.id);
-  if (index < 0) return null;
-  return { index, intra: rowData.getRowId(index) === anchor.id ? anchor.intra : 0 };
+  if (index >= 0) return { index, intra: rowData.getRowId(index) === anchor.id ? anchor.intra : 0 };
+  return holdsPlaceholder(rowData, anchor.index) ? { index: anchor.index, intra: anchor.intra } : null;
+};
+
+const resolveActiveRow = <TData>(rowData: RowDataManager<TData>, active: { id: RowId; row: number }): number => {
+  const row = locateRow(rowData, active.id);
+  if (row >= 0) return row;
+  return holdsPlaceholder(rowData, active.row) ? active.row : -1;
 };
 
 const restoreActive = <TData>(
@@ -68,7 +80,7 @@ const restoreActive = <TData>(
     if (selection.getSelectionRange()) selection.clearSelectionRange();
     return;
   }
-  const row = locateRow(deps.rowData, active.id);
+  const row = resolveActiveRow(deps.rowData, active);
   if (row < 0) selection.clearSelection();
   else selection.setActiveCell(row, active.col);
 };

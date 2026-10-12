@@ -4,6 +4,7 @@ import {
   type DataSource,
   type DataSourceResponse,
   type HierarchicalRowAccess,
+  type HierarchyChange,
   type RowAccess,
   type RowGrouping,
   type RowGroupingRejection,
@@ -58,11 +59,13 @@ export interface RowViewBinderOptions<TData> {
   getDataSource: () => DataSource<TData>;
   getRowId?: (row: TData) => RowId;
   onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
+  onHierarchyChange?: (change: HierarchyChange) => void;
 }
 
 /**
  * Binds responses and, with a grouping, the hierarchy the engine builds over the
- * flat rows. The binder is the grouping's host: what it sees of this grid.
+ * flat rows. The binder is the grouping's host: what it sees of this grid, and
+ * the one subscriber of the bound hierarchy's changes.
  */
 export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   private readonly store: RowStore<TData>;
@@ -71,6 +74,8 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   private grouping: RowGroupingEngine | null;
   private sourceHierarchy = false;
   private partial = false;
+  private subscribed: HierarchicalRowAccess<TData> | null = null;
+  private unsubscribe: (() => void) | null = null;
   readonly getRowId?: (row: TData) => RowId;
   readonly onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
 
@@ -99,6 +104,7 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   /** Release the bound hierarchy and forget the last response. */
   reset(): void {
     this.store.bindHierarchy(null);
+    this.syncSubscription();
     this.sourceHierarchy = false;
     this.partial = false;
   }
@@ -139,6 +145,12 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   }
 
   private regroup(): RowGroupingRejection | null {
+    const rejection = this.bindEngine();
+    this.syncSubscription();
+    return rejection;
+  }
+
+  private bindEngine(): RowGroupingRejection | null {
     const { grouping, store } = this;
     if (grouping === null) {
       this.unbindEngine();
@@ -157,5 +169,16 @@ export class RowViewBinder<TData> implements RowGroupingHost<TData> {
   private unbindEngine(): void {
     if (this.sourceHierarchy) return;
     this.store.bindHierarchy(null);
+  }
+
+  /** Subscribed to the bound hierarchy alone, whoever built it. */
+  private syncSubscription(): void {
+    const bound = this.store.getHierarchy();
+    if (bound === this.subscribed) return;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.subscribed = bound;
+    const listener = this.options.onHierarchyChange;
+    if (bound?.subscribe && listener) this.unsubscribe = bound.subscribe(listener);
   }
 }

@@ -49,6 +49,8 @@ export interface ViewSyncDeps<TData> {
   getFrozenRowsBaseline: () => FrozenRowsState;
   onFrozenRowsChanged?: (state: FrozenRowsState) => void;
   getHeaderBands: () => HeaderBandLayout;
+  /** PRD 009 D3: asks a self-loading hierarchy for the rows a full load shows. */
+  requestHierarchyRows: () => void;
 }
 
 export class ViewSync<TData> {
@@ -110,6 +112,12 @@ export class ViewSync<TData> {
     } finally {
       batcher.flush();
     }
+  }
+
+  /** A full load: rebuild everything, then request the rows now in view. */
+  reconcileAfterLoad(): void {
+    this.reconcile();
+    this.deps.requestHierarchyRows();
   }
 
   /**

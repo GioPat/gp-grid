@@ -177,9 +177,9 @@ export class RowStore<TData = unknown> {
     return this.cachedRows.get(rowIndex);
   }
 
-  /** Whether a view row exists and can be rendered; a columnar row renders with no record. */
+  /** Whether a view row exists and can be rendered; a columnar row renders with no record, a placeholder not at all. */
   hasRow(rowIndex: number): boolean {
-    if (this.hierarchy) return this.isResident(rowIndex);
+    if (this.hierarchy) return this.getHierarchyRow(rowIndex) !== undefined;
     if (this.rowAccess) return rowIndex >= 0 && rowIndex < this.rowAccess.rowCount;
     return this.cachedRows.get(rowIndex) !== undefined;
   }
@@ -200,10 +200,12 @@ export class RowStore<TData = unknown> {
     return record === undefined ? undefined : this.options.getRowId?.(record);
   }
 
-  /** Record lookup by identity: the source's direct lookup, else a scan of the flat rows, O(resident). */
+  /** Record lookup by identity: the source's direct lookup, the shown hierarchy row, else a scan of the flat rows, O(resident). */
   getRecordById(rowId: RowId): TData | undefined {
     const dataSource = this.options.getDataSource();
     if (dataSource.getRecordById) return dataSource.getRecordById(rowId);
+    const viewIndex = this.hierarchy ? this.findViewIndexById(rowId) : -1;
+    if (viewIndex >= 0) return this.getRowData(viewIndex);
     for (const [row, record] of this.cachedRows) {
       if (this.flatRowId(row) === rowId) return record;
     }
