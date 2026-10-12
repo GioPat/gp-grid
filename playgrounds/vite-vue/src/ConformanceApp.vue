@@ -74,6 +74,14 @@ import {
   type RowGroupsColumnsVariant,
   type RowGroupsMode,
 } from "./conformance-row-groups";
+import {
+  createServerGroupsFixture,
+  SERVER_GROUPS_COLUMN_LAYOUT,
+  SERVER_GROUPS_HEADER_HEIGHT,
+  SERVER_GROUPS_LABEL_COLUMN,
+  SERVER_GROUPS_ROW_HEIGHT,
+  type ServerGroupsMode,
+} from "./conformance-server-groups";
 
 interface ConformanceRow {
   id: number;
@@ -95,7 +103,8 @@ type FixtureArm =
   | { fixture: "rowHeights"; mode: RowHeightsMode }
   | { fixture: "autoFit"; mode: AutoFitMode }
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
-  | { fixture: "rowGroups"; mode: RowGroupsMode };
+  | { fixture: "rowGroups"; mode: RowGroupsMode }
+  | { fixture: "serverGroups"; mode: ServerGroupsMode };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -207,6 +216,7 @@ const rowHeights = createRowHeightsFixture();
 const autoFit = createAutoFitFixture();
 const columnGroups = createColumnGroupsFixture();
 const rowGroups = createRowGroupsFixture();
+const serverGroups = createServerGroupsFixture();
 // Shallow: the grouping and the columns reach the grid as the fixture's own objects.
 const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
 
@@ -299,6 +309,8 @@ const autoFitMode = computed<AutoFitMode>(() => (arm.value.fixture === "autoFit"
 const columnGroupsMode = computed<ColumnGroupsMode>(() => (arm.value.fixture === "columnGroups" ? arm.value.mode : "off"));
 const rowGroupsMode = computed<RowGroupsMode>(() => (arm.value.fixture === "rowGroups" ? arm.value.mode : "off"));
 const rowGroupsActive = computed(() => rowGroupsMode.value !== "off");
+const serverGroupsMode = computed<ServerGroupsMode>(() => (arm.value.fixture === "serverGroups" ? arm.value.mode : "off"));
+const serverGroupsActive = computed(() => serverGroupsMode.value !== "off");
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
 const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
@@ -345,6 +357,11 @@ const setRowGroupColumns = (variant: RowGroupsColumnsVariant): void => {
 const ungroup = (): void => {
   rowGroupsArm.value = { ...rowGroupsArm.value, grouping: null };
 };
+/** Server group arms (PRD 009): a fresh mock and source, then a remount. */
+const armServerGroups = (next: ServerGroupsMode): void => {
+  serverGroups.arm(next);
+  armFixture({ fixture: "serverGroups", mode: next });
+};
 const useWideGroups = (): void => armColumnGroups("wide");
 
 // In-place controls: the option stays reactive, so these never touch the
@@ -370,6 +387,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (serverGroupsActive.value) return serverGroups.source();
   if (rowGroupsActive.value) return rowGroups.source();
   if (columnGroupsActive.value) return undefined;
   if (autoFitActive.value) return autoFit.sourceFor(autoFitMode.value);
@@ -381,7 +399,7 @@ const activeDataSource = (): DataSource<never> | undefined => {
 
 /** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
-  if (rowGroupsActive.value) return undefined;
+  if (rowGroupsActive.value || serverGroupsActive.value) return undefined;
   if (columnGroupsActive.value) {
     return columnGroups.rowDataFor(columnGroupsMode.value) as unknown as ConformanceRow[] | undefined;
   }
@@ -392,6 +410,7 @@ const activeRowData = (): ConformanceRow[] | undefined => {
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  if (serverGroupsActive.value) return serverGroups.columns();
   if (rowGroupsActive.value) return rowGroupsArm.value.columns;
   if (columnGroupsActive.value) return groupsSchema.value.columns;
   const fitColumns = autoFitActive.value ? autoFit.columnsFor(autoFitMode.value) : undefined;
@@ -404,6 +423,7 @@ const activeColumns = (): ColumnDefinition[] => {
 };
 
 const activeRowLoading = (): RowLoadingOptions | undefined => {
+  if (serverGroupsActive.value) return undefined;
   if (rowGroupsActive.value) return rowGroups.rowLoading();
   if (autoFitActive.value) return autoFit.rowLoadingFor(autoFitMode.value);
   return rowHeightsActive.value
@@ -417,6 +437,7 @@ const activeRowHeight = (): number => {
   if (autoFitActive.value) return AUTO_FIT_ROW_HEIGHT;
   if (columnGroupsActive.value) return COLUMN_GROUPS_ROW_HEIGHT;
   if (rowGroupsActive.value) return ROW_GROUPS_ROW_HEIGHT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_ROW_HEIGHT;
   return 32;
 };
 
@@ -426,17 +447,28 @@ const activeHeaderHeight = (): number => {
   if (autoFitActive.value) return AUTO_FIT_HEADER_HEIGHT;
   if (columnGroupsActive.value) return COLUMN_GROUPS_HEADER_HEIGHT;
   if (rowGroupsActive.value) return ROW_GROUPS_HEADER_HEIGHT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_HEADER_HEIGHT;
   return 36;
 };
 
 const activeColumnLayout = (): ColumnLayoutMode => {
   if (autoFitActive.value) return AUTO_FIT_COLUMN_LAYOUT;
   if (rowGroupsActive.value) return ROW_GROUPS_COLUMN_LAYOUT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_COLUMN_LAYOUT;
   return columnGroupsActive.value ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout.value;
 };
 
-const activeFreezeRows = (): FreezeRowsOptions | undefined =>
-  freezeOverride.value === null ? frozen.freezeRowsFor(frozenMode.value) : freezeOverride.value;
+const activeFreezeRows = (): FreezeRowsOptions | undefined => {
+  if (freezeOverride.value !== null) return freezeOverride.value;
+  return serverGroupsActive.value
+    ? serverGroups.freezeRowsFor(serverGroupsMode.value)
+    : frozen.freezeRowsFor(frozenMode.value);
+};
+
+const activeLabelColumn = (): string | undefined => {
+  if (serverGroupsActive.value) return SERVER_GROUPS_LABEL_COLUMN;
+  return rowGroupsActive.value ? rowGroups.labelColumn() : undefined;
+};
 
 /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
 const useWideColumns = (count: number): void => {
@@ -666,6 +698,7 @@ if (typeof window !== "undefined") {
       },
     }),
     ...rowGroups.createHooks(() => coreOf()),
+    ...serverGroups.createHooks(),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
       if (autoFitActive.value) return autoFit.requestedRanges();
@@ -756,6 +789,13 @@ if (typeof window !== "undefined") {
       <button data-testid="toggle-column-layout" @click="toggleColumnLayout">Toggle layout</button>
       <button data-testid="resize-host" @click="resizeHost">Resize host</button>
       <button data-testid="hide-column" @click="hideColumn">Hide column</button>
+      <button data-testid="use-server-groups" @click="armServerGroups('immediate')">SG</button>
+      <button data-testid="use-server-groups-held" @click="armServerGroups('held')">SGh</button>
+      <button data-testid="use-server-groups-frozen" @click="armServerGroups('frozen')">SGf</button>
+      <button data-testid="release-responses" @click="serverGroups.releaseResponses()">Rel</button>
+      <button data-testid="fail-next-leaves" @click="serverGroups.failNextLeaves()">Fail</button>
+      <button data-testid="collapse-first-group" @click="withCore(serverGroups.collapseFirstGroup)()">C1</button>
+      <button data-testid="scroll-deep" @click="withCore(serverGroups.scrollDeep)()">Dp</button>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
     <div
@@ -792,7 +832,7 @@ if (typeof window !== "undefined") {
         :on-frozen-rows-changed="frozen.recordFreezeEvent"
         :cell-renderers="rowGroupRenderers"
         :row-grouping="rowGroupsActive ? rowGroupsArm.grouping : undefined"
-        :group-label-column="rowGroupsActive ? rowGroups.labelColumn() : undefined"
+        :group-label-column="activeLabelColumn()"
         :group-label-renderer="rowGroupsMode === 'external' ? renderExternalLabel : undefined"
         :on-row-group-toggled="rowGroups.recordToggle"
         :on-row-grouping-rejected="rowGroups.recordRejection"

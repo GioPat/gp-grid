@@ -77,6 +77,14 @@ import {
   type RowGroupsColumnsVariant,
   type RowGroupsMode,
 } from "./conformance-row-groups";
+import {
+  createServerGroupsFixture,
+  SERVER_GROUPS_COLUMN_LAYOUT,
+  SERVER_GROUPS_HEADER_HEIGHT,
+  SERVER_GROUPS_LABEL_COLUMN,
+  SERVER_GROUPS_ROW_HEIGHT,
+  type ServerGroupsMode,
+} from "./conformance-server-groups";
 
 interface ConformanceRow {
   id: number;
@@ -234,7 +242,8 @@ type FixtureArm =
   | { fixture: "rowHeights"; mode: RowHeightsMode }
   | { fixture: "autoFit"; mode: AutoFitMode }
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
-  | { fixture: "rowGroups"; mode: RowGroupsMode };
+  | { fixture: "rowGroups"; mode: RowGroupsMode }
+  | { fixture: "serverGroups"; mode: ServerGroupsMode };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -279,6 +288,7 @@ export const ConformanceApp = (): React.ReactNode => {
   const [autoFit] = useState(createAutoFitFixture);
   const [columnGroups] = useState(createColumnGroupsFixture);
   const [rowGroups] = useState(createRowGroupsFixture);
+  const [serverGroups] = useState(createServerGroupsFixture);
   const [rowGroupsArm, setRowGroupsArm] = useState<RowGroupsArm>({ columns: [], grouping: null });
   const [arm, setArm] = useState<FixtureArm>(NO_ARM);
   const [groupsSchema, setGroupsSchema] = useState<ColumnGroupsSchema>(() => columnGroups.schemaFor("off"));
@@ -308,6 +318,8 @@ export const ConformanceApp = (): React.ReactNode => {
   const columnGroupsMode: ColumnGroupsMode = arm.fixture === "columnGroups" ? arm.mode : "off";
   const rowGroupsMode: RowGroupsMode = arm.fixture === "rowGroups" ? arm.mode : "off";
   const rowGroupsActive = rowGroupsMode !== "off";
+  const serverGroupsMode: ServerGroupsMode = arm.fixture === "serverGroups" ? arm.mode : "off";
+  const serverGroupsActive = serverGroupsMode !== "off";
   const frozenActive = frozenMode !== "off";
   const frozenObject = frozenMode === "object";
   const rowHeightsActive = rowHeightsMode !== "off";
@@ -354,6 +366,11 @@ export const ConformanceApp = (): React.ReactNode => {
   const ungroup = useCallback(() => {
     setRowGroupsArm((current) => ({ ...current, grouping: null }));
   }, []);
+  /** Server group arms (PRD 009): a fresh mock and source, then a remount. */
+  const armServerGroups = useCallback((next: ServerGroupsMode) => {
+    serverGroups.arm(next);
+    armFixture({ fixture: "serverGroups", mode: next });
+  }, [armFixture, serverGroups]);
   const useWideGroups = useCallback(() => armColumnGroups("wide"), [armColumnGroups]);
 
   // In-place controls: the option stays reactive, so these never touch the
@@ -377,6 +394,7 @@ export const ConformanceApp = (): React.ReactNode => {
   }, []);
 
   const activeColumns = (): ColumnDefinition[] => {
+    if (serverGroupsActive) return serverGroups.columns();
     if (rowGroupsActive) return rowGroupsArm.columns;
     if (columnGroupsActive) return groupsSchema.columns;
     const fitColumns = autoFitActive ? autoFit.columnsFor(autoFitMode) : undefined;
@@ -390,6 +408,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   const activeDataSource = (): DataSource<never> | undefined => {
+    if (serverGroupsActive) return serverGroups.source();
     if (rowGroupsActive) return rowGroups.source();
     if (columnGroupsActive) return undefined;
     if (autoFitActive) return autoFit.sourceFor(autoFitMode);
@@ -401,7 +420,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** The writable arms keep the caller's object rows; every other one is sourced. */
   const activeRowData = (): ConformanceRow[] | undefined => {
-    if (rowGroupsActive) return undefined;
+    if (rowGroupsActive || serverGroupsActive) return undefined;
     if (columnGroupsActive) return columnGroups.rowDataFor(columnGroupsMode) as unknown as ConformanceRow[] | undefined;
     if (autoFitActive) return autoFit.rowDataFor(autoFitMode) as unknown as ConformanceRow[] | undefined;
     if (rowHeightsActive) return rowHeights.rowDataFor(rowHeightsMode) as RowHeightsRow[] | undefined;
@@ -410,6 +429,7 @@ export const ConformanceApp = (): React.ReactNode => {
   };
 
   const activeRowLoading = () => {
+    if (serverGroupsActive) return undefined;
     if (rowGroupsActive) return rowGroups.rowLoading();
     if (autoFitActive) return autoFit.rowLoadingFor(autoFitMode);
     return rowHeightsActive ? rowHeights.rowLoadingFor(rowHeightsMode) : frozen.rowLoadingFor(frozenMode);
@@ -421,6 +441,7 @@ export const ConformanceApp = (): React.ReactNode => {
     if (autoFitActive) return AUTO_FIT_ROW_HEIGHT;
     if (columnGroupsActive) return COLUMN_GROUPS_ROW_HEIGHT;
     if (rowGroupsActive) return ROW_GROUPS_ROW_HEIGHT;
+    if (serverGroupsActive) return SERVER_GROUPS_ROW_HEIGHT;
     return 32;
   };
 
@@ -430,17 +451,26 @@ export const ConformanceApp = (): React.ReactNode => {
     if (autoFitActive) return AUTO_FIT_HEADER_HEIGHT;
     if (columnGroupsActive) return COLUMN_GROUPS_HEADER_HEIGHT;
     if (rowGroupsActive) return ROW_GROUPS_HEADER_HEIGHT;
+    if (serverGroupsActive) return SERVER_GROUPS_HEADER_HEIGHT;
     return 36;
   };
 
   const activeColumnLayout = (): ColumnLayoutMode => {
     if (autoFitActive) return AUTO_FIT_COLUMN_LAYOUT;
     if (rowGroupsActive) return ROW_GROUPS_COLUMN_LAYOUT;
+    if (serverGroupsActive) return SERVER_GROUPS_COLUMN_LAYOUT;
     return columnGroupsActive ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout;
   };
 
-  const activeFreezeRows = (): FreezeRowsOptions | undefined =>
-    freezeOverride === null ? frozen.freezeRowsFor(frozenMode) : freezeOverride;
+  const activeFreezeRows = (): FreezeRowsOptions | undefined => {
+    if (freezeOverride !== null) return freezeOverride;
+    return serverGroupsActive ? serverGroups.freezeRowsFor(serverGroupsMode) : frozen.freezeRowsFor(frozenMode);
+  };
+
+  const activeLabelColumn = (): string | undefined => {
+    if (serverGroupsActive) return SERVER_GROUPS_LABEL_COLUMN;
+    return rowGroupsActive ? rowGroups.labelColumn() : undefined;
+  };
 
   const replaceColumns = useCallback(() => {
     setColumns([
@@ -696,6 +726,7 @@ const hideColumn = useCallback(() => {
         setBandHeights,
       }),
       ...rowGroups.createHooks(groupCore),
+      ...serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: () => {
         if (autoFitActive) return autoFit.requestedRanges();
@@ -706,7 +737,7 @@ const hideColumn = useCallback(() => {
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [autoFit, autoFitActive, columnGroups, fixture, frozen, groupCore, readCoreToken, rowGroups, rowHeights, rowHeightsActive, setColumnGroups, setFreezeCount, useWideColumns]);
+  }, [autoFit, autoFitActive, columnGroups, fixture, frozen, groupCore, readCoreToken, rowGroups, rowHeights, rowHeightsActive, serverGroups, setColumnGroups, setFreezeCount, useWideColumns]);
 
   // Arming remounts the grid, so the announcement reader follows each core.
   useEffect(() => {
@@ -801,6 +832,13 @@ const hideColumn = useCallback(() => {
         <button data-testid="ungroup" onClick={ungroup}>Flat</button>
         <button data-testid="replace-revision" onClick={withCore((core) => void rowGroups.replaceRevision(core))}>Rev</button>
         <button data-testid="format-country" onClick={() => setRowGroupColumns("formatted")}>Fmt</button>
+        <button data-testid="use-server-groups" onClick={() => armServerGroups("immediate")}>SG</button>
+        <button data-testid="use-server-groups-held" onClick={() => armServerGroups("held")}>SGh</button>
+        <button data-testid="use-server-groups-frozen" onClick={() => armServerGroups("frozen")}>SGf</button>
+        <button data-testid="release-responses" onClick={serverGroups.releaseResponses}>Rel</button>
+        <button data-testid="fail-next-leaves" onClick={serverGroups.failNextLeaves}>Fail</button>
+        <button data-testid="collapse-first-group" onClick={withCore(serverGroups.collapseFirstGroup)}>C1</button>
+        <button data-testid="scroll-deep" onClick={withCore(serverGroups.scrollDeep)}>Dp</button>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
       <div
@@ -837,7 +875,7 @@ const hideColumn = useCallback(() => {
             onFrozenRowsChanged={frozen.recordFreezeEvent}
             cellRenderers={ROW_GROUP_RENDERERS}
             rowGrouping={rowGroupsActive ? rowGroupsArm.grouping : undefined}
-            groupLabelColumn={rowGroupsActive ? rowGroups.labelColumn() : undefined}
+            groupLabelColumn={activeLabelColumn()}
             groupLabelRenderer={rowGroupsMode === "external" ? renderExternalLabel : undefined}
             onRowGroupToggled={rowGroups.recordToggle}
             onRowGroupingRejected={rowGroups.recordRejection}

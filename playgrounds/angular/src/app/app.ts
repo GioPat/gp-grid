@@ -16,6 +16,7 @@ import type {
   HighlightingOptions,
   RowGrouping,
 } from '@gp-grid/angular';
+import { createDemoServerSource } from './demo-server-groups';
 
 interface Person {
   id: number;
@@ -76,6 +77,17 @@ const createDemoRowGrouping = (): RowGrouping =>
       { field: 'age', aggregate: 'avg' },
     ],
     grandTotal: 'top',
+  });
+
+// Server grouping (PRD 009): the same groups and measures, asked of the mock service.
+const DEMO_SERVER_ROWS = 100_000;
+const createDemoServerGrouping = () =>
+  createDemoServerSource(generateRows(DEMO_SERVER_ROWS), {
+    dimensions: [{ field: 'city' }, { field: 'name' }],
+    measures: [
+      { field: 'id', aggregate: 'sum' },
+      { field: 'age', aggregate: 'avg' },
+    ],
   });
 
 // A group's `avg` is fractional; leaf ages stay integers.
@@ -173,13 +185,26 @@ export class App implements AfterViewInit {
   /** Row grouping (PRD 008): regroups and expands without a remount. */
   protected readonly groupRows = signal(false);
 
+  /** Server grouping (PRD 009): swaps the data source, no remount. */
+  protected readonly serverGroups = signal(false);
+
+  protected readonly serverSource = computed(() => (this.serverGroups() ? createDemoServerGrouping() : null));
+
+  protected readonly dataSource = computed(() => this.serverSource() ?? this.grid.dataSource);
+
   // The published input typing drops `| null` like `columnGroups` above.
   protected readonly rowGrouping = computed(
-    () => (this.groupRows() ? createDemoRowGrouping() : null) as RowGrouping,
+    () => (this.groupRows() && this.serverGroups() === false ? createDemoRowGrouping() : null) as RowGrouping,
   );
+
+  protected readonly grouping = computed(() => this.groupRows() || this.serverGroups());
 
   protected toggleGroupRows(): void {
     this.groupRows.update((value) => !value);
+  }
+
+  protected toggleServerGroups(): void {
+    this.serverGroups.update((value) => !value);
   }
 
   protected expandAllGroups(): void {
@@ -221,6 +246,10 @@ export class App implements AfterViewInit {
     effect(() => {
       if (!this.isBrowser) return;
       document.documentElement.classList.toggle('dark', this.darkMode());
+    });
+    effect((onCleanup) => {
+      const source = this.serverSource();
+      onCleanup(() => source?.destroy());
     });
   }
 

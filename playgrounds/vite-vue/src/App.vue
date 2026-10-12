@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import {
     GpGrid,
     useGridData,
@@ -16,6 +16,7 @@ import StatusBadge from "./renderers/StatusBadge.vue";
 import Bold from "./renderers/Bold.vue";
 import Tags from "./renderers/Tags.vue";
 import AgeBucket from "./renderers/AgeBucket.vue";
+import { createDemoServerSource } from "./demo-server-groups";
 type HighlightMode = "row" | "column" | "cell";
 type FreezeCount = 0 | 1 | 3 | 5;
 const highlightMode = ref<HighlightMode>("row");
@@ -237,9 +238,26 @@ const expandAllGroups = (): void => {
 };
 
 // Create data source via useGridData
-const { dataSource, updateRow } = useGridData<Person>(generateRowData(), {
+const rowData = generateRowData();
+const { dataSource, updateRow } = useGridData<Person>(rowData, {
     getRowId: (row) => row.id,
 });
+
+// Server grouping (PRD 009): the same groups and measures, asked of the mock service, no remount.
+const DEMO_SERVER_ROWS = 100_000;
+const serverGroups = ref(false);
+const serverSource = computed(() =>
+    serverGroups.value
+        ? createDemoServerSource(rowData.slice(0, DEMO_SERVER_ROWS), {
+            dimensions: [{ field: "status" }, { field: "name" }],
+            measures: [
+                { field: "salary", aggregate: "sum" },
+                { field: "age", aggregate: "avg" },
+            ],
+        })
+        : null,
+);
+watch(serverSource, (_next, previous) => previous?.destroy());
 
 const rowIdToUpdate = ref(1);
 
@@ -358,7 +376,14 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         >
             Group rows
         </button>
-        <button class="mode-btn" :disabled="groupRows === false" @click="expandAllGroups">
+        <button
+            :class="['mode-btn', { active: serverGroups }]"
+            :aria-pressed="serverGroups"
+            @click="serverGroups = !serverGroups"
+        >
+            Server groups
+        </button>
+        <button class="mode-btn" :disabled="groupRows === false && serverGroups === false" @click="expandAllGroups">
             Expand all
         </button>
     </div>
@@ -371,12 +396,12 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :columns="columns"
             :column-groups="grouped ? demoColumnGroups : undefined"
             :header-band-heights="tallBand ? tallBandHeights : undefined"
-            :row-grouping="rowGrouping"
+            :row-grouping="serverSource === null ? rowGrouping : null"
             :labels="gridLabels"
             :freeze-rows="freezeRows"
             :on-frozen-rows-changed="handleFrozenRowsChanged"
             :overscan="12"
-            :data-source="dataSource"
+            :data-source="serverSource ?? dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
             :row-height="36"
             :row-resize="true"
