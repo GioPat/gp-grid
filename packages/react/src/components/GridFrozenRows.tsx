@@ -8,6 +8,7 @@ import type {
   RowRegionLayout,
   SlotData,
 } from "@gp-grid/core";
+import { hierarchyRowAttributes } from "@gp-grid/core";
 import { GridRow, GridRowPins, groupDepthStyle, rowBoxStyle } from "./GridRow";
 import type { GridRowCellContext } from "./GridRow";
 
@@ -103,6 +104,7 @@ export const GridFrozenRows = <TData = unknown>(
             className="gp-grid-frozen-pin-row"
             role="presentation"
             data-row-kind={slot.row?.kind}
+            data-row-error={hierarchyRowAttributes(slot.row)["data-row-error"]}
             style={{
               ...rowBoxStyle(slot.translateY, contentWidthPx, slot.height),
               ...groupDepthStyle(slot.row),

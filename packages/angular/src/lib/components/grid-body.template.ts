@@ -1,3 +1,5 @@
+import { GRID_BODY_CELL_TEMPLATE } from "./grid-body-cell.template";
+
 export const GRID_BODY_TEMPLATE = `<div
   #scrollContainer
   class="gp-grid-body-scroll"
@@ -9,81 +11,7 @@ export const GRID_BODY_TEMPLATE = `<div
       role="presentation"
       [style.width.px]="innerWidth()"
       [style.height.px]="sizerHeight()">
-      <ng-template #cellTpl let-slot="slot" let-entry="entry">
-        @let editing = isEditing(slot.rowIndex, entry.layoutIndex);
-        @let group = groupCell(slot.row, entry.columnId);
-        @let groups = rowGroups();
-        <div
-          [class]="cellClass(slot.rowIndex, entry.layoutIndex, entry.column, slot.rowData, group)"
-          role="gridcell"
-          [attr.aria-colindex]="displayedIndexOf()(entry.columnId) + 1"
-          [attr.data-cell-row]="slot.rowIndex"
-          [attr.data-cell-col]="entry.layoutIndex"
-          [attr.data-cell-region]="entry.region"
-          [attr.title]="cellTitle(entry.column, editing, group)"
-          [attr.aria-readonly]="group.readOnly ? 'true' : null"
-          style="position: absolute; top: 0;"
-          [style.inset-inline-start.px]="entry.regionOffset"
-          [style.width.px]="entry.width"
-          (pointerdown)="cellPointerDown.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex, event: $event })"
-          (mouseenter)="cellPointerEnter.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
-          (mouseleave)="cellPointerLeave.emit()"
-          (dblclick)="cellDoubleClick.emit({ rowIndex: slot.rowIndex, colIndex: entry.layoutIndex })"
-        >
-          @if (group.labelRow !== null && groups !== null) {
-            <span gpGridGroupToggle
-              [row]="group.labelRow"
-              [rowIndex]="slot.rowIndex"
-              [context]="groups"></span>
-            <span gpGridGroupLabel
-              [row]="group.labelRow"
-              [rowIndex]="slot.rowIndex"
-              [label]="group.label"
-              [context]="groups"></span>
-          } @else if (emptyGroupCell(slot, entry)) {
-          } @else if (editing) {
-            @let etpl = editTemplate(entry.column);
-            @if (etpl) {
-              <ng-container
-                [ngTemplateOutlet]="etpl"
-                [ngTemplateOutletContext]="{ $implicit: editParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex) }">
-              </ng-container>
-            } @else {
-              <input
-                class="gp-grid-edit-input"
-                type="text"
-                [attr.data-edit-id]="editingCell()?.editId"
-                [value]="editInitialValue()"
-                autofocus
-                (focus)="onEditFocus($event)"
-                (input)="editValueChange.emit(asInput($event).value)"
-                (keydown)="onEditKeyDown($event)"
-                (blur)="onEditBlur($event)" />
-            }
-          } @else {
-            @let tpl = cellTemplate(entry.column);
-            @if (tpl) {
-              <ng-container
-                [ngTemplateOutlet]="tpl"
-                [ngTemplateOutletContext]="{ $implicit: cellParams(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind) }">
-              </ng-container>
-            } @else {
-              <span class="gp-grid-cell-content">{{ cellDisplay(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex, slot.row?.kind) }}</span>
-            }
-          }
-          @if (rowResize() && editing === false) {
-            <div
-              gpGridResizeHandle
-              [axis]="'row'"
-              [index]="slot.rowIndex"
-              [size]="slot.height"
-              [resizing]="resizingRow() === slot.rowIndex"
-              (resizePointerDown)="onRowResizePointerDown($event)"
-              (resizeDoubleClick)="resizeDoubleClick.emit($event)">
-            </div>
-          }
-        </div>
-      </ng-template>
+      ${GRID_BODY_CELL_TEMPLATE}
       <ng-template #rowPinsTpl let-slot="slot">
         @if (startColumns().length > 0) {
           <div
@@ -134,6 +62,17 @@ export const GRID_BODY_TEMPLATE = `<div
           </ng-container>
         </div>
       </ng-template>
+      <ng-template #loadingRowTpl let-slot="slot">
+        <div
+          class="gp-grid-row gp-grid-row--loading"
+          role="row"
+          [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
+          style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
+          [style.transform]="'translateY(' + slot.translateY + 'px)'"
+          [style.width.px]="innerWidth()"
+          [style.height.px]="slot.height">
+        </div>
+      </ng-template>
       @if (rowRegions().frozenCount > 0) {
         <div
           class="gp-grid-frozen-rows"
@@ -147,15 +86,10 @@ export const GRID_BODY_TEMPLATE = `<div
             [style.width.px]="innerWidth()">
             @for (slot of frozenSlots(); track slot.slotId) {
               @if (slot.loading) {
-                <div
-                  class="gp-grid-row gp-grid-row--loading"
-                  role="row"
-                  [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
-                  style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
-                  [style.transform]="'translateY(' + slot.translateY + 'px)'"
-                  [style.width.px]="innerWidth()"
-                  [style.height.px]="slot.height">
-                </div>
+                <ng-container
+                  [ngTemplateOutlet]="loadingRowTpl"
+                  [ngTemplateOutletContext]="{ slot: slot }">
+                </ng-container>
               } @else {
                 @let hierarchy = rowAttributes(slot.row);
                 <div
@@ -163,6 +97,7 @@ export const GRID_BODY_TEMPLATE = `<div
                   role="row"
                   [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
                   [attr.data-row-kind]="hierarchy['data-row-kind']"
+                  [attr.data-row-error]="hierarchy['data-row-error']"
                   [attr.aria-level]="hierarchy['aria-level']"
                   [attr.aria-expanded]="hierarchy['aria-expanded']"
                   [style.--gp-grid-group-depth]="slot.row?.depth"
@@ -201,10 +136,12 @@ export const GRID_BODY_TEMPLATE = `<div
           [style.margin-top.px]="-frozenHeight()">
           @for (slot of frozenSlots(); track slot.slotId) {
             @if (slot.loading === false) {
+              @let hierarchy = rowAttributes(slot.row);
               <div
                 class="gp-grid-frozen-pin-row"
                 role="presentation"
-                [attr.data-row-kind]="slot.row?.kind"
+                [attr.data-row-kind]="hierarchy['data-row-kind']"
+                [attr.data-row-error]="hierarchy['data-row-error']"
                 [style.--gp-grid-group-depth]="slot.row?.depth"
                 style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
                 [style.transform]="'translateY(' + slot.translateY + 'px)'"
@@ -239,30 +176,38 @@ export const GRID_BODY_TEMPLATE = `<div
         [style.transform]="wrapperTransform()">
         @for (slot of suffixSlots(); track slot.slotId) {
           @if (slot.rowIndex >= 0) {
-            @let hierarchy = rowAttributes(slot.row);
-            <div
-              [class]="rowClass(slot.rowIndex, slot.rowData, hierarchy)"
-              role="row"
-              [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
-              [attr.data-row-kind]="hierarchy['data-row-kind']"
-              [attr.aria-level]="hierarchy['aria-level']"
-              [attr.aria-expanded]="hierarchy['aria-expanded']"
-              [style.--gp-grid-group-depth]="slot.row?.depth"
-              style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
-              [style.transform]="'translateY(' + slot.translateY + 'px)'"
-              [style.width.px]="innerWidth()"
-              [style.height.px]="slot.height">
-              @for (entry of centerColumns(); track entry.columnId) {
-                <ng-container
-                  [ngTemplateOutlet]="cellTpl"
-                  [ngTemplateOutletContext]="{ slot: slot, entry: entry }">
-                </ng-container>
-              }
+            @if (slot.loading) {
               <ng-container
-                [ngTemplateOutlet]="rowPinsTpl"
+                [ngTemplateOutlet]="loadingRowTpl"
                 [ngTemplateOutletContext]="{ slot: slot }">
               </ng-container>
-            </div>
+            } @else {
+              @let hierarchy = rowAttributes(slot.row);
+              <div
+                [class]="rowClass(slot.rowIndex, slot.rowData, hierarchy)"
+                role="row"
+                [attr.aria-rowindex]="slot.rowIndex + headerRowCount() + 1"
+                [attr.data-row-kind]="hierarchy['data-row-kind']"
+                [attr.data-row-error]="hierarchy['data-row-error']"
+                [attr.aria-level]="hierarchy['aria-level']"
+                [attr.aria-expanded]="hierarchy['aria-expanded']"
+                [style.--gp-grid-group-depth]="slot.row?.depth"
+                style="position: absolute; top: 0; inset-inline-start: 0; display: flex;"
+                [style.transform]="'translateY(' + slot.translateY + 'px)'"
+                [style.width.px]="innerWidth()"
+                [style.height.px]="slot.height">
+                @for (entry of centerColumns(); track entry.columnId) {
+                  <ng-container
+                    [ngTemplateOutlet]="cellTpl"
+                    [ngTemplateOutletContext]="{ slot: slot, entry: entry }">
+                  </ng-container>
+                }
+                <ng-container
+                  [ngTemplateOutlet]="rowPinsTpl"
+                  [ngTemplateOutletContext]="{ slot: slot }">
+                </ng-container>
+              </div>
+            }
           }
         }
         @if (suffixHandle(); as fhp) {

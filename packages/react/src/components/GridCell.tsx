@@ -139,7 +139,7 @@ export const GridCell = <TData = unknown>(
   // `tooltip: false`. Suppressed while editing (the input shows its value).
   const titleOf = (): string => {
     if (definition.tooltip === false || isEditing) return "";
-    if (groupCell.labelRow !== null) return groupCell.label;
+    if (groupCell.labelRow !== null) return groupCell.title ?? groupCell.label;
     return formatCellValue(rawValue, definition.valueFormatter);
   };
   const titleText = titleOf();

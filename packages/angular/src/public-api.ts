@@ -14,6 +14,7 @@ export type {
   SortModel,
   FilterModel,
   FilterCondition,
+  TextFilterCondition,
   FilterConditionGroup,
   FilterCombination,
   ColumnFilterModel,
@@ -107,6 +108,18 @@ export type {
   RowGroupingRejection,
   RowGroupingResult,
   RowGroupToggledEvent,
+  HierarchyChange,
+  // Server grouping (PRD 009)
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+  ServerGroupingConfig,
+  ServerGroupingSource,
   GridRowGroupsApi,
   GroupLabelRendererParams,
 
@@ -177,6 +190,9 @@ export {
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
   createRowGrouping,
+  createServerGroupingSource,
+  encodeGroupId,
+  decodeGroupId,
   isHierarchicalRowAccess,
 } from '@gp-grid/core';
 

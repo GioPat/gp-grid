@@ -68,7 +68,7 @@ const cellProps = (column: ResolvedColumn) => ({
 </script>
 
 <template>
-  <!-- C7: an unavailable frozen row has no data and renders no cells. -->
+  <!-- C7 and PRD 009: an unavailable frozen row or a hierarchy placeholder renders no cells. -->
   <div
     v-if="props.slot.loading"
     class="gp-grid-row gp-grid-row--loading"
@@ -82,6 +82,7 @@ const cellProps = (column: ResolvedColumn) => ({
     role="row"
     :aria-rowindex="ariaRowIndex"
     :data-row-kind="rowAttributes['data-row-kind']"
+    :data-row-error="rowAttributes['data-row-error']"
     :aria-level="rowAttributes['aria-level']"
     :aria-expanded="rowAttributes['aria-expanded']"
     :style="rowStyle"

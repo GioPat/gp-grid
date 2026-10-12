@@ -22,7 +22,7 @@ const hoverPosition = inject(HOVER_POSITION, null);
 const groupCell = computed(() => groupCellOf(props.row, props.column.columnId, props.rowGroups));
 const labelTitle = computed(() => {
   if (props.column.column.tooltip === false || groupCell.value.labelRow === null) return undefined;
-  return groupCell.value.label;
+  return groupCell.value.title ?? groupCell.value.label;
 });
 
 const getCellClasses = (): string => {
