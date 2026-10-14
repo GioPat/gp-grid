@@ -22,7 +22,7 @@
             "browser": "src/main.conformance.ts",
             "tsConfig": "tsconfig.app.json",
             "index": "src/index.html",
-            "styles": ["src/styles.css"],
+            "styles": ["src/styles.css", "../conformance-controls.css"],
             "outputPath": "dist/conformance-angular",
             "outputMode": "static"
           },

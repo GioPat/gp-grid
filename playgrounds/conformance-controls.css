@@ -1,0 +1,91 @@
+/* Shared by the React, Vue and Angular conformance pages.
+   The specs run at 900x650: below 1200 px the controls stay compact and in
+   flow, because a taller page scrolls on grid focus and moves rows under the
+   pointer. Wider windows get a readable side panel. */
+[data-conformance-framework] {
+  width: 620px;
+  margin: 16px;
+}
+
+[data-conformance-framework] button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+[data-conformance-framework] .cf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+[data-conformance-framework] .cf-group {
+  display: contents;
+}
+
+[data-conformance-framework] .cf-group > h2 {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  [data-conformance-framework] {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    width: auto;
+  }
+
+  [data-conformance-framework] > [data-testid="grid-host"] {
+    flex: none;
+  }
+
+  [data-conformance-framework] .cf-controls {
+    order: 2;
+    position: sticky;
+    top: 16px;
+    flex: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 12px;
+    box-sizing: border-box;
+    width: 520px;
+    max-height: calc(100vh - 32px);
+    margin: 0;
+    padding: 12px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  [data-conformance-framework] .cf-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  [data-conformance-framework] .cf-group > h2 {
+    display: block;
+    flex: 0 0 100%;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  [data-conformance-framework] .cf-controls button {
+    min-height: 32px;
+    padding: 6px 12px;
+    border-color: color-mix(in srgb, currentColor 30%, transparent);
+    font-size: 14px;
+  }
+
+  [data-conformance-framework] .cf-controls output {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    opacity: 0.8;
+  }
+}

@@ -486,7 +486,7 @@ test("AC-007-07 Tab never lands on a handle", async ({ page }, testInfo) => {
 
   // From the last control, Tab enters the grid at its single stop; inside,
   // the grid keeps Tab for the active cell.
-  await page.locator("[data-conformance-framework] > div:first-of-type > button").last().focus();
+  await page.locator("[data-conformance-framework] .cf-controls button").last().focus();
   const trail: string[] = [];
   for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab"]) {
     await page.keyboard.press(key);
