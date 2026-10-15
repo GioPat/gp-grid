@@ -204,6 +204,7 @@ export {
   normalizeColumnFilterModel,
   createRowGrouping,
   createServerGroupingSource,
+  createPivotSource,
   encodeGroupId,
   decodeGroupId,
   buildPivotSchema,

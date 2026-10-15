@@ -94,6 +94,7 @@ export {
   isHierarchicalRowAccess,
   // Server grouping
   createServerGroupingSource,
+  createPivotSource,
   encodeGroupId,
   decodeGroupId,
   buildPivotSchema,
