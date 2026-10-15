@@ -3,14 +3,21 @@
 // one column group per creation date, salary summed and age averaged.
 
 import { createPivotSource } from "@gp-grid/angular";
-import type { DataSource, PivotConfig, PivotSource } from "@gp-grid/angular";
+import type { CellValue, DataSource, PivotConfig, PivotSource } from "@gp-grid/angular";
+
+const formatSalary = (value: CellValue): string =>
+  typeof value === "number"
+    ? value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+    : "";
+
+const formatAverage = (value: CellValue): string => (typeof value === "number" ? value.toFixed(1) : "");
 
 const demoPivotConfig: PivotConfig = {
   rows: [{ field: "status" }, { field: "name" }],
   pivots: [{ field: "createdAt" }],
   measures: [
-    { field: "salary", aggregate: "sum" },
-    { field: "age", aggregate: "avg" },
+    { field: "salary", aggregate: "sum", column: { headerName: "Salary", width: 140, valueFormatter: formatSalary } },
+    { field: "age", aggregate: "avg", column: { headerName: "Avg age", width: 100, valueFormatter: formatAverage } },
   ],
   rowTotals: true,
   grandTotal: "top",
