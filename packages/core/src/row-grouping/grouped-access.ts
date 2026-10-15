@@ -21,13 +21,16 @@ type Reader = (row: number) => CellValue;
 const groupRow = (view: GroupedView, group: number): HierarchyRow => {
   const { tree } = view;
   const depth = tree.depth[group]!;
+  const leafCount = tree.leafEnd[group]! - tree.leafStart[group]!;
+  // The tree counts child groups only; a terminal group's children are its records.
+  const terminal = depth === tree.dimensions.length - 1;
   return {
     kind: "group",
     id: groupIdOf(tree, group),
     depth,
     expanded: view.expanded[group] === 1,
-    childCount: tree.childCount[group]!,
-    leafCount: tree.leafEnd[group]! - tree.leafStart[group]!,
+    childCount: terminal ? leafCount : tree.childCount[group]!,
+    leafCount,
     field: tree.dimensions[depth]!.field,
     value: keyValue(tree.tag[group]!, tree.key[group]!),
   };

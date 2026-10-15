@@ -49,6 +49,14 @@ const setup = (config: RowGroupingConfig = CONFIG) => {
 const ids = (access: HierarchicalRowAccess) => Array.from({ length: access.rowCount }, (_, view) => access.getRowId(view));
 
 describe("grouped row access", () => {
+  it("counts child groups on a parent and records on a terminal group (PRD 012 D1)", () => {
+    const { access } = setup();
+    // IT holds Milan and Rome; Rome holds its records.
+    expect(access.getRow(3)).toMatchObject({ id: countryId("IT"), childCount: 2 });
+    const rome = access.getRow(5);
+    expect(rome).toMatchObject({ id: cityId("IT", "Rome"), childCount: 2, leafCount: 2 });
+  });
+
   it("answers the D1 contract over a small tree", () => {
     const { rows, access } = setup();
     expect(isHierarchicalRowAccess(access)).toBe(true);
