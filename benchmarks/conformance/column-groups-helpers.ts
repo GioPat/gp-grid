@@ -161,7 +161,7 @@ export const readHeader = (page: Page): Promise<HeaderView> =>
   page.locator(".gp-grid-header").first().evaluate((header) => {
     const root = header.getBoundingClientRect();
     const originTop = root.top + header.clientTop;
-    const scroller = header.closest('[role="grid"]')?.querySelector(".gp-grid-body-scroll");
+    const scroller = header.closest('[role="grid"], [role="treegrid"]')?.querySelector(".gp-grid-body-scroll");
     const numberAttribute = (node: Element, name: string): number | null => {
       const value = node.getAttribute(name);
       return value === null ? null : Number(value);
@@ -364,10 +364,21 @@ const ownershipMismatch = (view: HeaderView, bandCount: number): string | null =
   return new Set(ids).size === ids.length ? null : "duplicate header ids";
 };
 
-/** First difference between the rendered header and D7–D9, or `"ok"`. */
-export const headerMismatch = (sample: HeaderSample, groups: readonly GroupChild[]): string => {
+/** The runs over at least one mounted leaf of their region. */
+const mountedRuns = (runs: readonly ExpectedRun[], view: HeaderView): ExpectedRun[] => {
+  const mounted = new Set(view.cells.filter((cell) => cell.kind === "leaf").map((cell) => `${cell.region}:${cell.colIndex}`));
+  return runs.filter((run) => Array.from({ length: run.leafCount }, (_, offset) => run.firstDisplayIndex + offset + 1)
+    .some((colIndex) => mounted.has(`${run.region}:${colIndex}`)));
+};
+
+/**
+ * First difference between the rendered header and D7–D9, or `"ok"`.
+ * `windowed` expects only the runs over mounted leaves, for a header wider than its host.
+ */
+export const headerMismatch = (sample: HeaderSample, groups: readonly GroupChild[], windowed = false): string => {
   const { view, bands } = sample;
-  const expected = expectedHeader(sample.state, groups);
+  const full = expectedHeader(sample.state, groups);
+  const expected = windowed ? { ...full, runs: mountedRuns(full.runs, view) } : full;
   if (bands.count !== expected.bandCount) return `band count ${bands.count} vs ${expected.bandCount}`;
   if (view.role !== "rowgroup" || view.rowIndex !== null) return `header role ${view.role}`;
   if (near(view.clientHeight, bands.totalHeight) === false || near(view.bodyGap, 0) === false) {
@@ -390,11 +401,15 @@ export const headerMismatch = (sample: HeaderSample, groups: readonly GroupChild
  * run as one fragment on its leaves and band, every leaf from its first band
  * to the body, with the D9 ids, spans and associations.
  */
-export const expectGroupedHeader = async (page: Page, groups: readonly GroupChild[]): Promise<HeaderSample> => {
+export const expectGroupedHeader = async (
+  page: Page,
+  groups: readonly GroupChild[],
+  windowed = false,
+): Promise<HeaderSample> => {
   const latest: { sample?: HeaderSample } = {};
   await expect.poll(async () => {
     latest.sample = await sampleHeader(page);
-    return headerMismatch(latest.sample, groups);
+    return headerMismatch(latest.sample, groups, windowed);
   }).toBe("ok");
   return latest.sample!;
 };

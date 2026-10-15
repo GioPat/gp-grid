@@ -19,6 +19,7 @@ import type {
   FreezeRowsOptions,
   GridCore,
   GroupLabelRendererTemplate,
+  PivotSchema,
   RowGrouping,
   RowLoadingOptions,
   RowDragEndEvent,
@@ -85,6 +86,15 @@ import {
   SERVER_GROUPS_ROW_HEIGHT,
   type ServerGroupsMode,
 } from './conformance-server-groups';
+import {
+  createPivotFixture,
+  PIVOT_BAND_HEIGHTS,
+  PIVOT_COLUMN_LAYOUT,
+  PIVOT_HEADER_HEIGHT,
+  PIVOT_LABEL_COLUMN_ID,
+  PIVOT_ROW_HEIGHT,
+  type PivotMode,
+} from './conformance-pivot-external';
 
 interface ConformanceRow {
   id: number;
@@ -107,7 +117,8 @@ type FixtureArm =
   | { fixture: 'autoFit'; mode: AutoFitMode }
   | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
   | { fixture: 'rowGroups'; mode: RowGroupsMode }
-  | { fixture: 'serverGroups'; mode: ServerGroupsMode };
+  | { fixture: 'serverGroups'; mode: ServerGroupsMode }
+  | { fixture: 'pivot'; mode: PivotMode };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -116,7 +127,7 @@ const NO_GROUP_LIMITS: ColumnGroupLimits = {};
 
 /** Arms whose rows reach the grid through a data source take the columnar branch. */
 const isSourcedArm = (arm: FixtureArm): boolean => {
-  if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups') return true;
+  if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups' || arm.fixture === 'pivot') return true;
   if (arm.fixture === 'frozen' || arm.fixture === 'rowHeights') return arm.mode !== 'object';
   return arm.fixture === 'autoFit' && arm.mode === 'paged';
 };
@@ -334,6 +345,18 @@ const createColumnarFixture = () => {
           <button data-testid="collapse-first-group" (click)="withCore(serverGroups.collapseFirstGroup)">Collapse first group</button>
           <button data-testid="scroll-deep" (click)="withCore(serverGroups.scrollDeep)">Scroll deep</button>
         </section>
+        <section class="cf-group">
+          <h2>Pivot</h2>
+          <button data-testid="use-pivot-external" (click)="armPivot('external')">Pivot: external</button>
+          <button data-testid="use-pivot-external-wide" (click)="armPivot('wide')">Pivot: wide</button>
+          <button data-testid="pivot-replace-revision" (click)="pivotReplaceRevision()">Replace revision</button>
+          <button data-testid="pivot-refresh" (click)="withCore(pivot.refresh)">Refresh</button>
+          <button data-testid="pivot-hold-next" (click)="pivot.holdNext()">Hold next</button>
+          <button data-testid="pivot-release" (click)="pivot.release()">Release</button>
+          <button data-testid="pivot-pin-label" (click)="withCore(pivot.pinLabel)">Pin label</button>
+          <button data-testid="pivot-move-leaf" (click)="withCore(pivot.moveLeaf)">Move leaf</button>
+          <button data-testid="pivot-set-total-width" (click)="withCore(pivot.setTotalWidth)">Total width</button>
+        </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="activeHostHeight()">
@@ -347,6 +370,8 @@ const createColumnarFixture = () => {
               [rows]="emptyRows"
               [rowHeight]="frozenRowHeight()"
               [headerHeight]="frozenHeaderHeight()"
+              [columnGroups]="activeColumnGroups()"
+              [headerBandHeights]="activeBandHeights()"
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [rowLoading]="activeRowLoading()"
@@ -443,6 +468,9 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     return arm.fixture === 'serverGroups' ? arm.mode : 'off';
   });
   protected readonly serverGroupsActive = computed(() => this.serverGroupsMode() !== 'off');
+  protected readonly pivot = createPivotFixture();
+  protected readonly pivotActive = computed(() => this.arm().fixture === 'pivot');
+  protected readonly pivotSchema = signal<PivotSchema>({ columns: [], columnGroups: [] });
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
@@ -505,6 +533,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (typeof window === 'undefined') return;
+    const rowGroupHooks = this.rowGroups.createHooks(() => this.coreOf());
     (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
       getCellValue: (row: number, col: number): CellValue => this.coreOf()?.cells.getValue(row, col) ?? null,
       getFieldValue: (row: number, field: string): CellValue => this.coreOf()?.cells.getFieldValue(row, field) ?? null,
@@ -536,7 +565,8 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
         setGroups: (groups) => this.groupsSchema.update((schema) => ({ columns: schema.columns, groups })),
         setBandHeights: (heights) => this.bandHeights.set(heights ?? NO_BAND_HEIGHTS),
       }),
-      ...this.rowGroups.createHooks(() => this.coreOf()),
+      ...rowGroupHooks,
+      ...this.pivot.createHooks(() => this.coreOf(), rowGroupHooks),
       ...this.serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
@@ -632,6 +662,16 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.armFixture({ fixture: 'serverGroups', mode: next });
   }
 
+  /** Pivot arms (PRD 012): a fresh fixture and its schema, then a remount. */
+  protected armPivot(next: PivotMode): void {
+    this.pivotSchema.set(this.pivot.arm(next));
+    this.armFixture({ fixture: 'pivot', mode: next });
+  }
+
+  protected pivotReplaceRevision(): void {
+    this.withCore((core) => this.pivotSchema.set(this.pivot.replaceRevision(core)));
+  }
+
   /** In place: the grid keeps its core and regroups or relabels. */
   protected setRowGroupColumns(variant: RowGroupsColumnsVariant): void {
     const columns = this.rowGroups.columnsFor(this.rowGroupsMode(), variant);
@@ -658,6 +698,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeGroupLabelColumn(): string {
+    if (this.pivotActive()) return PIVOT_LABEL_COLUMN_ID;
     if (this.serverGroupsActive()) return SERVER_GROUPS_LABEL_COLUMN;
     return this.rowGroupsActive() ? this.rowGroups.labelColumn() : '';
   }
@@ -696,12 +737,14 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   // The published input typings drop `| undefined` (ng-packagr), while the
   // inputs take it at runtime: `undefined` keeps the grid flat.
   protected activeColumnGroups(): readonly AngularColumnGroupChild[] {
+    if (this.pivotActive()) return this.pivotSchema().columnGroups as readonly AngularColumnGroupChild[];
     const groups: readonly ColumnGroupChild[] | undefined =
       this.columnGroupsActive() ? this.groupsSchema().groups : undefined;
     return groups as readonly AngularColumnGroupChild[];
   }
 
   protected activeBandHeights(): readonly number[] {
+    if (this.pivotActive()) return PIVOT_BAND_HEIGHTS;
     return this.columnGroupsActive() ? this.bandHeights() : NO_BAND_HEIGHTS;
   }
 
@@ -760,6 +803,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.pivotActive()) return this.pivot.source() ?? this.columnarSource;
     if (this.serverGroupsActive()) return this.serverGroups.source() ?? this.columnarSource;
     if (this.rowGroupsActive()) return this.rowGroups.source() ?? this.columnarSource;
     if (this.autoFitActive()) return this.autoFit.sourceFor(this.autoFitMode()) ?? this.columnarSource;
@@ -769,6 +813,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    if (this.pivotActive()) return this.pivotSchema().columns;
     if (this.serverGroupsActive()) return this.serverGroups.columns();
     if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
     if (this.columnGroupsActive()) return this.groupsSchema().columns;
@@ -805,7 +850,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeRowLoading(): RowLoadingOptions {
-    if (this.serverGroupsActive()) return NO_ROW_LOADING;
+    if (this.serverGroupsActive() || this.pivotActive()) return NO_ROW_LOADING;
     if (this.rowGroupsActive()) return this.rowGroups.rowLoading() ?? NO_ROW_LOADING;
     const fitLoading = this.autoFitActive() ? this.autoFit.rowLoadingFor(this.autoFitMode()) : undefined;
     if (fitLoading !== undefined) return fitLoading;
@@ -824,6 +869,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.columnGroupsActive()) return COLUMN_GROUPS_ROW_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_ROW_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_ROW_HEIGHT;
+    if (this.pivotActive()) return PIVOT_ROW_HEIGHT;
     return 32;
   }
 
@@ -834,6 +880,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.columnGroupsActive()) return COLUMN_GROUPS_HEADER_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_HEADER_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_HEADER_HEIGHT;
+    if (this.pivotActive()) return PIVOT_HEADER_HEIGHT;
     return 36;
   }
 
@@ -841,6 +888,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.autoFitActive()) return AUTO_FIT_COLUMN_LAYOUT;
     if (this.rowGroupsActive()) return ROW_GROUPS_COLUMN_LAYOUT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_COLUMN_LAYOUT;
+    if (this.pivotActive()) return PIVOT_COLUMN_LAYOUT;
     return this.columnGroupsActive() ? COLUMN_GROUPS_COLUMN_LAYOUT : this.columnLayout();
   }
 

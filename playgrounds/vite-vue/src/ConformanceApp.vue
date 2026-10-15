@@ -21,6 +21,7 @@ import type {
   FreezeRowsOptions,
   GridCore,
   GroupLabelRendererParams,
+  PivotSchema,
   RowDragEndEvent,
   RowLoadingOptions,
   RowResizedEvent,
@@ -83,6 +84,15 @@ import {
   SERVER_GROUPS_ROW_HEIGHT,
   type ServerGroupsMode,
 } from "./conformance-server-groups";
+import {
+  createPivotFixture,
+  PIVOT_BAND_HEIGHTS,
+  PIVOT_COLUMN_LAYOUT,
+  PIVOT_HEADER_HEIGHT,
+  PIVOT_LABEL_COLUMN_ID,
+  PIVOT_ROW_HEIGHT,
+  type PivotMode,
+} from "./conformance-pivot-external";
 
 interface ConformanceRow {
   id: number;
@@ -105,7 +115,8 @@ type FixtureArm =
   | { fixture: "autoFit"; mode: AutoFitMode }
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
   | { fixture: "rowGroups"; mode: RowGroupsMode }
-  | { fixture: "serverGroups"; mode: ServerGroupsMode };
+  | { fixture: "serverGroups"; mode: ServerGroupsMode }
+  | { fixture: "pivot"; mode: PivotMode };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -218,6 +229,8 @@ const autoFit = createAutoFitFixture();
 const columnGroups = createColumnGroupsFixture();
 const rowGroups = createRowGroupsFixture();
 const serverGroups = createServerGroupsFixture();
+const pivot = createPivotFixture();
+const pivotSchema = shallowRef<PivotSchema>({ columns: [], columnGroups: [] });
 // Shallow: the grouping and the columns reach the grid as the fixture's own objects.
 const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
 
@@ -312,6 +325,7 @@ const rowGroupsMode = computed<RowGroupsMode>(() => (arm.value.fixture === "rowG
 const rowGroupsActive = computed(() => rowGroupsMode.value !== "off");
 const serverGroupsMode = computed<ServerGroupsMode>(() => (arm.value.fixture === "serverGroups" ? arm.value.mode : "off"));
 const serverGroupsActive = computed(() => serverGroupsMode.value !== "off");
+const pivotActive = computed(() => arm.value.fixture === "pivot");
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
 const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
@@ -347,6 +361,11 @@ const armColumnGroups = (next: ColumnGroupsMode): void => {
 const useColumnGroups = (): void => armColumnGroups("groups");
 
 /** Row group arms (PRD 008): fresh rows, source and grouping, then a remount. */
+/** Pivot arms (PRD 012): a fresh fixture and its schema, then a remount. */
+const armPivot = (next: PivotMode): void => {
+  pivotSchema.value = pivot.arm(next);
+  armFixture({ fixture: "pivot", mode: next });
+};
 const armRowGroups = (next: RowGroupsMode): void => {
   rowGroupsArm.value = rowGroups.arm(next);
   armFixture({ fixture: "rowGroups", mode: next });
@@ -388,6 +407,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (pivotActive.value) return pivot.source();
   if (serverGroupsActive.value) return serverGroups.source();
   if (rowGroupsActive.value) return rowGroups.source();
   if (columnGroupsActive.value) return undefined;
@@ -400,7 +420,7 @@ const activeDataSource = (): DataSource<never> | undefined => {
 
 /** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
-  if (rowGroupsActive.value || serverGroupsActive.value) return undefined;
+  if (rowGroupsActive.value || serverGroupsActive.value || pivotActive.value) return undefined;
   if (columnGroupsActive.value) {
     return columnGroups.rowDataFor(columnGroupsMode.value) as unknown as ConformanceRow[] | undefined;
   }
@@ -411,6 +431,7 @@ const activeRowData = (): ConformanceRow[] | undefined => {
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  if (pivotActive.value) return pivotSchema.value.columns;
   if (serverGroupsActive.value) return serverGroups.columns();
   if (rowGroupsActive.value) return rowGroupsArm.value.columns;
   if (columnGroupsActive.value) return groupsSchema.value.columns;
@@ -439,6 +460,7 @@ const activeRowHeight = (): number => {
   if (columnGroupsActive.value) return COLUMN_GROUPS_ROW_HEIGHT;
   if (rowGroupsActive.value) return ROW_GROUPS_ROW_HEIGHT;
   if (serverGroupsActive.value) return SERVER_GROUPS_ROW_HEIGHT;
+  if (pivotActive.value) return PIVOT_ROW_HEIGHT;
   return 32;
 };
 
@@ -449,6 +471,7 @@ const activeHeaderHeight = (): number => {
   if (columnGroupsActive.value) return COLUMN_GROUPS_HEADER_HEIGHT;
   if (rowGroupsActive.value) return ROW_GROUPS_HEADER_HEIGHT;
   if (serverGroupsActive.value) return SERVER_GROUPS_HEADER_HEIGHT;
+  if (pivotActive.value) return PIVOT_HEADER_HEIGHT;
   return 36;
 };
 
@@ -456,6 +479,7 @@ const activeColumnLayout = (): ColumnLayoutMode => {
   if (autoFitActive.value) return AUTO_FIT_COLUMN_LAYOUT;
   if (rowGroupsActive.value) return ROW_GROUPS_COLUMN_LAYOUT;
   if (serverGroupsActive.value) return SERVER_GROUPS_COLUMN_LAYOUT;
+  if (pivotActive.value) return PIVOT_COLUMN_LAYOUT;
   return columnGroupsActive.value ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout.value;
 };
 
@@ -467,8 +491,19 @@ const activeFreezeRows = (): FreezeRowsOptions | undefined => {
 };
 
 const activeLabelColumn = (): string | undefined => {
+  if (pivotActive.value) return PIVOT_LABEL_COLUMN_ID;
   if (serverGroupsActive.value) return SERVER_GROUPS_LABEL_COLUMN;
   return rowGroupsActive.value ? rowGroups.labelColumn() : undefined;
+};
+
+const activeColumnGroups = (): readonly ColumnGroupChild[] | undefined => {
+  if (pivotActive.value) return pivotSchema.value.columnGroups;
+  return columnGroupsActive.value ? groupsSchema.value.groups : undefined;
+};
+
+const activeBandHeights = (): readonly number[] | undefined => {
+  if (pivotActive.value) return PIVOT_BAND_HEIGHTS;
+  return columnGroupsActive.value ? bandHeights.value : undefined;
 };
 
 /** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
@@ -658,6 +693,9 @@ const rejectMissing = replaceSchema(columnGroups.missing);
 const tallBand = withCore((core) => {
   bandHeights.value = columnGroups.tallBandHeights(core);
 });
+const pivotReplaceRevision = withCore((core) => {
+  pivotSchema.value = pivot.replaceRevision(core);
+});
 /** Budgets are creation-only, so arming one remounts the grid. */
 const overBudgetMove = withCore((core) => {
   groupLimits.value = columnGroups.overBudgetLimits(core);
@@ -665,6 +703,7 @@ const overBudgetMove = withCore((core) => {
 });
 
 if (typeof window !== "undefined") {
+  const rowGroupHooks = rowGroups.createHooks(() => coreOf());
   (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
     getCellValue: (row: number, col: number): CellValue => coreOf()?.cells.getValue(row, col) ?? null,
     getFieldValue: (row: number, field: string): CellValue => coreOf()?.cells.getFieldValue(row, field) ?? null,
@@ -698,7 +737,8 @@ if (typeof window !== "undefined") {
         bandHeights.value = heights;
       },
     }),
-    ...rowGroups.createHooks(() => coreOf()),
+    ...rowGroupHooks,
+    ...pivot.createHooks(() => coreOf(), rowGroupHooks),
     ...serverGroups.createHooks(),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
@@ -821,6 +861,18 @@ if (typeof window !== "undefined") {
         <button data-testid="collapse-first-group" @click="withCore(serverGroups.collapseFirstGroup)()">Collapse first group</button>
         <button data-testid="scroll-deep" @click="withCore(serverGroups.scrollDeep)()">Scroll deep</button>
       </section>
+      <section class="cf-group">
+        <h2>Pivot</h2>
+        <button data-testid="use-pivot-external" @click="armPivot('external')">Pivot: external</button>
+        <button data-testid="use-pivot-external-wide" @click="armPivot('wide')">Pivot: wide</button>
+        <button data-testid="pivot-replace-revision" @click="pivotReplaceRevision()">Replace revision</button>
+        <button data-testid="pivot-refresh" @click="withCore(pivot.refresh)()">Refresh</button>
+        <button data-testid="pivot-hold-next" @click="pivot.holdNext()">Hold next</button>
+        <button data-testid="pivot-release" @click="pivot.release()">Release</button>
+        <button data-testid="pivot-pin-label" @click="withCore(pivot.pinLabel)()">Pin label</button>
+        <button data-testid="pivot-move-leaf" @click="withCore(pivot.moveLeaf)()">Move leaf</button>
+        <button data-testid="pivot-set-total-width" @click="withCore(pivot.setTotalWidth)()">Total width</button>
+      </section>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
     <div
@@ -839,8 +891,8 @@ if (typeof window !== "undefined") {
         :row-data="activeRowData()"
         :row-height="activeRowHeight()"
         :header-height="activeHeaderHeight()"
-        :column-groups="columnGroupsActive ? groupsSchema.groups : undefined"
-        :header-band-heights="columnGroupsActive ? bandHeights : undefined"
+        :column-groups="activeColumnGroups()"
+        :header-band-heights="activeBandHeights()"
         :column-group-limits="columnGroupsActive ? groupLimits : undefined"
         :freeze-rows="activeFreezeRows()"
         :row-resize="autoFitActive"
