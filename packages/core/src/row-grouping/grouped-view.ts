@@ -3,10 +3,15 @@
 
 import type { CellValue, RowGroupDimension, RowGroupMeasure, RowGroupingRejection, RowId } from "../types";
 import type { FlatRowSource } from "../types/row-grouping-engine";
-import { foldMeasure, type MeasureFold } from "./aggregators";
-import type { ExpansionState } from "./expansion-state";
-import { buildGroupTree, type GroupTree, type MeasureValues } from "./group-tree";
-import { createVisibleRows, type GrandTotalPlacement, type VisibleRows } from "./visible-rows";
+import { foldMeasure, type MeasureFold } from "../hierarchy/aggregators";
+import type { ExpansionState } from "../hierarchy/tree-expansion";
+import { buildGroupTree, type GroupTree, type MeasureValues } from "../hierarchy/group-tree";
+import {
+  createVisibleRows,
+  highestCollapsed,
+  type GrandTotalPlacement,
+  type VisibleRows,
+} from "../hierarchy/visible-rows";
 
 export interface GroupingSpec {
   readonly dimensions: readonly RowGroupDimension[];
@@ -50,21 +55,6 @@ export const buildGroupedView = (
     expanded,
     visible: createVisibleRows(tree, expanded, spec.grandTotal),
   };
-};
-
-/** The highest collapsed group among `group` and its ancestors, or -1. */
-const highestCollapsed = (view: GroupedView, group: number): number => {
-  let top = -1;
-  for (let g = group; g >= 0; g = view.tree.parent[g]!) {
-    if (view.expanded[g] !== 1) top = g;
-  }
-  return top;
-};
-
-/** View index of a group, or of its highest collapsed ancestor when hidden. */
-export const locateGroup = (view: GroupedView, group: number): number => {
-  const hiddenBy = highestCollapsed(view, view.tree.parent[group]!);
-  return view.visible.viewIndexOfGroup(hiddenBy < 0 ? group : hiddenBy);
 };
 
 /** Offset of a flat position in its terminal group's range, whose leaves ascend. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGroupTree, groupIdOf, type GroupTree } from "../src/row-grouping/group-tree";
+import { buildGroupTree, groupIdOf, type GroupTree } from "../src/hierarchy/group-tree";
 import {
   TAG_BOOLEAN,
   TAG_DATE,

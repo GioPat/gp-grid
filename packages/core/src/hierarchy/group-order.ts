@@ -1,11 +1,11 @@
-// packages/core/src/row-grouping/group-order.ts
+// packages/core/src/hierarchy/group-order.ts
 // The order of sibling groups at each depth.
 
 import { compareValues } from "../indexed-data-store/sorting";
 import type { CellValue, SortDirection } from "../types";
 import type { FlatRowSource } from "../types/row-grouping-engine";
 import type { TreeLevel } from "./group-layout";
-import { keyTagOf } from "../hierarchy/keys";
+import { keyTagOf } from "./keys";
 
 type Direction = 1 | -1;
 

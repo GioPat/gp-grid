@@ -1,7 +1,7 @@
-// packages/core/src/row-grouping/group-layout.ts
+// packages/core/src/hierarchy/group-layout.ts
 // Numbers bucketed groups in display pre-order and lays their leaves out.
 
-import type { GroupKey } from "../hierarchy/keys";
+import type { GroupKey } from "./keys";
 
 /** The groups of one depth, by level-local index; `parent` indexes the level above. */
 export interface TreeLevel {

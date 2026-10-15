@@ -2,7 +2,7 @@
 
 import { keyOf, keyTagOf } from "../src/hierarchy/keys";
 import { compareValues } from "../src/indexed-data-store/sorting";
-import { compareTagged } from "../src/row-grouping/group-order";
+import { compareTagged } from "../src/hierarchy/group-order";
 import type {
   CellValue,
   ColumnFilterModel,
