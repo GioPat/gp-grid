@@ -1,6 +1,6 @@
 ---
 name: gp-grid-integration
-description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, server-side grouping, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createServerGroupingSource, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
+description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, server-side grouping, read-only pivot, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createServerGroupingSource, createPivotSource, buildPivotSchema, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
 ---
 
 # gp-grid integration
@@ -446,8 +446,93 @@ const source = createServerGroupingSource(service, {      // create once; one so
   leaves only (`undefined` for an unloaded leaf or a group id); after a refresh
   the active cell and the anchor follow their row by id when the new view has
   it at once, else keep their index on the placeholder there, which may load as
-  another row; no pivot.
+  another row; no pivot over the service yet (see Pivot).
   See [docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+
+### Pivot (`createPivotSource`, `buildPivotSchema`)
+
+A read-only pivot: group rows at every row dimension (the last level is
+childless: no leaves, no expander), one generated column per leaf tuple of the
+pivot dimensions and measure, header groups per tuple prefix, and the label
+column first. It binds as a supplied hierarchy plus ordinary `columns` and
+`columnGroups`; no new prop.
+
+```ts
+import { PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createClientDataSource, createPivotSource, type PivotConfig } from "@gp-grid/react"; // or /vue, /angular, /core
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],     // RowGroupDimension { field, id?, toKey? }; last level childless
+  pivots: [{ field: "year" }, { field: "quarter" }],  // outermost header band first; ids unique across rows + pivots
+  measures: [
+    { field: "amount", aggregate: "sum" },             // 008's aggregates: names or a RowGroupAggregator
+    { field: "n", source: "amount", aggregate: "count", column: { headerName: "Sales" } }, // column: leaf overrides
+  ],
+  domain: { quarter: ["Q1", "Q2", "Q3", "Q4"] },       // fixed keys in order, by pivot dimension id; default: keys found
+  rowTotals: true,                                     // one column per measure under "Total"; default false
+  grandTotal: "top",                                   // "top" | "bottom"; default none
+  defaultExpandedDepth: 1,                             // default 0; capped at the last non-terminal level
+  initialState: { expanded: [], collapsed: [] },       // RowGroupingState, e.g. from source.getState()
+  maxColumns: 1000,                                    // generated columns allowed; default 1000
+  labelColumn: { headerName: "Region / City" },        // label column overrides but colId/field
+  formatKey: ([, , key]) => String(key),               // header text per step; default "(Blanks)", UTC YYYY-MM-DD, String(key)
+};
+const source = createPivotSource(createClientDataSource(sales), config); // create once; every record must be resident
+```
+
+- **Schema hook:** `source.getSchema()` is `null` before the first query;
+  `subscribeSchema(listener)` fires synchronously, before the query resolves,
+  whenever the column or group ids change. Feed it to `columns` and
+  `columnGroups`; start from `buildPivotSchema([], config)` (the label column):
+
+  ```tsx
+  const [schema, setSchema] = useState(() => source.getSchema() ?? buildPivotSchema([], config));
+  useEffect(() => {
+    setSchema((shown) => source.getSchema() ?? shown); // the first query may publish before this effect
+    return source.subscribeSchema(setSchema);
+  }, [source]);
+  <Grid columns={schema.columns} columnGroups={schema.columnGroups} dataSource={source}
+    rowHeight={32} groupLabelColumn={PIVOT_LABEL_COLUMN_ID} />
+  ```
+
+  Vue: a `shallowRef` set from `subscribeSchema`, unsubscribed `onUnmounted`.
+  Angular: a `signal` set from `subscribeSchema`, unsubscribed in
+  `ngOnDestroy`. Core: `subscribeSchema((s) => core.columns.set(s.columns, s.columnGroups))`.
+  Columns and rows land by two commands: one frame may show new columns over
+  old rows.
+- **Precomputed (no engine):** `buildPivotSchema(tuples, { measures, rowTotals?,
+  labelColumn?, formatKey? })` for the columns, a `HierarchicalRowAccess` with
+  `childCount: 0` on the last row level, and `getValue(viewRow, encodePivotColumnId(path, measure))`.
+- **Ids:** `encodePivotColumnId(path, measure)` (`path` `[]` = row total),
+  `decodePivotColumnId(id)`, `encodePivotGroupId(prefix)`, `PIVOT_LABEL_COLUMN_ID`
+  (`"gp-pivot-label"`); group rows `encodeGroupId(path)`. They are plain
+  strings from typed key paths, so any server can compute and echo them.
+- **Rejections:** creation throws `RangeError("Invalid pivot.<field>: <value>")`
+  (no rows, pivots or measures, a repeated dimension id or measure field, an
+  unknown aggregate, a negative depth, `maxColumns` ≤ 0, an unknown domain id or
+  an object domain value). A query rejects (the grid's data error) with
+  `"pivot needs every row"` (paginated or short inner source), `"pivot reads unknown field <f>"`
+  (columnar source), `"pivot key of <id> is an object; add toKey"` or
+  `"pivot generates N columns, over maxColumns M"` (before any measure is read).
+  `buildPivotSchema` throws `RangeError("Invalid pivot keys: …")` for tuples of
+  mixed length or dimension, an empty tuple or keys not grouped by prefix.
+- **Sort and filter:** the first sorted generated or row-total column orders
+  every row level by its value, the label column by key; otherwise keys
+  ascend. The filter reaches the inner source; generated columns are not
+  filterable. A schema change drops sort/filter entries of ids that left.
+- **Domain:** listed keys appear under every parent, empty or not; records
+  outside it reach only the row totals and grand total; a tuple with nothing
+  below is dropped.
+- **State and writes:** expansion by id across queries (`source.getState()`);
+  terminal rows ignore toggles. Everything is read-only. The pivot does not
+  watch its inner source: after changing it, `core.refresh()`.
+- **Teardown:** `source.destroy()` is final (later queries reject). In React do
+  not destroy a `useMemo` source in an effect cleanup (StrictMode remounts with
+  it); unsubscribing is enough.
+- **Limits:** a cell is one value (no-data and `null` both render empty); an id
+  that leaves and returns takes its defaults; no incremental refold; no leaves,
+  no `getRecordById`; the `"Total"` header is fixed (rename it in
+  `schema.columnGroups`); no pivot over the server grouping service yet.
+  See [docs/features/pivot.md](../../../docs/features/pivot.md).
 
 ### Data sources — pick one
 
@@ -458,6 +543,7 @@ const source = createServerGroupingSource(service, {      // create once; one so
 | Client-side data that changes after first render (most apps) | `useGridData` (React/Vue) or `createGridData` / `provideGridData` (Angular) | mutable, transactional |
 | Data is too big for memory; server handles paging/sort/filter | `createServerDataSource(async (req) => ...)` | server-driven |
 | Grouped rows too big for memory; server groups and aggregates | `createServerGroupingSource(service, config)` (see Server grouping) | read-only unless `writable: true` |
+| Every record resident, shown as a pivot | `createPivotSource(flatSource, config)` (see Pivot) | read-only |
 | Your own column-oriented/typed-array storage is already resident | `createColumnarDataSource({ fields, rowCount, getRowId? })` | read-only (1.0) |
 
 **Why `useGridData` / `createGridData` matters:** if you replace the `rowData` prop with a fresh array on every state change, the grid rebuilds the entire pipeline (sort indices, filter caches, virtualization). Above 10,000 rows the library logs a dev warning. The mutable hook/helper batches updates as transactions instead. Always prefer it when data changes.

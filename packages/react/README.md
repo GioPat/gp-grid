@@ -41,6 +41,7 @@ A high-performance, feature lean React data grid component built to manage grids
 - **Row Resize and Auto-Fit**: Drag a row edge, or fit a row or a column to its rendered content once
 - **Column Groups**: Nested header groups of any finite depth, with configured header band heights
 - **Row Grouping**: Group rows by ordered dimensions with aggregates, a total row and expand/collapse
+- **Pivot**: Read-only pivot with generated columns per key tuple and measure, row totals and a grand total
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
@@ -741,6 +742,27 @@ const source = createServerGroupingSource(service, {
 });
 
 <Grid columns={columns} dataSource={source} rowHeight={32} groupLabelColumn="country" />;
+```
+
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. Pass it as `dataSource` and the schema from `subscribeSchema` as
+`columns` and `columnGroups`; `buildPivotSchema(keys, options)` builds the same schema from keys
+you computed yourself, without the engine. See
+[Pivot](../../docs/features/pivot.md).
+
+```tsx
+import { Grid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource } from "@gp-grid/react";
+
+const source = useMemo(() => createPivotSource(inner, config), [inner]);
+const [schema, setSchema] = useState(() => source.getSchema() ?? buildPivotSchema([], config));
+useEffect(() => {
+  setSchema((shown) => source.getSchema() ?? shown); // the first query may publish before this effect
+  return source.subscribeSchema(setSchema);
+}, [source]);
+
+<Grid columns={schema.columns} columnGroups={schema.columnGroups} dataSource={source}
+  rowHeight={32} groupLabelColumn={PIVOT_LABEL_COLUMN_ID} />;
 ```
 
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.

@@ -459,7 +459,7 @@ each clip edge center columns stay mounted; an open editor keeps its column
 mounted regardless. The default header action uses `pinIcon` and cycles through
 physical left, physical right and unpinned; override `pinLeftColumn`,
 `pinRightColumn` and `unpinColumn` in `labels` for its accessible names. See
-[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
 
 ## Frozen rows
 
@@ -475,7 +475,7 @@ prefix as `labels.frozenRowsLimited` in a hidden live region.
 A changed prop is applied at runtime through `core.frozenRows.set`: the core is
 not recreated, the scroll position is corrected so the visible suffix stays
 anchored, and an equal-valued object is silent. See
-[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
 
 ## Row heights
 
@@ -498,7 +498,7 @@ index and is dropped at the next data revision. Applying a height anchors the ro
 at the clip top and corrects the scroll in the same batch, so the viewport does
 not jump. Cells carry no inline height — they fill the row through the shipped
 `.gp-grid-cell { height: 100% }` rule. See
-[docs/features/row-heights.md](../../../docs/features/row-heights.md).
+[docs/features/row-heights.md](../../../../docs/features/row-heights.md).
 
 ## Row resize and auto-fit
 
@@ -524,7 +524,7 @@ gridRef.current?.core?.columns.setState([{ columnId: "name", width: null }]); //
 
 A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
 the same for the active cell. The handles are pointer-only. See
-[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
 
 ## Column groups
 
@@ -550,7 +550,7 @@ const columnGroups: ColumnGroupChild[] = [
 Keep `columnGroups` referentially stable (module constant or `useMemo`). A
 rejected hierarchy leaves the previous one on screen; the prop is re-applied with
 every later `columns` change, so put a valid one back. See
-[docs/features/column-groups.md](../../../docs/features/column-groups.md).
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
 
 ## Row grouping
 
@@ -609,7 +609,7 @@ and each aggregate renders under the column named by its measure's `field`. A
 group cell with no aggregate renders empty and calls no renderer. The grouping
 needs every row resident (`rowData`, a client source or `useGridData`); a server
 source is rejected with `partial-source`. See
-[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
 
 ## Server grouping
 
@@ -654,7 +654,49 @@ Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
 failed collapses with `row.error` and retries when expanded again. The source is
 read-only unless created with `writable: true`. `gridRef.current?.core?.rowGroups`
 and `onRowGroupToggled` work as for local grouping. See
-[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```tsx
+import { useEffect, useMemo, useState } from "react";
+import { Grid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource, type DataSource, type PivotConfig } from "@gp-grid/react";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+
+function SalesPivot({ inner }: { inner: DataSource<Sale> }) {
+  const source = useMemo(() => createPivotSource(inner, config), [inner]);
+  const [schema, setSchema] = useState(() => source.getSchema() ?? buildPivotSchema([], config));
+  useEffect(() => {
+    setSchema((shown) => source.getSchema() ?? shown); // the grid's first query may publish before this effect
+    return source.subscribeSchema(setSchema);
+  }, [source]);
+  // No destroy() in a cleanup here: it is final, and StrictMode remounts with the same memoized source.
+
+  return (
+    <Grid
+      columns={schema.columns}
+      columnGroups={schema.columnGroups}
+      dataSource={source}             // no rowGrouping: it would be rejected as hierarchical-source
+      rowHeight={32}
+      groupLabelColumn={PIVOT_LABEL_COLUMN_ID}
+    />
+  );
+}
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `gridRef.current?.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
 
 ## All `<Grid>` props (cheatsheet)
 

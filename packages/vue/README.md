@@ -41,6 +41,7 @@ A high-performance, feature lean Vue 3 data grid component built to manage grids
 - **Row Resize and Auto-Fit**: Drag a row edge, or fit a row or a column to its rendered content once
 - **Column Groups**: Nested header groups of any finite depth, with configured header band heights
 - **Row Grouping**: Group rows by ordered dimensions with aggregates, a total row and expand/collapse
+- **Pivot**: Read-only pivot with generated columns per key tuple and measure, row totals and a grand total
 - **Keyboard Navigation**: Arrow keys, Tab, Enter, Escape, Ctrl+A, Ctrl+C, Ctrl+V
 - **Custom Renderers**: Registry-based cell, edit, and header renderers
 - **Dark Mode**: Built-in dark theme support
@@ -780,6 +781,29 @@ const source = createServerGroupingSource(service, {
 
 <template>
   <GpGrid :columns="columns" :data-source="source" :row-height="32" group-label-column="country" />
+</template>
+```
+
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. Pass it as `data-source` and the schema from `subscribeSchema` as
+`columns` and `column-groups`; `buildPivotSchema(keys, options)` builds the same schema from keys
+you computed yourself, without the engine. See
+[Pivot](../../docs/features/pivot.md).
+
+```vue
+<script setup lang="ts">
+import { onUnmounted, shallowRef } from "vue";
+import { GpGrid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource } from "@gp-grid/vue";
+
+const source = createPivotSource(inner, config);
+const schema = shallowRef(source.getSchema() ?? buildPivotSchema([], config));
+onUnmounted(source.subscribeSchema((next) => (schema.value = next)));
+</script>
+
+<template>
+  <GpGrid :columns="schema.columns" :column-groups="schema.columnGroups" :data-source="source"
+    :row-height="32" :group-label-column="PIVOT_LABEL_COLUMN_ID" />
 </template>
 ```
 

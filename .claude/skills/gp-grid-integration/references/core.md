@@ -321,7 +321,7 @@ Optional members are capabilities: `setExpanded(ids | null, expanded): boolean`
 (called once per edit, paste or fill; `true` when view rows moved). Ids must be
 unique and stable across queries. Sort and filter arrive in the request; the
 grid never regroups or re-aggregates a supplied hierarchy. See
-[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
 
 A hierarchy may also count rows it has not loaded: `getRow` answers `undefined`
 for such a *placeholder* (rendered as the loading row, no input) while `getRowId`
@@ -367,7 +367,41 @@ the branch, which collapses its group with `error`. What a transport must encode
 (`Date` keys, `Set` and `Date` filter values) is in SKILL.md's "Server grouping"
 section. The reference implementation is the mock in
 `packages/core/tests/server-grouping-mock.ts`. See
-[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+### Pivot
+
+`createPivotSource(source, config)` pivots a flat source that holds every
+record into a hierarchy over generated columns. The schema reaches the core
+through `columns.set`; no option is pivot-specific.
+
+```ts
+import { GridCore, buildPivotSchema, createPivotSource, type PivotConfig } from "@gp-grid/core";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+};
+const source = createPivotSource(inner, config);
+const initial = buildPivotSchema([], config); // label column (+ row totals) until the first query
+const core = new GridCore({ columns: initial.columns, columnGroups: initial.columnGroups, dataSource: source, rowHeight: 32 });
+// Fires synchronously inside the query, before it resolves, when the ids change.
+const stop = source.subscribeSchema((schema) => core.columns.set(schema.columns, schema.columnGroups));
+await core.initialize();
+// …
+stop();
+core.destroy();
+source.destroy(); // final: later queries reject
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `core.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
 
 ## Building a wrapper for a new framework
 

@@ -507,6 +507,11 @@ A group whose children failed to load carries `error`, a message. Its row gets
 when it clears (server grouping clears it and retries when the group is
 expanded again).
 
+A group row with `childCount` 0 is childless: it shows no expander, has no
+`aria-expanded` and ignores every toggle. A [pivot](./pivot.md) is a supplied
+hierarchy whose last row level is childless, over generated columns built by
+`buildPivotSchema`; `createPivotSource` builds both from a flat source.
+
 ## Sorting, filtering, frozen rows and row heights
 
 - **Sorting and filtering** work on the flat rows first; see [Order](#order).
@@ -524,7 +529,7 @@ expanded again).
   (`GridState.hierarchical`), `role="grid"` otherwise.
 - Every row of a hierarchy carries `aria-level` (`depth + 1`),
   `data-row-kind` (`record`, `group` or `total`) and `--gp-grid-group-depth`. A
-  group row adds `aria-expanded` and `.gp-grid-row--group`; a total row
+  group row adds `.gp-grid-row--group` and, unless childless, `aria-expanded`; a total row
   `.gp-grid-row--total`. A group row with `error` adds `.gp-grid-row--error` and
   `data-row-error`.
 - The label column's cell is `.gp-grid-cell--group-indent` on every row; its
@@ -532,7 +537,8 @@ expanded again).
   depth.
 - On a group or total row the label cell is also `.gp-grid-cell--group-label`
   and holds `span.gp-grid-group-toggle[aria-hidden="true"]`
-  (`.gp-grid-group-toggle--expanded` while expanded, `--none` on the total row)
+  (`.gp-grid-group-toggle--expanded` while expanded, `--none` on the total row
+  and on a childless group row)
   and `span.gp-grid-group-label`.
 - Every cell of a group or total row is `aria-readonly="true"`.
 - The expander mirrors in RTL and does not animate under

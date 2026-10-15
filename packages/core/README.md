@@ -834,6 +834,31 @@ const source = createServerGroupingSource(service, {
 const grid = new GridCore({ columns, dataSource: source, rowHeight: 32 });
 ```
 
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. `getSchema()` and `subscribeSchema(listener)` give the
+`PivotSchema` (`columns`, `columnGroups`) to pass to `columns.set`.
+`buildPivotSchema(keys, options)` builds the same schema from keys the
+application computed itself, without the engine. Exports: `createPivotSource`,
+`buildPivotSchema`, `encodePivotColumnId`, `decodePivotColumnId`,
+`encodePivotGroupId`, `PIVOT_LABEL_COLUMN_ID` and the types `PivotConfig`,
+`PivotSource`, `PivotSchema`, `PivotSchemaOptions` and `PivotMeasure`. See
+[Pivot](../../docs/features/pivot.md).
+
+```typescript
+import { GridCore, buildPivotSchema, createPivotSource, type PivotConfig } from "@gp-grid/core";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+};
+const source = createPivotSource(inner, config);
+const initial = buildPivotSchema([], config); // the label column until the first query
+const grid = new GridCore({ columns: initial.columns, columnGroups: initial.columnGroups, dataSource: source, rowHeight: 32 });
+source.subscribeSchema((schema) => grid.columns.set(schema.columns, schema.columnGroups));
+```
+
 ### Editing and scroll motion
 
 An editor commit is coerced by the column's `cellDataType`, like paste:
