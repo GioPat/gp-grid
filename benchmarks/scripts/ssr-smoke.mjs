@@ -33,7 +33,7 @@ import {
   rowGroupColumns,
   rowGroupRows,
 } from "./ssr-row-groups.mjs";
-import { checkPivotCore, expectPivotMarkup, pivotGridProps } from "./ssr-pivot.mjs";
+import { checkLocalPivotCore, checkPivotCore, expectPivotMarkup, pivotGridProps } from "./ssr-pivot.mjs";
 
 const importFrom = async (specifier, packageFile) => {
   const requireFromPackage = createRequire(packageFile);
@@ -325,6 +325,8 @@ await check("core row grouping over columnar rows", () =>
 await check("core binds a source-supplied hierarchy", () => checkExternalHierarchy(coreArtifact));
 
 await check("core precomputed pivot without browser globals", () => checkPivotCore(coreArtifact));
+
+await check("core local pivot without browser globals", () => checkLocalPivotCore(coreArtifact));
 
 /** The server renders of one wrapper: the local engine, a hierarchy from the source, then server grouping (PRD 009). */
 const rowGroupArms = () => [

@@ -22,6 +22,11 @@ const PACKAGE_ENTRY_SOURCES = {
     export { createServerGroupingSource } from "@gp-grid/core";
     import "@gp-grid/react/dist/styles.css";
   `,
+  "gp-grid-pivot": `
+    export { Grid } from "@gp-grid/react";
+    export { createPivotSource } from "@gp-grid/core";
+    import "@gp-grid/react/dist/styles.css";
+  `,
   "ag-grid": `
     export { AgGridReact } from "ag-grid-react";
     export { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
@@ -49,12 +54,12 @@ const PACKAGE_ENTRY_SOURCES = {
   `,
 };
 
-// Both gp-grid entries resolve to the benchmark source's artifacts.
-const GP_GRID_ENTRIES = new Set(["gp-grid", "gp-grid-server-grouping"]);
+// Every gp-grid entry resolves to the benchmark source's artifacts.
+const GP_GRID_ENTRIES = new Set(["gp-grid", "gp-grid-server-grouping", "gp-grid-pivot"]);
 
 // Measured beside "gp-grid" from candidate artifacts only: the published packages
-// predate server grouping.
-const CANDIDATE_COMPANIONS = { "gp-grid": ["gp-grid-server-grouping"] };
+// predate server grouping and pivot.
+const CANDIDATE_COMPANIONS = { "gp-grid": ["gp-grid-server-grouping", "gp-grid-pivot"] };
 
 // PRD 008 D12, PRD 009 D7 and PRD 012 D8: no gp-grid entry may keep the local
 // grouping or pivot engine. Each marker is its engine's RangeError text, which
@@ -62,12 +67,29 @@ const CANDIDATE_COMPANIONS = { "gp-grid": ["gp-grid-server-grouping"] };
 const ENGINE_MARKER = "Invalid rowGrouping.";
 const PIVOT_ENGINE_MARKER = "Invalid pivot.";
 const GP_GRID_ENGINE_MARKERS = [ENGINE_MARKER, PIVOT_ENGINE_MARKER];
+// The engine an entry must keep, and the markers it must still not hold.
+const ENTRY_ENGINES = { "gp-grid-pivot": { kept: PIVOT_ENGINE_MARKER, absent: [ENGINE_MARKER] } };
 
 export const assertConsumerHoldsNoEngine = (grid, contents, markers) => {
   const found = markers.find((marker) => contents.some((content) => content.includes(marker)));
   if (found !== undefined) {
     throw new Error(`The ${grid} package-size bundle contains an engine ("${found}").`);
   }
+};
+
+export const assertConsumerHoldsEngine = (grid, contents, marker) => {
+  if (contents.some((content) => content.includes(marker))) return;
+  throw new Error(`The ${grid} package-size bundle lacks its engine ("${marker}").`);
+};
+
+const assertEntryEngines = (grid, contents) => {
+  const engines = ENTRY_ENGINES[grid];
+  if (engines === undefined) {
+    assertConsumerHoldsNoEngine(grid, contents, GP_GRID_ENGINE_MARKERS);
+    return;
+  }
+  assertConsumerHoldsEngine(grid, contents, engines.kept);
+  assertConsumerHoldsNoEngine(grid, contents, engines.absent);
 };
 
 const isReactPeer = (source) => {
@@ -137,7 +159,7 @@ const measurePackageGroup = async (grid, source, benchmarkSource) => {
     },
   });
   const contents = outputContents(buildResult);
-  if (GP_GRID_ENTRIES.has(grid)) assertConsumerHoldsNoEngine(grid, contents, GP_GRID_ENGINE_MARKERS);
+  if (GP_GRID_ENTRIES.has(grid)) assertEntryEngines(grid, contents);
 
   return {
     minifiedBytes: contents.reduce((total, content) => total + content.length, 0),

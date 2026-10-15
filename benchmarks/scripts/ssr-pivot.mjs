@@ -1,6 +1,9 @@
-// PRD 012 precomputed pivot fixture and checks for `ssr-smoke.mjs` (D9,
-// AC-012-07): revision 1 of the conformance fixture, ids and values written
-// out by hand. The schema comes from the core artifact's helper; no engine.
+// PRD 012 pivot fixtures and checks for `ssr-smoke.mjs` (D9, AC-012-07): the
+// precomputed one is revision 1 of the conformance fixture, ids and values
+// written out by hand, its schema from the core artifact's helper and no
+// engine; the local one runs `createPivotSource` over the row-groups records.
+
+import { rowGroupRows } from "./ssr-row-groups.mjs";
 
 const MEASURES = [
   { field: "amount", aggregate: "sum" },
@@ -165,6 +168,70 @@ export const checkPivotCore = async (coreArtifact) => {
   expectEqual(core.cells.getFieldValue(2, leafId(2025, "Q2", "amount")), null, "Oslo 2025 Q2 amount");
   core.destroy();
   return `${COLUMN_COUNT} columns, ${PIVOT_BAND_HEIGHTS.length} bands, total 215; North has 2 cities, Oslo is childless`;
+};
+
+const LOCAL_TOTAL_ID = "gp-pivot:[]|amount";
+/** Country > city over amount bands "high" then "low", ascending; written out from the six records. */
+const LOCAL_COLLAPSED = [
+  { id: "gp-total", kind: "total", amount: 210, high: 150 },
+  { id: 'gp-group:[["country","s","FR"]]', kind: "group", amount: 120, high: 100 },
+  { id: 'gp-group:[["country","s","IT"]]', kind: "group", amount: 90, high: 50 },
+];
+/** The label column, 2 bands x 1 measure, 1 row total. */
+const LOCAL_COLUMN_COUNT = 4;
+/** The band groups and the row totals group, then the leaves. */
+const LOCAL_BAND_COUNT = 2;
+
+const encodeLocalLeaf = (band) => `gp-pivot:[["band","s","${band}"]]|amount`;
+
+const createLocalPivot = (coreArtifact) =>
+  coreArtifact.createPivotSource(coreArtifact.createClientDataSource(rowGroupRows), {
+    rows: [{ field: "country" }, { field: "city" }],
+    pivots: [{ field: "amount", id: "band", toKey: (value) => (value >= 40 ? "high" : "low") }],
+    measures: [{ field: "amount", aggregate: "sum" }],
+    rowTotals: true,
+    grandTotal: "top",
+  });
+
+export const checkLocalPivotCore = async (coreArtifact) => {
+  if (typeof window !== "undefined" || typeof document !== "undefined") {
+    throw new Error("The core check must run without browser globals.");
+  }
+  const source = createLocalPivot(coreArtifact);
+  let published = 0;
+  source.subscribeSchema(() => {
+    published += 1;
+  });
+  await source.query({ range: { startRow: 0, endRow: rowGroupRows.length } });
+  const schema = source.getSchema();
+  expectEqual(published, 1, "schemas published");
+  const core = new coreArtifact.GridCore({
+    columns: schema.columns,
+    columnGroups: schema.columnGroups,
+    dataSource: source,
+    rowHeight: 32,
+    headerHeight: PIVOT_HEADER_HEIGHT,
+    columnLayout: "fixed",
+  });
+  await core.initialize();
+  expectEqual(core.columns.get().length, LOCAL_COLUMN_COUNT, "local column count");
+  expectEqual(core.header.getBands().count, LOCAL_BAND_COUNT, "local band count");
+  expectEqual(core.rows.getCount(), LOCAL_COLLAPSED.length, "local collapsed row count");
+  const highId = encodeLocalLeaf("high");
+  LOCAL_COLLAPSED.forEach((expected, viewIndex) => {
+    const row = core.rows.getViewRow(viewIndex);
+    expectEqual(row?.id, expected.id, `local row ${viewIndex} id`);
+    expectEqual(row?.kind, expected.kind, `local row ${viewIndex} kind`);
+    expectEqual(core.cells.getFieldValue(viewIndex, LOCAL_TOTAL_ID), expected.amount, `local row ${viewIndex} total`);
+    expectEqual(core.cells.getFieldValue(viewIndex, highId), expected.high, `local row ${viewIndex} high`);
+  });
+  core.destroy();
+  const pending = source.query({ range: { startRow: 0, endRow: rowGroupRows.length } });
+  source.destroy();
+  const late = await pending.then(() => "resolved", (error) => error.message);
+  expectEqual(late, "Superseded by a later query", "query in flight at destroy");
+  expectEqual(published, 1, "schemas published after destroy");
+  return `${LOCAL_COLUMN_COUNT} columns, ${LOCAL_BAND_COUNT} bands, rows total/FR/IT with row totals 210/120/90; destroy settles the pending query`;
 };
 
 /** The header root's start tag up to the body. */
