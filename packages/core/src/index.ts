@@ -52,6 +52,7 @@ export type {
 } from "./types";
 
 /** Pivot (PRD 012) */
+export { createPivotSource } from "./pivot";
 export { buildPivotSchema } from "./hierarchy/pivot-schema";
 export {
   PIVOT_LABEL_COLUMN_ID,
