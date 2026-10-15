@@ -89,7 +89,7 @@ const schema = buildPivotSchema(
 `buildPivotSchema(keys, options)` takes the leaf tuples in column order. The
 schema is the label column, then one column per measure for each tuple in
 measure order, inside one group per tuple prefix, then with `rowTotals` one
-column per measure under a group headed `"Total"`. Without keys it is the label
+column per measure under a group headed by `rowTotalsHeader`. Without keys it is the label
 column, and the row totals when asked.
 
 | `PivotSchemaOptions` | Default | Meaning |
@@ -97,18 +97,18 @@ column, and the row totals when asked.
 | `measures` | required | `PivotMeasure[]`: a [`RowGroupMeasure`](./row-grouping.md#aggregates) plus an optional `column`, a `Partial<ColumnDefinition>` over the generated column's defaults. |
 | `labelColumn` | none | Overrides the label column's defaults. |
 | `rowTotals` | `false` | Adds the row total columns. |
+| `rowTotalsHeader` | `"Total"` | Header of the row totals group. |
 | `formatKey` | see below | `(step) => string`: the header text of a tuple step. |
 
 | Column | Defaults | Fixed |
 |---|---|---|
-| Label | `headerName: ""`, `width: 200`, `cellDataType: "text"` | `colId` and `field` (`"gp-pivot-label"`) |
+| Label | `headerName: ""`, `width: 200`, `cellDataType: "text"` | `colId` and `field` (`"gp-pivot-label"`), `filterable: false` |
 | Generated and row total | `headerName: measure.field`, `width: 120`, `cellDataType: "number"` | `colId` and `field` (the id), `editable: false`, `filterable: false` |
 
 The default `formatKey` prints `"(Blanks)"` for a `z` step, a `d` timestamp as
 its UTC date `YYYY-MM-DD`, and `String(key)` otherwise, so a schema reads the
-same on the server and in every time zone. `formatKey` does not reach the
-`"Total"` header: to translate it, replace the `headerName` of the group
-`encodePivotGroupId([])` in `schema.columnGroups`.
+same on the server and in every time zone. `formatKey` does not reach the row
+totals header; `rowTotalsHeader` names it.
 
 `buildPivotSchema` throws a `RangeError` when the keys cannot nest:
 
@@ -211,6 +211,7 @@ const source = createPivotSource(createClientDataSource(sales), config);
 | `measures` | required | `PivotMeasure[]`: one generated column per tuple each, in this order. The [aggregates](./row-grouping.md#aggregates) are row grouping's: a built-in name or a `RowGroupAggregator`. |
 | `domain` | none | Fixed keys of a pivot dimension, by its id; see [Domain](#domain). |
 | `rowTotals` | `false` | One column per measure over every tuple. |
+| `rowTotalsHeader` | `"Total"` | Header of the row totals group. |
 | `grandTotal` | none | `"top"` or `"bottom"` adds the total row. |
 | `defaultExpandedDepth` | `0` | Groups of a depth below it start expanded. A value past the last non-terminal level acts as that level. |
 | `initialState` | none | A `RowGroupingState`, from `getState()` or built from group ids. |
@@ -248,7 +249,7 @@ Creation throws `RangeError("Invalid pivot.<field>: <value>")`:
 | `getSchema()` | The last built schema, `null` before the first query. |
 | `subscribeSchema(listener)` | Calls `listener(schema)` when a query builds a schema with other column or group ids; returns the unsubscribe. |
 | `getState()` | The expansion by id, kept across queries. |
-| `destroy()` | Drops the listeners and releases the view; a later query rejects. |
+| `destroy()` | Drops the listeners and releases the view the grid holds; a later query builds a new one. |
 
 ### The query
 
@@ -262,8 +263,7 @@ error, with:
 | `pivot reads unknown field quarter` | A dimension or measure field (`source ?? field`) that a columnar inner source lacks |
 | `pivot key of year is an object; add toKey` | An object key in a row or pivot dimension without `toKey`; names the dimension id |
 | `pivot generates 8 columns, over maxColumns 7` | The schema is over budget |
-| `Superseded by a later query` | A later query started before this one resolved |
-| `pivot source destroyed` | `destroy()` ran before or during the query |
+| `Superseded by a later query` | A later query, or `destroy()`, came before this one resolved |
 
 ### The schema hook
 
@@ -361,10 +361,8 @@ and a descending sort reverses the whole order. A sort on a record field has
 no column to name and is skipped.
 
 The request's filter model reaches the inner source unchanged, so the records
-are filtered before they are pivoted. Generated columns are not filterable. The
-label column is filterable by default, and a filter on it reaches the inner
-source keyed by `gp-pivot-label`; `labelColumn: { filterable: false }` removes
-it. The grid keeps sort and filter entries only for the ids of its current columns: a
+are filtered before they are pivoted. Neither the generated columns nor the
+label column is filterable. The grid keeps sort and filter entries only for the ids of its current columns: a
 schema change drops the entries of the ids that left and queries again.
 
 ### Expansion and state
@@ -404,12 +402,10 @@ resolved: a server render shows the schema the application passes, so an
 application that wants the generated headers in its HTML awaits one
 `source.query(…)` first and passes `source.getSchema()`.
 
-`source.destroy()` is final: the listeners stop, the view the grid holds reads
-as empty, and every later query rejects with `pivot source destroyed`. No
-wrapper destroys a source passed as `dataSource`. In React, a source created
-with `useMemo` survives StrictMode's second mount, so do not destroy it in that
-effect's cleanup; unsubscribing is enough, and the grid releases the view it
-bound when it is destroyed.
+`source.destroy()` drops the listeners and releases the view the grid holds,
+which then reads as empty; a later query builds a new view, so a React effect
+cleanup may destroy a `useMemo` source and StrictMode's second mount keeps
+working. No wrapper destroys a source passed as `dataSource`.
 
 ## Limits
 

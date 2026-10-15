@@ -73,6 +73,7 @@ const specOf = (config: PivotConfig): PivotSpec => ({
   measures: [...config.measures],
   domain: config.domain,
   rowTotals: config.rowTotals ?? false,
+  rowTotalsHeader: config.rowTotalsHeader,
   grandTotal: config.grandTotal,
   maxColumns: config.maxColumns ?? DEFAULT_MAX_COLUMNS,
   labelColumn: config.labelColumn,
@@ -103,8 +104,7 @@ export const createPivotSource = <TData>(source: DataSource<TData>, config: Pivo
   const listeners = new Set<(schema: PivotSchema) => void>();
   let schema: PivotSchema | null = null;
   let current: HierarchicalRowAccess<TData> | null = null;
-  let destroyed = false;
-  /** Moves with every query, so a superseded response never publishes its schema. */
+  /** Moves with every query and on destroy, so a superseded response never publishes its schema. */
   let generation = 0;
 
   const publish = (next: PivotSchema) => {
@@ -114,7 +114,6 @@ export const createPivotSource = <TData>(source: DataSource<TData>, config: Pivo
   };
 
   const query = async (request: DataSourceRequest): Promise<DataSourceResponse<TData>> => {
-    if (destroyed) throw new Error("pivot source destroyed");
     if (source.loadMode === "paginated") throw new Error("pivot needs every row");
     const token = ++generation;
     const response = await source.query({
@@ -122,7 +121,6 @@ export const createPivotSource = <TData>(source: DataSource<TData>, config: Pivo
       filter: request.filter,
       valueFormatters: request.valueFormatters,
     });
-    if (destroyed) throw new Error("pivot source destroyed");
     if (token !== generation) throw new Error("Superseded by a later query");
     if (isPartial(response)) throw new Error("pivot needs every row");
     const known = new Set(knownFields(source, spec));
@@ -151,7 +149,7 @@ export const createPivotSource = <TData>(source: DataSource<TData>, config: Pivo
     },
     getState: () => expansion.snapshot(),
     destroy: () => {
-      destroyed = true;
+      generation += 1;
       listeners.clear();
       current?.release?.();
       current = null;

@@ -21,8 +21,10 @@ export interface PivotSchemaOptions {
   measures: readonly PivotMeasure[];
   /** Overrides the label column's defaults but its `colId` and `field`. */
   labelColumn?: Partial<ColumnDefinition>;
-  /** One column per measure over every tuple, under a "Total" group. Default: false. */
+  /** One column per measure over every tuple, under the row totals group. Default: false. */
   rowTotals?: boolean;
+  /** Header of the row totals group. Default: "Total". */
+  rowTotalsHeader?: string;
   /** Header text of a tuple step. Default: `(Blanks)` for null, `YYYY-MM-DD` for a date, `String(key)` otherwise. */
   formatKey?: (step: GroupPathStep) => string;
 }
@@ -35,6 +37,8 @@ export interface PivotConfig {
   domain?: Readonly<Record<string, readonly CellValue[]>>;
   /** Default: false. */
   rowTotals?: boolean;
+  /** Default: "Total". */
+  rowTotalsHeader?: string;
   grandTotal?: "top" | "bottom";
   /** Default: 0. */
   defaultExpandedDepth?: number;

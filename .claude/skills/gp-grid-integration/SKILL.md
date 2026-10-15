@@ -468,7 +468,8 @@ const config: PivotConfig = {
     { field: "n", source: "amount", aggregate: "count", column: { headerName: "Sales" } }, // column: leaf overrides
   ],
   domain: { quarter: ["Q1", "Q2", "Q3", "Q4"] },       // fixed keys in order, by pivot dimension id; default: keys found
-  rowTotals: true,                                     // one column per measure under "Total"; default false
+  rowTotals: true,                                     // one column per measure under the row totals group; default false
+  rowTotalsHeader: "Total",                            // its header; default "Total"
   grandTotal: "top",                                   // "top" | "bottom"; default none
   defaultExpandedDepth: 1,                             // default 0; capped at the last non-terminal level
   initialState: { expanded: [], collapsed: [] },       // RowGroupingState, e.g. from source.getState()
@@ -517,21 +518,20 @@ const source = createPivotSource(createClientDataSource(sales), config); // crea
   mixed length or dimension, an empty tuple or keys not grouped by prefix.
 - **Sort and filter:** the first sorted generated or row-total column orders
   every row level by its value, the label column by key; otherwise keys
-  ascend. The filter reaches the inner source; generated columns are not
-  filterable. A schema change drops sort/filter entries of ids that left.
+  ascend. The filter reaches the inner source; generated columns and the
+  label column are not filterable. A schema change drops sort/filter entries of ids that left.
 - **Domain:** listed keys appear under every parent, empty or not; records
   outside it reach only the row totals and grand total; a tuple with nothing
   below is dropped.
 - **State and writes:** expansion by id across queries (`source.getState()`);
   terminal rows ignore toggles. Everything is read-only. The pivot does not
   watch its inner source: after changing it, `core.refresh()`.
-- **Teardown:** `source.destroy()` is final (later queries reject). In React do
-  not destroy a `useMemo` source in an effect cleanup (StrictMode remounts with
-  it); unsubscribing is enough.
+- **Teardown:** `source.destroy()` drops the listeners and releases the view;
+  a later query builds a new one, so a React effect cleanup may destroy a
+  `useMemo` source under StrictMode.
 - **Limits:** a cell is one value (no-data and `null` both render empty); an id
   that leaves and returns takes its defaults; no incremental refold; no leaves,
-  no `getRecordById`; the `"Total"` header is fixed (rename it in
-  `schema.columnGroups`); no pivot over the server grouping service yet.
+  no `getRecordById`; no pivot over the server grouping service yet.
   See [docs/features/pivot.md](../../../docs/features/pivot.md).
 
 ### Data sources — pick one

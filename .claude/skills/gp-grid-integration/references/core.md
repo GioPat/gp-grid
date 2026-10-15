@@ -393,7 +393,7 @@ await core.initialize();
 // …
 stop();
 core.destroy();
-source.destroy(); // final: later queries reject
+source.destroy(); // releases the view; a later query rebuilds
 ```
 
 The source is read-only, keeps expansion by id across queries and does not

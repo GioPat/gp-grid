@@ -225,7 +225,7 @@ describe("createPivotSource order", () => {
 });
 
 describe("createPivotSource destroy", () => {
-  it("silences listeners, releases the view and rejects later queries", async () => {
+  it("silences listeners, releases the view and keeps answering later queries", async () => {
     const source = pivot(objects());
     const listener = vi.fn();
     source.subscribeSchema(listener);
@@ -234,7 +234,8 @@ describe("createPivotSource destroy", () => {
     expect(access.rowCount).toBe(0);
     expect(access.getValue(0, TOTAL_AMOUNT)).toBeNull();
     expect(access.setExpanded!(null, true)).toBe(false);
-    await expect(query(source)).rejects.toThrow("pivot source destroyed");
+    const later = await query(source);
+    expect(later.rowCount).toBeGreaterThan(0);
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });

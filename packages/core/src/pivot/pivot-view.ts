@@ -20,6 +20,7 @@ export interface PivotSpec {
   readonly measures: readonly PivotMeasure[];
   readonly domain?: PivotConfig["domain"];
   readonly rowTotals: boolean;
+  readonly rowTotalsHeader?: string;
   readonly grandTotal?: GrandTotalPlacement;
   readonly maxColumns: number;
   readonly labelColumn?: PivotConfig["labelColumn"];
@@ -126,6 +127,7 @@ export const buildPivotView = (
       measures: spec.measures,
       labelColumn: spec.labelColumn,
       rowTotals: spec.rowTotals,
+      rowTotalsHeader: spec.rowTotalsHeader,
       formatKey: spec.formatKey,
     }),
     resolve,

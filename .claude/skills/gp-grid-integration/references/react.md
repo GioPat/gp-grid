@@ -677,7 +677,7 @@ function SalesPivot({ inner }: { inner: DataSource<Sale> }) {
     setSchema((shown) => source.getSchema() ?? shown); // the grid's first query may publish before this effect
     return source.subscribeSchema(setSchema);
   }, [source]);
-  // No destroy() in a cleanup here: it is final, and StrictMode remounts with the same memoized source.
+  useEffect(() => () => source.destroy(), [source]); // a later query rebuilds, so StrictMode's remount is fine
 
   return (
     <Grid

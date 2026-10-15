@@ -63,6 +63,11 @@ describe("buildPivotSchema — structure", () => {
     expect(build([])).toEqual({ columns: [expect.objectContaining({ colId: PIVOT_LABEL_COLUMN_ID })], columnGroups: [PIVOT_LABEL_COLUMN_ID] });
   });
 
+  it("heads the row totals group with rowTotalsHeader", () => {
+    const schema = build([[y(2024)]], { rowTotals: true, rowTotalsHeader: "Totale" });
+    expect(shape(schema.columnGroups).at(-1)).toEqual(["gp-pivot-group:[]", "Totale", expect.any(Array)]);
+  });
+
   it("adds one row total per measure under the Total group", () => {
     const schema = build([[y(2024)]], { rowTotals: true });
     expect(schema.columns.slice(-2).map((column) => column.colId)).toEqual([col([], "amount"), col([], "count")]);
@@ -77,6 +82,7 @@ describe("buildPivotSchema — column definitions", () => {
     const [label, generated] = build([[y(2024)]]).columns;
     expect(label).toEqual({
       colId: PIVOT_LABEL_COLUMN_ID, field: PIVOT_LABEL_COLUMN_ID, headerName: "", width: 200, cellDataType: "text",
+      filterable: false,
     });
     const id = col([y(2024)], "amount");
     expect(generated).toEqual({
@@ -94,9 +100,11 @@ describe("buildPivotSchema — column definitions", () => {
   });
 
   it("applies labelColumn but keeps its colId and field", () => {
-    const schema = build([[y(2024)]], { labelColumn: { colId: "x", field: "x", headerName: "Region", width: 260 } });
+    const labelColumn = { colId: "x", field: "x", headerName: "Region", width: 260, filterable: true };
+    const schema = build([[y(2024)]], { labelColumn });
     expect(schema.columns[0]).toEqual({
       colId: PIVOT_LABEL_COLUMN_ID, field: PIVOT_LABEL_COLUMN_ID, headerName: "Region", width: 260, cellDataType: "text",
+      filterable: false,
     });
   });
 });

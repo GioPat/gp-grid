@@ -17,8 +17,8 @@ interface OpenGroup {
   children: ColumnGroupChild[];
 }
 
-const LABEL_ID = { colId: PIVOT_LABEL_COLUMN_ID, field: PIVOT_LABEL_COLUMN_ID };
-const LABEL_DEFAULTS: ColumnDefinition = { ...LABEL_ID, headerName: "", width: 200, cellDataType: "text" };
+const LABEL_FIXED = { colId: PIVOT_LABEL_COLUMN_ID, field: PIVOT_LABEL_COLUMN_ID, filterable: false };
+const LABEL_DEFAULTS: ColumnDefinition = { ...LABEL_FIXED, headerName: "", width: 200, cellDataType: "text" };
 
 /** Dates print in UTC, so a schema is the same on the server and in every time zone. */
 const formatTimestamp = (key: GroupPathStep[2]): string => {
@@ -111,7 +111,7 @@ export const buildPivotSchema = (
   options: PivotSchemaOptions,
 ): PivotSchema => {
   checkKeys(keys);
-  const label: ColumnDefinition = { ...LABEL_DEFAULTS, ...options.labelColumn, ...LABEL_ID };
+  const label: ColumnDefinition = { ...LABEL_DEFAULTS, ...options.labelColumn, ...LABEL_FIXED };
   const build: SchemaBuild = {
     options,
     formatKey: options.formatKey ?? defaultFormatKey,
@@ -122,7 +122,7 @@ export const buildPivotSchema = (
   };
   for (const index of keys.keys()) appendTuple(build, keys, index);
   if (options.rowTotals) {
-    const totals: OpenGroup = { groupId: encodePivotGroupId([]), headerName: "Total", children: [] };
+    const totals: OpenGroup = { groupId: encodePivotGroupId([]), headerName: options.rowTotalsHeader ?? "Total", children: [] };
     appendMeasures(build, [], totals.children);
     build.roots.push(totals);
   }
