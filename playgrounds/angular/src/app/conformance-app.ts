@@ -95,6 +95,8 @@ import {
   PIVOT_ROW_HEIGHT,
   type PivotMode,
 } from './conformance-pivot-external';
+import { createEnginePivotFixture } from './conformance-pivot';
+import { createPivotSchemaBinding } from './pivot-schema-binding';
 
 interface ConformanceRow {
   id: number;
@@ -118,7 +120,7 @@ type FixtureArm =
   | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
   | { fixture: 'rowGroups'; mode: RowGroupsMode }
   | { fixture: 'serverGroups'; mode: ServerGroupsMode }
-  | { fixture: 'pivot'; mode: PivotMode };
+  | { fixture: 'pivot'; mode: PivotMode | 'engine' };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -356,6 +358,10 @@ const createColumnarFixture = () => {
           <button data-testid="pivot-pin-label" (click)="withCore(pivot.pinLabel)">Pin label</button>
           <button data-testid="pivot-move-leaf" (click)="withCore(pivot.moveLeaf)">Move leaf</button>
           <button data-testid="pivot-set-total-width" (click)="withCore(pivot.setTotalWidth)">Total width</button>
+          <button data-testid="use-pivot" (click)="armEnginePivot()">Pivot: engine</button>
+          <button data-testid="pivot-add-key" (click)="withCore(addPivotKey)">Add key</button>
+          <button data-testid="pivot-sort-first-amount" (click)="withCore(enginePivot.sortFirstAmount)">Sort first amount</button>
+          <button data-testid="pivot-set-first-amount-width" (click)="withCore(enginePivot.setFirstAmountWidth)">First amount width</button>
         </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
@@ -471,6 +477,14 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   protected readonly pivot = createPivotFixture();
   protected readonly pivotActive = computed(() => this.arm().fixture === 'pivot');
   protected readonly pivotSchema = signal<PivotSchema>({ columns: [], columnGroups: [] });
+  protected readonly enginePivot = createEnginePivotFixture();
+  protected readonly enginePivotActive = computed(() => {
+    const arm = this.arm();
+    return arm.fixture === 'pivot' && arm.mode === 'engine';
+  });
+  private readonly engineSchema = createPivotSchemaBinding(this.enginePivot.recordNotification);
+  private readonly shownPivotSchema = computed(() =>
+    this.enginePivotActive() ? this.engineSchema.schema() : this.pivotSchema());
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
@@ -566,7 +580,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
         setBandHeights: (heights) => this.bandHeights.set(heights ?? NO_BAND_HEIGHTS),
       }),
       ...rowGroupHooks,
-      ...this.pivot.createHooks(() => this.coreOf(), rowGroupHooks),
+      ...this.enginePivot.createHooks(this.pivot.createHooks(() => this.coreOf(), rowGroupHooks)),
       ...this.serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
@@ -578,6 +592,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
 
   ngOnDestroy(): void {
+    this.engineSchema.clear();
     if (typeof window === 'undefined') return;
     delete (window as unknown as { __gpConformance?: unknown }).__gpConformance;
   }
@@ -668,6 +683,17 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.armFixture({ fixture: 'pivot', mode: next });
   }
 
+  /** The engine arm (PRD 012): fresh records and sources; its schema arrives through the binding. */
+  protected armEnginePivot(): void {
+    this.enginePivot.arm();
+    this.engineSchema.bind(this.enginePivot.pivotSource());
+    this.armFixture({ fixture: 'pivot', mode: 'engine' });
+  }
+
+  protected readonly addPivotKey = (core: GridCore<unknown>): void => {
+    void this.enginePivot.addKey(core);
+  };
+
   protected pivotReplaceRevision(): void {
     this.withCore((core) => this.pivotSchema.set(this.pivot.replaceRevision(core)));
   }
@@ -737,7 +763,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   // The published input typings drop `| undefined` (ng-packagr), while the
   // inputs take it at runtime: `undefined` keeps the grid flat.
   protected activeColumnGroups(): readonly AngularColumnGroupChild[] {
-    if (this.pivotActive()) return this.pivotSchema().columnGroups as readonly AngularColumnGroupChild[];
+    if (this.pivotActive()) return this.shownPivotSchema().columnGroups as readonly AngularColumnGroupChild[];
     const groups: readonly ColumnGroupChild[] | undefined =
       this.columnGroupsActive() ? this.groupsSchema().groups : undefined;
     return groups as readonly AngularColumnGroupChild[];
@@ -803,6 +829,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.enginePivotActive()) return this.enginePivot.source() ?? this.columnarSource;
     if (this.pivotActive()) return this.pivot.source() ?? this.columnarSource;
     if (this.serverGroupsActive()) return this.serverGroups.source() ?? this.columnarSource;
     if (this.rowGroupsActive()) return this.rowGroups.source() ?? this.columnarSource;
@@ -813,7 +840,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
-    if (this.pivotActive()) return this.pivotSchema().columns;
+    if (this.pivotActive()) return this.shownPivotSchema().columns;
     if (this.serverGroupsActive()) return this.serverGroups.columns();
     if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
     if (this.columnGroupsActive()) return this.groupsSchema().columns;

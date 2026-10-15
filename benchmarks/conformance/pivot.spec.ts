@@ -5,7 +5,7 @@
 // Runs in the react, vue and angular projects.
 
 import { expect, test } from "@playwright/test";
-import { cell, columnIds, columnState, scrollBody } from "./helpers";
+import { cell, columnIds, columnState, scrollBody, sortColumn } from "./helpers";
 import { activateCell } from "./pinning-helpers";
 import { activeCell } from "./frozen-rows-helpers";
 import {
@@ -19,13 +19,35 @@ import {
   readHeader,
   type GroupChild,
 } from "./column-groups-helpers";
-import { container, expander, groupLabel, indexOfId, queryCount, rowAt, viewRows, waitForExpanded } from "./row-groups-helpers";
 import {
+  container,
+  expander,
+  groupIndex,
+  groupLabel,
+  indexOfId,
+  queryCount,
+  rowAt,
+  setExpanded,
+  viewRows,
+  waitForExpanded,
+  type ViewRowSnapshot,
+} from "./row-groups-helpers";
+import {
+  armEnginePivot,
   armPivot,
   BAND_HEIGHT,
   cellText,
   COLUMNS_1,
   COLUMNS_2,
+  ENGINE_ADDED_RECORD,
+  engineColumnId,
+  engineColumnIds,
+  engineExpectedRow,
+  engineQuarterGroupId,
+  engineRecords,
+  engineRowsOf,
+  engineTuples,
+  engineYearGroupId,
   expectLiterals,
   LABEL,
   LABEL_ID,
@@ -40,6 +62,7 @@ import {
   PIVOT_WIDE_KEY_COUNT,
   pivotFixtureSource,
   pivotRevision,
+  pivotSchemaNotifications,
 } from "./pivot-helpers";
 
 const { total, north, oslo, bergen, south, rome } = PIVOT_ROW_IDS;
@@ -250,4 +273,122 @@ test("AC-012-07 the precomputed fixture imports no engine", async ({}, testInfo)
   expect(values).toEqual(["PIVOT_LABEL_COLUMN_ID", "buildPivotSchema", "encodeGroupId", "encodePivotColumnId"]);
   expect(fixture).not.toMatch(/createPivotSource|createRowGrouping|createServerGroupingSource|row-grouping|server-grouping/);
   expect(data).not.toMatch(/^import /m);
+});
+
+// The engine arm: createPivotSource over the playground's mutable client source.
+
+const ENGINE_COUNTRIES: readonly (string | null)[] = ["FR", "IT", "", null];
+const FIRST_AMOUNT = engineColumnId(2023, "Q1", "amount");
+
+const generatedValues = (row: ViewRowSnapshot | undefined, columns: readonly string[]) =>
+  Object.fromEntries(columns.map((id) => [id, row?.values[id] ?? null]));
+
+const topLevelValues = async (page: Parameters<typeof viewRows>[0]) =>
+  (await viewRows(page)).filter((row) => row.kind === "group" && row.depth === 0).map((row) => row.value);
+
+test("AC-012-01 the engine shows the total, country and blank rows of its records", async ({ page }, testInfo) => {
+  const pageErrors = await armEnginePivot(page, testInfo.project.name);
+  const records = engineRecords();
+  const tuples = engineTuples(records);
+  const columns = engineColumnIds(records);
+  expect(await columnIds(page)).toEqual([LABEL_ID, ...columns]);
+
+  const rows = await viewRows(page);
+  expect(generatedValues(rows[0], columns)).toEqual(engineExpectedRow(records, tuples));
+  for (const country of ENGINE_COUNTRIES) {
+    const expected = engineExpectedRow(engineRowsOf(records, country), tuples);
+    expect(generatedValues(rows[groupIndex(rows, country)], columns)).toEqual(expected);
+  }
+  expect(await topLevelValues(page)).toHaveLength(ENGINE_COUNTRIES.length);
+  const fr = groupIndex(rows, "FR");
+  const frFirst = engineExpectedRow(engineRowsOf(records, "FR"), tuples)[FIRST_AMOUNT];
+  await expect(cell(page, fr, 1)).toHaveText(cellText(frFirst));
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-012-01 the engine's terminal city rows have no expander and no children", async ({ page }, testInfo) => {
+  const pageErrors = await armEnginePivot(page, testInfo.project.name);
+  await page.getByTestId("expand-all").click();
+  // A total row, four countries and three cities under each.
+  await expect.poll(async () => (await viewRows(page)).length).toBe(17);
+  const rows = await viewRows(page);
+  const countries = rows.filter((row) => row.kind === "group" && row.depth === 0);
+  const cities = rows.filter((row) => row.kind === "group" && row.depth === 1);
+  expect(countries.map((row) => [row.childCount, row.expanded])).toEqual(countries.map(() => [3, true]));
+  expect(cities).toHaveLength(12);
+  expect(cities.map((row) => [row.childCount, row.expanded])).toEqual(cities.map(() => [0, false]));
+
+  const city = cities[0]!.index;
+  await expect(cell(page, city, LABEL).locator(".gp-grid-group-toggle:not(.gp-grid-group-toggle--none)")).toHaveCount(0);
+  await expect(cell(page, city - 1, LABEL).locator(".gp-grid-group-toggle--expanded")).toHaveCount(1);
+  const row = await rowAt(page, city);
+  await expect(row).toHaveAttribute("data-row-kind", "group");
+  expect(await row.getAttribute("aria-expanded")).toBeNull();
+  expect(await setExpanded(page, [cities[0]!.id], true)).toBe("unchanged");
+  expect((await viewRows(page)).length).toBe(17);
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-012-02 a new key adds one column per measure under its group and keeps surviving widths", async ({ page }, testInfo) => {
+  const pageErrors = await armEnginePivot(page, testInfo.project.name);
+  await page.getByTestId("pivot-set-first-amount-width").click();
+  const widthOf = async (id: string) => (await columnState(page)).find((entry) => entry.columnId === id)?.width;
+  await expect.poll(() => widthOf(FIRST_AMOUNT)).toBe(200);
+  const before = await columnIds(page);
+  const notifications = await pivotSchemaNotifications(page);
+  const queries = await queryCount(page);
+
+  await page.getByTestId("pivot-add-key").click();
+
+  await expect.poll(async () => (await columnIds(page)).length).toBe(before.length + 2);
+  const added = [engineColumnId(2026, "Q1", "amount"), engineColumnId(2026, "Q1", "count")];
+  const after = await columnIds(page);
+  expect(after.filter((id) => before.includes(id) === false)).toEqual(added);
+  expect(after.filter((id) => before.includes(id))).toEqual(before);
+  const records = [...engineRecords(), { id: 1000, ...ENGINE_ADDED_RECORD }];
+  expect(after).toEqual([LABEL_ID, ...engineColumnIds(records)]);
+
+  const year = (await activeGroups(page)).find((child) => typeof child === "object" && child.groupId === engineYearGroupId(2026));
+  expect(year).toMatchObject({
+    headerName: "2026",
+    children: [{ groupId: engineQuarterGroupId(2026, "Q1"), headerName: "Q1", children: added }],
+  });
+  expect(await widthOf(FIRST_AMOUNT)).toBe(200);
+  expect(await pivotSchemaNotifications(page)).toBe(notifications + 1);
+  expect(await queryCount(page)).toBe(queries + 1);
+  const it = async () => {
+    const rows = await viewRows(page);
+    return generatedValues(rows[groupIndex(rows, "IT")], added);
+  };
+  await expect.poll(it).toEqual({ [added[0]!]: 5, [added[1]!]: 1 });
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-012-01 a sort on a generated column re-queries and orders the countries by it", async ({ page }, testInfo) => {
+  const pageErrors = await armEnginePivot(page, testInfo.project.name);
+  const records = engineRecords();
+  const tuples = engineTuples(records);
+  const firstAmountOf = (country: string | null) =>
+    engineExpectedRow(engineRowsOf(records, country), tuples)[FIRST_AMOUNT] ?? 0;
+  const expected = [...ENGINE_COUNTRIES].sort((a, b) => firstAmountOf(b) - firstAmountOf(a));
+  expect(await topLevelValues(page)).not.toEqual(expected);
+  const queries = await queryCount(page);
+
+  await page.getByTestId("pivot-sort-first-amount").click();
+
+  await expect.poll(() => sortColumn(page)).toBe(FIRST_AMOUNT);
+  await expect.poll(() => topLevelValues(page)).toEqual(expected);
+  expect(await queryCount(page)).toBe(queries + 1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-012-06 a double-click on an engine pivot cell opens no editor", async ({ page }, testInfo) => {
+  const pageErrors = await armEnginePivot(page, testInfo.project.name);
+  await cell(page, 0, 1).dblclick();
+  await cell(page, 1, 2).dblclick();
+  await cell(page, 1, LABEL).dblclick();
+  await nextFrames(page);
+  await expect(page.locator('[role="gridcell"] input')).toHaveCount(0);
+  await expect(page.locator(".gp-grid-edit-input")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
 });

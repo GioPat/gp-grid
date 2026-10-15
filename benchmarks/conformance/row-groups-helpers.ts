@@ -40,6 +40,7 @@ export interface ViewRowSnapshot {
   expanded: boolean | null;
   value: unknown;
   leafCount: number | null;
+  childCount: number | null;
   values: Record<string, unknown>;
 }
 

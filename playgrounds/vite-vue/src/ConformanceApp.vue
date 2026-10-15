@@ -93,6 +93,8 @@ import {
   PIVOT_ROW_HEIGHT,
   type PivotMode,
 } from "./conformance-pivot-external";
+import { createEnginePivotFixture } from "./conformance-pivot";
+import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
   id: number;
@@ -116,7 +118,7 @@ type FixtureArm =
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
   | { fixture: "rowGroups"; mode: RowGroupsMode }
   | { fixture: "serverGroups"; mode: ServerGroupsMode }
-  | { fixture: "pivot"; mode: PivotMode };
+  | { fixture: "pivot"; mode: PivotMode | "engine" };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -231,6 +233,7 @@ const rowGroups = createRowGroupsFixture();
 const serverGroups = createServerGroupsFixture();
 const pivot = createPivotFixture();
 const pivotSchema = shallowRef<PivotSchema>({ columns: [], columnGroups: [] });
+const enginePivot = createEnginePivotFixture();
 // Shallow: the grouping and the columns reach the grid as the fixture's own objects.
 const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
 
@@ -326,6 +329,13 @@ const rowGroupsActive = computed(() => rowGroupsMode.value !== "off");
 const serverGroupsMode = computed<ServerGroupsMode>(() => (arm.value.fixture === "serverGroups" ? arm.value.mode : "off"));
 const serverGroupsActive = computed(() => serverGroupsMode.value !== "off");
 const pivotActive = computed(() => arm.value.fixture === "pivot");
+const enginePivotActive = computed(() => arm.value.fixture === "pivot" && arm.value.mode === "engine");
+const engineSchema = usePivotSchema(
+  // Reads `arm` itself, so re-arming the engine rebinds to its new source.
+  () => (arm.value.fixture === "pivot" && arm.value.mode === "engine" ? enginePivot.pivotSource() : null),
+  enginePivot.recordNotification,
+);
+const shownPivotSchema = computed(() => (enginePivotActive.value ? engineSchema.value : pivotSchema.value));
 const frozenActive = computed(() => frozenMode.value !== "off");
 const frozenObject = computed(() => frozenMode.value === "object");
 const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
@@ -365,6 +375,11 @@ const useColumnGroups = (): void => armColumnGroups("groups");
 const armPivot = (next: PivotMode): void => {
   pivotSchema.value = pivot.arm(next);
   armFixture({ fixture: "pivot", mode: next });
+};
+/** The engine arm (PRD 012): fresh records and sources; its schema arrives through `usePivotSchema`. */
+const armEnginePivot = (): void => {
+  enginePivot.arm();
+  armFixture({ fixture: "pivot", mode: "engine" });
 };
 const armRowGroups = (next: RowGroupsMode): void => {
   rowGroupsArm.value = rowGroups.arm(next);
@@ -407,7 +422,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
-  if (pivotActive.value) return pivot.source();
+  if (pivotActive.value) return enginePivotActive.value ? enginePivot.source() : pivot.source();
   if (serverGroupsActive.value) return serverGroups.source();
   if (rowGroupsActive.value) return rowGroups.source();
   if (columnGroupsActive.value) return undefined;
@@ -431,7 +446,7 @@ const activeRowData = (): ConformanceRow[] | undefined => {
 };
 
 const activeColumns = (): ColumnDefinition[] => {
-  if (pivotActive.value) return pivotSchema.value.columns;
+  if (pivotActive.value) return shownPivotSchema.value.columns;
   if (serverGroupsActive.value) return serverGroups.columns();
   if (rowGroupsActive.value) return rowGroupsArm.value.columns;
   if (columnGroupsActive.value) return groupsSchema.value.columns;
@@ -497,7 +512,7 @@ const activeLabelColumn = (): string | undefined => {
 };
 
 const activeColumnGroups = (): readonly ColumnGroupChild[] | undefined => {
-  if (pivotActive.value) return pivotSchema.value.columnGroups;
+  if (pivotActive.value) return shownPivotSchema.value.columnGroups;
   return columnGroupsActive.value ? groupsSchema.value.groups : undefined;
 };
 
@@ -738,7 +753,7 @@ if (typeof window !== "undefined") {
       },
     }),
     ...rowGroupHooks,
-    ...pivot.createHooks(() => coreOf(), rowGroupHooks),
+    ...enginePivot.createHooks(pivot.createHooks(() => coreOf(), rowGroupHooks)),
     ...serverGroups.createHooks(),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
@@ -872,6 +887,10 @@ if (typeof window !== "undefined") {
         <button data-testid="pivot-pin-label" @click="withCore(pivot.pinLabel)()">Pin label</button>
         <button data-testid="pivot-move-leaf" @click="withCore(pivot.moveLeaf)()">Move leaf</button>
         <button data-testid="pivot-set-total-width" @click="withCore(pivot.setTotalWidth)()">Total width</button>
+        <button data-testid="use-pivot" @click="armEnginePivot()">Pivot: engine</button>
+        <button data-testid="pivot-add-key" @click="withCore((core) => void enginePivot.addKey(core))()">Add key</button>
+        <button data-testid="pivot-sort-first-amount" @click="withCore(enginePivot.sortFirstAmount)()">Sort first amount</button>
+        <button data-testid="pivot-set-first-amount-width" @click="withCore(enginePivot.setFirstAmountWidth)()">First amount width</button>
       </section>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>

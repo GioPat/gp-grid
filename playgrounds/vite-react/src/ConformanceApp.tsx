@@ -96,6 +96,8 @@ import {
   PIVOT_ROW_HEIGHT,
   type PivotMode,
 } from "./conformance-pivot-external";
+import { createEnginePivotFixture } from "./conformance-pivot";
+import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
   id: number;
@@ -255,7 +257,7 @@ type FixtureArm =
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
   | { fixture: "rowGroups"; mode: RowGroupsMode }
   | { fixture: "serverGroups"; mode: ServerGroupsMode }
-  | { fixture: "pivot"; mode: PivotMode };
+  | { fixture: "pivot"; mode: PivotMode | "engine" };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -303,6 +305,7 @@ export const ConformanceApp = (): React.ReactNode => {
   const [serverGroups] = useState(createServerGroupsFixture);
   const [pivot] = useState(createPivotFixture);
   const [pivotSchema, setPivotSchema] = useState<PivotSchema>({ columns: [], columnGroups: [] });
+  const [enginePivot] = useState(createEnginePivotFixture);
   const [rowGroupsArm, setRowGroupsArm] = useState<RowGroupsArm>({ columns: [], grouping: null });
   const [arm, setArm] = useState<FixtureArm>(NO_ARM);
   const [groupsSchema, setGroupsSchema] = useState<ColumnGroupsSchema>(() => columnGroups.schemaFor("off"));
@@ -335,6 +338,9 @@ export const ConformanceApp = (): React.ReactNode => {
   const serverGroupsMode: ServerGroupsMode = arm.fixture === "serverGroups" ? arm.mode : "off";
   const serverGroupsActive = serverGroupsMode !== "off";
   const pivotActive = arm.fixture === "pivot";
+  const enginePivotActive = arm.fixture === "pivot" && arm.mode === "engine";
+  const engineSchema = usePivotSchema(enginePivotActive ? enginePivot.pivotSource() : null, enginePivot.recordNotification);
+  const shownPivotSchema = enginePivotActive ? engineSchema : pivotSchema;
   const frozenActive = frozenMode !== "off";
   const frozenObject = frozenMode === "object";
   const rowHeightsActive = rowHeightsMode !== "off";
@@ -392,6 +398,11 @@ export const ConformanceApp = (): React.ReactNode => {
     setPivotSchema(pivot.arm(next));
     armFixture({ fixture: "pivot", mode: next });
   }, [armFixture, pivot]);
+  /** The engine arm (PRD 012): fresh records and sources; its schema arrives through `usePivotSchema`. */
+  const armEnginePivot = useCallback(() => {
+    enginePivot.arm();
+    armFixture({ fixture: "pivot", mode: "engine" });
+  }, [armFixture, enginePivot]);
 
   // In-place controls: the option stays reactive, so these never touch the
   // remount `generation`. `null` means "the armed mode's own option".
@@ -414,7 +425,7 @@ export const ConformanceApp = (): React.ReactNode => {
   }, []);
 
   const activeColumns = (): ColumnDefinition[] => {
-    if (pivotActive) return pivotSchema.columns;
+    if (pivotActive) return shownPivotSchema.columns;
     if (serverGroupsActive) return serverGroups.columns();
     if (rowGroupsActive) return rowGroupsArm.columns;
     if (columnGroupsActive) return groupsSchema.columns;
@@ -429,7 +440,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   const activeDataSource = (): DataSource<never> | undefined => {
-    if (pivotActive) return pivot.source();
+    if (pivotActive) return enginePivotActive ? enginePivot.source() : pivot.source();
     if (serverGroupsActive) return serverGroups.source();
     if (rowGroupsActive) return rowGroups.source();
     if (columnGroupsActive) return undefined;
@@ -499,7 +510,7 @@ export const ConformanceApp = (): React.ReactNode => {
   };
 
   const activeColumnGroups = (): readonly ColumnGroupChild[] | undefined => {
-    if (pivotActive) return pivotSchema.columnGroups;
+    if (pivotActive) return shownPivotSchema.columnGroups;
     return columnGroupsActive ? groupsSchema.groups : undefined;
   };
 
@@ -763,7 +774,7 @@ const hideColumn = useCallback(() => {
         setBandHeights,
       }),
       ...rowGroupHooks,
-      ...pivot.createHooks(groupCore, rowGroupHooks),
+      ...enginePivot.createHooks(pivot.createHooks(groupCore, rowGroupHooks)),
       ...serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: () => {
@@ -775,7 +786,7 @@ const hideColumn = useCallback(() => {
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [autoFit, autoFitActive, columnGroups, fixture, frozen, groupCore, pivot, readCoreToken, rowGroups, rowHeights, rowHeightsActive, serverGroups, setColumnGroups, setFreezeCount, useWideColumns]);
+  }, [autoFit, autoFitActive, columnGroups, enginePivot, fixture, frozen, groupCore, pivot, readCoreToken, rowGroups, rowHeights, rowHeightsActive, serverGroups, setColumnGroups, setFreezeCount, useWideColumns]);
 
   // Arming remounts the grid, so the announcement reader follows each core.
   useEffect(() => {
@@ -909,6 +920,10 @@ const hideColumn = useCallback(() => {
           <button data-testid="pivot-pin-label" onClick={withCore(pivot.pinLabel)}>Pin label</button>
           <button data-testid="pivot-move-leaf" onClick={withCore(pivot.moveLeaf)}>Move leaf</button>
           <button data-testid="pivot-set-total-width" onClick={withCore(pivot.setTotalWidth)}>Total width</button>
+          <button data-testid="use-pivot" onClick={armEnginePivot}>Pivot: engine</button>
+          <button data-testid="pivot-add-key" onClick={withCore((core) => void enginePivot.addKey(core))}>Add key</button>
+          <button data-testid="pivot-sort-first-amount" onClick={withCore(enginePivot.sortFirstAmount)}>Sort first amount</button>
+          <button data-testid="pivot-set-first-amount-width" onClick={withCore(enginePivot.setFirstAmountWidth)}>First amount width</button>
         </section>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>

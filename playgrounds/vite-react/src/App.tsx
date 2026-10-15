@@ -6,6 +6,7 @@ import {
   Grid,
   useGridData,
   createRowGrouping,
+  PIVOT_LABEL_COLUMN_ID,
   type ColumnDefinition,
   type ColumnGroupChild,
   type CellRendererParams,
@@ -19,6 +20,8 @@ import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
 import { DebugOverlay } from "./DebugOverlay";
 import { createDemoServerSource } from "./demo-server-groups";
+import { createDemoPivotSource } from "./demo-pivot";
+import { usePivotSchema } from "./use-pivot-schema";
 
 type DemoPage = "main" | "live-insert";
 
@@ -468,6 +471,14 @@ function MainDemo() {
   const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
     getRowId: (row) => row.id,
   });
+  const [pivot, setPivot] = useState(false);
+  const pivotSource = useMemo(() => (pivot ? createDemoPivotSource(dataSource) : null), [pivot, dataSource]);
+  useEffect(() => () => pivotSource?.destroy(), [pivotSource]);
+  const pivotSchema = usePivotSchema(pivotSource);
+  const pivotActive = pivotSource !== null;
+  const plainColumnGroups = grouped ? demoColumnGroups : undefined;
+  const plainBandHeights = tallBand ? tallBandHeights : undefined;
+  const flatSource = serverSource ?? dataSource;
 
   const highlighting = useMemo(
     () => ({
@@ -704,13 +715,27 @@ function MainDemo() {
           Server groups
         </button>
         <button
-          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
-          disabled={groupRows === false && serverGroups === false}
+          onClick={() => setPivot((value) => !value)}
+          aria-pressed={pivot}
           style={{
             padding: "6px 12px",
             borderRadius: "4px",
             border: "none",
-            cursor: groupRows || serverGroups ? "pointer" : "not-allowed",
+            cursor: "pointer",
+            backgroundColor: pivot ? "#3b82f6" : "#374151",
+            color: pivot ? "white" : "#9ca3af",
+          }}
+        >
+          Pivot
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
+          disabled={groupRows === false && serverGroups === false && pivot === false}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: groupRows || serverGroups || pivot ? "pointer" : "not-allowed",
             backgroundColor: "#374151",
             color: "#9ca3af",
           }}
@@ -732,13 +757,14 @@ function MainDemo() {
           }
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
-          columns={columns}
-          columnGroups={grouped ? demoColumnGroups : undefined}
-          headerBandHeights={tallBand ? tallBandHeights : undefined}
-          rowGrouping={serverSource === null ? rowGrouping : null}
+          columns={pivotActive ? pivotSchema.columns : columns}
+          columnGroups={pivotActive ? pivotSchema.columnGroups : plainColumnGroups}
+          headerBandHeights={pivotActive ? undefined : plainBandHeights}
+          rowGrouping={serverSource === null && pivotActive === false ? rowGrouping : null}
+          groupLabelColumn={pivotActive ? PIVOT_LABEL_COLUMN_ID : undefined}
           labels={gridLabels}
           overscan={12}
-          dataSource={serverSource ?? dataSource}
+          dataSource={pivotSource ?? flatSource}
           rowHeight={36}
           rowResize
           darkMode={true}

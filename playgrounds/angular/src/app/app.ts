@@ -1,7 +1,7 @@
-import { Component, signal, computed, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, signal, computed, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { isPlatformBrowser } from '@angular/common';
-import { GpGridComponent, provideGridData, injectGridData, createRowGrouping } from '@gp-grid/angular';
+import { GpGridComponent, provideGridData, injectGridData, createRowGrouping, PIVOT_LABEL_COLUMN_ID } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
   AngularColumnGroupChild,
@@ -17,6 +17,8 @@ import type {
   RowGrouping,
 } from '@gp-grid/angular';
 import { createDemoServerSource } from './demo-server-groups';
+import { createDemoPivotSource } from './demo-pivot';
+import { createPivotSchemaBinding } from './pivot-schema-binding';
 
 interface Person {
   id: number;
@@ -120,7 +122,7 @@ const generateRows = (count: number): Person[] =>
     }),
   ],
 })
-export class App implements AfterViewInit {
+export class App implements AfterViewInit, OnDestroy {
   protected darkMode = signal(false);
 
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -168,11 +170,13 @@ export class App implements AfterViewInit {
 
   // The published input typings drop `| undefined` (ng-packagr declares them
   // without strictNullChecks), while the input takes it at runtime.
-  protected readonly columnGroups = computed(
-    () => (this.grouped() ? demoColumnGroups : undefined) as readonly AngularColumnGroupChild[],
-  );
+  protected readonly columnGroups = computed(() => {
+    if (this.pivotActive()) return this.pivotSchema.schema().columnGroups as readonly AngularColumnGroupChild[];
+    return (this.grouped() ? demoColumnGroups : undefined) as readonly AngularColumnGroupChild[];
+  });
 
-  protected readonly headerBandHeights = computed(() => (this.tallBand() ? tallBandHeights : NO_BAND_HEIGHTS));
+  protected readonly headerBandHeights = computed(() =>
+    this.tallBand() && this.pivotActive() === false ? tallBandHeights : NO_BAND_HEIGHTS);
 
   protected toggleGrouped(): void {
     this.grouped.update((value) => !value);
@@ -190,14 +194,35 @@ export class App implements AfterViewInit {
 
   protected readonly serverSource = computed(() => (this.serverGroups() ? createDemoServerGrouping() : null));
 
-  protected readonly dataSource = computed(() => this.serverSource() ?? this.grid.dataSource);
+  /** Pivot (PRD 012): the demo rows by status and name, a column group per creation date. */
+  protected readonly pivot = signal(false);
+
+  protected readonly pivotSource = computed(() => (this.pivot() ? createDemoPivotSource(this.grid.dataSource) : null));
+
+  protected readonly pivotActive = computed(() => this.pivotSource() !== null);
+
+  private readonly pivotSchema = createPivotSchemaBinding();
+
+  protected readonly pivotLabelColumn = PIVOT_LABEL_COLUMN_ID;
+
+  protected readonly dataSource = computed(() => this.pivotSource() ?? this.serverSource() ?? this.grid.dataSource);
 
   // The published input typing drops `| null` like `columnGroups` above.
   protected readonly rowGrouping = computed(
-    () => (this.groupRows() && this.serverGroups() === false ? createDemoRowGrouping() : null) as RowGrouping,
+    () => (this.groupRows() && this.serverGroups() === false && this.pivot() === false
+      ? createDemoRowGrouping()
+      : null) as RowGrouping,
   );
 
-  protected readonly grouping = computed(() => this.groupRows() || this.serverGroups());
+  protected readonly grouping = computed(() => this.groupRows() || this.serverGroups() || this.pivot());
+
+  protected shownColumns(): AngularColumnDefinition[] {
+    return this.pivotActive() ? this.pivotSchema.schema().columns : this.columns;
+  }
+
+  protected togglePivot(): void {
+    this.pivot.update((value) => !value);
+  }
 
   protected toggleGroupRows(): void {
     this.groupRows.update((value) => !value);
@@ -251,6 +276,15 @@ export class App implements AfterViewInit {
       const source = this.serverSource();
       onCleanup(() => source?.destroy());
     });
+    effect((onCleanup) => {
+      const source = this.pivotSource();
+      this.pivotSchema.bind(source);
+      onCleanup(() => source?.destroy());
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.pivotSchema.clear();
   }
 
   ngAfterViewInit(): void {
