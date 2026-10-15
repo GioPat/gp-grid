@@ -238,3 +238,47 @@ describe("createPivotSource destroy", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("createPivotSource budget", () => {
+  /** Object rows that count reads of each field. */
+  const counted = () => {
+    const reads = new Map<string, number>();
+    const rows = SALES.map(
+      (sale) =>
+        new Proxy(sale, {
+          get: (target, field, receiver) => {
+            if (typeof field === "string") reads.set(field, (reads.get(field) ?? 0) + 1);
+            return Reflect.get(target, field, receiver);
+          },
+        }),
+    );
+    return { inner: objects(rows), reads };
+  };
+
+  it("rejects over maxColumns before any measure is read", async () => {
+    const { inner, reads } = counted();
+    await expect(query(pivot(inner, { maxColumns: 7 }))).rejects.toThrow(
+      new Error("pivot generates 8 columns, over maxColumns 7"),
+    );
+    expect(reads.get("year")).toBeGreaterThan(0);
+    expect(reads.get("amount") ?? 0).toBe(0);
+    await query(pivot(inner, { maxColumns: 8 }));
+    expect(reads.get("amount")).toBeGreaterThan(0);
+  });
+
+  it("counts domain keys without rows toward the budget", async () => {
+    const domain = { quarter: ["Q1", "Q2", "Q3", "Q4"] };
+    await expect(query(pivot(objects(), { domain, maxColumns: 17 }))).rejects.toThrow(
+      new Error("pivot generates 18 columns, over maxColumns 17"),
+    );
+    const source = pivot(objects(), { domain, maxColumns: 18 });
+    await query(source);
+    expect(source.getSchema()!.columns).toHaveLength(19);
+  });
+
+  it("accepts a schema exactly at the limit", async () => {
+    const source = pivot(objects(), { maxColumns: 8 });
+    await query(source);
+    expect(source.getSchema()!.columns).toHaveLength(9);
+  });
+});
