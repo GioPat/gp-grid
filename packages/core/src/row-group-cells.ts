@@ -31,13 +31,17 @@ const FLAT_ROW: HierarchyRowAttributes = { className: "" };
 /** A group whose children failed to load; expanding it again retries. */
 const hasLoadError = (row: HierarchyRow): boolean => row.kind === "group" && row.error !== undefined;
 
+/** A group row with children; a childless one, like the total row, never expands. */
+const isExpandable = (row: HierarchyRow): row is HierarchyGroupRow =>
+  row.kind === "group" && row.childCount > 0;
+
 export const hierarchyRowAttributes = (row: HierarchyRow | undefined): HierarchyRowAttributes => {
   if (row === undefined) return FLAT_ROW;
   const attributes: HierarchyRowAttributes = {
     className: ROW_KIND_CLASS[row.kind],
     "data-row-kind": row.kind,
     "aria-level": row.depth + 1,
-    "aria-expanded": row.kind === "group" ? row.expanded : undefined,
+    "aria-expanded": isExpandable(row) ? row.expanded : undefined,
   };
   if (hasLoadError(row)) {
     attributes.className += " gp-grid-row--error";
@@ -93,11 +97,13 @@ export const groupCellOf = (
 };
 
 export const groupToggleClassName = (row: HierarchyGroupRow | HierarchyTotalRow): string => {
-  if (row.kind === "total") return "gp-grid-group-toggle gp-grid-group-toggle--none";
-  return row.expanded ? "gp-grid-group-toggle gp-grid-group-toggle--expanded" : "gp-grid-group-toggle";
+  if (isExpandable(row)) {
+    return row.expanded ? "gp-grid-group-toggle gp-grid-group-toggle--expanded" : "gp-grid-group-toggle";
+  }
+  return "gp-grid-group-toggle gp-grid-group-toggle--none";
 };
 
-/** Renderer params of a label cell; `toggle` is a no-op on the total row. */
+/** Renderer params of a label cell; `toggle` is a no-op on the total row and a childless group. */
 export const groupLabelParams = (
   row: HierarchyGroupRow | HierarchyTotalRow,
   viewIndex: number,
@@ -108,6 +114,6 @@ export const groupLabelParams = (
   viewIndex,
   label,
   toggle: () => {
-    if (row.kind === "group") onToggle(viewIndex);
+    if (isExpandable(row)) onToggle(viewIndex);
   },
 });

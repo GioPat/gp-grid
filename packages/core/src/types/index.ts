@@ -140,6 +140,15 @@ export type {
   ServerGroupingService,
 } from "./server-grouping";
 
+// Pivot schema and configuration
+export type {
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
+} from "./pivot";
+
 // Columnar source types
 export type {
   ColumnarField,

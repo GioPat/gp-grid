@@ -4,6 +4,7 @@
 import type {
   HierarchicalRowAccess,
   HierarchyChange,
+  HierarchyRow,
   RowGroupResult,
   RowGrouping,
   RowGroupingResult,
@@ -34,6 +35,15 @@ const APPLIED: RowGroupResult = { status: "applied" };
 const UNCHANGED: RowGroupResult = { status: "unchanged" };
 const UNSUPPORTED = { status: "unsupported" } as const;
 
+/** PRD 012 D1: a group row with `childCount` 0 never expands. */
+const isChildless = (row: HierarchyRow | undefined): boolean => row?.kind === "group" && row.childCount === 0;
+
+const isChildlessId = (hierarchy: HierarchicalRowAccess, id: RowId): boolean => {
+  const viewIndex = hierarchy.locate(id);
+  const row = viewIndex < 0 ? undefined : hierarchy.getRow(viewIndex);
+  return row?.id === id && isChildless(row);
+};
+
 export class RowGroupsController<TData> implements GridRowGroupsApi {
   private readonly deps: RowGroupsControllerDeps<TData>;
 
@@ -48,7 +58,9 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
   setExpanded(ids: readonly RowId[] | null, expanded: boolean): RowGroupResult {
     const hierarchy = this.expandable();
     if (hierarchy === null) return UNSUPPORTED;
-    const applied = applyViewRowsChange(this.deps, () => hierarchy.setExpanded?.(ids, expanded) === true);
+    const targets = ids?.filter((id) => isChildlessId(hierarchy, id) === false) ?? null;
+    if (targets?.length === 0) return UNCHANGED;
+    const applied = applyViewRowsChange(this.deps, () => hierarchy.setExpanded?.(targets, expanded) === true);
     return applied ? APPLIED : UNCHANGED;
   }
 
@@ -57,7 +69,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
     if (hierarchy === null) return UNSUPPORTED;
     const viewIndex = hierarchy.locate(id);
     const row = viewIndex < 0 ? undefined : hierarchy.getRow(viewIndex);
-    if (row?.kind !== "group" || row.id !== id) return UNCHANGED;
+    if (row?.kind !== "group" || row.id !== id || isChildless(row)) return UNCHANGED;
     return this.setExpanded([id], row.expanded === false);
   }
 
@@ -81,7 +93,7 @@ export class RowGroupsController<TData> implements GridRowGroupsApi {
   toggleAt(viewIndex: number): RowGroupResult {
     if (this.expandable() === null) return UNSUPPORTED;
     const row = this.deps.rowData.getHierarchyRow(viewIndex);
-    if (row?.kind !== "group") return UNCHANGED;
+    if (row?.kind !== "group" || isChildless(row)) return UNCHANGED;
     const expanded = row.expanded === false;
     const result = this.setExpanded([row.id], expanded);
     if (result.status === "applied") this.deps.onRowGroupToggled?.({ rowId: row.id, expanded });
