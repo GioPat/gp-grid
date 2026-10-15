@@ -56,14 +56,17 @@ const GP_GRID_ENTRIES = new Set(["gp-grid", "gp-grid-server-grouping"]);
 // predate server grouping.
 const CANDIDATE_COMPANIONS = { "gp-grid": ["gp-grid-server-grouping"] };
 
-// PRD 008 D12 and PRD 009 D7: no gp-grid entry may keep the local grouping engine.
-// The marker is the engine's RangeError text, which only `row-grouping/` holds;
-// "gp-group:" now lives in the ids both engines share.
+// PRD 008 D12, PRD 009 D7 and PRD 012 D8: no gp-grid entry may keep the local
+// grouping or pivot engine. Each marker is its engine's RangeError text, which
+// only that engine's folder holds; "gp-group:" lives in the shared ids.
 const ENGINE_MARKER = "Invalid rowGrouping.";
+const PIVOT_ENGINE_MARKER = "Invalid pivot.";
+const GP_GRID_ENGINE_MARKERS = [ENGINE_MARKER, PIVOT_ENGINE_MARKER];
 
-export const assertConsumerHoldsNoEngine = (grid, contents) => {
-  if (contents.some((content) => content.includes(ENGINE_MARKER))) {
-    throw new Error(`The ${grid} package-size bundle contains the row grouping engine ("${ENGINE_MARKER}").`);
+export const assertConsumerHoldsNoEngine = (grid, contents, markers) => {
+  const found = markers.find((marker) => contents.some((content) => content.includes(marker)));
+  if (found !== undefined) {
+    throw new Error(`The ${grid} package-size bundle contains an engine ("${found}").`);
   }
 };
 
@@ -134,7 +137,7 @@ const measurePackageGroup = async (grid, source, benchmarkSource) => {
     },
   });
   const contents = outputContents(buildResult);
-  if (GP_GRID_ENTRIES.has(grid)) assertConsumerHoldsNoEngine(grid, contents);
+  if (GP_GRID_ENTRIES.has(grid)) assertConsumerHoldsNoEngine(grid, contents, GP_GRID_ENGINE_MARKERS);
 
   return {
     minifiedBytes: contents.reduce((total, content) => total + content.length, 0),
