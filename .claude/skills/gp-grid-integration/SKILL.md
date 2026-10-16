@@ -446,7 +446,8 @@ const source = createServerGroupingSource(service, {      // create once; one so
   leaves only (`undefined` for an unloaded leaf or a group id); after a refresh
   the active cell and the anchor follow their row by id when the new view has
   it at once, else keep their index on the placeholder there, which may load as
-  another row; no pivot over the service yet (see Pivot).
+  another row; no pivot over the service: a server-computed pivot is supplied
+  precomputed (see Pivot).
   See [docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
 
 ### Pivot (`createPivotSource`, `buildPivotSchema`)
@@ -533,7 +534,8 @@ const source = createPivotSource(createClientDataSource(sales), config); // crea
   `useMemo` source under StrictMode.
 - **Limits:** a cell is one value (no-data and `null` both render empty); an id
   that leaves and returns takes its defaults; no incremental refold; no leaves,
-  no `getRecordById`; no pivot over the server grouping service yet.
+  no `getRecordById`; no pivot over the server grouping service (a
+  server-computed pivot is supplied precomputed).
   See [docs/features/pivot.md](../../../docs/features/pivot.md).
 
 ### Data sources — pick one

@@ -32,10 +32,11 @@ one frame may show the new columns over the previous rows.
 |---|---|---|
 | [Precomputed](#precomputed) | Computes or fetches the keys and the cells, builds the schema with `buildPivotSchema` and returns the rows from its own source | None |
 | [Local](#local-engine) | Wraps a flat source that holds every record in `createPivotSource` | The pivot engine |
-| [Remote](#remote) | Pivots over [server grouping](./server-grouping.md)'s service | Not available yet |
 
 Every composition uses the same [ids](#ids) and the same schema helper, so the
-same keys give the same columns and headers.
+same keys give the same columns and headers. There is no pivot over
+[server grouping](./server-grouping.md)'s service: a server that computes a
+pivot supplies it [precomputed](#precomputed).
 
 ## Childless group rows
 
@@ -131,7 +132,9 @@ totals header; `rowTotalsHeader` names it.
 
 An application that already has a pivot builds the schema from its keys and
 returns its group rows as a hierarchy, with `rows: []`. It imports the helper,
-the id encoders and types, and bundles no engine.
+the id encoders and types, and bundles no engine. A pivot a server computed
+arrives the same way: the source fetches the keys and the cells and returns
+them as a hierarchy with ids from the [encoders](#ids).
 
 ```ts
 import {
@@ -393,14 +396,6 @@ The pivot does not listen to its inner source. After a change to the inner
 records (a mutable source's transaction, flushed), call `core.refresh()`: the
 query pivots again and notifies a changed schema.
 
-## Remote
-
-A pivot over [server grouping](./server-grouping.md)'s service, with the pivot
-dimensions in the spec and the cells on its nodes, is not available yet. A
-server that computes a pivot reaches the grid through the
-[precomputed](#precomputed) composition: its source fetches the keys and
-cells and returns them as a hierarchy with ids from the [encoders](#ids).
-
 ## Server rendering and teardown
 
 `buildPivotSchema` and the engine read no browser global. As for any
@@ -425,6 +420,7 @@ working. No wrapper destroys a source passed as `dataSource`.
 - No leaves and no drill-through: the last row level is childless.
 - No `getRecordById`; `rows.getRecordById(id)` answers `undefined`.
 - The schema and the rows are not applied in one batch.
-- No remote pivot yet, no column-group collapse, field chooser or aggregate
-  editing, and no grid over both `rowGrouping` and a pivot source.
+- No pivot over [server grouping](./server-grouping.md)'s service, no
+  column-group collapse, field chooser or aggregate editing, and no grid over
+  both `rowGrouping` and a pivot source.
 - Limits beyond `maxColumns` are 007's header budgets.
