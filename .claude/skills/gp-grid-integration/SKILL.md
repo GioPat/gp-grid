@@ -505,8 +505,10 @@ const source = createPivotSource(createClientDataSource(sales), config); // crea
   `childCount: 0` on the last row level, and `getValue(viewRow, encodePivotColumnId(path, measure))`.
 - **Ids:** `encodePivotColumnId(path, measure)` (`path` `[]` = row total),
   `decodePivotColumnId(id)`, `encodePivotGroupId(prefix)`, `PIVOT_LABEL_COLUMN_ID`
-  (`"gp-pivot-label"`); group rows `encodeGroupId(path)`. They are plain
-  strings from typed key paths, so any server can compute and echo them.
+  (`"gp-pivot-label"`); group rows `encodeGroupId(path)`. The format is a
+  1.0 compatibility promise (state saved by id stays valid); a `toKey` key is
+  tagged by what it returns. Nothing outside the grid builds or parses one: a
+  supplier uses the two helpers, a server exchanges typed paths only.
 - **Rejections:** creation throws `RangeError("Invalid pivot.<field>: <value>")`
   (no rows, pivots or measures, a repeated dimension id or measure field, an
   unknown aggregate, a negative depth, `maxColumns` ≤ 0, an unknown domain id or

@@ -60,11 +60,19 @@ label prints as `{count}`.
 | Total row | `"gp-total"` | |
 
 A path is a list of [`GroupPathStep`](./server-grouping.md#path-steps)s,
-`[dimensionId, tag, key]`, written as JSON exactly as group ids write it.
-`decodePivotColumnId(id)` returns `{ path, measure }`, or `undefined` for any
-other string; a measure field may contain `|`. A generated column's `field` is
-its id. No id depends on a label, a formatter or the locale, and every id is a
-plain string, so a server can compute and echo them.
+`[dimensionId, tag, key]`, written as JSON exactly as group ids write it: `z`
+null, `s` string, `n` number, `b` boolean, `d` a date as its timestamp. A
+dimension with `toKey` tags the key `toKey` returns, so a month string is an
+`s` step. `decodePivotColumnId(id)` returns `{ path, measure }`, or `undefined`
+for any other string; a measure field may contain `|`. A generated column's
+`field` is its id.
+
+The format is a compatibility promise from 1.0: ids depend on no label,
+formatter or locale, so column state saved by id stays valid across versions
+and releases. Nothing outside the grid has to build or parse one: a supplier
+builds its schema with `buildPivotSchema` and answers cells through
+`decodePivotColumnId`, an application stores ids as opaque strings, and a
+server exchanges typed paths, never ids.
 
 ## The schema
 
