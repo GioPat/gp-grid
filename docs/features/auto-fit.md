@@ -105,9 +105,9 @@ revision.
 
 - **Rows.** The mounted cells of each row (`[data-cell-row]`), frozen rows
   included. The row takes its tallest cell.
-- **Columns.** The header cell (`[data-col-index]`) and the mounted body cells
-  (`[data-cell-col]`) of each column. The column takes the widest of them,
-  rounded up to a whole pixel.
+- **Columns.** The mounted body cells (`[data-cell-col]`) of each column. The
+  column takes the widest of them, rounded up to a whole pixel. The header is
+  not read, so a title longer than every value is clipped after a fit.
 - Editing cells are skipped. A box includes its padding and borders, and custom
   renderers are measured from their rendered DOM.
 - The host sets the measured dimension to its intrinsic size (`width:

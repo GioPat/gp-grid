@@ -18,7 +18,7 @@ export interface RowMeasurement {
 export interface ColumnMeasurement {
   /** The root's `data-layout-revision` when the cells were read. */
   readonly layoutRevision: number;
-  /** Widest of the header and the mounted body cells per requested layout index. */
+  /** Widest mounted body cell per requested layout index; the header is not read. */
   readonly widths: ReadonlyMap<number, number>;
   /** Distinct rows whose cells were read. */
   readonly consideredRows: number;

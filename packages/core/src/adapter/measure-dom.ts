@@ -21,7 +21,7 @@ const BODY_CELL = ":not(.gp-grid-cell--editing)";
 interface MeasureTarget {
   readonly element: HTMLElement;
   readonly index: number;
-  readonly cross: number | null;
+  readonly cross: number;
 }
 
 const readInteger = (element: Element, attribute: string): number =>
@@ -45,7 +45,7 @@ const collect = (
   root: HTMLElement,
   selector: string,
   indexAttribute: string,
-  crossAttribute: string | null,
+  crossAttribute: string,
   requested: ReadonlySet<number>,
 ): MeasureTarget[] => {
   const targets: MeasureTarget[] = [];
@@ -53,8 +53,7 @@ const collect = (
   for (const element of Array.from(root.querySelectorAll<HTMLElement>(selector))) {
     const index = readInteger(element, indexAttribute);
     if (requested.has(index) === false) continue;
-    const cross = crossAttribute === null ? null : readInteger(element, crossAttribute);
-    targets.push({ element, index, cross });
+    targets.push({ element, index, cross: readInteger(element, crossAttribute) });
   }
   return targets;
 };
@@ -104,7 +103,7 @@ const summarize = (
   targets.forEach((target, position) => {
     const size = sizes[position] ?? 0;
     largest.set(target.index, Math.max(largest.get(target.index) ?? 0, size));
-    if (target.cross !== null) cross.add(target.cross);
+    cross.add(target.cross);
   });
   return { sizes: largest, considered: cross.size };
 };
@@ -130,10 +129,7 @@ const readColumns = (
   layoutIndexes: readonly number[],
 ): ColumnMeasurement => {
   const requested = new Set(layoutIndexes);
-  const targets = [
-    ...collect(root, "[data-col-index]", "data-col-index", null, requested),
-    ...collect(root, `[data-cell-col]${BODY_CELL}`, "data-cell-col", "data-cell-row", requested),
-  ];
+  const targets = collect(root, `[data-cell-col]${BODY_CELL}`, "data-cell-col", "data-cell-row", requested);
   const { sizes, considered } = summarize(targets, measureBoxes(targets, "width"));
   return {
     layoutRevision: readLayoutRevision(root),
@@ -143,8 +139,8 @@ const readColumns = (
 };
 
 /**
- * Measurement host over the grid root: header cells by `data-col-index`, body
- * cells by `data-cell-row`/`data-cell-col`, editing cells skipped. Boxes are
+ * Measurement host over the grid root: body cells by `data-cell-row`/`data-cell-col`,
+ * editing cells skipped; a column fit never reads its header. Boxes are
  * border boxes, so padding and borders count and no computed style is read.
  */
 export const createDomMeasurementHost = (

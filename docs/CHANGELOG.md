@@ -113,6 +113,8 @@ All notable changes to gp-grid will be documented in this file.
 
 ### Changed
 
+- A column fit (`columns.fit`, the header edge double-click, Alt+Enter) measures the mounted body cells only; the header no longer widens the result, so a title longer than every value is clipped after a fit
+
 #### Typed edit commits
 - An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"` on a `number` column stores `60000`. A draft that cannot be converted, or a typed value that does not fit (`NaN` on a number column, an invalid `Date`), writes nothing, keeps the previous value and is reported through `onWriteRejected` with `reason: "type-mismatch"` and `operation: "edit"`; a whitespace-only draft on a `text` column stores `""`. This applies to flat grids too.
 
