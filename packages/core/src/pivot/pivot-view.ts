@@ -18,13 +18,13 @@ export interface PivotSpec {
   readonly rows: readonly RowGroupDimension[];
   readonly pivots: readonly RowGroupDimension[];
   readonly measures: readonly PivotMeasure[];
-  readonly domain?: PivotConfig["domain"];
+  readonly domain: PivotConfig["domain"];
   readonly rowTotals: boolean;
   readonly rowTotalsHeader?: string;
   readonly grandTotal?: GrandTotalPlacement;
   readonly maxColumns: number;
-  readonly labelColumn?: PivotConfig["labelColumn"];
-  readonly formatKey?: PivotConfig["formatKey"];
+  readonly labelColumn: PivotConfig["labelColumn"];
+  readonly formatKey: PivotConfig["formatKey"];
 }
 
 /** A generated column: a measure at a leaf tuple, or its row total at tuple -1. */

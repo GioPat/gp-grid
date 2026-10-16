@@ -110,7 +110,7 @@ export const createPivotSource = <TData>(source: DataSource<TData>, config: Pivo
   const publish = (next: PivotSchema) => {
     if (schema !== null && schemaIds(schema) === schemaIds(next)) return;
     schema = next;
-    for (const listener of [...listeners]) listener(next);
+    for (const listener of listeners) listener(next);
   };
 
   const query = async (request: DataSourceRequest): Promise<DataSourceResponse<TData>> => {
