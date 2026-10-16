@@ -106,7 +106,7 @@ describe("createDomMeasurementHost — rows", () => {
 });
 
 describe("createDomMeasurementHost — columns", () => {
-  it("reads the widest of the header and the mounted body cells", () => {
+  it("reads the widest mounted body cell and ignores the header", () => {
     const root = createRoot();
     root.append(
       header(0, { width: 90 }),
@@ -120,7 +120,7 @@ describe("createDomMeasurementHost — columns", () => {
 
     const measured = host.measureColumns([0, 1]);
 
-    expect(measured?.widths).toEqual(new Map([[0, 130], [1, 60]]));
+    expect(measured?.widths).toEqual(new Map([[0, 130], [1, 40]]));
     expect(measured?.consideredRows).toBe(2);
   });
 });

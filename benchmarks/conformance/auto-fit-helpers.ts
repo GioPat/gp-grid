@@ -136,13 +136,12 @@ export const waitForColumnWidth = async (
 };
 
 export interface IntrinsicSample {
-  headers: { col: number; width: number }[];
   cells: { row: number; col: number; width: number; height: number }[];
 }
 
 /**
- * Per mounted header and non-editing body cell, its intrinsic width and
- * height read as D2 reads them: the dimension takes `max-content` or `auto`,
+ * Per mounted non-editing body cell, its intrinsic width and height read as
+ * D2 reads them: the dimension takes `max-content` or `auto`,
  * every box is read, and the previous inline value is put back.
  */
 export const sampleIntrinsic = (page: Page): Promise<IntrinsicSample> =>
@@ -167,18 +166,12 @@ export const sampleIntrinsic = (page: Page): Promise<IntrinsicSample> =>
       }
       return sizes;
     };
-    const headers = Array.from(root.querySelectorAll<HTMLElement>("[data-col-index]"));
     const cells = Array.from(
       root.querySelectorAll<HTMLElement>("[data-cell-row]:not(.gp-grid-cell--editing)"),
     );
-    const headerWidths = measure(headers, "width");
     const cellWidths = measure(cells, "width");
     const cellHeights = measure(cells, "height");
     return {
-      headers: headers.map((element, index) => ({
-        col: Number(element.dataset.colIndex),
-        width: headerWidths[index] ?? 0,
-      })),
       cells: cells.map((element, index) => ({
         row: Number(element.dataset.cellRow),
         col: Number(element.dataset.cellCol),
@@ -189,10 +182,7 @@ export const sampleIntrinsic = (page: Page): Promise<IntrinsicSample> =>
   });
 
 export const widestInColumn = (sample: IntrinsicSample, layoutIndex: number): number =>
-  Math.max(
-    ...sample.headers.filter((entry) => entry.col === layoutIndex).map((entry) => entry.width),
-    ...sample.cells.filter((entry) => entry.col === layoutIndex).map((entry) => entry.width),
-  );
+  Math.max(...sample.cells.filter((entry) => entry.col === layoutIndex).map((entry) => entry.width));
 
 export const tallestInRow = (sample: IntrinsicSample, row: number): number =>
   Math.max(...sample.cells.filter((entry) => entry.row === row).map((entry) => entry.height));
