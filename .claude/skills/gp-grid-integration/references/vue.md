@@ -390,7 +390,7 @@ each clip edge center columns stay mounted; an open editor keeps its column
 mounted regardless. The default header action uses `:pin-icon` and cycles through
 physical left, physical right and unpinned; override `pinLeftColumn`,
 `pinRightColumn` and `unpinColumn` in `:labels` for its accessible names. See
-[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
 
 ## Frozen rows
 
@@ -406,7 +406,7 @@ prefix as `labels.frozenRowsLimited` in a hidden live region.
 A changed prop is applied at runtime through `core.frozenRows.set`: the core is
 not recreated, the scroll position is corrected so the visible suffix stays
 anchored, and an equal-valued object is silent. See
-[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
 
 ## Row heights
 
@@ -428,7 +428,7 @@ index and is dropped at the next data revision. Applying a height anchors the ro
 at the clip top and corrects the scroll in the same batch. Rows render from
 `slot.height`, so `useGpGrid` consumers that build their own row markup must size
 the box from it rather than from the configured `row-height`. See
-[docs/features/row-heights.md](../../../docs/features/row-heights.md).
+[docs/features/row-heights.md](../../../../docs/features/row-heights.md).
 
 ## Row resize and auto-fit
 
@@ -456,7 +456,7 @@ coreOf()?.columns.setState([{ columnId: "name", width: null }]); // drop a width
 A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
 the same for the active cell. The handles are pointer-only. `useGpGrid` takes
 `rowResize`, `autoFit` and `onRowResized` as well. See
-[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
 
 ## Column groups
 
@@ -487,7 +487,7 @@ Every column is referenced once, ungrouped ones at the root. `column-groups` and
 `header-band-heights` apply at runtime. A rejected hierarchy leaves the previous
 one on screen; the prop is re-applied with every later `columns` change, so put
 a valid one back. See
-[docs/features/column-groups.md](../../../docs/features/column-groups.md).
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
 
 ## Row grouping
 
@@ -552,7 +552,7 @@ rejected with `partial-source`.
 and returns `handleGroupTogglePointerDown(rowIndex, event)`, which a custom grid
 binds to its expander's `pointerdown`; `renderGroupLabel(params, renderer?)`
 renders the label. See
-[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
 
 ## Server grouping
 
@@ -593,7 +593,50 @@ Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
 failed collapses with `row.error` and retries when expanded again. The source is
 read-only unless created with `writable: true`. `grid.value?.core?.rowGroups`
 and `:on-row-group-toggled` work as for local grouping. See
-[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```vue
+<script setup lang="ts">
+import { onUnmounted, shallowRef } from "vue";
+import { GpGrid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource, type PivotConfig } from "@gp-grid/vue";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+// Created once in setup: one source per grid.
+const source = createPivotSource(inner, config);
+// shallowRef: a schema can hold thousands of columns.
+const schema = shallowRef(source.getSchema() ?? buildPivotSchema([], config));
+const stop = source.subscribeSchema((next) => (schema.value = next));
+onUnmounted(() => {
+  stop();
+  source.destroy();
+});
+</script>
+
+<template>
+  <GpGrid
+    :columns="schema.columns"
+    :column-groups="schema.columnGroups"
+    :data-source="source"
+    :row-height="32"
+    :group-label-column="PIVOT_LABEL_COLUMN_ID"
+  />
+</template>
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `grid.value?.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
 
 ## All `<GpGrid>` props (cheatsheet)
 

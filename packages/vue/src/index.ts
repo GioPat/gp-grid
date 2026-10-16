@@ -94,8 +94,14 @@ export {
   isHierarchicalRowAccess,
   // Server grouping
   createServerGroupingSource,
+  createPivotSource,
   encodeGroupId,
   decodeGroupId,
+  buildPivotSchema,
+  encodePivotColumnId,
+  decodePivotColumnId,
+  encodePivotGroupId,
+  PIVOT_LABEL_COLUMN_ID,
   // Utils
   calculateColumnPositions,
   getTotalWidth,
@@ -147,6 +153,12 @@ export type {
   ServerGroupingService,
   ServerGroupingConfig,
   ServerGroupingSource,
+  // Pivot (PRD 012)
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
   GridRowGroupsApi,
   GroupLabelRendererParams,
   SortDirection,

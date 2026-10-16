@@ -4,6 +4,7 @@ import {
     GpGrid,
     useGridData,
     createRowGrouping,
+    PIVOT_LABEL_COLUMN_ID,
     type ColumnDefinition,
     type ColumnGroupChild,
     type HighlightingOptions,
@@ -17,6 +18,8 @@ import Bold from "./renderers/Bold.vue";
 import Tags from "./renderers/Tags.vue";
 import AgeBucket from "./renderers/AgeBucket.vue";
 import { createDemoServerSource } from "./demo-server-groups";
+import { createDemoPivotSource } from "./demo-pivot";
+import { usePivotSchema } from "./use-pivot-schema";
 type HighlightMode = "row" | "column" | "cell";
 type FreezeCount = 0 | 1 | 3 | 5;
 const highlightMode = ref<HighlightMode>("row");
@@ -259,6 +262,18 @@ const serverSource = computed(() =>
 );
 watch(serverSource, (_next, previous) => previous?.destroy());
 
+// Pivot (PRD 012): the same rows by status and name, a column group per creation date.
+const pivot = ref(false);
+const pivotSource = computed(() => (pivot.value ? createDemoPivotSource(dataSource) : null));
+watch(pivotSource, (_next, previous) => previous?.destroy());
+const pivotSchema = usePivotSchema(pivotSource);
+const pivotActive = computed(() => pivotSource.value !== null);
+const shownColumns = computed(() => (pivotActive.value ? pivotSchema.value.columns : columns));
+const shownColumnGroups = computed(() => {
+    if (pivotActive.value) return pivotSchema.value.columnGroups;
+    return grouped.value ? demoColumnGroups : undefined;
+});
+
 const rowIdToUpdate = ref(1);
 
 // Localized labels demo — override only what you need; the rest fall back to
@@ -383,7 +398,18 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
         >
             Server groups
         </button>
-        <button class="mode-btn" :disabled="groupRows === false && serverGroups === false" @click="expandAllGroups">
+        <button
+            :class="['mode-btn', { active: pivot }]"
+            :aria-pressed="pivot"
+            @click="pivot = !pivot"
+        >
+            Pivot
+        </button>
+        <button
+            class="mode-btn"
+            :disabled="groupRows === false && serverGroups === false && pivot === false"
+            @click="expandAllGroups"
+        >
             Expand all
         </button>
     </div>
@@ -393,15 +419,16 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             ref="gridRef"
             :row-drag-entire-row="true"
             :highlighting="highlightingProps"
-            :columns="columns"
-            :column-groups="grouped ? demoColumnGroups : undefined"
-            :header-band-heights="tallBand ? tallBandHeights : undefined"
-            :row-grouping="serverSource === null ? rowGrouping : null"
+            :columns="shownColumns"
+            :column-groups="shownColumnGroups"
+            :header-band-heights="tallBand && pivotActive === false ? tallBandHeights : undefined"
+            :row-grouping="serverSource === null && pivotActive === false ? rowGrouping : null"
+            :group-label-column="pivotActive ? PIVOT_LABEL_COLUMN_ID : undefined"
             :labels="gridLabels"
             :freeze-rows="freezeRows"
             :on-frozen-rows-changed="handleFrozenRowsChanged"
             :overscan="12"
-            :data-source="serverSource ?? dataSource"
+            :data-source="pivotSource ?? serverSource ?? dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
             :row-height="36"
             :row-resize="true"

@@ -1,9 +1,9 @@
-// packages/core/src/row-grouping/group-lookup.ts
+// packages/core/src/hierarchy/group-lookup.ts
 // Resolves group ids against a tree, walking only the subtrees the ids name.
 
 import type { RowId } from "../types";
 import type { GroupTree } from "./group-layout";
-import { decodeTaggedId, type GroupKey } from "../hierarchy/keys";
+import { decodeTaggedId, type GroupKey } from "./keys";
 
 interface PathNode {
   ids: RowId[];

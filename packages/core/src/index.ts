@@ -51,6 +51,16 @@ export type {
   RowAccess,
 } from "./types";
 
+/** Pivot (PRD 012) */
+export { createPivotSource } from "./pivot";
+export { buildPivotSchema } from "./hierarchy/pivot-schema";
+export {
+  PIVOT_LABEL_COLUMN_ID,
+  encodePivotColumnId,
+  decodePivotColumnId,
+  encodePivotGroupId,
+} from "./hierarchy/pivot-ids";
+
 /** Transaction system */
 export { IndexedDataStore } from "./indexed-data-store/index";
 
@@ -173,6 +183,13 @@ export type {
   ServerLeavesRequest,
   ServerLeavesResponse,
   ServerGroupingService,
+
+  /** Pivot (PRD 012) */
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
 
   /** Interaction events */
   ColumnResizedEvent,

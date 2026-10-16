@@ -2,9 +2,9 @@
 // The grouping configuration: validation, expansion state and builds.
 
 import type { RowGroupingConfig, RowGroupingRejection } from "../types";
-import { isBuiltInAggregate } from "./aggregators";
+import { isBuiltInAggregate } from "../hierarchy/aggregators";
 import type { FlatRowSource, RowGroupingEngine } from "../types/row-grouping-engine";
-import { createExpansionState } from "./expansion-state";
+import { createExpansionState } from "../hierarchy/tree-expansion";
 import { toFlatRowSource } from "./flat-row-source";
 import { createGroupedAccess } from "./grouped-access";
 import { buildGroupedView, type GroupingSpec } from "./grouped-view";

@@ -52,7 +52,7 @@
 
   <section class="grid-card">
     <gp-grid
-      [columns]="columns"
+      [columns]="shownColumns()"
       [columnGroups]="columnGroups()"
       [headerHeight]="headerHeight"
       [headerBandHeights]="headerBandHeights()"
@@ -65,6 +65,7 @@
       [rowResize]="true"
       [freezeRows]="freezeRows()"
       [rowGrouping]="rowGrouping()"
+      [groupLabelColumn]="pivotActive() ? pivotLabelColumn : ''"
       (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>
@@ -129,6 +130,15 @@
       (click)="toggleServerGroups()"
     >
       Server groups
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="pivot()"
+      [style.opacity]="pivot() ? 1 : 0.5"
+      (click)="togglePivot()"
+    >
+      Pivot
     </button>
     <button
       type="button"

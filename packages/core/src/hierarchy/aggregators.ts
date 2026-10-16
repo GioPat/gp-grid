@@ -1,4 +1,4 @@
-// packages/core/src/row-grouping/aggregators.ts
+// packages/core/src/hierarchy/aggregators.ts
 // The built-in aggregators and the fold of a group's leaf range.
 
 import { compareValues } from "../indexed-data-store/sorting";

@@ -1,4 +1,4 @@
-// packages/core/src/row-grouping/visible-rows.ts
+// packages/core/src/hierarchy/visible-rows.ts
 // The visible index: visible group rows and their first view index.
 
 import type { GroupTree } from "./group-layout";
@@ -139,4 +139,25 @@ export const createVisibleRows = (
       return firstView[slot]! + 1 + offset;
     },
   };
+};
+
+export interface ExpandedTree {
+  readonly tree: GroupTree;
+  readonly expanded: Uint8Array;
+  readonly visible: VisibleRows;
+}
+
+/** The highest collapsed group among `group` and its ancestors, or -1. */
+export const highestCollapsed = (view: ExpandedTree, group: number): number => {
+  let top = -1;
+  for (let g = group; g >= 0; g = view.tree.parent[g]!) {
+    if (view.expanded[g] !== 1) top = g;
+  }
+  return top;
+};
+
+/** View index of a group, or of its highest collapsed ancestor when hidden. */
+export const locateGroup = (view: ExpandedTree, group: number): number => {
+  const hiddenBy = highestCollapsed(view, view.tree.parent[group]!);
+  return view.visible.viewIndexOfGroup(hiddenBy < 0 ? group : hiddenBy);
 };

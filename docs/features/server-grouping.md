@@ -626,8 +626,10 @@ and handles no later notification. No wrapper destroys a source passed as
 - Counts are exact: `totalCount`, `childCount` and `leafCount`. Estimated or
   unknown counts are not supported.
 - Paging is by position range over a parent's children. Cursor-only paging is not supported.
-- No pivot, drill-through or aggregate windows, and no client-side aggregation:
-  the grid shows the aggregates the server sends.
+- No pivot (a server that computes one supplies it
+  [precomputed](./pivot.md#precomputed)), drill-through or aggregate windows,
+  and no client-side aggregation: the grid shows the aggregates the server
+  sends.
 - Nothing is cached across queries: a sort, a filter, a refresh or a new source
   drops every page, and only the expansion survives.
 - After a refresh the active cell and the anchor follow their row by id when

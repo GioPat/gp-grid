@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { GridInstruction, SetContentSizeInstruction } from "../src/types";
-import { createHierarchyFixture, createHierarchyGrid } from "./hierarchy-fixture";
+import { CHILDLESS_ID, createHierarchyFixture, createHierarchyGrid, type FixtureAccess } from "./hierarchy-fixture";
 
 const contentHeight = (batches: readonly GridInstruction[][]): number | undefined =>
   batches
@@ -139,5 +139,39 @@ describe("rowGroups — onRowGroupToggled", () => {
     expect(groups.toggleAt(0)).toEqual({ status: "unchanged" });
     expect(groups.toggleAt(99)).toEqual({ status: "unchanged" });
     expect(onRowGroupToggled).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("rowGroups — childless groups (PRD 012 D1)", () => {
+  const setup = async () => {
+    let access: FixtureAccess | undefined;
+    const created = createHierarchyGrid(() => {
+      access = createHierarchyFixture({ childless: true });
+      return access;
+    });
+    await mount(created.grid);
+    const setExpanded = vi.spyOn(access!, "setExpanded");
+    created.batches.length = 0;
+    return { ...created, setExpanded };
+  };
+
+  it("answers unchanged for toggle, setExpanded and toggleAt without asking the access", async () => {
+    const { grid, batches, setExpanded } = await setup();
+    expect(grid.rows.getCount()).toBe(4);
+
+    expect(grid.rowGroups.toggle(CHILDLESS_ID)).toEqual({ status: "unchanged" });
+    expect(grid.rowGroups.setExpanded([CHILDLESS_ID], true)).toEqual({ status: "unchanged" });
+    expect(grid["rowGroupsController"].toggleAt(3)).toEqual({ status: "unchanged" });
+
+    expect(setExpanded).not.toHaveBeenCalled();
+    expect(batches).toHaveLength(0);
+    expect(grid.rows.getCount()).toBe(4);
+  });
+
+  it("passes the other ids of a mixed setExpanded through", async () => {
+    const { grid, setExpanded } = await setup();
+    expect(grid.rowGroups.setExpanded([CHILDLESS_ID, "g:IT"], true)).toEqual({ status: "applied" });
+    expect(setExpanded).toHaveBeenCalledExactlyOnceWith(["g:IT"], true);
+    expect(grid.rows.getCount()).toBe(6);
   });
 });

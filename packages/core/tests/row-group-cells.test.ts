@@ -113,3 +113,24 @@ describe("groupToggleClassName and groupLabelParams", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("childless group rows (PRD 012 D1)", () => {
+  const childless: HierarchyGroupRow = { ...group, id: "g:XX", childCount: 0, leafCount: 4 };
+
+  it("gives a childless group the empty expander and no aria-expanded", () => {
+    expect(groupToggleClassName(childless)).toBe("gp-grid-group-toggle gp-grid-group-toggle--none");
+    expect(groupToggleClassName({ ...childless, expanded: true })).toBe("gp-grid-group-toggle gp-grid-group-toggle--none");
+    expect(hierarchyRowAttributes(childless)).toEqual({
+      className: "gp-grid-row--group",
+      "data-row-kind": "group",
+      "aria-level": 1,
+      "aria-expanded": undefined,
+    });
+  });
+
+  it("makes the label toggle a no-op on a childless group", () => {
+    const onToggle = vi.fn();
+    groupLabelParams(childless, 3, "XX", onToggle).toggle();
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+});

@@ -107,6 +107,15 @@ All notable changes to gp-grid will be documented in this file.
 - `pnpm test:server-groups` runs `benchmarks/scripts/server-grouping-smoke.mjs` on the production core over 1,000,000 leaves and asserts the placeholder memory, the request counts and the page and concurrency budgets
 - See [Server grouping](./features/server-grouping.md)
 
+#### Read-only pivot (PRD 012)
+- `createPivotSource(source, config): PivotSource<TData>`, the local pivot engine over a flat source that holds every record, object or columnar. `PivotConfig`: `rows` and `pivots` (`RowGroupDimension`s), `measures` (`PivotMeasure`s), `domain` (fixed keys per pivot dimension id), `rowTotals` (default `false`), `grandTotal`, `defaultExpandedDepth` (default `0`), `initialState`, `maxColumns` (default `1000`), `labelColumn` and `formatKey`. An invalid configuration throws `RangeError("Invalid pivot.<field>: <value>")`. A query rejects with `"pivot needs every row"`, `"pivot reads unknown field <field>"`, `"pivot key of <id> is an object; add toKey"` or `"pivot generates N columns, over maxColumns M"`, the last before any measure is read.
+- `PivotSource<TData>`: a read-only data source (`loadMode: "all"`, `writable: false`) with `getSchema()`, `subscribeSchema(listener)` (called synchronously with each schema whose ids changed, before its query resolves), `getState()` and `destroy()`. Expansion is kept by group id across queries; a sorted generated, row-total or label column orders every row level; the filter reaches the inner source.
+- `buildPivotSchema(keys, options): PivotSchema` (`columns`, `columnGroups`), `PivotSchemaOptions` (`measures`, `labelColumn`, `rowTotals`, `formatKey`) and `PivotMeasure` (a `RowGroupMeasure` with an optional `column` override): the label column, one read-only, non-filterable column per leaf tuple and measure, one header group per tuple prefix and the row totals under `"Total"`. Keys that cannot nest throw `RangeError("Invalid pivot keys: …")`.
+- Ids: `encodePivotColumnId(path, measure)` (`path` `[]` is the row total), `decodePivotColumnId(id)`, `encodePivotGroupId(path)` and `PIVOT_LABEL_COLUMN_ID` (`"gp-pivot-label"`), over the group id path JSON
+- Childless group rows: a group row with `childCount` 0 shows `.gp-grid-group-toggle--none`, has no `aria-expanded`, and ignores the expander, a double-click, Enter, Space and the label renderer's `toggle()`; `rowGroups.toggle` and `setExpanded` on it answer `unchanged`
+- `pnpm test:pivot` runs `benchmarks/scripts/pivot-smoke.mjs` on the production core over 1,000,000 object rows and records the query time, the retained heap per intersection and the schema size
+- See [Pivot](./features/pivot.md)
+
 #### Scroll motion
 - `GridCore.viewport.isScrollMotionActive()` and `interruptScrollMotion()`: whether a touch fling or a wheel glide is still moving the content, and a command that stops it where it is. An adapter registers its motion with `viewport.setScrollMotionHandle(handle)` / `clearScrollMotionHandle(handle)` (`ScrollMotionHandle`: `isActive()`, `interrupt()`); `TouchScrollController` does so on attach and exposes `interrupt()`.
 - `InputHandler.handleWheel(deltaY, deltaX, dampening, deltaMode?)` takes the `WheelEvent.deltaMode`: line and page deltas (modes 1 and 2) are converted to pixels (40 and 800 per unit) before dampening
@@ -229,6 +238,9 @@ All notable changes to gp-grid will be documented in this file.
 - Under a hierarchy `refresh()` keeps the scroll anchor and the active row by id, as `refreshFromTransaction()` does. After either, an anchor or active row whose id the view cannot locate keeps its old index when that index now holds a placeholder.
 - Under a hierarchy `rows.getRecordById(id)` also answers the loaded record row `locate` finds, after the data source's own `getRecordById`; a group or placeholder id answers `undefined`
 - Group ids and their typed key paths come from a module both engines share, so a server group and a local group over the same path have the same id
+
+#### Read-only pivot (PRD 012)
+- `createRowGrouping` reports a terminal group's record count as its `childCount` (it reported 0), matching the server engine and `HierarchyGroupRow`
 
 #### Vue rendering
 - Scrolling no longer re-renders every mounted row and cell. A cell re-renders when its row is re-assigned (`slot.generation`) or when a batch can change core-backed content; a batch that only places rows and columns leaves it alone. `useGpGrid().renderToken` still bumps once per batch.

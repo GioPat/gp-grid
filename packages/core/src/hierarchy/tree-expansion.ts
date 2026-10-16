@@ -1,8 +1,8 @@
-// packages/core/src/row-grouping/expansion-state.ts
+// packages/core/src/hierarchy/tree-expansion.ts
 // Seeds a group tree's expansion bits from the shared expansion by id.
 
 import type { RowGroupingState, RowId } from "../types";
-import { createExpansionIds } from "../hierarchy/expansion-state";
+import { createExpansionIds } from "./expansion-state";
 import type { GroupTree } from "./group-layout";
 import { findGroups } from "./group-lookup";
 import { createExpansion } from "./visible-rows";

@@ -167,6 +167,7 @@ export interface ViewRowSnapshot {
   expanded: boolean | null;
   value: CellValue;
   leafCount: number | null;
+  childCount: number | null;
   values: Record<string, CellValue>;
 }
 
@@ -197,6 +198,7 @@ const snapshotRow = (core: GridCore<unknown>, index: number, fields: readonly st
     expanded: row.kind === "group" ? row.expanded : null,
     value: row.kind === "group" ? row.value : null,
     leafCount: row.kind === "record" ? null : row.leafCount,
+    childCount: row.kind === "group" ? row.childCount : null,
     values,
   };
 };

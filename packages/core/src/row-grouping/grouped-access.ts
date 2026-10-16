@@ -3,31 +3,35 @@
 
 import type { CellValue, HierarchicalRowAccess, HierarchyRecordChange, HierarchyRow, RowId } from "../types";
 import type { FlatRowSource } from "../types/row-grouping-engine";
-import type { ExpansionState } from "./expansion-state";
-import { findGroup } from "./group-lookup";
-import { groupIdOf } from "./group-tree";
+import type { ExpansionState } from "../hierarchy/tree-expansion";
+import { findGroup } from "../hierarchy/group-lookup";
+import { groupIdOf } from "../hierarchy/group-tree";
 import {
   buildGroupedView,
   createPositionFinder,
-  locateGroup,
   locatePosition,
   type GroupedView,
   type GroupingSpec,
 } from "./grouped-view";
+import { createGroupExpansion, setGroup } from "../hierarchy/group-expansion";
 import { GROUP_ID_PREFIX, TOTAL_ROW_ID, keyValue } from "../hierarchy/keys";
+import { locateGroup } from "../hierarchy/visible-rows";
 
 type Reader = (row: number) => CellValue;
 
 const groupRow = (view: GroupedView, group: number): HierarchyRow => {
   const { tree } = view;
   const depth = tree.depth[group]!;
+  const leafCount = tree.leafEnd[group]! - tree.leafStart[group]!;
+  // The tree counts child groups only; a terminal group's children are its records.
+  const terminal = depth === tree.dimensions.length - 1;
   return {
     kind: "group",
     id: groupIdOf(tree, group),
     depth,
     expanded: view.expanded[group] === 1,
-    childCount: tree.childCount[group]!,
-    leafCount: tree.leafEnd[group]! - tree.leafStart[group]!,
+    childCount: terminal ? leafCount : tree.childCount[group]!,
+    leafCount,
     field: tree.dimensions[depth]!.field,
     value: keyValue(tree.tag[group]!, tree.key[group]!),
   };
@@ -105,36 +109,7 @@ export const createGroupedAccess = <TData = unknown>(
     return position < 0 ? -1 : locatePosition(view, position);
   };
 
-  const setGroup = (group: number, open: boolean): boolean => {
-    const bit = open ? 1 : 0;
-    if (view.expanded[group] === bit) return false;
-    view.expanded[group] = bit;
-    expansion.record(groupIdOf(view.tree, group), view.tree.depth[group]!, open);
-    return true;
-  };
-
-  const setAll = (open: boolean): boolean => {
-    const bit = open ? 1 : 0;
-    const changed = view.expanded.some((current) => current !== bit);
-    view.expanded.fill(bit);
-    expansion.setAll(view.tree, open);
-    return changed;
-  };
-
-  const setEach = (ids: readonly RowId[], open: boolean): boolean => {
-    let changed = false;
-    for (const id of ids) {
-      const group = findGroup(view.tree, id);
-      changed = (group >= 0 && setGroup(group, open)) || changed;
-    }
-    return changed;
-  };
-
-  const setExpanded = (ids: readonly RowId[] | null, open: boolean): boolean => {
-    const changed = ids === null ? setAll(open) : setEach(ids, open);
-    if (changed) view.visible.rebuild();
-    return changed;
-  };
+  const setExpanded = createGroupExpansion(() => view, expansion, () => true);
 
   const getRecord = (viewRow: number): TData | undefined => {
     const position = view.visible.leafAt(viewRow);
@@ -154,7 +129,7 @@ export const createGroupedAccess = <TData = unknown>(
     for (const [index, position] of positions.entries()) {
       const terminal = view.tree.rowGroup[position]!;
       if (groupIdOf(view.tree, terminal) === groupIds[index]) continue;
-      for (let g = terminal; g >= 0; g = view.tree.parent[g]!) changed = setGroup(g, true) || changed;
+      for (let g = terminal; g >= 0; g = view.tree.parent[g]!) changed = setGroup(view, expansion, g, true) || changed;
     }
     if (changed) view.visible.rebuild();
   };

@@ -88,6 +88,12 @@ export type {
   ServerGroupingService,
   ServerGroupingConfig,
   ServerGroupingSource,
+  // Pivot (PRD 012)
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
   GridRowGroupsApi,
   GroupLabelRendererParams,
 
@@ -198,8 +204,14 @@ export {
   normalizeColumnFilterModel,
   createRowGrouping,
   createServerGroupingSource,
+  createPivotSource,
   encodeGroupId,
   decodeGroupId,
+  buildPivotSchema,
+  encodePivotColumnId,
+  decodePivotColumnId,
+  encodePivotGroupId,
+  PIVOT_LABEL_COLUMN_ID,
   isHierarchicalRowAccess,
 } from "@gp-grid/core";
 

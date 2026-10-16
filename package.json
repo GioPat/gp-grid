@@ -27,6 +27,7 @@
     "test:columnar": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/columnar-smoke.mjs",
     "test:row-groups": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/row-grouping-smoke.mjs",
     "test:server-groups": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/server-grouping-smoke.mjs",
+    "test:pivot": "pnpm --filter @gp-grid/core build:production && node --expose-gc benchmarks/scripts/pivot-smoke.mjs",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",

@@ -40,11 +40,14 @@ export interface HierarchyFixtureOptions {
   withoutSetExpanded?: boolean;
   /** Group ids that start expanded. */
   expanded?: readonly RowId[];
+  /** Append the root group `CHILDLESS_ID`, reported with `childCount` 0. */
+  childless?: boolean;
 }
 
 export type FixtureAccess = HierarchicalRowAccess & { release: ReturnType<typeof vi.fn> };
 
 export const TOTAL_ID = "gp-total";
+export const CHILDLESS_ID = "g:XX";
 
 /** A leaf with a record reads it, so a write through the grid shows. */
 const leaf = (record: FixtureRecord, withRecord: boolean): FixtureNode => ({
@@ -70,7 +73,7 @@ const sumOf = (nodes: readonly FixtureNode[]): number =>
 const leafCountOf = (node: FixtureNode): number =>
   node.group?.children.reduce((count, child) => count + leafCountOf(child), 0) ?? 1;
 
-const buildTree = (revision: number): FixtureNode[] => {
+const buildTree = (revision: number, childless: boolean): FixtureNode[] => {
   const amount = (base: number) => base * revision;
   const italy = group("g:IT", "country", "IT", [
     group("g:IT:Rome", "city", "Rome", [
@@ -86,7 +89,8 @@ const buildTree = (revision: number): FixtureNode[] => {
       leaf({ id: "r4", country: "FR", city: "Paris", amount: amount(40) }, true),
     ]),
   ]);
-  return revision === 2 ? [italy] : [italy, france];
+  const roots = revision === 2 ? [italy] : [italy, france];
+  return childless ? [...roots, group(CHILDLESS_ID, "country", "XX", [])] : roots;
 };
 
 const flatten = (nodes: readonly FixtureNode[], depth: number, out: VisibleRow[]): void => {
@@ -125,7 +129,7 @@ const toHierarchyRow = ({ node, depth }: VisibleRow): HierarchyRow => {
 /** A total row on top, then the visible groups and leaves. */
 export const createHierarchyFixture = (options: HierarchyFixtureOptions = {}): FixtureAccess => {
   const revision = options.revision ?? 1;
-  const roots = buildTree(revision);
+  const roots = buildTree(revision, options.childless === true);
   const byId = new Map<RowId, { node: FixtureNode; parent: FixtureNode | null }>();
   indexParents(roots, null, byId);
   for (const id of options.expanded ?? []) {

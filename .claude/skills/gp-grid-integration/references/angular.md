@@ -419,7 +419,7 @@ request but read the effective `region` from `columns.getState()`.
 columns stay mounted; an open editor keeps its column mounted regardless. The
 default pin action cycles through physical left, physical right and unpinned;
 its labels are `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. See
-[docs/features/column-pinning.md](../../../docs/features/column-pinning.md).
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
 
 Frozen rows: `[freezeRows]="{ count: 3 }"` keeps the first displayed rows below
 the header (defaults `maxCount 100`, `minSuffixHeight 64`). `count` is a request
@@ -429,7 +429,7 @@ the header (defaults `maxCount 100`, `minSuffixHeight 64`). `count` is a request
 runtime through `core.frozenRows.set`, so the component is not recreated and the
 scroll position is corrected to keep the visible suffix anchored; a reduced
 prefix is announced through `labels.frozenRowsLimited`. See
-[docs/features/frozen-rows.md](../../../docs/features/frozen-rows.md).
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
 
 `getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
@@ -492,7 +492,7 @@ follows its row through sort, filter, refresh and paging, and an ID whose page
 has not loaded waits for its row; without it, an integer `rowId` addresses a view
 index and is dropped at the next data revision. Applying a height anchors the row
 at the clip top and corrects the scroll in the same batch, so the viewport does
-not jump. See [docs/features/row-heights.md](../../../docs/features/row-heights.md).
+not jump. See [docs/features/row-heights.md](../../../../docs/features/row-heights.md).
 
 ## Row resize and auto-fit
 
@@ -519,7 +519,7 @@ this.grid?.core?.columns.setState([{ columnId: "name", width: null }]); // drop 
 A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
 the same for the active cell. The handles are pointer-only. `[rowResize]` is
 reactive, `[autoFit]` is read at creation. See
-[docs/features/auto-fit.md](../../../docs/features/auto-fit.md).
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
 
 ## Column groups
 
@@ -550,7 +550,7 @@ Every column is referenced once, ungrouped ones at the root. `[columnGroups]` an
 or a key of `[headerRenderers]`; a function renderer is ignored. A rejected
 hierarchy leaves the previous one on screen; the input is re-applied with every
 later `columns` change, so put a valid one back. See
-[docs/features/column-groups.md](../../../docs/features/column-groups.md).
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
 
 ## Row grouping
 
@@ -625,7 +625,7 @@ grouping needs every row resident (`[rows]`, a client source or
 `createGridData`); a server source is rejected with `partial-source`.
 `GroupToggleComponent` and `GroupLabelComponent`, the label cell's parts, are
 exported. See
-[docs/features/row-grouping.md](../../../docs/features/row-grouping.md).
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
 
 ## Server grouping
 
@@ -669,7 +669,51 @@ Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
 failed collapses with `row.error` and retries when expanded again. The source is
 read-only unless created with `writable: true`. `grid.core?.rowGroups` and
 `(onRowGroupToggled)` work as for local grouping. See
-[docs/features/server-grouping.md](../../../docs/features/server-grouping.md).
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```ts
+import { Component, OnDestroy, signal } from "@angular/core";
+import { GpGridComponent, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createClientDataSource, createPivotSource, type PivotConfig } from "@gp-grid/angular";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  // No [rowGrouping]: it would be rejected as hierarchical-source.
+  template: `
+    <gp-grid [columns]="schema().columns" [columnGroups]="schema().columnGroups" [dataSource]="source"
+      [rowHeight]="32" [groupLabelColumn]="labelColumnId" />
+  `,
+})
+export class SalesPivotComponent implements OnDestroy {
+  protected readonly labelColumnId = PIVOT_LABEL_COLUMN_ID;
+  // A field, created once: one source per grid.
+  protected readonly source = createPivotSource(createClientDataSource(sales), config);
+  protected readonly schema = signal(this.source.getSchema() ?? buildPivotSchema([], config));
+  private readonly stop = this.source.subscribeSchema((next) => this.schema.set(next));
+
+  ngOnDestroy(): void {
+    this.stop();
+    this.source.destroy();
+  }
+}
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `grid.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
 
 ## Highlighting
 

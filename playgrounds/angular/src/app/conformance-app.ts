@@ -19,6 +19,7 @@ import type {
   FreezeRowsOptions,
   GridCore,
   GroupLabelRendererTemplate,
+  PivotSchema,
   RowGrouping,
   RowLoadingOptions,
   RowDragEndEvent,
@@ -85,6 +86,17 @@ import {
   SERVER_GROUPS_ROW_HEIGHT,
   type ServerGroupsMode,
 } from './conformance-server-groups';
+import {
+  createPivotFixture,
+  PIVOT_BAND_HEIGHTS,
+  PIVOT_COLUMN_LAYOUT,
+  PIVOT_HEADER_HEIGHT,
+  PIVOT_LABEL_COLUMN_ID,
+  PIVOT_ROW_HEIGHT,
+  type PivotMode,
+} from './conformance-pivot-external';
+import { createEnginePivotFixture } from './conformance-pivot';
+import { createPivotSchemaBinding } from './pivot-schema-binding';
 
 interface ConformanceRow {
   id: number;
@@ -107,7 +119,8 @@ type FixtureArm =
   | { fixture: 'autoFit'; mode: AutoFitMode }
   | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
   | { fixture: 'rowGroups'; mode: RowGroupsMode }
-  | { fixture: 'serverGroups'; mode: ServerGroupsMode };
+  | { fixture: 'serverGroups'; mode: ServerGroupsMode }
+  | { fixture: 'pivot'; mode: PivotMode | 'engine' };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -116,7 +129,7 @@ const NO_GROUP_LIMITS: ColumnGroupLimits = {};
 
 /** Arms whose rows reach the grid through a data source take the columnar branch. */
 const isSourcedArm = (arm: FixtureArm): boolean => {
-  if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups') return true;
+  if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups' || arm.fixture === 'pivot') return true;
   if (arm.fixture === 'frozen' || arm.fixture === 'rowHeights') return arm.mode !== 'object';
   return arm.fixture === 'autoFit' && arm.mode === 'paged';
 };
@@ -236,80 +249,120 @@ const createColumnarFixture = () => {
           style="width: 14px; height: 14px; margin-inline-start: 4px"
           (click)="params.toggle()"></button>}</span>
     </ng-template>
-    <main data-conformance-framework="angular" style="width: 620px; margin: 16px">
-      <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap">
-        <button data-testid="reset" (click)="reset()">Reset</button>
-        <button data-testid="remount" (click)="remount()">Remount</button>
-        <button data-testid="replace-columns" (click)="rowGroupsActive() ? setRowGroupColumns('replaced') : replaceColumns()">Replace columns</button>
-        <button data-testid="apply-column-state" (click)="applyColumnState()">Apply column state</button>
-        <button data-testid="reset-column-state" (click)="resetColumnState()">Reset column state</button>
-        <button data-testid="apply-sort" (click)="applySort()">Apply sort</button>
-        <button data-testid="apply-filter" (click)="applyFilter()">Apply filter</button>
-        <button data-testid="move-column" (click)="moveColumn()">Move column</button>
-        <button data-testid="drag-row" (click)="dragRow()">Drag row</button>
-        <button data-testid="use-columnar" (click)="useColumnar()">Use columnar</button>
-        <button data-testid="use-object" (click)="useObject()">Use object</button>
-        <button data-testid="bump-revision" (click)="bumpRevision()">Bump revision</button>
-        <button data-testid="use-narrow-columns" (click)="useNarrowColumns()">Narrow columns</button>
-        <button data-testid="use-large-columnar" (click)="useLargeColumnar()">Large columnar</button>
-        <button data-testid="use-wide-columns" (click)="useWideColumns(1000)">Wide columns</button>
-        <button data-testid="pin-columns" (click)="pinColumns()">Pin columns</button>
-        <button data-testid="unpin-all" (click)="unpinAll()">Unpin all</button>
-        <button data-testid="toggle-column-layout" (click)="toggleColumnLayout()">Toggle layout</button>
-        <button data-testid="resize-host" (click)="resizeHost()">Resize host</button>
-        <button data-testid="hide-column" (click)="hideColumn()">Hide column</button>
-        <button data-testid="toggle-rtl" (click)="toggleRtl()">Toggle RTL</button>
-        <button data-testid="use-freeze-rows" (click)="useFreezeRows()">Freeze rows</button>
-        <button data-testid="clear-freeze-rows" (click)="clearFreezeRows()">Clear freeze rows</button>
-        <button data-testid="use-frozen-paged" (click)="useFrozenPaged()">Frozen paged</button>
-        <button data-testid="use-frozen-paged-tight" (click)="useFrozenPagedTight()">Frozen paged tight</button>
-        <button data-testid="use-frozen-object" (click)="useFrozenObject()">Frozen object</button>
-        <button data-testid="freeze-count-3" (click)="freezeCount(3)">Freeze 3</button>
-        <button data-testid="freeze-count-5" (click)="freezeCount(5)">Freeze 5</button>
-        <button data-testid="freeze-through-5" (click)="freezeThrough5()">Freeze through 5</button>
-        <button data-testid="unfreeze-in-place" (click)="unfreezeInPlace()">Unfreeze in place</button>
-        <button data-testid="toggle-host-height" (click)="toggleHostHeight()">Toggle host height</button>
-        <button data-testid="use-row-heights" (click)="useRowHeights()">Row heights</button>
-        <button data-testid="use-row-heights-large" (click)="useRowHeightsLarge()">Heights large</button>
-        <button data-testid="use-row-heights-paged" (click)="useRowHeightsPaged()">Heights paged</button>
-        <button data-testid="set-row-heights" (click)="setRowHeights()">Set heights</button>
-        <button data-testid="grow-above-viewport" (click)="growAboveViewport()">Grow above</button>
-        <button data-testid="grow-frozen-row" (click)="growFrozenRow()">Grow frozen row</button>
-        <button data-testid="reset-row-heights" (click)="resetRowHeights()">Reset heights</button>
-        <button data-testid="use-auto-fit" (click)="useAutoFit()">Auto fit</button>
-        <button data-testid="use-auto-fit-paged" (click)="useAutoFitPaged()">Auto fit paged</button>
-        <button data-testid="freeze-two" (click)="freezeCount(2)">Freeze 2</button>
-        <button data-testid="use-column-groups" (click)="armColumnGroups('groups')">Column groups</button>
-        <button data-testid="use-wide-groups" (click)="armColumnGroups('wide')">Wide groups</button>
-        <button data-testid="move-x-between" (click)="withCore(columnGroups.moveXBetween)">X between</button>
-        <button data-testid="move-x-back" (click)="withCore(columnGroups.moveXBack)">X back</button>
-        <button data-testid="hide-b" (click)="setHiddenB(true)">Hide B</button>
-        <button data-testid="show-b" (click)="setHiddenB(false)">Show B</button>
-        <button data-testid="pin-a" (click)="pinA()">Pin A</button>
-        <button data-testid="reset-order" (click)="withCore(columnGroups.resetOrder)">Reset order</button>
-        <button data-testid="replace-groups" (click)="replaceSchema(columnGroups.replacement)">Replace groups</button>
-        <button data-testid="reject-cycle" (click)="replaceSchema(columnGroups.cyclic)">Reject cycle</button>
-        <button data-testid="reject-missing" (click)="replaceSchema(columnGroups.missing)">Reject missing</button>
-        <button data-testid="over-budget-move" (click)="overBudgetMove()">Over budget</button>
-        <button data-testid="tall-band" (click)="tallBand()">Tall band</button>
-        <button data-testid="freeze-three" (click)="freezeCount(3)">Freeze 3 rows</button>
-        <button data-testid="use-row-groups" (click)="armRowGroups('object')">RG</button>
-        <button data-testid="use-row-groups-columnar" (click)="armRowGroups('columnar')">RG col</button>
-        <button data-testid="use-row-groups-external" (click)="armRowGroups('external')">RG ext</button>
-        <button data-testid="use-row-groups-paged" (click)="armRowGroups('paged')">RG page</button>
-        <button data-testid="expand-all" (click)="withCore(rowGroups.expandAll)">Exp</button>
-        <button data-testid="collapse-all" (click)="withCore(rowGroups.collapseAll)">Col</button>
-        <button data-testid="tall-leaf" (click)="withCore(rowGroups.tallLeaf)">Tall</button>
-        <button data-testid="ungroup" (click)="ungroup()">Flat</button>
-        <button data-testid="replace-revision" (click)="replaceRevision()">Rev</button>
-        <button data-testid="format-country" (click)="setRowGroupColumns('formatted')">Fmt</button>
-        <button data-testid="use-server-groups" (click)="armServerGroups('immediate')">SG</button>
-        <button data-testid="use-server-groups-held" (click)="armServerGroups('held')">SGh</button>
-        <button data-testid="use-server-groups-frozen" (click)="armServerGroups('frozen')">SGf</button>
-        <button data-testid="release-responses" (click)="serverGroups.releaseResponses()">Rel</button>
-        <button data-testid="fail-next-leaves" (click)="serverGroups.failNextLeaves()">Fail</button>
-        <button data-testid="collapse-first-group" (click)="withCore(serverGroups.collapseFirstGroup)">C1</button>
-        <button data-testid="scroll-deep" (click)="withCore(serverGroups.scrollDeep)">Dp</button>
+    <main data-conformance-framework="angular">
+      <div class="cf-controls">
+        <section class="cf-group">
+          <h2>Session</h2>
+          <button data-testid="reset" (click)="reset()">Reset</button>
+          <button data-testid="remount" (click)="remount()">Remount</button>
+          <button data-testid="toggle-rtl" (click)="toggleRtl()">Toggle RTL</button>
+          <button data-testid="resize-host" (click)="resizeHost()">Resize host</button>
+          <button data-testid="toggle-host-height" (click)="toggleHostHeight()">Toggle host height</button>
+          <button data-testid="toggle-column-layout" (click)="toggleColumnLayout()">Toggle layout</button>
+        </section>
+        <section class="cf-group">
+          <h2>Data</h2>
+          <button data-testid="use-columnar" (click)="useColumnar()">Use columnar</button>
+          <button data-testid="use-object" (click)="useObject()">Use object</button>
+          <button data-testid="bump-revision" (click)="bumpRevision()">Bump revision</button>
+          <button data-testid="use-large-columnar" (click)="useLargeColumnar()">Large columnar</button>
+          <button data-testid="replace-columns" (click)="rowGroupsActive() ? setRowGroupColumns('replaced') : replaceColumns()">Replace columns</button>
+          <button data-testid="apply-sort" (click)="applySort()">Apply sort</button>
+          <button data-testid="apply-filter" (click)="applyFilter()">Apply filter</button>
+          <button data-testid="drag-row" (click)="dragRow()">Drag row</button>
+        </section>
+        <section class="cf-group">
+          <h2>Columns</h2>
+          <button data-testid="apply-column-state" (click)="applyColumnState()">Apply column state</button>
+          <button data-testid="reset-column-state" (click)="resetColumnState()">Reset column state</button>
+          <button data-testid="move-column" (click)="moveColumn()">Move column</button>
+          <button data-testid="hide-column" (click)="hideColumn()">Hide column</button>
+          <button data-testid="use-narrow-columns" (click)="useNarrowColumns()">Narrow columns</button>
+          <button data-testid="use-wide-columns" (click)="useWideColumns(1000)">Wide columns</button>
+          <button data-testid="pin-columns" (click)="pinColumns()">Pin columns</button>
+          <button data-testid="unpin-all" (click)="unpinAll()">Unpin all</button>
+        </section>
+        <section class="cf-group">
+          <h2>Frozen rows</h2>
+          <button data-testid="use-freeze-rows" (click)="useFreezeRows()">Freeze rows</button>
+          <button data-testid="clear-freeze-rows" (click)="clearFreezeRows()">Clear freeze rows</button>
+          <button data-testid="use-frozen-paged" (click)="useFrozenPaged()">Frozen paged</button>
+          <button data-testid="use-frozen-paged-tight" (click)="useFrozenPagedTight()">Frozen paged tight</button>
+          <button data-testid="use-frozen-object" (click)="useFrozenObject()">Frozen object</button>
+          <button data-testid="freeze-two" (click)="freezeCount(2)">Freeze 2</button>
+          <button data-testid="freeze-count-3" (click)="freezeCount(3)">Freeze 3</button>
+          <button data-testid="freeze-three" (click)="freezeCount(3)">Freeze 3 rows</button>
+          <button data-testid="freeze-count-5" (click)="freezeCount(5)">Freeze 5</button>
+          <button data-testid="freeze-through-5" (click)="freezeThrough5()">Freeze through 5</button>
+          <button data-testid="unfreeze-in-place" (click)="unfreezeInPlace()">Unfreeze in place</button>
+        </section>
+        <section class="cf-group">
+          <h2>Row heights</h2>
+          <button data-testid="use-row-heights" (click)="useRowHeights()">Row heights</button>
+          <button data-testid="use-row-heights-large" (click)="useRowHeightsLarge()">Heights large</button>
+          <button data-testid="use-row-heights-paged" (click)="useRowHeightsPaged()">Heights paged</button>
+          <button data-testid="set-row-heights" (click)="setRowHeights()">Set heights</button>
+          <button data-testid="grow-above-viewport" (click)="growAboveViewport()">Grow above</button>
+          <button data-testid="grow-frozen-row" (click)="growFrozenRow()">Grow frozen row</button>
+          <button data-testid="reset-row-heights" (click)="resetRowHeights()">Reset heights</button>
+          <button data-testid="use-auto-fit" (click)="useAutoFit()">Auto fit</button>
+          <button data-testid="use-auto-fit-paged" (click)="useAutoFitPaged()">Auto fit paged</button>
+        </section>
+        <section class="cf-group">
+          <h2>Column groups</h2>
+          <button data-testid="use-column-groups" (click)="armColumnGroups('groups')">Column groups</button>
+          <button data-testid="use-wide-groups" (click)="armColumnGroups('wide')">Wide groups</button>
+          <button data-testid="move-x-between" (click)="withCore(columnGroups.moveXBetween)">X between</button>
+          <button data-testid="move-x-back" (click)="withCore(columnGroups.moveXBack)">X back</button>
+          <button data-testid="hide-b" (click)="setHiddenB(true)">Hide B</button>
+          <button data-testid="show-b" (click)="setHiddenB(false)">Show B</button>
+          <button data-testid="pin-a" (click)="pinA()">Pin A</button>
+          <button data-testid="reset-order" (click)="withCore(columnGroups.resetOrder)">Reset order</button>
+          <button data-testid="replace-groups" (click)="replaceSchema(columnGroups.replacement)">Replace groups</button>
+          <button data-testid="reject-cycle" (click)="replaceSchema(columnGroups.cyclic)">Reject cycle</button>
+          <button data-testid="reject-missing" (click)="replaceSchema(columnGroups.missing)">Reject missing</button>
+          <button data-testid="over-budget-move" (click)="overBudgetMove()">Over budget</button>
+          <button data-testid="tall-band" (click)="tallBand()">Tall band</button>
+        </section>
+        <section class="cf-group">
+          <h2>Row groups</h2>
+          <button data-testid="use-row-groups" (click)="armRowGroups('object')">Groups: object</button>
+          <button data-testid="use-row-groups-columnar" (click)="armRowGroups('columnar')">Groups: columnar</button>
+          <button data-testid="use-row-groups-external" (click)="armRowGroups('external')">Groups: external</button>
+          <button data-testid="use-row-groups-paged" (click)="armRowGroups('paged')">Groups: paged</button>
+          <button data-testid="expand-all" (click)="withCore(rowGroups.expandAll)">Expand all</button>
+          <button data-testid="collapse-all" (click)="withCore(rowGroups.collapseAll)">Collapse all</button>
+          <button data-testid="tall-leaf" (click)="withCore(rowGroups.tallLeaf)">Tall leaf</button>
+          <button data-testid="ungroup" (click)="ungroup()">Ungroup</button>
+          <button data-testid="replace-revision" (click)="replaceRevision()">Replace revision</button>
+          <button data-testid="format-country" (click)="setRowGroupColumns('formatted')">Format country</button>
+        </section>
+        <section class="cf-group">
+          <h2>Server groups</h2>
+          <button data-testid="use-server-groups" (click)="armServerGroups('immediate')">Server: immediate</button>
+          <button data-testid="use-server-groups-held" (click)="armServerGroups('held')">Server: held</button>
+          <button data-testid="use-server-groups-frozen" (click)="armServerGroups('frozen')">Server: frozen</button>
+          <button data-testid="release-responses" (click)="serverGroups.releaseResponses()">Release responses</button>
+          <button data-testid="fail-next-leaves" (click)="serverGroups.failNextLeaves()">Fail next leaves</button>
+          <button data-testid="collapse-first-group" (click)="withCore(serverGroups.collapseFirstGroup)">Collapse first group</button>
+          <button data-testid="scroll-deep" (click)="withCore(serverGroups.scrollDeep)">Scroll deep</button>
+        </section>
+        <section class="cf-group">
+          <h2>Pivot</h2>
+          <button data-testid="use-pivot-external" (click)="armPivot('external')">Pivot: external</button>
+          <button data-testid="use-pivot-external-wide" (click)="armPivot('wide')">Pivot: wide</button>
+          <button data-testid="pivot-replace-revision" (click)="pivotReplaceRevision()">Replace revision</button>
+          <button data-testid="pivot-refresh" (click)="withCore(pivot.refresh)">Refresh</button>
+          <button data-testid="pivot-hold-next" (click)="pivot.holdNext()">Hold next</button>
+          <button data-testid="pivot-release" (click)="pivot.release()">Release</button>
+          <button data-testid="pivot-pin-label" (click)="withCore(pivot.pinLabel)">Pin label</button>
+          <button data-testid="pivot-move-leaf" (click)="withCore(pivot.moveLeaf)">Move leaf</button>
+          <button data-testid="pivot-set-total-width" (click)="withCore(pivot.setTotalWidth)">Total width</button>
+          <button data-testid="use-pivot" (click)="armEnginePivot()">Pivot: engine</button>
+          <button data-testid="pivot-add-key" (click)="withCore(addPivotKey)">Add key</button>
+          <button data-testid="pivot-sort-first-amount" (click)="withCore(enginePivot.sortFirstAmount)">Sort first amount</button>
+          <button data-testid="pivot-set-first-amount-width" (click)="withCore(enginePivot.setFirstAmountWidth)">First amount width</button>
+        </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="activeHostHeight()">
@@ -323,6 +376,8 @@ const createColumnarFixture = () => {
               [rows]="emptyRows"
               [rowHeight]="frozenRowHeight()"
               [headerHeight]="frozenHeaderHeight()"
+              [columnGroups]="activeColumnGroups()"
+              [headerBandHeights]="activeBandHeights()"
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [rowLoading]="activeRowLoading()"
@@ -419,6 +474,17 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     return arm.fixture === 'serverGroups' ? arm.mode : 'off';
   });
   protected readonly serverGroupsActive = computed(() => this.serverGroupsMode() !== 'off');
+  protected readonly pivot = createPivotFixture();
+  protected readonly pivotActive = computed(() => this.arm().fixture === 'pivot');
+  protected readonly pivotSchema = signal<PivotSchema>({ columns: [], columnGroups: [] });
+  protected readonly enginePivot = createEnginePivotFixture();
+  protected readonly enginePivotActive = computed(() => {
+    const arm = this.arm();
+    return arm.fixture === 'pivot' && arm.mode === 'engine';
+  });
+  private readonly engineSchema = createPivotSchemaBinding(this.enginePivot.recordNotification);
+  private readonly shownPivotSchema = computed(() =>
+    this.enginePivotActive() ? this.engineSchema.schema() : this.pivotSchema());
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
@@ -481,6 +547,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (typeof window === 'undefined') return;
+    const rowGroupHooks = this.rowGroups.createHooks(() => this.coreOf());
     (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
       getCellValue: (row: number, col: number): CellValue => this.coreOf()?.cells.getValue(row, col) ?? null,
       getFieldValue: (row: number, field: string): CellValue => this.coreOf()?.cells.getFieldValue(row, field) ?? null,
@@ -512,7 +579,8 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
         setGroups: (groups) => this.groupsSchema.update((schema) => ({ columns: schema.columns, groups })),
         setBandHeights: (heights) => this.bandHeights.set(heights ?? NO_BAND_HEIGHTS),
       }),
-      ...this.rowGroups.createHooks(() => this.coreOf()),
+      ...rowGroupHooks,
+      ...this.enginePivot.createHooks(this.pivot.createHooks(() => this.coreOf(), rowGroupHooks)),
       ...this.serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
@@ -524,6 +592,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
 
   ngOnDestroy(): void {
+    this.engineSchema.clear();
     if (typeof window === 'undefined') return;
     delete (window as unknown as { __gpConformance?: unknown }).__gpConformance;
   }
@@ -608,6 +677,27 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.armFixture({ fixture: 'serverGroups', mode: next });
   }
 
+  /** Pivot arms (PRD 012): a fresh fixture and its schema, then a remount. */
+  protected armPivot(next: PivotMode): void {
+    this.pivotSchema.set(this.pivot.arm(next));
+    this.armFixture({ fixture: 'pivot', mode: next });
+  }
+
+  /** The engine arm (PRD 012): fresh records and sources; its schema arrives through the binding. */
+  protected armEnginePivot(): void {
+    this.enginePivot.arm();
+    this.engineSchema.bind(this.enginePivot.pivotSource());
+    this.armFixture({ fixture: 'pivot', mode: 'engine' });
+  }
+
+  protected readonly addPivotKey = (core: GridCore<unknown>): void => {
+    void this.enginePivot.addKey(core);
+  };
+
+  protected pivotReplaceRevision(): void {
+    this.withCore((core) => this.pivotSchema.set(this.pivot.replaceRevision(core)));
+  }
+
   /** In place: the grid keeps its core and regroups or relabels. */
   protected setRowGroupColumns(variant: RowGroupsColumnsVariant): void {
     const columns = this.rowGroups.columnsFor(this.rowGroupsMode(), variant);
@@ -634,6 +724,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeGroupLabelColumn(): string {
+    if (this.pivotActive()) return PIVOT_LABEL_COLUMN_ID;
     if (this.serverGroupsActive()) return SERVER_GROUPS_LABEL_COLUMN;
     return this.rowGroupsActive() ? this.rowGroups.labelColumn() : '';
   }
@@ -672,12 +763,14 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   // The published input typings drop `| undefined` (ng-packagr), while the
   // inputs take it at runtime: `undefined` keeps the grid flat.
   protected activeColumnGroups(): readonly AngularColumnGroupChild[] {
+    if (this.pivotActive()) return this.shownPivotSchema().columnGroups as readonly AngularColumnGroupChild[];
     const groups: readonly ColumnGroupChild[] | undefined =
       this.columnGroupsActive() ? this.groupsSchema().groups : undefined;
     return groups as readonly AngularColumnGroupChild[];
   }
 
   protected activeBandHeights(): readonly number[] {
+    if (this.pivotActive()) return PIVOT_BAND_HEIGHTS;
     return this.columnGroupsActive() ? this.bandHeights() : NO_BAND_HEIGHTS;
   }
 
@@ -736,6 +829,8 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.enginePivotActive()) return this.enginePivot.source() ?? this.columnarSource;
+    if (this.pivotActive()) return this.pivot.source() ?? this.columnarSource;
     if (this.serverGroupsActive()) return this.serverGroups.source() ?? this.columnarSource;
     if (this.rowGroupsActive()) return this.rowGroups.source() ?? this.columnarSource;
     if (this.autoFitActive()) return this.autoFit.sourceFor(this.autoFitMode()) ?? this.columnarSource;
@@ -745,6 +840,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    if (this.pivotActive()) return this.shownPivotSchema().columns;
     if (this.serverGroupsActive()) return this.serverGroups.columns();
     if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
     if (this.columnGroupsActive()) return this.groupsSchema().columns;
@@ -781,7 +877,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeRowLoading(): RowLoadingOptions {
-    if (this.serverGroupsActive()) return NO_ROW_LOADING;
+    if (this.serverGroupsActive() || this.pivotActive()) return NO_ROW_LOADING;
     if (this.rowGroupsActive()) return this.rowGroups.rowLoading() ?? NO_ROW_LOADING;
     const fitLoading = this.autoFitActive() ? this.autoFit.rowLoadingFor(this.autoFitMode()) : undefined;
     if (fitLoading !== undefined) return fitLoading;
@@ -800,6 +896,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.columnGroupsActive()) return COLUMN_GROUPS_ROW_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_ROW_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_ROW_HEIGHT;
+    if (this.pivotActive()) return PIVOT_ROW_HEIGHT;
     return 32;
   }
 
@@ -810,6 +907,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.columnGroupsActive()) return COLUMN_GROUPS_HEADER_HEIGHT;
     if (this.rowGroupsActive()) return ROW_GROUPS_HEADER_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_HEADER_HEIGHT;
+    if (this.pivotActive()) return PIVOT_HEADER_HEIGHT;
     return 36;
   }
 
@@ -817,6 +915,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.autoFitActive()) return AUTO_FIT_COLUMN_LAYOUT;
     if (this.rowGroupsActive()) return ROW_GROUPS_COLUMN_LAYOUT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_COLUMN_LAYOUT;
+    if (this.pivotActive()) return PIVOT_COLUMN_LAYOUT;
     return this.columnGroupsActive() ? COLUMN_GROUPS_COLUMN_LAYOUT : this.columnLayout();
   }
 

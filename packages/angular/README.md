@@ -277,6 +277,18 @@ unless created with `writable: true`; keep it in a field. See
 <gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" groupLabelColumn="country" />
 ```
 
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. Pass it as `[dataSource]` and the schema from `subscribeSchema` as
+`[columns]` and `[columnGroups]`, kept in a signal; `buildPivotSchema(keys, options)` builds the same schema from keys
+you computed yourself, without the engine. See
+[Pivot](../../docs/features/pivot.md).
+
+```html
+<gp-grid [columns]="schema().columns" [columnGroups]="schema().columnGroups" [dataSource]="source"
+  [rowHeight]="32" [groupLabelColumn]="labelColumnId" />
+```
+
 An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
 typed into a `number` column stores `60000`, and a draft the type cannot hold
 writes nothing.

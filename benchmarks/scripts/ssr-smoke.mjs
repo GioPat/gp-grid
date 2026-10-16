@@ -33,6 +33,7 @@ import {
   rowGroupColumns,
   rowGroupRows,
 } from "./ssr-row-groups.mjs";
+import { checkLocalPivotCore, checkPivotCore, expectPivotMarkup, pivotGridProps } from "./ssr-pivot.mjs";
 
 const importFrom = async (specifier, packageFile) => {
   const requireFromPackage = createRequire(packageFile);
@@ -323,6 +324,10 @@ await check("core row grouping over columnar rows", () =>
 
 await check("core binds a source-supplied hierarchy", () => checkExternalHierarchy(coreArtifact));
 
+await check("core precomputed pivot without browser globals", () => checkPivotCore(coreArtifact));
+
+await check("core local pivot without browser globals", () => checkLocalPivotCore(coreArtifact));
+
 /** The server renders of one wrapper: the local engine, a hierarchy from the source, then server grouping (PRD 009). */
 const rowGroupArms = () => [
   ["rowGrouping", { rowData: rowGroupRows, rowGrouping: createGrouping(coreArtifact) }],
@@ -550,6 +555,15 @@ await check("React row groups server render", async () => {
     })));
 });
 
+await check("React precomputed pivot server render", async () => {
+  const React = await import("react");
+  const { renderToString } = await import("react-dom/server");
+  const { Grid } = await import(pathToFileURL(artifact("@gp-grid/react")).href);
+  const html = await renderWithoutErrors(() =>
+    renderToString(React.createElement(Grid, { ...pivotGridProps(coreArtifact), initialWidth: 500, initialHeight: 300 })));
+  return expectPivotMarkup(html, "React");
+});
+
 const vuePackage = path.join(REPOSITORY_ROOT, "playgrounds/vite-vue/package.json");
 
 /** Vue pins are declared on the columns, so the same shell rules apply. */
@@ -676,6 +690,20 @@ await check("Vue row groups server render", async () => {
     });
     return renderToString(app);
   });
+});
+
+await check("Vue precomputed pivot server render", async () => {
+  const { createSSRApp, h } = await importFrom("vue", vuePackage);
+  const { renderToString } = await importFrom("vue/server-renderer", vuePackage);
+  const vueArtifact = path.join(REPOSITORY_ROOT, "packages/vue/dist/index.js");
+  const { GpGrid } = await import(pathToFileURL(vueArtifact).href);
+  const html = await renderWithoutErrors(() => {
+    const app = createSSRApp({
+      render: () => h(GpGrid, { ...pivotGridProps(coreArtifact), initialWidth: 500, initialHeight: 300 }),
+    });
+    return renderToString(app);
+  });
+  return expectPivotMarkup(html, "Vue");
 });
 
 const angularPackage = path.join(REPOSITORY_ROOT, "playgrounds/angular/package.json");
@@ -872,6 +900,30 @@ await check("Angular row groups server render", async () => {
       { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
     );
   }, expectAngularRowGroupShell);
+});
+
+await check("Angular precomputed pivot server render", async () => {
+  await importFrom("@angular/compiler", angularPackage);
+  const { Component } = await importFrom("@angular/core", angularPackage);
+  const { bootstrapApplication } = await importFrom("@angular/platform-browser", angularPackage);
+  const { provideServerRendering, renderApplication } = await importFrom("@angular/platform-server", angularPackage);
+  const angularArtifact = path.join(REPOSITORY_ROOT, "packages/angular/dist/angular/fesm2022/gp-grid-angular.mjs");
+  const { GpGridComponent } = await import(pathToFileURL(angularArtifact).href);
+  class SsrPivotComponent {}
+  Component({
+    selector: "app-root",
+    standalone: true,
+    imports: [GpGridComponent],
+    template: `<gp-grid [columns]="columns" [columnGroups]="columnGroups" [dataSource]="dataSource"
+      [rowHeight]="rowHeight" columnLayout="fixed" [headerHeight]="headerHeight"
+      [headerBandHeights]="headerBandHeights" />`,
+  })(SsrPivotComponent);
+  Object.assign(SsrPivotComponent.prototype, pivotGridProps(coreArtifact));
+  const html = await renderWithoutErrors(() => renderApplication(
+    (context) => bootstrapApplication(SsrPivotComponent, { providers: [provideServerRendering()] }, context),
+    { document: "<!doctype html><html><body><app-root></app-root></body></html>" },
+  ));
+  return expectPivotMarkup(html, "Angular");
 });
 
 const report = {

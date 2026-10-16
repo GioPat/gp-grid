@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildGroupTree, type GroupTree } from "../src/row-grouping/group-tree";
+import { buildGroupTree, type GroupTree } from "../src/hierarchy/group-tree";
 import {
   createExpansion,
   createVisibleRows,
   type GrandTotalPlacement,
   type VisibleRows,
-} from "../src/row-grouping/visible-rows";
+} from "../src/hierarchy/visible-rows";
 import type { CellValue } from "../src/types";
 import { objectSource, seededRandom } from "./row-grouping-source";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { foldMeasure, foldRange, aggregatorOf } from "../src/row-grouping/aggregators";
-import { buildGroupTree, type GroupTree } from "../src/row-grouping/group-tree";
+import { foldMeasure, foldRange, aggregatorOf } from "../src/hierarchy/aggregators";
+import { buildGroupTree, type GroupTree } from "../src/hierarchy/group-tree";
 import type { CellValue, RowGroupAggregator, RowGroupBuiltInAggregate } from "../src/types";
 import { columnarSource, objectSource, seededRandom, toColumns } from "./row-grouping-source";
 

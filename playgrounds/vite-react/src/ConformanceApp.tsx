@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Grid, createColumnarDataSource } from "@gp-grid/react";
+import "../../conformance-controls.css";
 import type {
   CellValue,
   CellValueChangedEvent,
@@ -15,6 +16,7 @@ import type {
   ColumnStateUpdate,
   ColumnLayoutMode,
   DataSource,
+  PivotSchema,
   FreezeRowsOptions,
   GridCore,
   GridRef,
@@ -85,6 +87,17 @@ import {
   SERVER_GROUPS_ROW_HEIGHT,
   type ServerGroupsMode,
 } from "./conformance-server-groups";
+import {
+  createPivotFixture,
+  PIVOT_BAND_HEIGHTS,
+  PIVOT_COLUMN_LAYOUT,
+  PIVOT_HEADER_HEIGHT,
+  PIVOT_LABEL_COLUMN_ID,
+  PIVOT_ROW_HEIGHT,
+  type PivotMode,
+} from "./conformance-pivot-external";
+import { createEnginePivotFixture } from "./conformance-pivot";
+import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
   id: number;
@@ -243,7 +256,8 @@ type FixtureArm =
   | { fixture: "autoFit"; mode: AutoFitMode }
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
   | { fixture: "rowGroups"; mode: RowGroupsMode }
-  | { fixture: "serverGroups"; mode: ServerGroupsMode };
+  | { fixture: "serverGroups"; mode: ServerGroupsMode }
+  | { fixture: "pivot"; mode: PivotMode | "engine" };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -289,6 +303,9 @@ export const ConformanceApp = (): React.ReactNode => {
   const [columnGroups] = useState(createColumnGroupsFixture);
   const [rowGroups] = useState(createRowGroupsFixture);
   const [serverGroups] = useState(createServerGroupsFixture);
+  const [pivot] = useState(createPivotFixture);
+  const [pivotSchema, setPivotSchema] = useState<PivotSchema>({ columns: [], columnGroups: [] });
+  const [enginePivot] = useState(createEnginePivotFixture);
   const [rowGroupsArm, setRowGroupsArm] = useState<RowGroupsArm>({ columns: [], grouping: null });
   const [arm, setArm] = useState<FixtureArm>(NO_ARM);
   const [groupsSchema, setGroupsSchema] = useState<ColumnGroupsSchema>(() => columnGroups.schemaFor("off"));
@@ -320,6 +337,10 @@ export const ConformanceApp = (): React.ReactNode => {
   const rowGroupsActive = rowGroupsMode !== "off";
   const serverGroupsMode: ServerGroupsMode = arm.fixture === "serverGroups" ? arm.mode : "off";
   const serverGroupsActive = serverGroupsMode !== "off";
+  const pivotActive = arm.fixture === "pivot";
+  const enginePivotActive = arm.fixture === "pivot" && arm.mode === "engine";
+  const engineSchema = usePivotSchema(enginePivotActive ? enginePivot.pivotSource() : null, enginePivot.recordNotification);
+  const shownPivotSchema = enginePivotActive ? engineSchema : pivotSchema;
   const frozenActive = frozenMode !== "off";
   const frozenObject = frozenMode === "object";
   const rowHeightsActive = rowHeightsMode !== "off";
@@ -372,6 +393,16 @@ export const ConformanceApp = (): React.ReactNode => {
     armFixture({ fixture: "serverGroups", mode: next });
   }, [armFixture, serverGroups]);
   const useWideGroups = useCallback(() => armColumnGroups("wide"), [armColumnGroups]);
+  /** Pivot arms (PRD 012): a fresh fixture and its schema, then a remount. */
+  const armPivot = useCallback((next: PivotMode) => {
+    setPivotSchema(pivot.arm(next));
+    armFixture({ fixture: "pivot", mode: next });
+  }, [armFixture, pivot]);
+  /** The engine arm (PRD 012): fresh records and sources; its schema arrives through `usePivotSchema`. */
+  const armEnginePivot = useCallback(() => {
+    enginePivot.arm();
+    armFixture({ fixture: "pivot", mode: "engine" });
+  }, [armFixture, enginePivot]);
 
   // In-place controls: the option stays reactive, so these never touch the
   // remount `generation`. `null` means "the armed mode's own option".
@@ -394,6 +425,7 @@ export const ConformanceApp = (): React.ReactNode => {
   }, []);
 
   const activeColumns = (): ColumnDefinition[] => {
+    if (pivotActive) return shownPivotSchema.columns;
     if (serverGroupsActive) return serverGroups.columns();
     if (rowGroupsActive) return rowGroupsArm.columns;
     if (columnGroupsActive) return groupsSchema.columns;
@@ -408,6 +440,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   const activeDataSource = (): DataSource<never> | undefined => {
+    if (pivotActive) return enginePivotActive ? enginePivot.source() : pivot.source();
     if (serverGroupsActive) return serverGroups.source();
     if (rowGroupsActive) return rowGroups.source();
     if (columnGroupsActive) return undefined;
@@ -420,7 +453,7 @@ export const ConformanceApp = (): React.ReactNode => {
 
   /** The writable arms keep the caller's object rows; every other one is sourced. */
   const activeRowData = (): ConformanceRow[] | undefined => {
-    if (rowGroupsActive || serverGroupsActive) return undefined;
+    if (rowGroupsActive || serverGroupsActive || pivotActive) return undefined;
     if (columnGroupsActive) return columnGroups.rowDataFor(columnGroupsMode) as unknown as ConformanceRow[] | undefined;
     if (autoFitActive) return autoFit.rowDataFor(autoFitMode) as unknown as ConformanceRow[] | undefined;
     if (rowHeightsActive) return rowHeights.rowDataFor(rowHeightsMode) as RowHeightsRow[] | undefined;
@@ -442,6 +475,7 @@ export const ConformanceApp = (): React.ReactNode => {
     if (columnGroupsActive) return COLUMN_GROUPS_ROW_HEIGHT;
     if (rowGroupsActive) return ROW_GROUPS_ROW_HEIGHT;
     if (serverGroupsActive) return SERVER_GROUPS_ROW_HEIGHT;
+    if (pivotActive) return PIVOT_ROW_HEIGHT;
     return 32;
   };
 
@@ -452,6 +486,7 @@ export const ConformanceApp = (): React.ReactNode => {
     if (columnGroupsActive) return COLUMN_GROUPS_HEADER_HEIGHT;
     if (rowGroupsActive) return ROW_GROUPS_HEADER_HEIGHT;
     if (serverGroupsActive) return SERVER_GROUPS_HEADER_HEIGHT;
+    if (pivotActive) return PIVOT_HEADER_HEIGHT;
     return 36;
   };
 
@@ -459,6 +494,7 @@ export const ConformanceApp = (): React.ReactNode => {
     if (autoFitActive) return AUTO_FIT_COLUMN_LAYOUT;
     if (rowGroupsActive) return ROW_GROUPS_COLUMN_LAYOUT;
     if (serverGroupsActive) return SERVER_GROUPS_COLUMN_LAYOUT;
+    if (pivotActive) return PIVOT_COLUMN_LAYOUT;
     return columnGroupsActive ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout;
   };
 
@@ -468,8 +504,19 @@ export const ConformanceApp = (): React.ReactNode => {
   };
 
   const activeLabelColumn = (): string | undefined => {
+    if (pivotActive) return PIVOT_LABEL_COLUMN_ID;
     if (serverGroupsActive) return SERVER_GROUPS_LABEL_COLUMN;
     return rowGroupsActive ? rowGroups.labelColumn() : undefined;
+  };
+
+  const activeColumnGroups = (): readonly ColumnGroupChild[] | undefined => {
+    if (pivotActive) return shownPivotSchema.columnGroups;
+    return columnGroupsActive ? groupsSchema.groups : undefined;
+  };
+
+  const activeBandHeights = (): readonly number[] | undefined => {
+    if (pivotActive) return PIVOT_BAND_HEIGHTS;
+    return columnGroupsActive ? bandHeights : undefined;
   };
 
   const replaceColumns = useCallback(() => {
@@ -699,6 +746,7 @@ const hideColumn = useCallback(() => {
   // Expose the wrapper's stripped built core for raw-value assertions and the
   // borrowed-source read counters for bounded-read assertions.
   useEffect(() => {
+    const rowGroupHooks = rowGroups.createHooks(groupCore);
     const hooks: ConformanceHooks = {
       getCellValue: (row, col) => gridRef.current?.core?.cells.getValue(row, col) ?? null,
       getFieldValue: (row, field) => gridRef.current?.core?.cells.getFieldValue(row, field) ?? null,
@@ -725,7 +773,8 @@ const hideColumn = useCallback(() => {
         setGroups: setColumnGroups,
         setBandHeights,
       }),
-      ...rowGroups.createHooks(groupCore),
+      ...rowGroupHooks,
+      ...enginePivot.createHooks(pivot.createHooks(groupCore, rowGroupHooks)),
       ...serverGroups.createHooks(),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: () => {
@@ -737,7 +786,7 @@ const hideColumn = useCallback(() => {
     return () => {
       delete (window as unknown as { __gpConformance?: ConformanceHooks }).__gpConformance;
     };
-  }, [autoFit, autoFitActive, columnGroups, fixture, frozen, groupCore, readCoreToken, rowGroups, rowHeights, rowHeightsActive, serverGroups, setColumnGroups, setFreezeCount, useWideColumns]);
+  }, [autoFit, autoFitActive, columnGroups, enginePivot, fixture, frozen, groupCore, pivot, readCoreToken, rowGroups, rowHeights, rowHeightsActive, serverGroups, setColumnGroups, setFreezeCount, useWideColumns]);
 
   // Arming remounts the grid, so the announcement reader follows each core.
   useEffect(() => {
@@ -757,88 +806,125 @@ const hideColumn = useCallback(() => {
   );
 
   return (
-    <main data-conformance-framework="react" style={{ width: 620, margin: 16 }}>
-      {/* Compact controls: the fixture page must fit the 720 px viewport, or
-          focusing the grid scrolls the page and moves rows under the pointer. */}
-      <style>{`[data-conformance-framework] button { padding: 2px 6px; font-size: 11px; }`}</style>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <button data-testid="reset" onClick={reset}>Reset</button>
-        <button data-testid="remount" onClick={remount}>Remount</button>
-        <button
-          data-testid="replace-columns"
-          onClick={rowGroupsActive ? () => setRowGroupColumns("replaced") : replaceColumns}
-        >
-          Replace columns
-        </button>
-        <button data-testid="apply-column-state" onClick={applyColumnState}>Apply column state</button>
-        <button data-testid="reset-column-state" onClick={resetColumnState}>Reset column state</button>
-        <button data-testid="apply-sort" onClick={applySort}>Apply sort</button>
-        <button data-testid="apply-filter" onClick={applyFilter}>Apply filter</button>
-        <button data-testid="move-column" onClick={moveColumn}>Move column</button>
-        <button data-testid="drag-row" onClick={dragRow}>Drag row</button>
-        <button data-testid="use-columnar" onClick={useColumnar}>Use columnar</button>
-        <button data-testid="use-object" onClick={useObject}>Use object</button>
-        <button data-testid="bump-revision" onClick={bumpRevision}>Bump revision</button>
-        <button data-testid="use-narrow-columns" onClick={useNarrowColumns}>Narrow columns</button>
-        <button data-testid="use-large-columnar" onClick={useLargeColumnar}>Large columnar</button>
-        <button data-testid="use-wide-columns" onClick={() => useWideColumns(1000)}>Wide columns</button>
-        <button data-testid="pin-columns" onClick={pinColumns}>Pin columns</button>
-        <button data-testid="unpin-all" onClick={unpinAll}>Unpin all</button>
-        <button data-testid="toggle-column-layout" onClick={toggleColumnLayout}>Toggle layout</button>
-        <button data-testid="resize-host" onClick={resizeHost}>Resize host</button>
-        <button data-testid="hide-column" onClick={hideColumn}>Hide column</button>
-        <button data-testid="toggle-rtl" onClick={toggleRtl}>Toggle RTL</button>
-        <button data-testid="use-freeze-rows" onClick={useFreezeRows}>Freeze rows</button>
-        <button data-testid="clear-freeze-rows" onClick={clearFreezeRows}>Clear freeze rows</button>
-        <button data-testid="use-frozen-paged" onClick={useFrozenPaged}>Frozen paged</button>
-        <button data-testid="use-frozen-paged-tight" onClick={useFrozenPagedTight}>Frozen paged tight</button>
-        <button data-testid="use-frozen-object" onClick={useFrozenObject}>Frozen object</button>
-        <button data-testid="freeze-count-3" onClick={() => freezeCount(3)}>Freeze 3</button>
-        <button data-testid="freeze-count-5" onClick={() => freezeCount(5)}>Freeze 5</button>
-        <button data-testid="freeze-through-5" onClick={freezeThrough5}>Freeze through 5</button>
-        <button data-testid="unfreeze-in-place" onClick={unfreezeInPlace}>Unfreeze in place</button>
-        <button data-testid="toggle-host-height" onClick={toggleHostHeight}>Toggle host height</button>
-        <button data-testid="use-row-heights" onClick={useRowHeights}>Row heights</button>
-        <button data-testid="use-row-heights-large" onClick={useRowHeightsLarge}>Heights large</button>
-        <button data-testid="use-row-heights-paged" onClick={useRowHeightsPaged}>Heights paged</button>
-        <button data-testid="set-row-heights" onClick={setRowHeightControls}>Set heights</button>
-        <button data-testid="grow-above-viewport" onClick={growAboveViewport}>Grow above</button>
-        <button data-testid="grow-frozen-row" onClick={growFrozenRow}>Grow frozen row</button>
-        <button data-testid="reset-row-heights" onClick={resetRowHeights}>Reset heights</button>
-        <button data-testid="use-auto-fit" onClick={useAutoFit}>Auto fit</button>
-        <button data-testid="use-auto-fit-paged" onClick={useAutoFitPaged}>Auto fit paged</button>
-        <button data-testid="freeze-two" onClick={() => freezeCount(2)}>Freeze 2</button>
-        <button data-testid="use-column-groups" onClick={useColumnGroups}>Column groups</button>
-        <button data-testid="use-wide-groups" onClick={useWideGroups}>Wide groups</button>
-        <button data-testid="move-x-between" onClick={withCore((core) => columnGroups.moveXBetween(core))}>X between</button>
-        <button data-testid="move-x-back" onClick={withCore((core) => columnGroups.moveXBack(core))}>X back</button>
-        <button data-testid="hide-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", true))}>Hide B</button>
-        <button data-testid="show-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", false))}>Show B</button>
-        <button data-testid="pin-a" onClick={withCore((core) => columnGroups.pin(core, "a", "start"))}>Pin A</button>
-        <button data-testid="reset-order" onClick={withCore((core) => columnGroups.resetOrder(core))}>Reset order</button>
-        <button data-testid="replace-groups" onClick={replaceSchema(columnGroups.replacement)}>Replace groups</button>
-        <button data-testid="reject-cycle" onClick={replaceSchema(columnGroups.cyclic)}>Reject cycle</button>
-        <button data-testid="reject-missing" onClick={replaceSchema(columnGroups.missing)}>Reject missing</button>
-        <button data-testid="over-budget-move" onClick={overBudgetMove}>Over budget</button>
-        <button data-testid="tall-band" onClick={tallBand}>Tall band</button>
-        <button data-testid="freeze-three" onClick={() => freezeCount(3)}>Freeze 3 rows</button>
-        <button data-testid="use-row-groups" onClick={() => armRowGroups("object")}>RG</button>
-        <button data-testid="use-row-groups-columnar" onClick={() => armRowGroups("columnar")}>RG col</button>
-        <button data-testid="use-row-groups-external" onClick={() => armRowGroups("external")}>RG ext</button>
-        <button data-testid="use-row-groups-paged" onClick={() => armRowGroups("paged")}>RG page</button>
-        <button data-testid="expand-all" onClick={withCore(rowGroups.expandAll)}>Exp</button>
-        <button data-testid="collapse-all" onClick={withCore(rowGroups.collapseAll)}>Col</button>
-        <button data-testid="tall-leaf" onClick={withCore(rowGroups.tallLeaf)}>Tall</button>
-        <button data-testid="ungroup" onClick={ungroup}>Flat</button>
-        <button data-testid="replace-revision" onClick={withCore((core) => void rowGroups.replaceRevision(core))}>Rev</button>
-        <button data-testid="format-country" onClick={() => setRowGroupColumns("formatted")}>Fmt</button>
-        <button data-testid="use-server-groups" onClick={() => armServerGroups("immediate")}>SG</button>
-        <button data-testid="use-server-groups-held" onClick={() => armServerGroups("held")}>SGh</button>
-        <button data-testid="use-server-groups-frozen" onClick={() => armServerGroups("frozen")}>SGf</button>
-        <button data-testid="release-responses" onClick={serverGroups.releaseResponses}>Rel</button>
-        <button data-testid="fail-next-leaves" onClick={serverGroups.failNextLeaves}>Fail</button>
-        <button data-testid="collapse-first-group" onClick={withCore(serverGroups.collapseFirstGroup)}>C1</button>
-        <button data-testid="scroll-deep" onClick={withCore(serverGroups.scrollDeep)}>Dp</button>
+    <main data-conformance-framework="react">
+      <div className="cf-controls">
+        <section className="cf-group">
+          <h2>Session</h2>
+          <button data-testid="reset" onClick={reset}>Reset</button>
+          <button data-testid="remount" onClick={remount}>Remount</button>
+          <button data-testid="toggle-rtl" onClick={toggleRtl}>Toggle RTL</button>
+          <button data-testid="resize-host" onClick={resizeHost}>Resize host</button>
+          <button data-testid="toggle-host-height" onClick={toggleHostHeight}>Toggle host height</button>
+          <button data-testid="toggle-column-layout" onClick={toggleColumnLayout}>Toggle layout</button>
+        </section>
+        <section className="cf-group">
+          <h2>Data</h2>
+          <button data-testid="use-columnar" onClick={useColumnar}>Use columnar</button>
+          <button data-testid="use-object" onClick={useObject}>Use object</button>
+          <button data-testid="bump-revision" onClick={bumpRevision}>Bump revision</button>
+          <button data-testid="use-large-columnar" onClick={useLargeColumnar}>Large columnar</button>
+          <button
+            data-testid="replace-columns"
+            onClick={rowGroupsActive ? () => setRowGroupColumns("replaced") : replaceColumns}
+          >
+            Replace columns
+          </button>
+          <button data-testid="apply-sort" onClick={applySort}>Apply sort</button>
+          <button data-testid="apply-filter" onClick={applyFilter}>Apply filter</button>
+          <button data-testid="drag-row" onClick={dragRow}>Drag row</button>
+        </section>
+        <section className="cf-group">
+          <h2>Columns</h2>
+          <button data-testid="apply-column-state" onClick={applyColumnState}>Apply column state</button>
+          <button data-testid="reset-column-state" onClick={resetColumnState}>Reset column state</button>
+          <button data-testid="move-column" onClick={moveColumn}>Move column</button>
+          <button data-testid="hide-column" onClick={hideColumn}>Hide column</button>
+          <button data-testid="use-narrow-columns" onClick={useNarrowColumns}>Narrow columns</button>
+          <button data-testid="use-wide-columns" onClick={() => useWideColumns(1000)}>Wide columns</button>
+          <button data-testid="pin-columns" onClick={pinColumns}>Pin columns</button>
+          <button data-testid="unpin-all" onClick={unpinAll}>Unpin all</button>
+        </section>
+        <section className="cf-group">
+          <h2>Frozen rows</h2>
+          <button data-testid="use-freeze-rows" onClick={useFreezeRows}>Freeze rows</button>
+          <button data-testid="clear-freeze-rows" onClick={clearFreezeRows}>Clear freeze rows</button>
+          <button data-testid="use-frozen-paged" onClick={useFrozenPaged}>Frozen paged</button>
+          <button data-testid="use-frozen-paged-tight" onClick={useFrozenPagedTight}>Frozen paged tight</button>
+          <button data-testid="use-frozen-object" onClick={useFrozenObject}>Frozen object</button>
+          <button data-testid="freeze-two" onClick={() => freezeCount(2)}>Freeze 2</button>
+          <button data-testid="freeze-count-3" onClick={() => freezeCount(3)}>Freeze 3</button>
+          <button data-testid="freeze-three" onClick={() => freezeCount(3)}>Freeze 3 rows</button>
+          <button data-testid="freeze-count-5" onClick={() => freezeCount(5)}>Freeze 5</button>
+          <button data-testid="freeze-through-5" onClick={freezeThrough5}>Freeze through 5</button>
+          <button data-testid="unfreeze-in-place" onClick={unfreezeInPlace}>Unfreeze in place</button>
+        </section>
+        <section className="cf-group">
+          <h2>Row heights</h2>
+          <button data-testid="use-row-heights" onClick={useRowHeights}>Row heights</button>
+          <button data-testid="use-row-heights-large" onClick={useRowHeightsLarge}>Heights large</button>
+          <button data-testid="use-row-heights-paged" onClick={useRowHeightsPaged}>Heights paged</button>
+          <button data-testid="set-row-heights" onClick={setRowHeightControls}>Set heights</button>
+          <button data-testid="grow-above-viewport" onClick={growAboveViewport}>Grow above</button>
+          <button data-testid="grow-frozen-row" onClick={growFrozenRow}>Grow frozen row</button>
+          <button data-testid="reset-row-heights" onClick={resetRowHeights}>Reset heights</button>
+          <button data-testid="use-auto-fit" onClick={useAutoFit}>Auto fit</button>
+          <button data-testid="use-auto-fit-paged" onClick={useAutoFitPaged}>Auto fit paged</button>
+        </section>
+        <section className="cf-group">
+          <h2>Column groups</h2>
+          <button data-testid="use-column-groups" onClick={useColumnGroups}>Column groups</button>
+          <button data-testid="use-wide-groups" onClick={useWideGroups}>Wide groups</button>
+          <button data-testid="move-x-between" onClick={withCore((core) => columnGroups.moveXBetween(core))}>X between</button>
+          <button data-testid="move-x-back" onClick={withCore((core) => columnGroups.moveXBack(core))}>X back</button>
+          <button data-testid="hide-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", true))}>Hide B</button>
+          <button data-testid="show-b" onClick={withCore((core) => columnGroups.setHidden(core, "b", false))}>Show B</button>
+          <button data-testid="pin-a" onClick={withCore((core) => columnGroups.pin(core, "a", "start"))}>Pin A</button>
+          <button data-testid="reset-order" onClick={withCore((core) => columnGroups.resetOrder(core))}>Reset order</button>
+          <button data-testid="replace-groups" onClick={replaceSchema(columnGroups.replacement)}>Replace groups</button>
+          <button data-testid="reject-cycle" onClick={replaceSchema(columnGroups.cyclic)}>Reject cycle</button>
+          <button data-testid="reject-missing" onClick={replaceSchema(columnGroups.missing)}>Reject missing</button>
+          <button data-testid="over-budget-move" onClick={overBudgetMove}>Over budget</button>
+          <button data-testid="tall-band" onClick={tallBand}>Tall band</button>
+        </section>
+        <section className="cf-group">
+          <h2>Row groups</h2>
+          <button data-testid="use-row-groups" onClick={() => armRowGroups("object")}>Groups: object</button>
+          <button data-testid="use-row-groups-columnar" onClick={() => armRowGroups("columnar")}>Groups: columnar</button>
+          <button data-testid="use-row-groups-external" onClick={() => armRowGroups("external")}>Groups: external</button>
+          <button data-testid="use-row-groups-paged" onClick={() => armRowGroups("paged")}>Groups: paged</button>
+          <button data-testid="expand-all" onClick={withCore(rowGroups.expandAll)}>Expand all</button>
+          <button data-testid="collapse-all" onClick={withCore(rowGroups.collapseAll)}>Collapse all</button>
+          <button data-testid="tall-leaf" onClick={withCore(rowGroups.tallLeaf)}>Tall leaf</button>
+          <button data-testid="ungroup" onClick={ungroup}>Ungroup</button>
+          <button data-testid="replace-revision" onClick={withCore((core) => void rowGroups.replaceRevision(core))}>Replace revision</button>
+          <button data-testid="format-country" onClick={() => setRowGroupColumns("formatted")}>Format country</button>
+        </section>
+        <section className="cf-group">
+          <h2>Server groups</h2>
+          <button data-testid="use-server-groups" onClick={() => armServerGroups("immediate")}>Server: immediate</button>
+          <button data-testid="use-server-groups-held" onClick={() => armServerGroups("held")}>Server: held</button>
+          <button data-testid="use-server-groups-frozen" onClick={() => armServerGroups("frozen")}>Server: frozen</button>
+          <button data-testid="release-responses" onClick={serverGroups.releaseResponses}>Release responses</button>
+          <button data-testid="fail-next-leaves" onClick={serverGroups.failNextLeaves}>Fail next leaves</button>
+          <button data-testid="collapse-first-group" onClick={withCore(serverGroups.collapseFirstGroup)}>Collapse first group</button>
+          <button data-testid="scroll-deep" onClick={withCore(serverGroups.scrollDeep)}>Scroll deep</button>
+        </section>
+        <section className="cf-group">
+          <h2>Pivot</h2>
+          <button data-testid="use-pivot-external" onClick={() => armPivot("external")}>Pivot: external</button>
+          <button data-testid="use-pivot-external-wide" onClick={() => armPivot("wide")}>Pivot: wide</button>
+          <button data-testid="pivot-replace-revision" onClick={withCore((core) => setPivotSchema(pivot.replaceRevision(core)))}>Replace revision</button>
+          <button data-testid="pivot-refresh" onClick={withCore(pivot.refresh)}>Refresh</button>
+          <button data-testid="pivot-hold-next" onClick={pivot.holdNext}>Hold next</button>
+          <button data-testid="pivot-release" onClick={pivot.release}>Release</button>
+          <button data-testid="pivot-pin-label" onClick={withCore(pivot.pinLabel)}>Pin label</button>
+          <button data-testid="pivot-move-leaf" onClick={withCore(pivot.moveLeaf)}>Move leaf</button>
+          <button data-testid="pivot-set-total-width" onClick={withCore(pivot.setTotalWidth)}>Total width</button>
+          <button data-testid="use-pivot" onClick={armEnginePivot}>Pivot: engine</button>
+          <button data-testid="pivot-add-key" onClick={withCore((core) => void enginePivot.addKey(core))}>Add key</button>
+          <button data-testid="pivot-sort-first-amount" onClick={withCore(enginePivot.sortFirstAmount)}>Sort first amount</button>
+          <button data-testid="pivot-set-first-amount-width" onClick={withCore(enginePivot.setFirstAmountWidth)}>First amount width</button>
+        </section>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
       <div
@@ -857,8 +943,8 @@ const hideColumn = useCallback(() => {
             rowData={activeRowData()}
             rowHeight={activeRowHeight()}
             headerHeight={activeHeaderHeight()}
-            columnGroups={columnGroupsActive ? groupsSchema.groups : undefined}
-            headerBandHeights={columnGroupsActive ? bandHeights : undefined}
+            columnGroups={activeColumnGroups()}
+            headerBandHeights={activeBandHeights()}
             columnGroupLimits={columnGroupsActive ? groupLimits : undefined}
             freezeRows={activeFreezeRows()}
             rowResize={autoFitActive}

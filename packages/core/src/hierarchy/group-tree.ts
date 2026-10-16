@@ -1,4 +1,4 @@
-// packages/core/src/row-grouping/group-tree.ts
+// packages/core/src/hierarchy/group-tree.ts
 // Buckets flat rows into groups, one pass per dimension.
 
 import type { CellValue, RowGroupDimension, RowGroupingRejection } from "../types";
@@ -12,7 +12,7 @@ import {
   type TreeLevel,
 } from "./group-layout";
 import { keyComparator, measureComparator, resolveLevelOrders, type LevelOrder } from "./group-order";
-import { TAG_DATE, TAG_OBJECT, childGroupId, keyOf, keyTagOf, type GroupKey } from "../hierarchy/keys";
+import { TAG_DATE, TAG_OBJECT, childGroupId, keyOf, keyTagOf, type GroupKey } from "./keys";
 
 export type { GroupTree } from "./group-layout";
 
