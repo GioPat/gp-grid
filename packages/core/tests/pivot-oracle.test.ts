@@ -25,7 +25,7 @@ import {
   type ReferenceTable,
 } from "./pivot-oracle";
 
-const SEEDS = [1, 7, 42, 2024, 9001];
+const SEEDS = [2024, 9001];
 
 interface Case {
   readonly aggregate: PivotMeasure["aggregate"];

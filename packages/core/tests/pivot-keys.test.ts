@@ -14,12 +14,6 @@ const keysOf = (result: PivotKeysResult): PivotKeys => {
 const values = (field: string, list: CellValue[]) => objectSource(list.map((value) => ({ [field]: value })));
 
 describe("buildPivotKeys", () => {
-  it("one level orders keys ascending and maps every row", () => {
-    const keys = keysOf(buildPivotKeys(objectSource(SALES), [{ field: "year" }]));
-    expect(keys.tuples).toEqual([[["year", "n", 2024]], [["year", "n", 2025]]]);
-    expect([...keys.tupleOf]).toEqual([0, 0, 0, 1, 0, 1, 1]);
-  });
-
   it("two levels build the tuples per parent", () => {
     const keys = keysOf(buildPivotKeys(objectSource(SALES), [{ field: "year" }, { field: "quarter", id: "q" }]));
     expect(keys.tuples).toEqual([

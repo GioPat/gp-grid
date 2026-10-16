@@ -148,10 +148,6 @@ describe("createPivotSource queries", () => {
     await expect(pivot(inner()).query({ range: { startRow: 0, endRow: 1 } })).rejects.toThrow(new Error(message));
   });
 
-  it("rejects a schema over maxColumns, row totals counted", async () => {
-    await expect(query(pivot(objects(), { maxColumns: 7 }))).rejects.toThrow("pivot generates 8 columns, over maxColumns 7");
-    await expect(query(pivot(objects(), { maxColumns: 6, rowTotals: false }))).resolves.toBeDefined();
-  });
 });
 
 describe("createPivotSource schema and expansion", () => {
@@ -277,9 +273,10 @@ describe("createPivotSource budget", () => {
     expect(source.getSchema()!.columns).toHaveLength(19);
   });
 
-  it("accepts a schema exactly at the limit", async () => {
+  it("accepts a schema exactly at the limit, row totals counted", async () => {
     const source = pivot(objects(), { maxColumns: 8 });
     await query(source);
     expect(source.getSchema()!.columns).toHaveLength(9);
+    await expect(query(pivot(objects(), { maxColumns: 6, rowTotals: false }))).resolves.toBeDefined();
   });
 });

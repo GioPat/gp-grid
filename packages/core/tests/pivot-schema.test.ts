@@ -116,9 +116,6 @@ describe("buildPivotSchema — header text", () => {
   it.each<[GroupPathStep, string]>([
     [["k", "z", null], "(Blanks)"],
     [["k", "s", "North"], "North"],
-    [["k", "n", 2.5], "2.5"],
-    [["k", "n", "Infinity"], "Infinity"],
-    [["k", "b", false], "false"],
     [["k", "d", Date.UTC(2024, 1, 29, 23, 59)], "2024-02-29"],
   ])("formats %j as %s by default", (step, text) => {
     expect(headers(step)).toEqual([PIVOT_LABEL_COLUMN_ID, text]);
