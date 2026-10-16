@@ -27,10 +27,13 @@ interface Person {
   city: string;
   bio: string;
   createdAt: Date;
+  status: 'active' | 'inactive' | 'pending';
+  salary: number;
 }
 
 const NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
 const CITIES = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
+const STATUSES: Person['status'][] = ['active', 'inactive', 'pending'];
 
 // Long bio strings pooled so the 1.5M-row dataset doesn't allocate millions of
 // distinct strings. Each row references one of these by index modulo.
@@ -67,7 +70,7 @@ const demoColumnGroups: AngularColumnGroupChild[] = [
       },
     ],
   },
-  { groupId: 'record', headerName: 'Record', children: ['city', 'createdAt'] },
+  { groupId: 'record', headerName: 'Record', children: ['city', 'createdAt', 'status', 'salary'] },
 ];
 
 // Row grouping (PRD 008): two dimensions, one `sum` and one `avg`.
@@ -96,6 +99,11 @@ const createDemoServerGrouping = () =>
 const formatAge = (value: CellValue): string =>
   typeof value === 'number' ? String(Math.round(value * 10) / 10) : String(value ?? '');
 
+const formatSalary = (value: CellValue): string =>
+  typeof value === 'number'
+    ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+    : String(value ?? '');
+
 const DEMO_HEADER_HEIGHT = 40;
 const tallBandHeights: readonly number[] = [DEMO_HEADER_HEIGHT * 2];
 const NO_BAND_HEIGHTS: readonly number[] = [];
@@ -108,6 +116,8 @@ const generateRows = (count: number): Person[] =>
     city: CITIES[i % CITIES.length],
     bio: BIOS[i % BIOS.length],
     createdAt: DATES[i % DATES.length],
+    status: STATUSES[i % STATUSES.length],
+    salary: 30000 + (i % 121) * 1000,
   }));
 
 @Component({
@@ -299,6 +309,8 @@ export class App implements AfterViewInit, OnDestroy {
       // renders one — currently behaviour-only).
       { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS, wrapText: true },
       { field: 'createdAt', cellDataType: 'dateTime', headerName: 'Created', width: 200, sortable: true, filterable: true, valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : '') },
+      { field: 'status', cellDataType: 'text', headerName: 'Status', width: 110, sortable: true, filterable: true },
+      { field: 'salary', cellDataType: 'number', headerName: 'Salary', width: 130, sortable: true, filterable: true, valueFormatter: formatSalary },
     ];
     this.cdr.detectChanges();
   }
