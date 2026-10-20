@@ -15,6 +15,8 @@ import type {
   HeaderRendererTemplate,
   HighlightingOptions,
   RowGrouping,
+  RowId,
+  WriteCommittedEvent,
 } from '@gp-grid/angular';
 import { createDemoServerSource } from './demo-server-groups';
 import { createDemoPivotSource } from './demo-pivot';
@@ -133,6 +135,13 @@ const generateRows = (count: number): Person[] =>
   ],
 })
 export class App implements AfterViewInit, OnDestroy {
+  protected readonly getRowId = (row: unknown): RowId => (row as Person).id;
+  protected readonly history = { maxEntries: 100 };
+
+  protected onWriteCommitted(event: WriteCommittedEvent): void {
+    console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`);
+  }
+
   protected darkMode = signal(false);
 
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));

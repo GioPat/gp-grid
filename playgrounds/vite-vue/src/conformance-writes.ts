@@ -92,7 +92,7 @@ export const createWritesFixture = () => {
       await inner.flushTransactions();
       await core.refreshFromTransaction();
     },
-    createHooks: (coreOf: () => GridCore<unknown> | null): WritesHooks => ({
+    createHooks: (coreOf: () => GridCore<unknown> | null | undefined): WritesHooks => ({
       writeCommitted: () => committed,
       lastWrite: () => last,
       writesRecord: (id) => inner?.getRowById(id) ?? null,
