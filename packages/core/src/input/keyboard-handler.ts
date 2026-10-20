@@ -176,7 +176,7 @@ export class KeyboardHandler<TData = unknown> {
       return { preventDefault: true };
     }
     if (key === "c") {
-      selection.copySelectionToClipboard();
+      void selection.copySelectionToClipboard();
       return { preventDefault: true };
     }
     if (history.isEnabled() === false) return { preventDefault: false };
