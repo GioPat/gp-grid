@@ -116,12 +116,21 @@ All notable changes to gp-grid will be documented in this file.
 - `pnpm test:pivot` runs `benchmarks/scripts/pivot-smoke.mjs` on the production core over 1,000,000 object rows and records the query time, the retained heap per intersection and the schema size
 - See [Pivot](./features/pivot.md)
 
+#### Write commands and history (PRD 013)
+- `onWriteCommitted(event)`: one `WriteCommittedEvent` per write command (an editor commit, a paste, a fill, `cells.setValue`, an undo, a redo) with `operation`, `changes` (`WriteChange`: `rowId`, `columnId`, `field`, `oldValue`, `newValue`, in write order) and `skipped` (the targets the command left out, as `CellWriteRejectedEvent`s); fires after the hierarchy's `recordsChanged`, never when nothing changed or was skipped; requires `getRowId`
+- `history: { maxEntries }` (default 100) and `GridCore.history` (`isEnabled`, `canUndo`, `canRedo`, `undo`, `redo`, `clear`): one entry per command that changed a cell, written back by record id through the same command, so `onCellValueChanged` and `onWriteCommitted` see an undo like an edit and a hierarchy refolds; Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z while no editor is open; `setDataSource` clears it
+- A history entry whose record is gone or whose cell no longer holds what it wrote is refused as a whole, dropped and reported once through `onWriteRejected` with `reason: "missing-record"` or `"conflict"` and `operation: "undo"` or `"redo"`
+- `WriteRejectionReason` gains `"not-editable"`, `"conflict"` and `"missing-record"`; `WriteRejectionOperation` gains `"undo"` and `"redo"`; `HistoryOptions`, `WriteOperation`, `WriteChange`, `WriteCommittedEvent` and `GridHistoryApi` are exported
+- React and Vue props `history` and `onWriteCommitted`; Angular `[history]` input and `(onWriteCommitted)` output
+- See [Write commands and history](./features/writes-and-history.md)
+
 #### Scroll motion
 - `GridCore.viewport.isScrollMotionActive()` and `interruptScrollMotion()`: whether a touch fling or a wheel glide is still moving the content, and a command that stops it where it is. An adapter registers its motion with `viewport.setScrollMotionHandle(handle)` / `clearScrollMotionHandle(handle)` (`ScrollMotionHandle`: `isActive()`, `interrupt()`); `TouchScrollController` does so on attach and exposes `interrupt()`.
 - `InputHandler.handleWheel(deltaY, deltaX, dampening, deltaMode?)` takes the `WheelEvent.deltaMode`: line and page deltas (modes 1 and 2) are converted to pixels (40 and 800 per unit) before dampening
 
 ### Changed
 
+- A paste reports what it skips: a target in a non-editable column is listed in the command's `skipped` with `reason: "not-editable"`, and a value the column type cannot hold also fires `onWriteRejected` with `reason: "type-mismatch"`, as an editor commit does. A rejection raised before a command's first write (a read-only source's paste or fill, the editor's type mismatch) now runs inside the command, so its event lists it
 - A column fit (`columns.fit`, the header edge double-click, Alt+Enter) measures the mounted body cells only; the header no longer widens the result, so a title longer than every value is clipped after a fit
 
 #### Typed edit commits

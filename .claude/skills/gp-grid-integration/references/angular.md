@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onColumnResized)`, `(onRowResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)`, `(onColumnSchemaRejected)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onWriteCommitted)`, `(onColumnResized)`, `(onRowResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)`, `(onColumnSchemaRejected)` outputs:
 
 ```html
 <gp-grid
@@ -392,6 +392,7 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejecte
   [freezeRows]="freezeRows"
   (onCellValueChanged)="onCellValueChanged($event)"
   (onWriteRejected)="onWriteRejected($event)"
+  (onWriteCommitted)="onWriteCommitted($event)"
   (onRowDragEnd)="onRowDragEnd($event)"
   (onColumnResized)="onColumnResized($event)"
   (onColumnMoved)="onColumnMoved($event)"
@@ -404,6 +405,7 @@ Output payloads:
 
 - `onCellValueChanged: CellValueChangedEvent<TData>` — full event from core
 - `onWriteRejected: CellWriteRejectedEvent` — a read-only source refused a write; `operation` names the entry point
+- `onWriteCommitted: WriteCommittedEvent` — once per write command (edit, paste, fill, `cells.setValue`, undo, redo): `operation`, `changes` by record id, `skipped` with reasons; needs `[getRowId]`
 - `onRowDragEnd: { rowId: RowId; fromViewIndex: number; toViewIndex: number }`
 - `onColumnResized: { columnId: string; width: number; viewIndex: number }`
 - `onColumnMoved: { columnId: string; fromViewIndex: number; toViewIndex: number }`
@@ -715,6 +717,18 @@ precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
 and the ids are in the SKILL.md "Pivot" section. See
 [docs/features/pivot.md](../../../../docs/features/pivot.md).
 
+## Writes, undo and redo
+
+```html
+<gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" [getRowId]="getRowId"
+  [history]="{ maxEntries: 100 }" (onWriteCommitted)="onWriteCommitted($event)" />
+```
+
+`[history]` is creation-only and needs `[getRowId]`; the `core` getter's
+`history.undo()` / `redo()` write an entry back by record id, and Ctrl+Z,
+Ctrl+Y and Ctrl+Shift+Z do the same while no editor is open. See the SKILL.md
+"Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## Highlighting
 
 ```ts
@@ -787,6 +801,7 @@ Outputs:
 | `(onRowDragEnd)` | `{ rowId: RowId; fromViewIndex: number; toViewIndex: number }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<unknown>` |
 | `(onWriteRejected)` | `CellWriteRejectedEvent` |
+| `(onWriteCommitted)` | `WriteCommittedEvent` |
 | `(onColumnResized)` | `{ columnId: string; width: number; viewIndex: number }` |
 | `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
 | `(onColumnPinned)` | `{ columnId: string; pinned: "start" \| "end" \| null }` |

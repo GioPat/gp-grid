@@ -698,6 +698,30 @@ precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
 and the ids are in the SKILL.md "Pivot" section. See
 [docs/features/pivot.md](../../../../docs/features/pivot.md).
 
+## Writes, undo and redo
+
+```tsx
+<Grid
+  columns={columns}
+  dataSource={source}
+  rowHeight={32}
+  getRowId={(row) => row.id}            // required by both
+  history={{ maxEntries: 100 }}       // creation-only
+  onWriteCommitted={(event) => {
+    save(event.changes);                  // one request per paste, by record id
+    if (event.skipped.length > 0) notify(`${event.skipped.length} cells were not pasted`);
+  }}
+/>
+// gridRef.current?.core?.history.undo() / redo() / canUndo() / canRedo(); Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z
+```
+
+One event per editor commit, paste, fill or `cells.setValue`, with `changes`
+(`rowId`, `columnId`, `field`, `oldValue`, `newValue`) and `skipped`
+(`row`, `col`, `field`, `reason`). An undo writes the entry back by record id
+through the same command and is refused as a whole when a cell moved on
+(`onWriteRejected` with `"conflict"` or `"missing-record"`). See the SKILL.md
+"Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
@@ -734,6 +758,8 @@ and the ids are in the SKILL.md "Pivot" section. See
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
 | `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | a write was refused; `e.reason` is `"read-only-source"`, `"not-a-record"` (group/total row), `"derived-view"` (row drag while grouped) or `"type-mismatch"` (edit the column type cannot hold), `e.operation` names the entry point |
+| `onWriteCommitted` | `(e: WriteCommittedEvent) => void` | — | once per write command (edit, paste, fill, `cells.setValue`, undo, redo): `e.operation`, `e.changes` by record id, `e.skipped` with reasons; requires `getRowId` |
+| `history` | `HistoryOptions` | — | `{ maxEntries? }` (default 100) turns on undo/redo of the write commands (`core.history`, Ctrl+Z / Ctrl+Y); creation-only, requires `getRowId` |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
 | `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |

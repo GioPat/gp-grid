@@ -15,6 +15,7 @@ A high-performance virtualized data grid for React applications.
 - [Row grouping and aggregation](./features/row-grouping.md) - Dimensions, keys and ids, group order, aggregates, the label column, writes, rejections, expansion state and hierarchies supplied by a data source
 - [Server grouping](./features/server-grouping.md) - Groups and leaves paged from an application service: the service contract and protocol rules, paths and ids, placeholders, lazy expansion, errors and retry, budgets, refresh and writes, the reference mock
 - [Pivot](./features/pivot.md) - Read-only pivot: generated columns per key tuple and measure, the schema helper and ids, the precomputed and local (`createPivotSource`) compositions, domain, budget, sort and filter, the schema hook per wrapper
+- [Write commands and history](./features/writes-and-history.md) - One event per edit, paste, fill or `cells.setValue` with its changes by record id and the targets it skipped, and opt-in undo and redo of those commands
 - [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only) - Borrowed columns, read-only access, and revision refresh with inferred or explicit row counts
 
 ## Changelog

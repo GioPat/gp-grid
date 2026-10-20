@@ -318,8 +318,13 @@ refresh keeps its state.
   `cells.setValue` on such a row reports the same reason.
 - No row drag starts while a hierarchy is bound, and `rowDrag.commit` reports
   `reason: "derived-view"` with `operation: "row-move"`.
-- `CellWriteRejectedEvent.reason` is
-  `"read-only-source" | "not-a-record" | "derived-view" | "type-mismatch"`.
+- `CellWriteRejectedEvent.reason` is one of `"read-only-source"`,
+  `"not-a-record"`, `"derived-view"` and `"type-mismatch"` here; a paste adds
+  `"not-editable"` and history `"conflict"` and `"missing-record"`, see
+  [Write commands and history](./writes-and-history.md).
+- One paste, fill or editor commit is one write command: `onWriteCommitted`
+  lists its changes by record id and the group rows it skipped, and an undo
+  writes the records back through the same command, refolding or regrouping.
 - An editor commit is coerced by the column's `cellDataType`, like paste, so an
   edited `number` measure enters `sum` and `avg` as a number. A draft or typed
   value the column cannot hold writes nothing and is reported with
