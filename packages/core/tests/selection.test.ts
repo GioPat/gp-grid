@@ -705,7 +705,7 @@ describe("SelectionManager", () => {
           base.setCellValue(row, col, value, operation);
           return true;
         },
-        runWrites: (command) => {
+        runWrites: (_operation, command) => {
           calls.push("begin");
           try {
             return command();

@@ -4,6 +4,7 @@ import type {
   CellPosition,
   CellRange,
   CellWriteRejectedEvent,
+  WriteOperation,
   SelectionState,
   CellValue,
   ColumnDefinition,
@@ -38,9 +39,11 @@ export interface SelectionManagerOptions {
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
   /** Runs one write command, so its writes are reported together. */
-  runWrites?: <T>(command: () => T) => T;
-  /** Called when a paste is refused before any cell is written. */
+  runWrites?: <T>(operation: WriteOperation, command: () => T) => T;
+  /** Called when a paste is refused before any cell is written, or a pasted value cannot be converted. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** A paste target in a non-editable column: listed by the command, no rejection of its own. */
+  onWriteSkipped?: (event: CellWriteRejectedEvent) => void;
 }
 
 export interface PasteResult {
@@ -334,9 +337,11 @@ export class SelectionManager {
     if (this.options.isWritable?.() === false) {
       const { minRow, minCol } = normalizeRange(effectiveRange);
       const column = this.options.getColumn(minCol);
-      this.options.onWriteRejected?.(
-        createWriteRejection(minRow, minCol, column?.field ?? "", "paste", "read-only-source"),
-      );
+      this.runWrites("paste", () => {
+        this.options.onWriteRejected?.(
+          createWriteRejection(minRow, minCol, column?.field ?? "", "paste", "read-only-source"),
+        );
+      });
       return { handled: false, changedCells: [] };
     }
 
@@ -345,11 +350,14 @@ export class SelectionManager {
       return { handled: false, changedCells: [] };
     }
 
-    const run = this.options.runWrites ?? ((command) => command());
-    const changedCells = run(() =>
+    const changedCells = this.runWrites("paste", () =>
       this.applyPasteSource(sourceCells, effectiveRange, this.state.range !== null),
     );
     return { handled: true, changedCells };
+  }
+
+  private runWrites<T>(operation: WriteOperation, command: () => T): T {
+    return this.options.runWrites === undefined ? command() : this.options.runWrites(operation, command);
   }
 
   // ===========================================================================
@@ -484,10 +492,16 @@ export class SelectionManager {
     const column = this.options.getColumn(col);
     if (column === undefined) return;
     if (column.hidden === true) return;
-    if (column.editable !== true) return;
+    if (column.editable !== true) {
+      this.options.onWriteSkipped?.(createWriteRejection(row, col, column.field, "paste", "not-editable"));
+      return;
+    }
 
     const coerced = coerceCellValue(sourceCell, column);
-    if (coerced.ok === false) return;
+    if (coerced.ok === false) {
+      this.options.onWriteRejected?.(createWriteRejection(row, col, column.field, "paste", "type-mismatch"));
+      return;
+    }
 
     if (this.options.setCellValue(row, col, coerced.value, "paste") === false) return;
     changedCells.push({ row, col, value: coerced.value });

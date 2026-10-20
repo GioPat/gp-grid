@@ -406,7 +406,7 @@ describe("FillManager", () => {
           options.setCellValue(row, col, value);
           return true;
         },
-        runWrites: (command) => {
+        runWrites: (_operation, command) => {
           calls.push("begin");
           try {
             return command();

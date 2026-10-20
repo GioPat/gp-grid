@@ -105,12 +105,14 @@ export const buildGridManagers = <TData>(
     getColumns,
     applyViewRowsChange: (change) => deps.applyViewRowsChange(change),
     refreshSlots: () => slotPool.refreshAllSlots(),
+    onWriteRejected: config.onWriteRejected,
+    onWriteCommitted: config.onWriteCommitted,
   });
   const writes = {
     setCellValue: recordWrites.setCellValue,
     isWritable: () => rowData.isWritable(),
     runWrites: recordWrites.run,
-    onWriteRejected: config.onWriteRejected,
+    onWriteRejected: recordWrites.reject,
   };
 
   const scrollVirtualization = new ScrollVirtualizationManager({
@@ -130,6 +132,7 @@ export const buildGridManagers = <TData>(
     getRowData: (row) => rowData.getRowData(row),
     getColumn: (col) => getColumns()[col],
     ...writes,
+    onWriteSkipped: recordWrites.skip,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
@@ -249,7 +252,7 @@ export const buildGridManagers = <TData>(
     getPageBudgetInput,
     getLoadContext,
     onCellValueChanged: config.onCellValueChanged,
-    onWriteRejected: config.onWriteRejected,
+    onWriteRejected: recordWrites.reject,
     getRowId: config.getRowId,
     rowGrouping: config.rowGrouping,
     onRowGroupingRejected: config.onRowGroupingRejected,

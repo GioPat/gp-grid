@@ -18,6 +18,9 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   WriteRejectionReason,
+  WriteOperation,
+  WriteChange,
+  WriteCommittedEvent,
   SlotState,
   RowHeightUpdate,
 } from "./basic";

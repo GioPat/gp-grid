@@ -5,6 +5,7 @@ import type {
   RowId,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type {
@@ -155,6 +156,11 @@ export interface GridCoreOptions<TData = unknown> {
    * The grid never emits a successful change event for a rejected write.
    */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /**
+   * Called once per write command (an edit commit, a paste, a fill,
+   * `cells.setValue`, an undo or a redo) with its changes and skips. Requires getRowId.
+   */
+  onWriteCommitted?: (event: WriteCommittedEvent) => void;
   /** Whether clicking and dragging any cell in a row drags the entire row instead of starting selection. Default: false */
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */

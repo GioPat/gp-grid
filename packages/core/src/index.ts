@@ -224,6 +224,9 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   WriteRejectionReason,
+  WriteOperation,
+  WriteChange,
+  WriteCommittedEvent,
   SlotState,
   /** Application-set row height by identity (PRD 006) */
   RowHeightUpdate,

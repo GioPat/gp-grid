@@ -197,6 +197,9 @@ export const resolveGridCoreConfig = <TData>(
   if (options.onCellValueChanged && options.getRowId === undefined) {
     throw new Error("getRowId is required when onCellValueChanged is provided");
   }
+  if (options.onWriteCommitted && options.getRowId === undefined) {
+    throw new Error("getRowId is required when onWriteCommitted is provided");
+  }
   if (isPositiveSize(options.rowHeight) === false) {
     throw invalidOption("rowHeight", options.rowHeight);
   }
@@ -218,6 +221,7 @@ export const resolveGridCoreConfig = <TData>(
     highlighting: options.highlighting,
     onCellValueChanged: options.onCellValueChanged,
     onWriteRejected: options.onWriteRejected,
+    onWriteCommitted: options.onWriteCommitted,
     onRowDragEnd: options.onRowDragEnd,
     onColumnResized: options.onColumnResized,
     onRowResized: options.onRowResized,

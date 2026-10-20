@@ -5,6 +5,7 @@ import type {
   CellRange,
   CellValue,
   CellWriteRejectedEvent,
+  WriteOperation,
   FillHandleState,
   ColumnDefinition,
 } from "./types";
@@ -24,7 +25,7 @@ export interface FillManagerOptions {
   /** False when the bound source refuses writes. */
   isWritable?: () => boolean;
   /** Runs one write command, so its writes are reported together. */
-  runWrites?: <T>(command: () => T) => T;
+  runWrites?: <T>(operation: WriteOperation, command: () => T) => T;
   /** Called when a fill drag is refused before any cell is written. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
@@ -68,9 +69,11 @@ export class FillManager {
     if (this.options.isWritable?.() === false) {
       const { minRow, minCol } = normalizeRange(sourceRange);
       const column = this.options.getColumn(minCol);
-      this.options.onWriteRejected?.(
-        createWriteRejection(minRow, minCol, column?.field ?? "", "fill", "read-only-source"),
-      );
+      this.runWrites("fill", () => {
+        this.options.onWriteRejected?.(
+          createWriteRejection(minRow, minCol, column?.field ?? "", "fill", "read-only-source"),
+        );
+      });
       return;
     }
     this.state = {
@@ -109,13 +112,16 @@ export class FillManager {
 
     const { sourceRange, targetRow } = this.state;
     const targets = this.calculateFilledCells(sourceRange, targetRow);
-    const run = this.options.runWrites ?? ((command) => command());
     // A refused target (a group or total row) is left out of the commit.
-    const filledCells = run(() =>
+    const filledCells = this.runWrites("fill", () =>
       targets.filter(({ row, col, value }) => this.options.setCellValue(row, col, value, "fill") !== false),
     );
     this.emit({ type: "COMMIT_FILL", filledCells });
     this.state = null;
+  }
+
+  private runWrites<T>(operation: WriteOperation, command: () => T): T {
+    return this.options.runWrites === undefined ? command() : this.options.runWrites(operation, command);
   }
 
   /**
