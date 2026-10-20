@@ -22,7 +22,7 @@ import {
   createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { AutoFitOptions, RowGrouping, RowGroupingRejection, RowGroupToggledEvent, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, WriteCommittedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowGrouping, RowGroupingRejection, RowGroupToggledEvent, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, WriteCommittedEvent, FreezeRowsOptions, HistoryOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -114,6 +114,8 @@ const props = withDefaults(
     onRowResized?: (event: RowResizedEvent) => void;
     /** Clamps for the fit commands and the row resize gesture. Read at creation. */
     autoFit?: AutoFitOptions;
+    /** Undo and redo of the write commands, `maxEntries` deep. Read at creation; requires getRowId. */
+    history?: HistoryOptions;
     /** Called when a column is moved/reordered. */
     onColumnMoved?: (event: ColumnMovedEvent) => void;
     /** Called when a column is pinned or unpinned. */
@@ -361,6 +363,7 @@ function initializeCore(dataSource: DataSource<Row>): void {
     freezeRows: props.freezeRows,
     rowResize: props.rowResize,
     autoFit: props.autoFit,
+    history: props.history,
     // Created on mount only, so a server render never builds a host.
     measurementHost: createDomMeasurementHost(() => outerContainerRef.value),
     sortingEnabled: props.sortingEnabled,

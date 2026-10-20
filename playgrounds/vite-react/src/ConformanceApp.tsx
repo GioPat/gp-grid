@@ -97,7 +97,7 @@ import {
   type PivotMode,
 } from "./conformance-pivot-external";
 import { createEnginePivotFixture } from "./conformance-pivot";
-import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_ROW_HEIGHT } from "./conformance-writes";
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
@@ -789,7 +789,7 @@ const hideColumn = useCallback(() => {
       ...rowGroupHooks,
       ...enginePivot.createHooks(pivot.createHooks(groupCore, rowGroupHooks)),
       ...serverGroups.createHooks(),
-      ...writes.createHooks(),
+      ...writes.createHooks(groupCore),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: () => {
         if (autoFitActive) return autoFit.requestedRanges();
@@ -942,6 +942,10 @@ const hideColumn = useCallback(() => {
         <section className="cf-group">
           <h2>Writes</h2>
           <button data-testid="use-writes" onClick={armWrites}>Writes</button>
+          <button data-testid="writes-sort-name" onClick={withCore(writes.sortByName)}>Sort by name</button>
+          <button data-testid="writes-filter-names" onClick={withCore(writes.filterNames)}>Filter names</button>
+          <button data-testid="writes-clear-filter" onClick={withCore(writes.clearFilter)}>Clear filter</button>
+          <button data-testid="writes-conflict" onClick={withCore((core) => void writes.conflictFirst(core))}>Conflict</button>
         </section>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>
@@ -971,6 +975,7 @@ const hideColumn = useCallback(() => {
             onCellValueChanged={onCellValueChanged}
             onWriteRejected={onWriteRejected}
             onWriteCommitted={writes.recordWrite}
+            history={writesActive ? WRITES_HISTORY : undefined}
             onColumnResized={onColumnResized}
             onColumnMoved={onColumnMoved}
             onRowDragEnd={onRowDragEnd}

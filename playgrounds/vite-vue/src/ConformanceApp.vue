@@ -94,7 +94,7 @@ import {
   type PivotMode,
 } from "./conformance-pivot-external";
 import { createEnginePivotFixture } from "./conformance-pivot";
-import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_ROW_HEIGHT } from "./conformance-writes";
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
@@ -768,7 +768,7 @@ if (typeof window !== "undefined") {
     ...rowGroupHooks,
     ...enginePivot.createHooks(pivot.createHooks(() => coreOf(), rowGroupHooks)),
     ...serverGroups.createHooks(),
-    ...writes.createHooks(),
+    ...writes.createHooks(() => coreOf()),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
       if (autoFitActive.value) return autoFit.requestedRanges();
@@ -909,6 +909,10 @@ if (typeof window !== "undefined") {
       <section class="cf-group">
         <h2>Writes</h2>
         <button data-testid="use-writes" @click="armWrites()">Writes</button>
+        <button data-testid="writes-sort-name" @click="withCore(writes.sortByName)()">Sort by name</button>
+        <button data-testid="writes-filter-names" @click="withCore(writes.filterNames)()">Filter names</button>
+        <button data-testid="writes-clear-filter" @click="withCore(writes.clearFilter)()">Clear filter</button>
+        <button data-testid="writes-conflict" @click="withCore((core) => void writes.conflictFirst(core))()">Conflict</button>
       </section>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
@@ -938,6 +942,7 @@ if (typeof window !== "undefined") {
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"
         :on-write-committed="writes.recordWrite"
+        :history="writesActive ? WRITES_HISTORY : undefined"
         :on-column-resized="onColumnResized"
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"

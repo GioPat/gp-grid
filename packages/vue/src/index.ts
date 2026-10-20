@@ -173,6 +173,7 @@ export type {
   WriteCommittedEvent,
   WriteChange,
   WriteOperation,
+  HistoryOptions,
   ColumnResizedEvent,
   ColumnMovedEvent,
   ColumnPinnedEvent,

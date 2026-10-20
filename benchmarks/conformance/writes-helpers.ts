@@ -65,3 +65,16 @@ export const dragFill = async (page: Page, row: number, col: number): Promise<vo
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
   await page.mouse.up();
 };
+
+export const canUndo = (page: Page): Promise<boolean> => readHook<boolean>(page, "canUndo");
+
+export const canRedo = (page: Page): Promise<boolean> => readHook<boolean>(page, "canRedo");
+
+/** A raw field at a view row, through the shell's `getFieldValue` hook. */
+export const fieldValue = (page: Page, row: number, field: string): Promise<unknown> =>
+  page.evaluate(({ targetRow, targetField }) => {
+    const hooks = (globalThis as unknown as {
+      __gpConformance?: { getFieldValue?: (row: number, field: string) => unknown };
+    }).__gpConformance;
+    return hooks?.getFieldValue?.(targetRow, targetField) ?? null;
+  }, { targetRow: row, targetField: field });

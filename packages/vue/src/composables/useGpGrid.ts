@@ -21,6 +21,7 @@ import {
 } from "@gp-grid/core";
 import type {
   AutoFitOptions,
+  HistoryOptions,
   RowId,
   RowResizedEvent,
   ColumnDefinition,
@@ -122,6 +123,8 @@ export interface UseGpGridOptions<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Clamps for the fit commands and the row resize keys. Read at creation. */
   autoFit?: AutoFitOptions;
+  /** Undo and redo of the write commands, `maxEntries` deep. Creation-only; requires getRowId. */
+  history?: HistoryOptions;
   /** Groups the resident rows; a new value regroups without recreating the core. */
   rowGrouping?: RowGrouping | null;
   /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
@@ -343,6 +346,7 @@ export function useGpGrid<TData = unknown>(
       freezeRows: options.freezeRows,
       rowResize: options.rowResize,
       autoFit: options.autoFit,
+      history: options.history,
       // Created on mount only, so a server render never builds a host.
       measurementHost: createDomMeasurementHost(() => containerRef.value),
       sortingEnabled: options.sortingEnabled ?? true,

@@ -8,6 +8,7 @@ import type {
   DataSource,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  HistoryOptions,
   ColumnMovedEvent,
   ColumnGroupChild,
   ColumnGroupLimits,
@@ -96,7 +97,7 @@ import {
   type PivotMode,
 } from './conformance-pivot-external';
 import { createEnginePivotFixture } from './conformance-pivot';
-import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_ROW_HEIGHT } from './conformance-writes';
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from './conformance-writes';
 import { createPivotSchemaBinding } from './pivot-schema-binding';
 
 interface ConformanceRow {
@@ -369,6 +370,10 @@ const createColumnarFixture = () => {
         <section class="cf-group">
           <h2>Writes</h2>
           <button data-testid="use-writes" (click)="armWrites()">Writes</button>
+          <button data-testid="writes-sort-name" (click)="withCore(writes.sortByName)">Sort by name</button>
+          <button data-testid="writes-filter-names" (click)="withCore(writes.filterNames)">Filter names</button>
+          <button data-testid="writes-clear-filter" (click)="withCore(writes.clearFilter)">Clear filter</button>
+          <button data-testid="writes-conflict" (click)="withCore(conflictFirst)">Conflict</button>
         </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
@@ -388,6 +393,7 @@ const createColumnarFixture = () => {
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [rowLoading]="activeRowLoading()"
+              [history]="writesHistory()"
               [getRowId]="getRowId"
               [cellRenderers]="rowGroupRenderers"
               [rowGrouping]="activeRowGrouping()"
@@ -489,6 +495,13 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   protected readonly enginePivot = createEnginePivotFixture();
   protected readonly writes = createWritesFixture();
   protected readonly writesActive = computed(() => this.arm().fixture === 'writes');
+  // The rolled-up declarations drop `| undefined` from the inputs; the component takes it at runtime.
+  protected readonly writesHistory = computed(
+    (): HistoryOptions => (this.writesActive() ? WRITES_HISTORY : undefined) as unknown as HistoryOptions,
+  );
+  protected readonly conflictFirst = (core: GridCore<unknown>): void => {
+    void this.writes.conflictFirst(core);
+  };
   protected readonly enginePivotActive = computed(() => {
     const arm = this.arm();
     return arm.fixture === 'pivot' && arm.mode === 'engine';
@@ -593,7 +606,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
       ...rowGroupHooks,
       ...this.enginePivot.createHooks(this.pivot.createHooks(() => this.coreOf(), rowGroupHooks)),
       ...this.serverGroups.createHooks(),
-      ...this.writes.createHooks(),
+      ...this.writes.createHooks(() => this.coreOf()),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
         if (this.autoFitActive()) return this.autoFit.requestedRanges();

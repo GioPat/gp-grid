@@ -99,6 +99,7 @@ export function Grid<TData = unknown>(
     onFrozenRowsChanged,
     rowResize = false,
     autoFit,
+    history,
     rowGrouping,
     groupLabelColumn,
     groupLabelRenderer,
@@ -360,6 +361,7 @@ export function Grid<TData = unknown>(
       onRowResized: (event) => onRowResizedRef.current?.(event),
       rowResize,
       autoFit,
+      history,
       measurementHost: createDomMeasurementHost(() => outerContainerRef.current),
       onColumnMoved: (event) => onColumnMovedRef.current?.(event),
       onColumnPinned: (event) => onColumnPinnedRef.current?.(event),
@@ -416,7 +418,7 @@ export function Grid<TData = unknown>(
         gridRef.current = null;
       }
     };
-    // `labels`, `autoFit` and `columnGroupLimits` are creation-only, and the
+    // `labels`, `autoFit`, `history` and `columnGroupLimits` are creation-only, and the
     // schema, `headerBandHeights`, `freezeRows` and `rowResize` have their own
     // runtime effects below, so none may rebuild the core and reset scroll.
   }, [

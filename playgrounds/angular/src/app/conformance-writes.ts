@@ -3,7 +3,7 @@
 // pastes into and fills; the shell hands it every write event it receives.
 
 import { createMutableClientDataSource } from "@gp-grid/angular";
-import type { ColumnDefinition, DataSource, MutableDataSource, WriteCommittedEvent } from "@gp-grid/angular";
+import type { ColumnDefinition, DataSource, GridCore, HistoryOptions, MutableDataSource, WriteCommittedEvent } from "@gp-grid/angular";
 
 export interface WritesRecord {
   id: number;
@@ -15,6 +15,7 @@ export interface WritesRecord {
 export const WRITES_RECORD_COUNT = 200;
 export const WRITES_ROW_HEIGHT = 32;
 export const WRITES_HEADER_HEIGHT = 36;
+export const WRITES_HISTORY: HistoryOptions = { maxEntries: 50 };
 
 export const WRITES_COLUMNS: ColumnDefinition[] = [
   { field: "id", headerName: "Id", cellDataType: "number", width: 80 },
@@ -42,6 +43,8 @@ export interface WritesHooks {
   writeCommitted: () => number;
   lastWrite: () => WriteSummary | null;
   writesRecord: (id: number) => WritesRecord | null;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
 
 export const createWritesFixture = () => {
@@ -71,10 +74,30 @@ export const createWritesFixture = () => {
         skipped: event.skipped.map((skip) => `${skip.row}:${skip.col}:${skip.reason}`),
       };
     },
-    createHooks: (): WritesHooks => ({
+    /** The first record last: a sort the undo must see through. */
+    sortByName: (core: GridCore<unknown>): void => {
+      void core.sortFilter.setSort("name", "desc");
+    },
+    /** Hides every record whose name no longer contains "Name". */
+    filterNames: (core: GridCore<unknown>): void => {
+      void core.sortFilter.setFilter("name", "Name");
+    },
+    clearFilter: (core: GridCore<unknown>): void => {
+      void core.sortFilter.setFilter("name", null);
+    },
+    /** The application's own change to the first record's amount, refreshed. */
+    conflictFirst: async (core: GridCore<unknown>): Promise<void> => {
+      if (inner === null) return;
+      inner.updateCell(1, "amount", 999);
+      await inner.flushTransactions();
+      await core.refreshFromTransaction();
+    },
+    createHooks: (coreOf: () => GridCore<unknown> | null): WritesHooks => ({
       writeCommitted: () => committed,
       lastWrite: () => last,
       writesRecord: (id) => inner?.getRowById(id) ?? null,
+      canUndo: () => coreOf()?.history.canUndo() ?? false,
+      canRedo: () => coreOf()?.history.canRedo() ?? false,
     }),
   };
 };

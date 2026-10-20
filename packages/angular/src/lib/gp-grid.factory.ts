@@ -1,6 +1,7 @@
 import { GridCore, createDomMeasurementHost } from '@gp-grid/core';
 import type {
   AutoFitOptions,
+  HistoryOptions,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
   WriteCommittedEvent,
@@ -47,6 +48,7 @@ export interface BuildGridCoreInputs<TData> {
   labels: GridLabelOverrides | undefined;
   rowResize: boolean;
   autoFit: AutoFitOptions | undefined;
+  history: HistoryOptions | undefined;
   rowGrouping: RowGrouping | null | undefined;
   /** Grid root the fit commands measure; `null` on the server, where no host is built. */
   measureRoot: (() => HTMLElement | null) | null;
@@ -102,6 +104,7 @@ export const buildGridCore = <TData>(
     labels: inputs.labels,
     rowResize: inputs.rowResize,
     autoFit: inputs.autoFit,
+    history: inputs.history,
     rowGrouping: inputs.rowGrouping,
     measurementHost,
     onRowDragEnd: emitters.onRowDragEnd,

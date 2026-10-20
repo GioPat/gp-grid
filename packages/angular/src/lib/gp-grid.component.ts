@@ -28,6 +28,7 @@ import type {
 import { isPlatformBrowser } from '@angular/common';
 import type {
   AutoFitOptions,
+  HistoryOptions,
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
@@ -144,6 +145,8 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   rowResize = input<boolean>(false);
   /** Bounds of the fit commands and the row resize gestures; read at creation. */
   autoFit = input<AutoFitOptions | undefined>(undefined);
+  /** Undo and redo of the write commands; read at creation, requires getRowId. */
+  history = input<HistoryOptions | undefined>(undefined);
   onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onWriteRejected = output<CellWriteRejectedEvent>();
@@ -247,6 +250,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         labels: this.labels(),
         rowResize: this.rowResize(),
         autoFit: this.autoFit(),
+        history: this.history(),
         rowGrouping: this.rowGrouping(),
         measureRoot: this.isBrowser ? () => this.container?.nativeElement ?? null : null,
       },

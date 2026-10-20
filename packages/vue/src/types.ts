@@ -3,6 +3,7 @@
 import type { VNode, Component } from "vue";
 import type {
   AutoFitOptions,
+  HistoryOptions,
   RowId,
   ColumnDefinition as CoreColumnDefinition,
   ColumnGroupChild,
@@ -194,6 +195,8 @@ export interface GpGridProps<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Clamps for the fit commands and the row resize gesture. Read at creation. */
   autoFit?: AutoFitOptions;
+  /** Undo and redo of the write commands, `maxEntries` deep. Creation-only; requires getRowId. */
+  history?: HistoryOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */

@@ -34,6 +34,7 @@ import {
   rowGroupRows,
 } from "./ssr-row-groups.mjs";
 import { checkLocalPivotCore, checkPivotCore, expectPivotMarkup, pivotGridProps } from "./ssr-pivot.mjs";
+import { checkWritesCore } from "./ssr-writes.mjs";
 
 const importFrom = async (specifier, packageFile) => {
   const requireFromPackage = createRequire(packageFile);
@@ -327,6 +328,8 @@ await check("core binds a source-supplied hierarchy", () => checkExternalHierarc
 await check("core precomputed pivot without browser globals", () => checkPivotCore(coreArtifact));
 
 await check("core local pivot without browser globals", () => checkLocalPivotCore(coreArtifact));
+
+await check("core write history without browser globals", () => checkWritesCore(coreArtifact));
 
 /** The server renders of one wrapper: the local engine, a hierarchy from the source, then server grouping (PRD 009). */
 const rowGroupArms = () => [

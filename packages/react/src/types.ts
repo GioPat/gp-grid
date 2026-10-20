@@ -3,6 +3,7 @@
 import type {
   RowId,
   AutoFitOptions,
+  HistoryOptions,
   ColumnDefinition,
   ColumnGroupChild,
   ColumnGroupHeaderParams,
@@ -192,6 +193,8 @@ export interface GridProps<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Bounds of the fit commands and the row resize gestures. Creation-only. */
   autoFit?: AutoFitOptions;
+  /** Undo and redo of the write commands, `maxEntries` deep. Creation-only; requires getRowId. */
+  history?: HistoryOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */
