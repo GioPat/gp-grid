@@ -12,6 +12,7 @@ import type {
   CellRendererParams,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
@@ -173,6 +174,8 @@ export interface GpGridProps<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Called when a write is refused because the bound source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** Called once per write command with its changes and skips. Requires getRowId. */
+  onWriteCommitted?: (event: WriteCommittedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
   /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */

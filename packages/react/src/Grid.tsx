@@ -88,6 +88,7 @@ export function Grid<TData = unknown>(
     getRowId,
     onCellValueChanged,
     onWriteRejected,
+    onWriteCommitted,
     loadingComponent,
     rowDragEntireRow = false,
     onRowDragEnd,
@@ -232,6 +233,8 @@ export function Grid<TData = unknown>(
   columnStateRef.current = columnState;
   const onWriteRejectedRef = useRef(onWriteRejected);
   onWriteRejectedRef.current = onWriteRejected;
+  const onWriteCommittedRef = useRef(onWriteCommitted);
+  onWriteCommittedRef.current = onWriteCommitted;
   const onRowDragEndRef = useRef(onRowDragEnd);
   onRowDragEndRef.current = onRowDragEnd;
   const onColumnResizedRef = useRef(onColumnResized);
@@ -348,6 +351,9 @@ export function Grid<TData = unknown>(
         ? (event) => onCellValueChangedRef.current?.(event)
         : undefined,
       onWriteRejected: (event) => onWriteRejectedRef.current?.(event),
+      onWriteCommitted: onWriteCommittedRef.current
+        ? (event) => onWriteCommittedRef.current?.(event)
+        : undefined,
       rowDragEntireRow,
       onRowDragEnd: (event) => onRowDragEndRef.current?.(event),
       onColumnResized: (event) => onColumnResizedRef.current?.(event),

@@ -3,6 +3,7 @@ import type {
   AutoFitOptions,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnGroupChild,
   ColumnGroupLimits,
@@ -55,6 +56,7 @@ export interface BuildGridCoreEmitters<TData> {
   onRowDragEnd: (event: RowDragEndEvent) => void;
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
   onWriteRejected: (event: CellWriteRejectedEvent) => void;
+  onWriteCommitted: (event: WriteCommittedEvent) => void;
   onColumnResized: (event: ColumnResizedEvent) => void;
   onRowResized: (event: RowResizedEvent) => void;
   onColumnMoved: (event: ColumnMovedEvent) => void;
@@ -72,6 +74,9 @@ export const buildGridCore = <TData>(
   const cellValueChanged = inputs.getRowId === undefined
     ? undefined
     : emitters.onCellValueChanged;
+  const writeCommitted = inputs.getRowId === undefined
+    ? undefined
+    : emitters.onWriteCommitted;
   const measurementHost = inputs.measureRoot === null
     ? undefined
     : createDomMeasurementHost(inputs.measureRoot);
@@ -102,6 +107,7 @@ export const buildGridCore = <TData>(
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
     onWriteRejected: emitters.onWriteRejected,
+    onWriteCommitted: writeCommitted,
     onColumnResized: emitters.onColumnResized,
     onRowResized: emitters.onRowResized,
     onColumnMoved: emitters.onColumnMoved,

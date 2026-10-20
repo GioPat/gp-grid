@@ -31,6 +31,7 @@ import type {
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnFilterModel,
   ColumnGroupChild,
@@ -146,6 +147,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onWriteRejected = output<CellWriteRejectedEvent>();
+  onWriteCommitted = output<WriteCommittedEvent>();
   onColumnResized = output<ColumnResizedEvent>();
   onRowResized = output<RowResizedEvent>();
   onColumnMoved = output<ColumnMovedEvent>();
@@ -252,6 +254,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
         onWriteRejected: (event) => this.onWriteRejected.emit(event),
+        onWriteCommitted: (event) => this.onWriteCommitted.emit(event),
         onColumnResized: (event) => this.onColumnResized.emit(event),
         onRowResized: (event) => this.onRowResized.emit(event),
         onColumnMoved: (event) => this.onColumnMoved.emit(event),

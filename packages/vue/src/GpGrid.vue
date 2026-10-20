@@ -22,7 +22,7 @@ import {
   createDomMeasurementHost,
 } from "@gp-grid/core";
 import type { Component } from "vue";
-import type { AutoFitOptions, RowGrouping, RowGroupingRejection, RowGroupToggledEvent, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
+import type { AutoFitOptions, RowGrouping, RowGroupingRejection, RowGroupToggledEvent, RowId, RowResizedEvent, ColumnFilterModel, ColumnGroupChild, ColumnGroupLimits, ColumnSchemaError, ColumnLayoutMode, ColumnMovedEvent, ColumnPinnedEvent, ColumnResizedEvent, ColumnStateUpdate, DataSource, CellValueChangedEvent, CellWriteRejectedEvent, WriteCommittedEvent, FreezeRowsOptions, FrozenRowsState, GridIcon, GridLabelOverrides, HighlightingOptions, ColumnDefinition as CoreColumnDefinition, RowDragEndEvent, RowLoadingOptions } from "@gp-grid/core";
 import { useGridState } from "./gridState";
 import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
@@ -94,6 +94,8 @@ const props = withDefaults(
     onCellValueChanged?: (event: CellValueChangedEvent<Row>) => void;
     /** Called when a write is refused because the bound source is read-only. */
     onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+    /** Called once per write command with its changes and skips. Requires getRowId. */
+    onWriteCommitted?: (event: WriteCommittedEvent) => void;
     /** Custom loading component to render instead of default spinner */
     loadingComponent?: Component<{ isLoading: boolean }>;
     /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
@@ -368,6 +370,9 @@ function initializeCore(dataSource: DataSource<Row>): void {
       ? (event) => props.onCellValueChanged?.(event)
       : undefined,
     onWriteRejected: (event) => props.onWriteRejected?.(event),
+    onWriteCommitted: props.onWriteCommitted
+      ? (event) => props.onWriteCommitted?.(event)
+      : undefined,
     rowDragEntireRow: props.rowDragEntireRow ?? false,
     onRowDragEnd: (event) => props.onRowDragEnd?.(event),
     onColumnResized: (event) => props.onColumnResized?.(event),
