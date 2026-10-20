@@ -26,6 +26,7 @@ import type { HeaderBandLayout } from "./types/geometry";
 import type { GridCoreConfig } from "./grid-core-config";
 import type { CellValue, ColumnDefinition, HierarchyChange } from "./types";
 import { createRecordWrites, type RecordWrites } from "./grid-core-record-writes";
+import { WriteHistory } from "./history/write-history";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
@@ -50,6 +51,8 @@ export interface GridManagersDeps<TData> {
   applyViewRowsChange: (change: () => boolean) => boolean;
   /** PRD 009 D4; bound lazily to the row-groups controller. */
   onHierarchyChange: (change: HierarchyChange) => void;
+  /** The full reload, for a by-id write whose record has no view row (PRD 013 D3). */
+  reload: () => Promise<void>;
 }
 
 export interface GridManagers<TData> {
@@ -64,6 +67,7 @@ export interface GridManagers<TData> {
   sortFilter: SortFilterManager<TData>;
   view: ViewSync<TData>;
   recordWrites: RecordWrites;
+  history: WriteHistory | null;
 }
 
 export const buildGridManagers = <TData>(
@@ -100,11 +104,14 @@ export const buildGridManagers = <TData>(
   });
   slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
+  const history = config.history === null ? null : new WriteHistory(config.history.maxEntries);
   const recordWrites = createRecordWrites<TData>({
     getRowData: () => rowData,
     getColumns,
     applyViewRowsChange: (change) => deps.applyViewRowsChange(change),
     refreshSlots: () => slotPool.refreshAllSlots(),
+    reload: () => deps.reload(),
+    recordEntry: history === null ? undefined : (entry) => history.record(entry),
     onWriteRejected: config.onWriteRejected,
     onWriteCommitted: config.onWriteCommitted,
   });
@@ -262,6 +269,7 @@ export const buildGridManagers = <TData>(
 
   return {
     rowData,
+    history,
     selection,
     highlight,
     fill,

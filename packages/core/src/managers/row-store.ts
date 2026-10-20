@@ -8,9 +8,12 @@ import type {
   HierarchyRow,
   RowAccess,
   RowId,
+  WriteChange,
   WriteRejectionOperation,
   WriteRejectionReason,
 } from "../types";
+import type { RecordFieldRead } from "../history/history-apply";
+import { writeRecordField } from "../utils/cell-access";
 import type { AxisBounds } from "../types/geometry";
 import {
   createWriteRejection,
@@ -278,6 +281,24 @@ export class RowStore<TData = unknown> {
   }
 
   /** Every refused write routes here, so a read-only source is observable consistently. */
+  /** A record's field by identity; `found: false` when no record answers the id. */
+  readRecordField(rowId: RowId, field: string): RecordFieldRead {
+    const record = this.getRecordById(rowId);
+    if (record === undefined || record === null || typeof record !== "object") return { found: false, value: null };
+    return { found: true, value: readRowFieldValue(record, field) ?? null };
+  }
+
+  /** A write by identity, wherever the row is: the change, or the reason it was refused. */
+  setRecordValue(rowId: RowId, columnId: string, field: string, value: CellValue): WriteChange | WriteRejectionReason {
+    if (this.options.isWritable() === false) return "read-only-source";
+    const record = this.getRecordById(rowId);
+    if (record === undefined || record === null || typeof record !== "object") return "missing-record";
+    const col = this.options.getColumns().findIndex((column) => (column.colId ?? column.field) === columnId);
+    const oldValue = readRowFieldValue(record, field) ?? null;
+    writeRecordField(record, { field, columnId, col }, value, this.options.onCellValueChanged, () => rowId);
+    return { rowId, columnId, field, oldValue, newValue: value };
+  }
+
   rejectWrite(
     row: number,
     col: number,

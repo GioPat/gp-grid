@@ -22,6 +22,7 @@ import { RowHeightsController, type GridRowHeightsApi } from "./grid-core-row-he
 import { ViewportController, type GridViewportApi } from "./grid-core-viewport";
 import type { GridEditApi } from "./grid-core-edit";
 import type { GridCellsApi } from "./grid-core-cells";
+import type { GridHistoryApi } from "./grid-core-history";
 import type { GridRowsApi } from "./grid-core-rows";
 import type { GridColumnsApi } from "./grid-core-column-api";
 import type { GridHeaderApi } from "./grid-core-header";
@@ -41,6 +42,7 @@ export class GridCore<TData = unknown> {
   public readonly geometry: GridGeometry;
   public readonly rows: GridRowsApi<TData>;
   public readonly cells: GridCellsApi;
+  public readonly history: GridHistoryApi;
   public readonly edit: GridEditApi;
   public readonly columns: GridColumnsApi;
   /** Header bands, shared by every pin region (PRD 007). */
@@ -96,6 +98,7 @@ export class GridCore<TData = unknown> {
         this.rowHeightsController.onRowsLoaded(totalRowsChanged),
       applyViewRowsChange: (change) => applyViewRowsChange(this.hierarchyChange, change),
       onHierarchyChange: (change) => this.rowGroupsController.applyHierarchyChange(change),
+      reload: () => this.refresh(),
     });
     this.rowData = managers.rowData;
     this.rowHeightOverrides = new RowHeightOverrides({
@@ -200,6 +203,7 @@ export class GridCore<TData = unknown> {
     });
     this.rows = rowControllers.rows;
     this.cells = rowControllers.cells;
+    this.history = rowControllers.history;
     this.edit = rowControllers.edit;
     this.rowDrag = rowControllers.rowDrag;
     this.rowGroupsController = rowControllers.rowGroups;
@@ -260,6 +264,7 @@ export class GridCore<TData = unknown> {
   async setDataSource(dataSource: DataSource<TData>): Promise<void> {
     if (this.editManager.getState()) this.editManager.cancel();
     this.rowData.setDataSource(dataSource);
+    this.history.clear();
     await this.refresh();
     const activeCell = this.selection.getActiveCell();
     if (activeCell && activeCell.row >= this.rowData.getTotalRows()) {

@@ -118,7 +118,7 @@ export class KeyboardHandler<TData = unknown> {
       case "Tab":
         return this.handleTab(editingCell, isShift);
       default:
-        return this.handleNonSpecialKey(key, activeCell, editingCell, isCtrl);
+        return this.handleNonSpecialKey(key, activeCell, editingCell, isShift, isCtrl);
     }
   }
 
@@ -149,6 +149,7 @@ export class KeyboardHandler<TData = unknown> {
     key: string,
     activeCell: CellPosition | null,
     editingCell: EditingCell,
+    isShift: boolean,
     isCtrl: boolean,
   ): KeyboardResult {
     const { selection } = this.core;
@@ -160,6 +161,10 @@ export class KeyboardHandler<TData = unknown> {
     if (key === "c" && isCtrl) {
       selection.copySelectionToClipboard();
       return { preventDefault: true };
+    }
+    if (isCtrl) {
+      const history = this.historyKey(key, isShift);
+      if (history !== null) return history;
     }
     if (key === "F2") {
       if (activeCell && !editingCell) {
@@ -178,5 +183,22 @@ export class KeyboardHandler<TData = unknown> {
       this.core.edit.start(activeCell.row, activeCell.col);
     }
     return { preventDefault: false };
+  }
+
+  /** Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z with history on; left to the browser otherwise. */
+  private historyKey(key: string, isShift: boolean): KeyboardResult | null {
+    const { history } = this.core;
+    if (history.isEnabled() === false) return null;
+    const lower = key.toLowerCase();
+    if (lower === "z") {
+      if (isShift) history.redo();
+      else history.undo();
+      return { preventDefault: true };
+    }
+    if (lower === "y") {
+      history.redo();
+      return { preventDefault: true };
+    }
+    return null;
   }
 }

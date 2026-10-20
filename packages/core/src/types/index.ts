@@ -236,6 +236,7 @@ export type {
 // Options types
 export type {
   GridCoreOptions,
+  HistoryOptions,
   AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,

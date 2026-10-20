@@ -56,15 +56,31 @@ export const writeRecordCell = <TData>(
   value: CellValue,
   onCellValueChanged: ((event: CellValueChangedEvent<TData>) => void) | undefined,
   getRowId: () => RowId,
+): void =>
+  writeRecordField(rowData, { field: column.field, columnId: column.colId ?? column.field, col }, value, onCellValueChanged, getRowId);
+
+/** The written field as the change event names it; `col` is `-1` for a field whose column left the grid. */
+export interface WrittenField {
+  readonly field: string;
+  readonly columnId: string;
+  readonly col: number;
+}
+
+export const writeRecordField = <TData>(
+  rowData: TData,
+  target: WrittenField,
+  value: CellValue,
+  onCellValueChanged: ((event: CellValueChangedEvent<TData>) => void) | undefined,
+  getRowId: () => RowId,
 ): void => {
   if (typeof rowData !== "object" || rowData === null) return;
-  const oldValue = onCellValueChanged === undefined ? null : getFieldValue(rowData, column.field);
-  setFieldValue(rowData as Record<string, unknown>, column.field, value);
+  const oldValue = onCellValueChanged === undefined ? null : getFieldValue(rowData, target.field);
+  setFieldValue(rowData as Record<string, unknown>, target.field, value);
   onCellValueChanged?.({
     rowId: getRowId(),
-    columnId: column.colId ?? column.field,
-    colIndex: col,
-    field: column.field,
+    columnId: target.columnId,
+    colIndex: target.col,
+    field: target.field,
     oldValue,
     newValue: value,
     rowData,
