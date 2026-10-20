@@ -216,10 +216,7 @@ export class GridCore<TData = unknown> {
     });
   }
 
-  /**
-   * Subscribe to batched instructions. Listeners receive arrays of
-   * instructions instead of individual ones.
-   */
+  /** Subscribe to batched instructions: a listener receives arrays, never single ones. */
   onBatchInstruction(listener: BatchInstructionListener): () => void {
     return this.batcher.subscribe(listener);
   }
@@ -230,19 +227,12 @@ export class GridCore<TData = unknown> {
     this.view.reconcileAfterLoad();
   }
 
-  /**
-   * Update viewport measurements and sync slots. Under scroll virtualization
-   * the DOM scroll position is mapped to the logical row position.
-   */
+  /** Update the viewport measurements and sync the slots; a virtualized DOM scroll maps to the logical row position. */
   setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void {
     this.viewportController.update(scrollTop, scrollLeft, width, height);
   }
 
-  /**
-   * The C2 frozen-rows request seam, applied in one atomic batch.
-   *
-   * @internal
-   */
+  /** The C2 frozen-rows request seam, applied in one atomic batch. @internal */
   setFrozenRowsRequest(request: FrozenRowsRequest | null): void {
     this.frozenRowsController.apply(request);
   }
