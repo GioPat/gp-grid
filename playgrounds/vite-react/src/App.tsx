@@ -757,6 +757,8 @@ function MainDemo() {
           }
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
+          history={{ maxEntries: 100 }}
+          onWriteCommitted={(event) => console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`)}
           columns={pivotActive ? pivotSchema.columns : columns}
           columnGroups={pivotActive ? pivotSchema.columnGroups : plainColumnGroups}
           headerBandHeights={pivotActive ? undefined : plainBandHeights}

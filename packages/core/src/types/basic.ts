@@ -113,14 +113,25 @@ export type WriteRejectionOperation =
   | "edit"
   | "paste"
   | "fill"
-  | "row-move";
+  | "row-move"
+  | "undo"
+  | "redo";
 
 /**
- * Why a write was refused: the source is read-only, the row is a group or
- * total row, row order is derived from a hierarchy, or an edit draft cannot be
- * converted to the column's `cellDataType`.
+ * Why a write was refused or a target skipped: the source is read-only, the
+ * row is a group or total row, row order is derived from a hierarchy, a value
+ * cannot be converted to the column's `cellDataType`, a paste target sits in a
+ * non-editable column, or a history entry's record is gone or no longer holds
+ * what the entry wrote.
  */
-export type WriteRejectionReason = "read-only-source" | "not-a-record" | "derived-view" | "type-mismatch";
+export type WriteRejectionReason =
+  | "read-only-source"
+  | "not-a-record"
+  | "derived-view"
+  | "type-mismatch"
+  | "not-editable"
+  | "conflict"
+  | "missing-record";
 
 /** Emitted when a write is refused. */
 export interface CellWriteRejectedEvent {
@@ -134,6 +145,29 @@ export interface CellWriteRejectedEvent {
   reason: WriteRejectionReason;
   /** Attempted write entry point that was refused */
   operation: WriteRejectionOperation;
+}
+
+/** The user action a write command runs as. */
+export type WriteOperation = "setCellValue" | "edit" | "paste" | "fill" | "undo" | "redo";
+
+/** One cell a write command wrote. */
+export interface WriteChange {
+  rowId: RowId;
+  /** Normalized column identity: `colId ?? field`. */
+  columnId: string;
+  field: string;
+  oldValue: CellValue;
+  newValue: CellValue;
+}
+
+/**
+ * Emitted once per write command, after its records are written and a
+ * hierarchy told, with every cell it wrote and every target it left out.
+ */
+export interface WriteCommittedEvent {
+  operation: WriteOperation;
+  changes: readonly WriteChange[];
+  skipped: readonly CellWriteRejectedEvent[];
 }
 
 /** One application-set row height, keyed by row identity (D1). */

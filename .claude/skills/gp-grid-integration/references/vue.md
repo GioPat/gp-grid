@@ -638,6 +638,26 @@ precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
 and the ids are in the SKILL.md "Pivot" section. See
 [docs/features/pivot.md](../../../../docs/features/pivot.md).
 
+## Writes, undo and redo
+
+```vue
+<GpGrid
+  :columns="columns"
+  :data-source="source"
+  :row-height="32"
+  :get-row-id="(row) => row.id"
+  :history="{ maxEntries: 100 }"
+  :on-write-committed="onWriteCommitted"
+/>
+<!-- the exposed core.history.undo() / redo(); Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z -->
+```
+
+`onWriteCommitted` fires once per editor commit, paste, fill or
+`cells.setValue` with `changes` (`rowId`, `columnId`, `field`, `oldValue`,
+`newValue`) and `skipped` (`row`, `col`, `field`, `reason`); `history` is
+creation-only; both need `getRowId`. The `useGpGrid` composable takes the same
+two options. See the SKILL.md "Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |

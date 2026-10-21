@@ -8,6 +8,7 @@
 export { GridCore } from "./grid-core";
 export type { GridRowsApi } from "./grid-core-rows";
 export type { GridCellsApi } from "./grid-core-cells";
+export type { GridHistoryApi } from "./grid-core-history";
 export type { GridEditApi } from "./grid-core-edit";
 export type { GridColumnsApi } from "./grid-core-column-api";
 export type { GridHeaderApi } from "./grid-core-header";
@@ -224,6 +225,9 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   WriteRejectionReason,
+  WriteOperation,
+  WriteChange,
+  WriteCommittedEvent,
   SlotState,
   /** Application-set row height by identity (PRD 006) */
   RowHeightUpdate,
@@ -267,6 +271,7 @@ export type {
 
   /** Options */
   GridCoreOptions,
+  HistoryOptions,
   AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,

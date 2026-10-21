@@ -18,6 +18,9 @@ export type {
   CellWriteRejectedEvent,
   WriteRejectionOperation,
   WriteRejectionReason,
+  WriteOperation,
+  WriteChange,
+  WriteCommittedEvent,
   SlotState,
   RowHeightUpdate,
 } from "./basic";
@@ -233,6 +236,7 @@ export type {
 // Options types
 export type {
   GridCoreOptions,
+  HistoryOptions,
   AutoFitOptions,
   FreezeRowsOptions,
   RowLoadingOptions,

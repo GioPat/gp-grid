@@ -66,6 +66,9 @@
       [freezeRows]="freezeRows()"
       [rowGrouping]="rowGrouping()"
       [groupLabelColumn]="pivotActive() ? pivotLabelColumn : ''"
+      [getRowId]="getRowId"
+      [history]="history"
+      (onWriteCommitted)="onWriteCommitted($event)"
       (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>

@@ -8,6 +8,7 @@ import type {
   RowGrouping,
   RowGroupingResult,
   RowId,
+  WriteChange,
   WriteRejectionOperation,
   WriteRejectionReason,
 } from "../types";
@@ -16,6 +17,7 @@ import { buildDataSourceRequest } from "../utils";
 import { PaginatedRowLoader } from "./paginated-row-loader";
 import { RowIdDiagnostics } from "./row-id-diagnostics";
 import { RowStore } from "./row-store";
+import type { RecordFieldRead } from "../history/history-apply";
 import { RowViewBinder } from "./row-view-binder";
 import { hierarchyLoadRanges } from "./hierarchy-load-ranges";
 import { refreshTransactionData } from "../grid-core-operations";
@@ -147,6 +149,14 @@ export class RowDataManager<TData = unknown> {
   /** False when the write was refused, and reported as `operation`. */
   setCellValue(row: number, col: number, value: CellValue, operation?: WriteRejectionOperation): boolean {
     return this.store.setCellValue(row, col, value, operation);
+  }
+
+  readRecordField(rowId: RowId, field: string): RecordFieldRead {
+    return this.store.readRecordField(rowId, field);
+  }
+
+  setRecordValue(rowId: RowId, columnId: string, field: string, value: CellValue): WriteChange | WriteRejectionReason {
+    return this.store.setRecordValue(rowId, columnId, field, value);
   }
   /** A group or total row takes no write. */
   isRowWritable(row: number): boolean {

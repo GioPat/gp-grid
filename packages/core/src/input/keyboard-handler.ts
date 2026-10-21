@@ -118,7 +118,7 @@ export class KeyboardHandler<TData = unknown> {
       case "Tab":
         return this.handleTab(editingCell, isShift);
       default:
-        return this.handleNonSpecialKey(key, activeCell, editingCell, isCtrl);
+        return this.handleNonSpecialKey(key, activeCell, editingCell, isShift, isCtrl);
     }
   }
 
@@ -149,33 +149,46 @@ export class KeyboardHandler<TData = unknown> {
     key: string,
     activeCell: CellPosition | null,
     editingCell: EditingCell,
+    isShift: boolean,
     isCtrl: boolean,
   ): KeyboardResult {
-    const { selection } = this.core;
-
-    if (key === "a" && isCtrl) {
-      selection.selectAll();
-      return { preventDefault: true };
-    }
-    if (key === "c" && isCtrl) {
-      selection.copySelectionToClipboard();
-      return { preventDefault: true };
-    }
+    if (isCtrl) return this.ctrlShortcut(key, isShift);
+    const canEdit = activeCell !== null && editingCell === null;
     if (key === "F2") {
-      if (activeCell && !editingCell) {
-        this.core.edit.start(activeCell.row, activeCell.col);
-      }
+      if (canEdit) this.core.edit.start(activeCell.row, activeCell.col);
       return { preventDefault: true };
     }
     if (key === "Delete" || key === "Backspace") {
-      if (activeCell && !editingCell) {
-        this.core.edit.start(activeCell.row, activeCell.col);
-        return { preventDefault: true };
-      }
-      return { preventDefault: false };
+      if (canEdit) this.core.edit.start(activeCell.row, activeCell.col);
+      return { preventDefault: canEdit };
     }
-    if (activeCell && !editingCell && !isCtrl && key.length === 1) {
+    if (canEdit && key.length === 1) {
       this.core.edit.start(activeCell.row, activeCell.col);
+    }
+    return { preventDefault: false };
+  }
+
+  /** Ctrl+A, Ctrl+C, and with history on Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z; the rest reaches the browser. */
+  private ctrlShortcut(key: string, isShift: boolean): KeyboardResult {
+    const { selection, history } = this.core;
+    if (key === "a") {
+      selection.selectAll();
+      return { preventDefault: true };
+    }
+    if (key === "c") {
+      void selection.copySelectionToClipboard();
+      return { preventDefault: true };
+    }
+    if (history.isEnabled() === false) return { preventDefault: false };
+    const lower = key.toLowerCase();
+    if (lower === "z") {
+      if (isShift) history.redo();
+      else history.undo();
+      return { preventDefault: true };
+    }
+    if (lower === "y") {
+      history.redo();
+      return { preventDefault: true };
     }
     return { preventDefault: false };
   }

@@ -8,10 +8,14 @@ import type {
   HierarchyRow,
   RowAccess,
   RowId,
+  WriteChange,
   WriteRejectionOperation,
   WriteRejectionReason,
 } from "../types";
+import type { RecordFieldRead } from "../history/history-apply";
+import { writeRecordField } from "../utils/cell-access";
 import type { AxisBounds } from "../types/geometry";
+import { locateInHierarchy, rangeEnd, rangeStart } from "./row-locate";
 import {
   createWriteRejection,
   getFieldValue as readRowFieldValue,
@@ -28,28 +32,6 @@ export interface RowStoreOptions<TData> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
-
-const rangeStart = (range?: AxisBounds): number => Math.max(0, Math.trunc(range?.start ?? 0));
-
-const rangeEnd = (range: AxisBounds | undefined, extent: number): number =>
-  Math.min(Math.trunc(range?.end ?? extent), extent);
-
-/** Asks the hierarchy for each id; a hidden row answers its ancestor, which is not a match. */
-const locateInHierarchy = (
-  hierarchy: HierarchicalRowAccess<unknown>,
-  ids: ReadonlySet<RowId>,
-  range?: AxisBounds,
-): Map<RowId, number> => {
-  const found = new Map<RowId, number>();
-  const first = rangeStart(range);
-  const end = rangeEnd(range, hierarchy.rowCount);
-  for (const id of ids) {
-    const index = hierarchy.locate(id);
-    if (index < first || index >= end || hierarchy.getRowId(index) !== id) continue;
-    found.set(id, index);
-  }
-  return found;
-};
 
 /**
  * Owns the row cache, the bound scalar access, the row count and the bound
@@ -278,6 +260,24 @@ export class RowStore<TData = unknown> {
   }
 
   /** Every refused write routes here, so a read-only source is observable consistently. */
+  /** A record's field by identity; `found: false` when no record answers the id. */
+  readRecordField(rowId: RowId, field: string): RecordFieldRead {
+    const record = this.getRecordById(rowId);
+    if (record === undefined || record === null || typeof record !== "object") return { found: false, value: null };
+    return { found: true, value: readRowFieldValue(record, field) ?? null };
+  }
+
+  /** A write by identity, wherever the row is: the change, or the reason it was refused. */
+  setRecordValue(rowId: RowId, columnId: string, field: string, value: CellValue): WriteChange | WriteRejectionReason {
+    if (this.options.isWritable() === false) return "read-only-source";
+    const record = this.getRecordById(rowId);
+    if (record === undefined || record === null || typeof record !== "object") return "missing-record";
+    const col = this.options.getColumns().findIndex((column) => (column.colId ?? column.field) === columnId);
+    const oldValue = readRowFieldValue(record, field) ?? null;
+    writeRecordField(record, { field, columnId, col }, value, this.options.onCellValueChanged, () => rowId);
+    return { rowId, columnId, field, oldValue, newValue: value };
+  }
+
   rejectWrite(
     row: number,
     col: number,

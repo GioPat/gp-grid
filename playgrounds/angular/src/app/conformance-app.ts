@@ -8,6 +8,7 @@ import type {
   DataSource,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  HistoryOptions,
   ColumnMovedEvent,
   ColumnGroupChild,
   ColumnGroupLimits,
@@ -96,6 +97,7 @@ import {
   type PivotMode,
 } from './conformance-pivot-external';
 import { createEnginePivotFixture } from './conformance-pivot';
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from './conformance-writes';
 import { createPivotSchemaBinding } from './pivot-schema-binding';
 
 interface ConformanceRow {
@@ -120,7 +122,8 @@ type FixtureArm =
   | { fixture: 'columnGroups'; mode: ColumnGroupsMode }
   | { fixture: 'rowGroups'; mode: RowGroupsMode }
   | { fixture: 'serverGroups'; mode: ServerGroupsMode }
-  | { fixture: 'pivot'; mode: PivotMode | 'engine' };
+  | { fixture: 'pivot'; mode: PivotMode | 'engine' }
+  | { fixture: 'writes' };
 
 const NO_ARM: FixtureArm = { fixture: 'none' };
 // Shared empties, so an unchanged binding keeps its identity.
@@ -130,6 +133,7 @@ const NO_GROUP_LIMITS: ColumnGroupLimits = {};
 /** Arms whose rows reach the grid through a data source take the columnar branch. */
 const isSourcedArm = (arm: FixtureArm): boolean => {
   if (arm.fixture === 'rowGroups' || arm.fixture === 'serverGroups' || arm.fixture === 'pivot') return true;
+  if (arm.fixture === 'writes') return true;
   if (arm.fixture === 'frozen' || arm.fixture === 'rowHeights') return arm.mode !== 'object';
   return arm.fixture === 'autoFit' && arm.mode === 'paged';
 };
@@ -363,6 +367,14 @@ const createColumnarFixture = () => {
           <button data-testid="pivot-sort-first-amount" (click)="withCore(enginePivot.sortFirstAmount)">Sort first amount</button>
           <button data-testid="pivot-set-first-amount-width" (click)="withCore(enginePivot.setFirstAmountWidth)">First amount width</button>
         </section>
+        <section class="cf-group">
+          <h2>Writes</h2>
+          <button data-testid="use-writes" (click)="armWrites()">Writes</button>
+          <button data-testid="writes-sort-name" (click)="withCore(writes.sortByName)">Sort by name</button>
+          <button data-testid="writes-filter-names" (click)="withCore(writes.filterNames)">Filter names</button>
+          <button data-testid="writes-clear-filter" (click)="withCore(writes.clearFilter)">Clear filter</button>
+          <button data-testid="writes-conflict" (click)="withCore(conflictFirst)">Conflict</button>
+        </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
       <div data-testid="grid-host" [attr.dir]="rtl() ? 'rtl' : 'ltr'" [style.width.px]="hostWidth()" [style.height.px]="activeHostHeight()">
@@ -381,6 +393,7 @@ const createColumnarFixture = () => {
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [rowLoading]="activeRowLoading()"
+              [history]="writesHistory()"
               [getRowId]="getRowId"
               [cellRenderers]="rowGroupRenderers"
               [rowGrouping]="activeRowGrouping()"
@@ -388,6 +401,7 @@ const createColumnarFixture = () => {
               [groupLabelRenderer]="activeGroupLabelRenderer()"
               (onCellValueChanged)="onCellValueChanged($event)"
               (onWriteRejected)="onWriteRejected($event)"
+              (onWriteCommitted)="writes.recordWrite($event)"
               (onColumnResized)="onColumnResized($event)"
               (onColumnMoved)="onColumnMoved($event)"
               (onRowDragEnd)="onRowDragEnd($event)"
@@ -412,6 +426,7 @@ const createColumnarFixture = () => {
               [getRowId]="getRowId"
               (onCellValueChanged)="onCellValueChanged($event)"
               (onWriteRejected)="onWriteRejected($event)"
+              (onWriteCommitted)="writes.recordWrite($event)"
               (onColumnResized)="onColumnResized($event)"
               (onColumnMoved)="onColumnMoved($event)"
               (onRowDragEnd)="onRowDragEnd($event)"
@@ -478,6 +493,15 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   protected readonly pivotActive = computed(() => this.arm().fixture === 'pivot');
   protected readonly pivotSchema = signal<PivotSchema>({ columns: [], columnGroups: [] });
   protected readonly enginePivot = createEnginePivotFixture();
+  protected readonly writes = createWritesFixture();
+  protected readonly writesActive = computed(() => this.arm().fixture === 'writes');
+  // The rolled-up declarations drop `| undefined` from the inputs; the component takes it at runtime.
+  protected readonly writesHistory = computed(
+    (): HistoryOptions => (this.writesActive() ? WRITES_HISTORY : undefined) as unknown as HistoryOptions,
+  );
+  protected readonly conflictFirst = (core: GridCore<unknown>): void => {
+    void this.writes.conflictFirst(core);
+  };
   protected readonly enginePivotActive = computed(() => {
     const arm = this.arm();
     return arm.fixture === 'pivot' && arm.mode === 'engine';
@@ -582,6 +606,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
       ...rowGroupHooks,
       ...this.enginePivot.createHooks(this.pivot.createHooks(() => this.coreOf(), rowGroupHooks)),
       ...this.serverGroups.createHooks(),
+      ...this.writes.createHooks(() => this.coreOf()),
       // Each arm records its own requests; the frozen reader is the other arms'.
       requestedRanges: (): RequestedRange[] => {
         if (this.autoFitActive()) return this.autoFit.requestedRanges();
@@ -688,6 +713,12 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.enginePivot.arm();
     this.engineSchema.bind(this.enginePivot.pivotSource());
     this.armFixture({ fixture: 'pivot', mode: 'engine' });
+  }
+
+  /** The writes arm (PRD 013): fresh records and source, then a remount. */
+  protected armWrites(): void {
+    this.writes.arm();
+    this.armFixture({ fixture: 'writes' });
   }
 
   protected readonly addPivotKey = (core: GridCore<unknown>): void => {
@@ -829,6 +860,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
 
   /** A frozen or height arm replaces the data source; otherwise the mode picks it. */
   protected activeDataSource(): DataSource<never> {
+    if (this.writesActive()) return this.writes.source() ?? this.columnarSource;
     if (this.enginePivotActive()) return this.enginePivot.source() ?? this.columnarSource;
     if (this.pivotActive()) return this.pivot.source() ?? this.columnarSource;
     if (this.serverGroupsActive()) return this.serverGroups.source() ?? this.columnarSource;
@@ -840,6 +872,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected activeColumns(): AngularColumnDefinition[] {
+    if (this.writesActive()) return WRITES_COLUMNS;
     if (this.pivotActive()) return this.shownPivotSchema().columns;
     if (this.serverGroupsActive()) return this.serverGroups.columns();
     if (this.rowGroupsActive()) return this.rowGroupsArm().columns;
@@ -897,6 +930,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.rowGroupsActive()) return ROW_GROUPS_ROW_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_ROW_HEIGHT;
     if (this.pivotActive()) return PIVOT_ROW_HEIGHT;
+    if (this.writesActive()) return WRITES_ROW_HEIGHT;
     return 32;
   }
 
@@ -908,6 +942,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     if (this.rowGroupsActive()) return ROW_GROUPS_HEADER_HEIGHT;
     if (this.serverGroupsActive()) return SERVER_GROUPS_HEADER_HEIGHT;
     if (this.pivotActive()) return PIVOT_HEADER_HEIGHT;
+    if (this.writesActive()) return WRITES_HEADER_HEIGHT;
     return 36;
   }
 

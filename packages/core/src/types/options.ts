@@ -5,6 +5,7 @@ import type {
   RowId,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type {
@@ -50,6 +51,12 @@ export interface RowCacheOptions {
  * sort, filter and data changes. The effective count is derived from the row
  * count, `maxCount` and the viewport/cache limits; see `getFrozenRows`.
  */
+/** Bounded undo and redo over the write commands; creation-only, requires getRowId. */
+export interface HistoryOptions {
+  /** Entries kept; the oldest leaves beyond it. Default: 100. */
+  maxEntries?: number;
+}
+
 export interface FreezeRowsOptions {
   /** Display indices `[0, count)`. Default: 0. */
   count: number;
@@ -155,6 +162,13 @@ export interface GridCoreOptions<TData = unknown> {
    * The grid never emits a successful change event for a rejected write.
    */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /**
+   * Called once per write command (an edit commit, a paste, a fill,
+   * `cells.setValue`, an undo or a redo) with its changes and skips. Requires getRowId.
+   */
+  onWriteCommitted?: (event: WriteCommittedEvent) => void;
+  /** Undo and redo of edit, paste, fill and `cells.setValue`; absent, nothing is recorded. */
+  history?: HistoryOptions;
   /** Whether clicking and dragging any cell in a row drags the entire row instead of starting selection. Default: false */
   rowDragEntireRow?: boolean;
   /** Called when a row is dropped after dragging. Consumer is responsible for data reordering. */

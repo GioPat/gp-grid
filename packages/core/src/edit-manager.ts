@@ -5,6 +5,7 @@ import type {
   CellValue,
   CellPosition,
   CellWriteRejectedEvent,
+  WriteOperation,
   ColumnDefinition,
   RowId,
 } from "./types";
@@ -27,7 +28,7 @@ export interface EditManagerOptions {
   /** False for a group or total row, which never opens an editor. */
   isRowWritable?: (row: number) => boolean;
   /** Runs one write command, so its writes are reported together. */
-  runWrites?: <T>(command: () => T) => T;
+  runWrites?: <T>(operation: WriteOperation, command: () => T) => T;
   /**
    * Current slot-assignment generation for a view row, or -1 when no slot
    * serves it. Used to drop a commit that belongs to a recycled assignment.
@@ -227,15 +228,19 @@ export class EditManager {
 
     const column = this.options.getColumn(col);
     const coerced = coerceEditValue(currentValue, column);
-    // Like paste, a value the column type cannot hold is dropped, not written; unlike paste, it is reported.
-    if (coerced.ok === false) {
-      this.options.onWriteRejected?.(createWriteRejection(row, col, column?.field ?? "", "edit", "type-mismatch"));
-      this.cancel();
-      return;
-    }
+    this.runWrites("edit", () => {
+      // Like paste, a value the column type cannot hold is dropped, not written.
+      if (coerced.ok === false) {
+        this.options.onWriteRejected?.(createWriteRejection(row, col, column?.field ?? "", "edit", "type-mismatch"));
+        this.cancel();
+        return;
+      }
+      this.commitValue(row, col, coerced.value);
+    });
+  }
 
-    const run = this.options.runWrites ?? ((command) => command());
-    run(() => this.commitValue(row, col, coerced.value));
+  private runWrites<T>(operation: WriteOperation, command: () => T): T {
+    return this.options.runWrites === undefined ? command() : this.options.runWrites(operation, command);
   }
 
   private commitValue(row: number, col: number, currentValue: CellValue): void {

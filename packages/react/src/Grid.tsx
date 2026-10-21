@@ -88,6 +88,7 @@ export function Grid<TData = unknown>(
     getRowId,
     onCellValueChanged,
     onWriteRejected,
+    onWriteCommitted,
     loadingComponent,
     rowDragEntireRow = false,
     onRowDragEnd,
@@ -98,6 +99,7 @@ export function Grid<TData = unknown>(
     onFrozenRowsChanged,
     rowResize = false,
     autoFit,
+    history,
     rowGrouping,
     groupLabelColumn,
     groupLabelRenderer,
@@ -232,6 +234,8 @@ export function Grid<TData = unknown>(
   columnStateRef.current = columnState;
   const onWriteRejectedRef = useRef(onWriteRejected);
   onWriteRejectedRef.current = onWriteRejected;
+  const onWriteCommittedRef = useRef(onWriteCommitted);
+  onWriteCommittedRef.current = onWriteCommitted;
   const onRowDragEndRef = useRef(onRowDragEnd);
   onRowDragEndRef.current = onRowDragEnd;
   const onColumnResizedRef = useRef(onColumnResized);
@@ -348,12 +352,16 @@ export function Grid<TData = unknown>(
         ? (event) => onCellValueChangedRef.current?.(event)
         : undefined,
       onWriteRejected: (event) => onWriteRejectedRef.current?.(event),
+      onWriteCommitted: onWriteCommittedRef.current
+        ? (event) => onWriteCommittedRef.current?.(event)
+        : undefined,
       rowDragEntireRow,
       onRowDragEnd: (event) => onRowDragEndRef.current?.(event),
       onColumnResized: (event) => onColumnResizedRef.current?.(event),
       onRowResized: (event) => onRowResizedRef.current?.(event),
       rowResize,
       autoFit,
+      history,
       measurementHost: createDomMeasurementHost(() => outerContainerRef.current),
       onColumnMoved: (event) => onColumnMovedRef.current?.(event),
       onColumnPinned: (event) => onColumnPinnedRef.current?.(event),
@@ -410,7 +418,7 @@ export function Grid<TData = unknown>(
         gridRef.current = null;
       }
     };
-    // `labels`, `autoFit` and `columnGroupLimits` are creation-only, and the
+    // `labels`, `autoFit`, `history` and `columnGroupLimits` are creation-only, and the
     // schema, `headerBandHeights`, `freezeRows` and `rowResize` have their own
     // runtime effects below, so none may rebuild the core and reset scroll.
   }, [

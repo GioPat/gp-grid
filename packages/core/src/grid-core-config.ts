@@ -7,6 +7,7 @@ import type {
   AutoFitOptions,
   ColumnGroupLimits,
   FreezeRowsOptions,
+  HistoryOptions,
   GridCoreOptions,
 } from "./types";
 import type { ColumnLayoutMode } from "./types/geometry";
@@ -51,7 +52,8 @@ type DefaultedOption =
   | "autoFit"
   | "columnGroupLimits"
   | "headerBandHeights"
-  | "labels";
+  | "labels"
+  | "history";
 
 /** `Invalid <path>: <value>`, the message of every rejected option. */
 const invalidOption = (path: string, value: unknown): RangeError =>
@@ -189,13 +191,35 @@ export interface GridCoreConfig<TData>
   readonly columnGroupLimits: Readonly<Required<ColumnGroupLimits>>;
   readonly headerBandHeights: readonly number[];
   readonly labels: GridLabels;
+  readonly history: Readonly<Required<HistoryOptions>> | null;
 }
+
+const DEFAULT_HISTORY_ENTRIES = 100;
+
+/** Absent means no history; present, the bound is a positive safe integer. */
+const resolveHistoryOptions = (
+  value: HistoryOptions | undefined,
+): Readonly<Required<HistoryOptions>> | null => {
+  if (value === undefined) return null;
+  const options = readOptionObject(value, "history");
+  const maxEntries = options.maxEntries ?? DEFAULT_HISTORY_ENTRIES;
+  if (!Number.isSafeInteger(maxEntries) || maxEntries <= 0) {
+    throw invalidOption("history.maxEntries", maxEntries);
+  }
+  return { maxEntries };
+};
 
 export const resolveGridCoreConfig = <TData>(
   options: GridCoreOptions<TData>,
 ): GridCoreConfig<TData> => {
   if (options.onCellValueChanged && options.getRowId === undefined) {
     throw new Error("getRowId is required when onCellValueChanged is provided");
+  }
+  if (options.onWriteCommitted && options.getRowId === undefined) {
+    throw new Error("getRowId is required when onWriteCommitted is provided");
+  }
+  if (options.history && options.getRowId === undefined) {
+    throw new Error("getRowId is required when history is provided");
   }
   if (isPositiveSize(options.rowHeight) === false) {
     throw invalidOption("rowHeight", options.rowHeight);
@@ -218,6 +242,7 @@ export const resolveGridCoreConfig = <TData>(
     highlighting: options.highlighting,
     onCellValueChanged: options.onCellValueChanged,
     onWriteRejected: options.onWriteRejected,
+    onWriteCommitted: options.onWriteCommitted,
     onRowDragEnd: options.onRowDragEnd,
     onColumnResized: options.onColumnResized,
     onRowResized: options.onRowResized,
@@ -238,6 +263,7 @@ export const resolveGridCoreConfig = <TData>(
     autoFit,
     measurementHost: options.measurementHost,
     labels: resolveGridLabels(options.labels),
+    history: resolveHistoryOptions(options.history),
     maxFlingVelocity: options.maxFlingVelocity ??
       (DEFAULT_FLING_ROWS_PER_SECOND * options.rowHeight) / 1000,
     sortingEnabled: options.sortingEnabled ?? true,

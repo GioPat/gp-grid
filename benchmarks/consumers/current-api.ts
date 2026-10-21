@@ -22,6 +22,7 @@ import type {
   CellRendererParams,
   CellValue,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnFitResult,
   ColumnGroupChild,
@@ -219,6 +220,8 @@ const core = new GridCore<Row>({
     const reason: WriteRejectionReason = event.reason;
     void (reason === "not-a-record" || reason === "derived-view" || reason === "read-only-source");
   },
+  onWriteCommitted: (event: WriteCommittedEvent) => void [event.operation, event.changes.length, event.skipped.length],
+  history: { maxEntries: 100 },
   getRowId: (row) => row.id,
   onColumnResized: (event: ColumnResizedEvent) => void event.viewIndex,
   onRowResized: (event: RowResizedEvent) => void event.height,

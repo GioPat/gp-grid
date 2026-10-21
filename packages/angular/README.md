@@ -289,6 +289,13 @@ you computed yourself, without the engine. See
   [rowHeight]="32" [groupLabelColumn]="labelColumnId" />
 ```
 
+Writes and history: every edit, paste, fill and `cells.setValue` is one write
+command reported through the `(onWriteCommitted)` output with its changes by
+record id and the targets it skipped; `[history]="{ maxEntries: 100 }"` turns
+on undo and redo of those commands by record id (`core.history.undo()`,
+Ctrl+Z, Ctrl+Y). See
+[Write commands and history](../../docs/features/writes-and-history.md).
+
 An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
 typed into a `number` column stores `60000`, and a draft the type cannot hold
 writes nothing.

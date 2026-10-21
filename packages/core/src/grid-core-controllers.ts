@@ -15,6 +15,7 @@ import { ColumnsController } from "./grid-core-column-api";
 import type { GridGeometry } from "./types/geometry";
 import { RowsController } from "./grid-core-rows";
 import { CellsController } from "./grid-core-cells";
+import { HistoryController } from "./grid-core-history";
 import { EditController } from "./grid-core-edit";
 import { RowDragController } from "./grid-core-row-drag";
 import { RowGroupsController } from "./grid-core-row-groups";
@@ -98,6 +99,7 @@ export interface RowControllers<TData> {
   edit: EditController<TData>;
   rowDrag: RowDragController<TData>;
   rowGroups: RowGroupsController<TData>;
+  history: HistoryController<TData>;
   /** The view-rows applier's inputs, shared with a transaction refresh. */
   hierarchyChange: HierarchyChangeDeps<TData>;
 }
@@ -117,6 +119,12 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
   return {
     rows: new RowsController({ rowData, slotPool }),
     cells: new CellsController({ rowData, geometry: deps.geometry, writes: managers.recordWrites }),
+    history: new HistoryController({
+      history: managers.history,
+      rowData,
+      writes: managers.recordWrites,
+      getColumns: () => deps.columnModel.getLayout(),
+    }),
     edit: new EditController({
       batcher,
       editManager,

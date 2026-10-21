@@ -94,6 +94,7 @@ import {
   type PivotMode,
 } from "./conformance-pivot-external";
 import { createEnginePivotFixture } from "./conformance-pivot";
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
 
 interface ConformanceRow {
@@ -118,7 +119,8 @@ type FixtureArm =
   | { fixture: "columnGroups"; mode: ColumnGroupsMode }
   | { fixture: "rowGroups"; mode: RowGroupsMode }
   | { fixture: "serverGroups"; mode: ServerGroupsMode }
-  | { fixture: "pivot"; mode: PivotMode | "engine" };
+  | { fixture: "pivot"; mode: PivotMode | "engine" }
+  | { fixture: "writes" };
 
 const NO_ARM: FixtureArm = { fixture: "none" };
 
@@ -234,6 +236,7 @@ const serverGroups = createServerGroupsFixture();
 const pivot = createPivotFixture();
 const pivotSchema = shallowRef<PivotSchema>({ columns: [], columnGroups: [] });
 const enginePivot = createEnginePivotFixture();
+const writes = createWritesFixture();
 // Shallow: the grouping and the columns reach the grid as the fixture's own objects.
 const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
 
@@ -330,6 +333,7 @@ const serverGroupsMode = computed<ServerGroupsMode>(() => (arm.value.fixture ===
 const serverGroupsActive = computed(() => serverGroupsMode.value !== "off");
 const pivotActive = computed(() => arm.value.fixture === "pivot");
 const enginePivotActive = computed(() => arm.value.fixture === "pivot" && arm.value.mode === "engine");
+const writesActive = computed(() => arm.value.fixture === "writes");
 const engineSchema = usePivotSchema(
   // Reads `arm` itself, so re-arming the engine rebinds to its new source.
   () => (arm.value.fixture === "pivot" && arm.value.mode === "engine" ? enginePivot.pivotSource() : null),
@@ -381,6 +385,11 @@ const armEnginePivot = (): void => {
   enginePivot.arm();
   armFixture({ fixture: "pivot", mode: "engine" });
 };
+/** The writes arm (PRD 013): fresh records and source, then a remount. */
+const armWrites = (): void => {
+  writes.arm();
+  armFixture({ fixture: "writes" });
+};
 const armRowGroups = (next: RowGroupsMode): void => {
   rowGroupsArm.value = rowGroups.arm(next);
   armFixture({ fixture: "rowGroups", mode: next });
@@ -422,6 +431,7 @@ const toggleHostHeight = (): void => {
 
 /** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
 const activeDataSource = (): DataSource<never> | undefined => {
+  if (writesActive.value) return writes.source();
   if (pivotActive.value) return enginePivotActive.value ? enginePivot.source() : pivot.source();
   if (serverGroupsActive.value) return serverGroups.source();
   if (rowGroupsActive.value) return rowGroups.source();
@@ -435,7 +445,7 @@ const activeDataSource = (): DataSource<never> | undefined => {
 
 /** The writable arms keep the caller's object rows; every other one is sourced. */
 const activeRowData = (): ConformanceRow[] | undefined => {
-  if (rowGroupsActive.value || serverGroupsActive.value || pivotActive.value) return undefined;
+  if (rowGroupsActive.value || serverGroupsActive.value || pivotActive.value || writesActive.value) return undefined;
   if (columnGroupsActive.value) {
     return columnGroups.rowDataFor(columnGroupsMode.value) as unknown as ConformanceRow[] | undefined;
   }
@@ -446,6 +456,7 @@ const activeRowData = (): ConformanceRow[] | undefined => {
 };
 
 const activeColumns = (): ColumnDefinition[] => {
+  if (writesActive.value) return WRITES_COLUMNS;
   if (pivotActive.value) return shownPivotSchema.value.columns;
   if (serverGroupsActive.value) return serverGroups.columns();
   if (rowGroupsActive.value) return rowGroupsArm.value.columns;
@@ -476,6 +487,7 @@ const activeRowHeight = (): number => {
   if (rowGroupsActive.value) return ROW_GROUPS_ROW_HEIGHT;
   if (serverGroupsActive.value) return SERVER_GROUPS_ROW_HEIGHT;
   if (pivotActive.value) return PIVOT_ROW_HEIGHT;
+  if (writesActive.value) return WRITES_ROW_HEIGHT;
   return 32;
 };
 
@@ -487,6 +499,7 @@ const activeHeaderHeight = (): number => {
   if (rowGroupsActive.value) return ROW_GROUPS_HEADER_HEIGHT;
   if (serverGroupsActive.value) return SERVER_GROUPS_HEADER_HEIGHT;
   if (pivotActive.value) return PIVOT_HEADER_HEIGHT;
+  if (writesActive.value) return WRITES_HEADER_HEIGHT;
   return 36;
 };
 
@@ -755,6 +768,7 @@ if (typeof window !== "undefined") {
     ...rowGroupHooks,
     ...enginePivot.createHooks(pivot.createHooks(() => coreOf(), rowGroupHooks)),
     ...serverGroups.createHooks(),
+    ...writes.createHooks(() => coreOf()),
     // Each arm records its own requests; the frozen reader is the other arms'.
     requestedRanges: () => {
       if (autoFitActive.value) return autoFit.requestedRanges();
@@ -892,6 +906,14 @@ if (typeof window !== "undefined") {
         <button data-testid="pivot-sort-first-amount" @click="withCore(enginePivot.sortFirstAmount)()">Sort first amount</button>
         <button data-testid="pivot-set-first-amount-width" @click="withCore(enginePivot.setFirstAmountWidth)()">First amount width</button>
       </section>
+      <section class="cf-group">
+        <h2>Writes</h2>
+        <button data-testid="use-writes" @click="armWrites()">Writes</button>
+        <button data-testid="writes-sort-name" @click="withCore(writes.sortByName)()">Sort by name</button>
+        <button data-testid="writes-filter-names" @click="withCore(writes.filterNames)()">Filter names</button>
+        <button data-testid="writes-clear-filter" @click="withCore(writes.clearFilter)()">Clear filter</button>
+        <button data-testid="writes-conflict" @click="withCore((core) => void writes.conflictFirst(core))()">Conflict</button>
+      </section>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>
     <div
@@ -919,6 +941,8 @@ if (typeof window !== "undefined") {
         :get-row-id="(row: unknown) => (row as ConformanceRow).id"
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"
+        :on-write-committed="writes.recordWrite"
+        :history="writesActive ? WRITES_HISTORY : undefined"
         :on-column-resized="onColumnResized"
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"

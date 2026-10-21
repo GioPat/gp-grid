@@ -3,6 +3,7 @@
 import type { VNode, Component } from "vue";
 import type {
   AutoFitOptions,
+  HistoryOptions,
   RowId,
   ColumnDefinition as CoreColumnDefinition,
   ColumnGroupChild,
@@ -12,6 +13,7 @@ import type {
   CellRendererParams,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnMovedEvent,
   ColumnPinnedEvent,
   ColumnResizedEvent,
@@ -173,6 +175,8 @@ export interface GpGridProps<TData = unknown> {
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
   /** Called when a write is refused because the bound source is read-only. */
   onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** Called once per write command with its changes and skips. Requires getRowId. */
+  onWriteCommitted?: (event: WriteCommittedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
   /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
@@ -191,6 +195,8 @@ export interface GpGridProps<TData = unknown> {
   onRowResized?: (event: RowResizedEvent) => void;
   /** Clamps for the fit commands and the row resize gesture. Read at creation. */
   autoFit?: AutoFitOptions;
+  /** Undo and redo of the write commands, `maxEntries` deep. Creation-only; requires getRowId. */
+  history?: HistoryOptions;
   /** Called when a column is moved/reordered. */
   onColumnMoved?: (event: ColumnMovedEvent) => void;
   /** Called when a column is pinned or unpinned. */

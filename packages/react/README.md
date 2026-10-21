@@ -765,6 +765,12 @@ useEffect(() => {
   rowHeight={32} groupLabelColumn={PIVOT_LABEL_COLUMN_ID} />;
 ```
 
+Writes and history: every edit, paste, fill and `cells.setValue` is one write
+command reported through `onWriteCommitted` with its changes by record id and the
+targets it skipped; `history={{ maxEntries: 100 }}` turns on undo and redo of those
+commands by record id (`core.history.undo()`, Ctrl+Z, Ctrl+Y). See
+[Write commands and history](../../docs/features/writes-and-history.md).
+
 The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## API Reference
@@ -811,6 +817,8 @@ The public website documentation for this package lives outside this repository 
 | `onRowDragEnd`    | `(event: RowDragEndEvent) => void`    | -           | Called with `{ rowId, fromViewIndex, toViewIndex }`         |
 | `onCellValueChanged` | `(event: CellValueChangedEvent<TData>) => void` | - | Requires `getRowId`; payload includes `columnId`, and `colIndex` is the current view column index |
 | `onWriteRejected` | `(event: CellWriteRejectedEvent) => void` | - | Called when a write is refused: `reason` is `"read-only-source"`, `"not-a-record"` (a group or total row), `"derived-view"` (a row drag under grouping) or `"type-mismatch"` (an edit commit the column type cannot hold) |
+| `onWriteCommitted` | `(event: WriteCommittedEvent) => void` | - | Requires `getRowId`; once per write command (edit, paste, fill, `cells.setValue`, undo, redo) with `operation`, `changes` by record id and `skipped` targets with their reason |
+| `history` | `HistoryOptions` | - | `{ maxEntries? }` (default 100): undo and redo of the write commands through the core's `history` and Ctrl+Z / Ctrl+Y; creation-only, requires `getRowId` |
 
 ### ColumnDefinition
 

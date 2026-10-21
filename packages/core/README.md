@@ -260,7 +260,7 @@ const grid = new GridCore({
     // "not-a-record" and "derived-view", and an edit commit the column type
     // cannot hold reports "type-mismatch".
     // event.operation is one of:
-    //   "setCellValue" | "edit" | "paste" | "fill" | "row-move"
+    //   "setCellValue" | "edit" | "paste" | "fill" | "row-move" | "undo" | "redo"
     console.warn(`Refused ${event.operation} on row ${event.row}, col ${event.col}`);
   },
 });
@@ -857,6 +857,35 @@ const source = createPivotSource(inner, config);
 const initial = buildPivotSchema([], config); // the label column until the first query
 const grid = new GridCore({ columns: initial.columns, columnGroups: initial.columnGroups, dataSource: source, rowHeight: 32 });
 source.subscribeSchema((schema) => grid.columns.set(schema.columns, schema.columnGroups));
+```
+
+### Write commands and history
+
+An editor commit, a paste, a fill and `cells.setValue` each run as one write
+command: `onCellValueChanged` per cell, one `recordsChanged` under a hierarchy,
+then one `onWriteCommitted` with the `operation`, the `changes` (record id,
+column id, field, the value before and after) and the `skipped` targets with
+their reason. A paste lists a non-editable column as `"not-editable"` and a
+value the type cannot hold as `"type-mismatch"`, which also fires
+`onWriteRejected`. `history: { maxEntries }` keeps one entry per command that
+changed a cell; `grid.history.undo()` and `redo()` write it back by record id
+through the same command, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z call them while no
+editor is open, and an entry whose cell changed since is refused, dropped and
+reported once with `"conflict"` or `"missing-record"`. Both need `getRowId`.
+See [Write commands and history](../../docs/features/writes-and-history.md).
+
+```typescript
+const grid = new GridCore({
+  columns,
+  dataSource,
+  rowHeight: 32,
+  getRowId: (row) => row.id,
+  history: { maxEntries: 100 },
+  onWriteCommitted: (event) => {
+    if (event.skipped.length > 0) console.warn(`${event.operation}: ${event.skipped.length} cells skipped`);
+  },
+});
+grid.history.undo(); // false on an empty stack or a refused entry
 ```
 
 ### Editing and scroll motion

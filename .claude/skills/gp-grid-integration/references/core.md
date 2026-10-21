@@ -403,6 +403,22 @@ precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
 and the ids are in the SKILL.md "Pivot" section. See
 [docs/features/pivot.md](../../../../docs/features/pivot.md).
 
+## Write commands and history
+
+```ts
+const core = new GridCore({
+  columns, dataSource, rowHeight: 32,
+  getRowId: (row) => row.id,
+  history: { maxEntries: 100 },
+  onWriteCommitted: (event) => save(event.changes),   // one event per edit, paste, fill, setValue, undo, redo
+});
+core.history.undo(); // false on an empty stack or a refused entry (reported through onWriteRejected)
+```
+
+The command writes in place and reports once; an undo writes the entry back by
+record id through the same command, so a hierarchy refolds and
+`onCellValueChanged` fires per cell. See [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## Building a wrapper for a new framework
 
 The minimal wrapper does five things, in order:
@@ -411,7 +427,7 @@ The minimal wrapper does five things, in order:
 2. **Instantiate `GridCore`** with the user's options.
 3. **Subscribe to `onBatchInstruction`** and dispatch each instruction to your framework's reactive layer. Use `applyBatchInstructions` from the adapter kit if your framework has a state container that matches the shape. Feed every batch to a `PendingScrollLatch` too, and after each render `take()` the latched `SCROLL_TO` and write it to the scroll element: coalesced batches must not drop a correction.
 4. **Wire input events** — pointer, key, wheel, paste, scroll, resize. Use `toPointerEventData` to normalize pointer events for `grid.input.*`.
-5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onRowDragEnd`, `onColumnResized`, `onRowResized`, `onColumnMoved`, `onColumnPinned`, `onColumnSchemaRejected` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.columns.setState`.
+5. **Forward output callbacks** — `onCellValueChanged`, `onWriteRejected`, `onWriteCommitted`, `onRowDragEnd`, `onColumnResized`, `onRowResized`, `onColumnMoved`, `onColumnPinned`, `onColumnSchemaRejected` — back out to the user's API. Column/row interaction events are object-shaped in every wrapper (a deliberate 0.x→1.0 break, no compatibility adapter): `onColumnResized({ columnId, width, viewIndex })`, `onColumnMoved({ columnId, fromViewIndex, toViewIndex })`, `onColumnPinned({ columnId, pinned })`, `onRowDragEnd({ rowId, fromViewIndex, toViewIndex })`. `CellValueChangedEvent` also carries `columnId`; `colIndex` stays the current view column index and `field` remains the source field. Wrappers also apply a controlled `columnState` input through `grid.columns.setState`.
 6. **Render the mounted column window**, not every displayed column: `GridState.columnWindow` gives `start` / `center` / `end` resolved columns, each with a region-local `regionOffset`. Key cells and headers by `columnId` so a column keeps its DOM node when it changes region, and place `lineX` / `dropIndicatorX` (viewport x) and the fill handle's region-local `left` directly.
 7. **Render the frozen prefix from `GridState.rowRegions`**, only while `frozenCount > 0`: a sticky block of height `frozenExtent` for the frozen center cells, plus a sibling sticky layer at the sizer level for their pinned cells (a pin inside the horizontally scrolling block would ride its content box out of the viewport). Split slots by `SlotData.region`, never by `rowIndex < frozenCount`, render `SlotData.loading` frozen rows as cell-less placeholders, and render `GridState.announcement` in one `aria-live="polite"` region. `freezeRows: { count, maxCount?, minSuffixHeight? }` is the option; a wrapper applies a changed prop through `frozenRows.set(config?)`, which replaces the whole config (omitted fields take the defaults) and stays silent for an equal-valued call, so no remount is needed. `frozenRows.get()` reports the effective count and its limiting constraint.
 8. **Pass a measurement host and render the header bands.** Give `GridCore` `measurementHost: createDomMeasurementHost(() => rootEl)` in the browser only, and render `data-layout-revision` (from `columnWindow.layout.revision`) on that root, so `rowHeights.fit` and `columns.fit` work and detect a stale layout. Header cells carry `data-col-index`, body cells `data-cell-row` and `data-cell-col`. Render the `aria-hidden` edge handles (`.gp-grid-header-resize-handle`, and `.gp-grid-row-resize-handle` in every non-editing cell while `rowResize` is on) and wire them through `InputEventAdapter.resizePointerDown`, `rowResizePointerDown` and `resizeDoubleClick`, stopping propagation on pointer down and double-click; pass `altKey` with key events. Render `GridState.headerBands` and the fragments in `columnWindow.groups` (each at `regionOffset`, `offsets[band]`, its run width and the band height), and build ids and ARIA with `leafHeaderId`, `fragmentHeaderId`, `leafHeaderBox`, `fragmentHeaderBox` and `resolveHeaderAssociations`. Number ARIA rows with the header bands first: a body row's `aria-rowindex` is its view index plus `headerBands.count` plus 1.

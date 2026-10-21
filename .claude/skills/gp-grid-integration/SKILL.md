@@ -538,6 +538,41 @@ const source = createPivotSource(createClientDataSource(sales), config); // crea
   server-computed pivot is supplied precomputed).
   See [docs/features/pivot.md](../../../docs/features/pivot.md).
 
+### Writes, undo and redo (`onWriteCommitted`, `history`, `core.history`)
+
+Every editor commit, paste, fill and `cells.setValue` is one *write command*:
+the records are written in place, `onCellValueChanged` fires per cell, a
+hierarchy gets one `recordsChanged`, then `onWriteCommitted` fires once with
+`{ operation, changes, skipped }`. Both callbacks need `getRowId`.
+
+- **`changes`:** `WriteChange[]` of `{ rowId, columnId, field, oldValue, newValue }`
+  in write order. **`skipped`:** the targets the command left out, as
+  `CellWriteRejectedEvent`s (`row`, `col`, `field`, `reason`, `operation`).
+- **Paste is best effort:** a target in a non-editable column is skipped with
+  `"not-editable"` (no `onWriteRejected`); a value the column type cannot hold
+  is skipped with `"type-mismatch"` and also fires `onWriteRejected`, like an
+  editor commit. Read `skipped` to tell the user which cells did not land.
+- **History:** `history: { maxEntries: 100 }` (creation-only) records one entry
+  per command that changed a cell. `core.history.undo()` / `redo()` write the
+  old or new values back by record id through the same command, so your
+  callbacks see an undo like any edit; also `canUndo()`, `canRedo()`,
+  `isEnabled()`, `clear()`. Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z while no editor is
+  open; with history off the keys reach the browser. `setDataSource` clears it.
+- **Refused entries:** before writing anything, every cell of the entry must
+  still hold what the entry wrote and its record must exist; otherwise the whole
+  entry is refused, dropped and reported once through `onWriteRejected` with
+  `reason: "conflict" | "missing-record"`, `operation: "undo" | "redo"`
+  (`row`/`col` are `-1` when the cell is not shown). A read-only source refuses
+  with `"read-only-source"`.
+- **Limits:** no re-query after an undo, so a row on a sorted column keeps its
+  place until the next query; `createClientDataSource` finds resident records
+  only (an undo across a filter needs a source with `getRecordById`, such as
+  `createMutableClientDataSource`); your own transactions on the source are not
+  entries, but they trigger the conflict check.
+  React/Vue: `history` and `onWriteCommitted` props; Angular: `[history]` input,
+  `(onWriteCommitted)` output.
+  See [docs/features/writes-and-history.md](../../../docs/features/writes-and-history.md).
+
 ### Data sources — pick one
 
 | Use when… | Factory | Mutability |
@@ -793,7 +828,7 @@ How to get the ref:
 
 - **Container has no explicit height** → grid is invisible. Wrap in a sized div.
 - **CSS not imported** → grid renders unstyled. Import once in app entry.
-- **`onCellValueChanged` provided without `getRowId`** → editing throws. Always provide `getRowId`.
+- **`onCellValueChanged`, `onWriteCommitted` or `history` provided without `getRowId`** → construction throws. Always provide `getRowId`.
 - **Replacing `rowData` with a new array on every render of large datasets** → full pipeline rebuild. Use the mutable hook/helper.
 - **`dataSource` and `rowData` both passed** → `dataSource` wins, `rowData` is ignored. Use one.
 - **`dataSource` reference unstable across renders** → grid resets on every render. Memoize (`useMemo` in React, `computed` / `shallowRef` in Vue, `inject`/DI in Angular).

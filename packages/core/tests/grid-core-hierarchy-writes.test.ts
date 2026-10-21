@@ -1,7 +1,7 @@
 // PRD 008 D5/D6: input and writes on group and total rows (AC-008-04).
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CellWriteRejectedEvent, HierarchyRecordChange, KeyEventData, PointerEventData } from "../src/types";
+import type { CellWriteRejectedEvent, HierarchyRecordChange, KeyEventData, PointerEventData, WriteCommittedEvent } from "../src/types";
 import type { GridCoreOptions } from "../src/types";
 import {
   createHierarchyFixture,
@@ -249,5 +249,40 @@ describe("hierarchy writes — row drag and copy", () => {
     await grid.selection.copySelectionToClipboard();
 
     expect(writeText).toHaveBeenCalledWith("100\n60\n30\n10");
+  });
+});
+
+describe("hierarchy writes — the write command's event (PRD 013 D1)", () => {
+  it("a paste is one event after recordsChanged, with the group rows as skips", async () => {
+    const seen: number[] = [];
+    let recordsChanged: ReturnType<typeof vi.fn> | undefined;
+    const events: WriteCommittedEvent[] = [];
+    const created = await setup({
+      options: {
+        getRowId: (record) => record.id,
+        onWriteCommitted: (event) => {
+          events.push(event);
+          seen.push(recordsChanged?.mock.calls.length ?? -1);
+        },
+      },
+    });
+    recordsChanged = created.recordsChanged;
+    const { grid } = created;
+    grid.selection.setActiveCell(5, AMOUNT);
+
+    expect(grid.edit.paste("1\n2\n3\n4\n5")).toBe(true);
+
+    expect(seen).toEqual([1]);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.operation).toBe("paste");
+    expect(events[0]?.changes.map(({ rowId, field, oldValue, newValue }) => [rowId, field, oldValue, newValue])).toEqual([
+      [grid.rows.getId(6), "amount", 30, 2],
+      [grid.rows.getId(9), "amount", 40, 5],
+    ]);
+    expect(events[0]?.skipped.map(({ row, reason }) => [row, reason])).toEqual([
+      [5, "not-a-record"],
+      [7, "not-a-record"],
+      [8, "not-a-record"],
+    ]);
   });
 });

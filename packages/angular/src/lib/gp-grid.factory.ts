@@ -1,8 +1,10 @@
 import { GridCore, createDomMeasurementHost } from '@gp-grid/core';
 import type {
   AutoFitOptions,
+  HistoryOptions,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnGroupChild,
   ColumnGroupLimits,
@@ -46,6 +48,7 @@ export interface BuildGridCoreInputs<TData> {
   labels: GridLabelOverrides | undefined;
   rowResize: boolean;
   autoFit: AutoFitOptions | undefined;
+  history: HistoryOptions | undefined;
   rowGrouping: RowGrouping | null | undefined;
   /** Grid root the fit commands measure; `null` on the server, where no host is built. */
   measureRoot: (() => HTMLElement | null) | null;
@@ -55,6 +58,7 @@ export interface BuildGridCoreEmitters<TData> {
   onRowDragEnd: (event: RowDragEndEvent) => void;
   onCellValueChanged: (event: CellValueChangedEvent<TData>) => void;
   onWriteRejected: (event: CellWriteRejectedEvent) => void;
+  onWriteCommitted: (event: WriteCommittedEvent) => void;
   onColumnResized: (event: ColumnResizedEvent) => void;
   onRowResized: (event: RowResizedEvent) => void;
   onColumnMoved: (event: ColumnMovedEvent) => void;
@@ -72,6 +76,9 @@ export const buildGridCore = <TData>(
   const cellValueChanged = inputs.getRowId === undefined
     ? undefined
     : emitters.onCellValueChanged;
+  const writeCommitted = inputs.getRowId === undefined
+    ? undefined
+    : emitters.onWriteCommitted;
   const measurementHost = inputs.measureRoot === null
     ? undefined
     : createDomMeasurementHost(inputs.measureRoot);
@@ -97,11 +104,13 @@ export const buildGridCore = <TData>(
     labels: inputs.labels,
     rowResize: inputs.rowResize,
     autoFit: inputs.autoFit,
+    history: inputs.history,
     rowGrouping: inputs.rowGrouping,
     measurementHost,
     onRowDragEnd: emitters.onRowDragEnd,
     onCellValueChanged: cellValueChanged,
     onWriteRejected: emitters.onWriteRejected,
+    onWriteCommitted: writeCommitted,
     onColumnResized: emitters.onColumnResized,
     onRowResized: emitters.onRowResized,
     onColumnMoved: emitters.onColumnMoved,

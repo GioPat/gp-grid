@@ -12,6 +12,7 @@ import {
     type GridLabels,
     type FrozenRowsState,
 } from "@gp-grid/vue";
+import type { WriteCommittedEvent } from "@gp-grid/vue";
 import Currency from "./renderers/Currency.vue";
 import StatusBadge from "./renderers/StatusBadge.vue";
 import Bold from "./renderers/Bold.vue";
@@ -294,6 +295,10 @@ const handleUpdateRow = () => {
 
 const freezeRows = computed(() => ({ count: freezeCount.value }));
 
+const onWriteCommitted = (event: WriteCommittedEvent): void => {
+    console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`);
+};
+
 const handleFrozenRowsChanged = (state: FrozenRowsState) => {
     frozenStatus.value = `${state.effectiveCount} of ${state.requestedCount} rows frozen`;
 };
@@ -430,6 +435,8 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :overscan="12"
             :data-source="pivotSource ?? serverSource ?? dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
+            :history="{ maxEntries: 100 }"
+            :on-write-committed="onWriteCommitted"
             :row-height="36"
             :row-resize="true"
             :header-height="DEMO_HEADER_HEIGHT"

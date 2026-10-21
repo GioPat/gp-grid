@@ -28,9 +28,11 @@ import type {
 import { isPlatformBrowser } from '@angular/common';
 import type {
   AutoFitOptions,
+  HistoryOptions,
   CellValue,
   CellValueChangedEvent,
   CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnFilterModel,
   ColumnGroupChild,
@@ -143,9 +145,12 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   rowResize = input<boolean>(false);
   /** Bounds of the fit commands and the row resize gestures; read at creation. */
   autoFit = input<AutoFitOptions | undefined>(undefined);
+  /** Undo and redo of the write commands; read at creation, requires getRowId. */
+  history = input<HistoryOptions | undefined>(undefined);
   onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
   onWriteRejected = output<CellWriteRejectedEvent>();
+  onWriteCommitted = output<WriteCommittedEvent>();
   onColumnResized = output<ColumnResizedEvent>();
   onRowResized = output<RowResizedEvent>();
   onColumnMoved = output<ColumnMovedEvent>();
@@ -245,6 +250,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         labels: this.labels(),
         rowResize: this.rowResize(),
         autoFit: this.autoFit(),
+        history: this.history(),
         rowGrouping: this.rowGrouping(),
         measureRoot: this.isBrowser ? () => this.container?.nativeElement ?? null : null,
       },
@@ -252,6 +258,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
         onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
         onWriteRejected: (event) => this.onWriteRejected.emit(event),
+        onWriteCommitted: (event) => this.onWriteCommitted.emit(event),
         onColumnResized: (event) => this.onColumnResized.emit(event),
         onRowResized: (event) => this.onRowResized.emit(event),
         onColumnMoved: (event) => this.onColumnMoved.emit(event),
