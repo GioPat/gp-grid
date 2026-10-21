@@ -486,8 +486,8 @@ export function Grid<TData = unknown>(
   // Subscribe to data source changes (for MutableDataSource)
   useEffect(() => {
     if (isMutableDataSource(dataSource) === false) return;
-    return dataSource.subscribe(() => {
-      coreRef.current?.refreshFromTransaction();
+    return dataSource.subscribe((result) => {
+      void coreRef.current?.refreshFromTransaction(result);
     });
   }, [dataSource]);
 
