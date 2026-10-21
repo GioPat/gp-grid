@@ -124,6 +124,12 @@ All notable changes to gp-grid will be documented in this file.
 - React and Vue props `history` and `onWriteCommitted`; Angular `[history]` input and `(onWriteCommitted)` output
 - See [Write commands and history](./features/writes-and-history.md)
 
+#### Change-proportional transaction refresh (PRD 015)
+- `TransactionResult.changes`: one `TransactionChange` per row a mutable source's batch touched (`kind: "update" | "add" | "remove"`, `rowId`, and an update's `fields`), in processing order; `clear()` reports none
+- `GridCore.refreshFromTransaction(result?)`: with a result whose changes are all updates, no query runs: the mounted rows that changed are redrawn, and under local row grouping the engine refolds a measure or regroups a dimension as for an edit; the updated row keeps its place under a sort or filter until the next query. An add, a remove, `clear()`, a result without changes, a paginated source, a read-only source or a hierarchy from the source reloads as before
+- React, Vue (component and composable) and Angular pass each batch's result through
+- `pnpm test:transactions` runs `benchmarks/scripts/transaction-smoke.mjs` on the production core over 1,000,000 rows: an update refreshes in a fraction of a millisecond with zero queries and one slot; an add keeps the full refresh
+
 #### Scroll motion
 - `GridCore.viewport.isScrollMotionActive()` and `interruptScrollMotion()`: whether a touch fling or a wheel glide is still moving the content, and a command that stops it where it is. An adapter registers its motion with `viewport.setScrollMotionHandle(handle)` / `clearScrollMotionHandle(handle)` (`ScrollMotionHandle`: `isActive()`, `interrupt()`); `TouchScrollController` does so on attach and exposes `interrupt()`.
 - `InputHandler.handleWheel(deltaY, deltaX, dampening, deltaMode?)` takes the `WheelEvent.deltaMode`: line and page deltas (modes 1 and 2) are converted to pixels (40 and 800 per unit) before dampening

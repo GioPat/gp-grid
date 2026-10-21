@@ -913,6 +913,9 @@ if (typeof window !== "undefined") {
         <button data-testid="writes-filter-names" @click="withCore(writes.filterNames)()">Filter names</button>
         <button data-testid="writes-clear-filter" @click="withCore(writes.clearFilter)()">Clear filter</button>
         <button data-testid="writes-conflict" @click="withCore((core) => void writes.conflictFirst(core))()">Conflict</button>
+        <button data-testid="writes-app-update" @click="void writes.appUpdate()">App update</button>
+        <button data-testid="writes-app-add" @click="void writes.appAdd()">App add</button>
+        <button data-testid="writes-refresh" @click="withCore((core) => void core.refresh())()">Refresh</button>
       </section>
       <output data-testid="metrics">{{ metrics }}</output>
     </div>

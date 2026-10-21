@@ -78,3 +78,14 @@ export const fieldValue = (page: Page, row: number, field: string): Promise<unkn
     }).__gpConformance;
     return hooks?.getFieldValue?.(targetRow, targetField) ?? null;
   }, { targetRow: row, targetField: field });
+
+export const writesQueryCount = (page: Page): Promise<number> => readHook<number>(page, "writesQueryCount");
+
+/** The application's own transaction on the arm's source, flushed; the wrapper refreshes from its result. */
+export const appTransaction = (page: Page, name: "appUpdate" | "appUpdateLast" | "appRenameFirst" | "appAdd"): Promise<void> =>
+  page.evaluate(async (hookName) => {
+    const hooks = (globalThis as unknown as {
+      __gpConformance?: Record<string, () => Promise<void>>;
+    }).__gpConformance;
+    await hooks?.[hookName]?.();
+  }, name);

@@ -339,10 +339,12 @@ refresh keeps its state.
 - `onCellValueChanged` requires `getRowId`, also when the hierarchy comes from
   the data source.
 
-A transaction (`useGridData`, `createMutableClientDataSource`) or a refresh
-rebuilds the grouping in one synchronous pass and keeps surviving expansion, the
-active record and the anchor. A sort or filter change rebuilds it too and
-returns to the top, as in a flat grid.
+A transaction on a mutable source (`useGridData`,
+`createMutableClientDataSource`) that only updates records refolds and regroups
+the records that changed, as an edit does, without a query; a transaction that
+adds or removes records, or a refresh, rebuilds the grouping in one synchronous
+pass and keeps surviving expansion, the active record and the anchor. A sort or
+filter change rebuilds it too and returns to the top, as in a flat grid.
 
 ## Rejections
 

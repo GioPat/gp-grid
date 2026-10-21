@@ -946,6 +946,9 @@ const hideColumn = useCallback(() => {
           <button data-testid="writes-filter-names" onClick={withCore(writes.filterNames)}>Filter names</button>
           <button data-testid="writes-clear-filter" onClick={withCore(writes.clearFilter)}>Clear filter</button>
           <button data-testid="writes-conflict" onClick={withCore((core) => void writes.conflictFirst(core))}>Conflict</button>
+          <button data-testid="writes-app-update" onClick={() => void writes.appUpdate()}>App update</button>
+          <button data-testid="writes-app-add" onClick={() => void writes.appAdd()}>App add</button>
+          <button data-testid="writes-refresh" onClick={withCore((core) => void core.refresh())}>Refresh</button>
         </section>
         <output data-testid="metrics">{JSON.stringify(metrics)}</output>
       </div>

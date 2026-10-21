@@ -45,6 +45,11 @@ export interface WritesHooks {
   writesRecord: (id: number) => WritesRecord | null;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  writesQueryCount: () => number;
+  appUpdate: () => Promise<void>;
+  appUpdateLast: () => Promise<void>;
+  appRenameFirst: () => Promise<void>;
+  appAdd: () => Promise<void>;
 }
 
 export const createWritesFixture = () => {
@@ -52,18 +57,34 @@ export const createWritesFixture = () => {
   let source: DataSource<never> | undefined;
   let committed = 0;
   let last: WriteSummary | null = null;
+  let queries = 0;
+
+  const flushed = async (transact: (source: MutableDataSource<WritesRecord>) => void): Promise<void> => {
+    if (inner === null) return;
+    transact(inner);
+    await inner.flushTransactions();
+  };
 
   return {
     /** Fresh records and source; the shell remounts the grid over `source()`. */
     arm: (): void => {
       committed = 0;
       last = null;
-      inner = createMutableClientDataSource(createWritesRecords(), {
+      queries = 0;
+      const created = createMutableClientDataSource(createWritesRecords(), {
         getRowId: (record) => record.id,
         debounceMs: 0,
         useWorker: false,
       });
-      source = inner as unknown as DataSource<never>;
+      inner = created;
+      const counted: DataSource<WritesRecord> = {
+        ...created,
+        query: (request) => {
+          queries += 1;
+          return created.query(request);
+        },
+      };
+      source = counted as unknown as DataSource<never>;
     },
     source: (): DataSource<never> | undefined => source,
     recordWrite: (event: WriteCommittedEvent): void => {
@@ -92,12 +113,23 @@ export const createWritesFixture = () => {
       await inner.flushTransactions();
       await core.refreshFromTransaction();
     },
+    /** The application's own transactions; the wrapper's subscription refreshes from each result. */
+    appUpdate: (): Promise<void> => flushed((source) => source.updateCell(2, "amount", 777)),
+    appUpdateLast: (): Promise<void> => flushed((source) => source.updateCell(WRITES_RECORD_COUNT, "amount", 555)),
+    appRenameFirst: (): Promise<void> => flushed((source) => source.updateCell(WRITES_RECORD_COUNT, "name", "Aaa")),
+    appAdd: (): Promise<void> =>
+      flushed((source) => source.addRows([{ id: WRITES_RECORD_COUNT + 1, name: "Name new", amount: 1, note: "" }])),
     createHooks: (coreOf: () => GridCore<unknown> | null | undefined): WritesHooks => ({
       writeCommitted: () => committed,
       lastWrite: () => last,
       writesRecord: (id) => inner?.getRowById(id) ?? null,
       canUndo: () => coreOf()?.history.canUndo() ?? false,
       canRedo: () => coreOf()?.history.canRedo() ?? false,
+      writesQueryCount: () => queries,
+      appUpdate: () => flushed((source) => source.updateCell(2, "amount", 777)),
+      appUpdateLast: () => flushed((source) => source.updateCell(WRITES_RECORD_COUNT, "amount", 555)),
+      appRenameFirst: () => flushed((source) => source.updateCell(WRITES_RECORD_COUNT, "name", "Aaa")),
+      appAdd: () => flushed((source) => source.addRows([{ id: WRITES_RECORD_COUNT + 1, name: "Name new", amount: 1, note: "" }])),
     }),
   };
 };

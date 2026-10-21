@@ -190,6 +190,23 @@ const dataSource = createClientDataSource(data, {
 });
 ```
 
+**Mutable client source.** `createMutableClientDataSource(data, { getRowId })`
+queues `updateCell`, `updateRow`, `addRows` and `removeRows`, processes them
+after `debounceMs` (default 50, `0` for sync) and notifies its subscribers
+with the batch's `TransactionResult`: the counts and `changes`, one entry per
+row touched (`kind`, `rowId`, and an update's `fields`). The wrappers pass that
+result to `refreshFromTransaction(result)`: a batch of updates redraws only the
+mounted rows that changed, without a query, and the row keeps its place under
+a sort or filter until the next query; an add, a remove or `clear()` reloads
+every row. Under local row grouping an update refolds a measure or regroups a
+dimension as an edit does.
+
+```typescript
+const source = createMutableClientDataSource(data, { getRowId: (row) => row.id });
+source.updateCell(42, "price", 10.5); // the grid redraws row 42 if it is mounted, no query
+source.addRows([{ id: 1001, name: "New" }]); // the grid reloads every row
+```
+
 ### Columnar Data Source (read-only)
 
 `createColumnarDataSource` reads caller-owned arrays, typed-array views, and scalar accessors without converting them into row objects. Construction and revision validation take O(columns) work. Pass the source through the ordinary `dataSource` input in React, Vue, or Angular, or use it with `GridCore` directly.
@@ -1000,7 +1017,7 @@ class MyGridAdapter {
 | `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
 | `setDataSource(dataSource)`                         | Swap the source, keeping sort, filter and scroll |
 | `refresh()`                                         | Refetch data from source                   |
-| `refreshFromTransaction()`                          | Refetch the visible window after a transaction |
+| `refreshFromTransaction(result?)`                   | After a mutable source's batch: a batch of updates redraws the changed mounted rows without a query, anything else reloads |
 | `onBatchInstruction(listener)`                      | Subscribe to instruction batches           |
 | `destroy()`                                         | Release listeners and managers             |
 
