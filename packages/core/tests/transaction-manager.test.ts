@@ -69,7 +69,20 @@ describe("TransactionManager", () => {
         added: 1,
         removed: 0,
         updated: 0,
+        changes: [{ kind: "add", rowId: 3 }],
       });
+    });
+
+    it("reports one change per row touched, an update with its fields", () => {
+      manager.remove([2]);
+      manager.updateCell(1, "name", "Alicia");
+      manager.updateRow(1, { name: "Alice", age: 31 });
+
+      expect(processedResults.map((result) => result.changes)).toEqual([
+        [{ kind: "remove", rowId: 2 }],
+        [{ kind: "update", rowId: 1, fields: ["name"] }],
+        [{ kind: "update", rowId: 1, fields: ["name", "age"] }],
+      ]);
     });
   });
 
@@ -115,7 +128,26 @@ describe("TransactionManager", () => {
         added: 2,
         removed: 0,
         updated: 1,
+        changes: [
+          { kind: "add", rowId: 3 },
+          { kind: "add", rowId: 4 },
+          { kind: "update", rowId: 1, fields: ["name"] },
+        ],
       });
+    });
+
+    it("lists a row updated twice in one batch twice, in order", () => {
+      manager.updateCell(1, "name", "A");
+      manager.updateCell(2, "age", 26);
+      manager.updateCell(1, "age", 31);
+
+      vi.advanceTimersByTime(50);
+
+      expect(processedResults[0]?.changes).toEqual([
+        { kind: "update", rowId: 1, fields: ["name"] },
+        { kind: "update", rowId: 2, fields: ["age"] },
+        { kind: "update", rowId: 1, fields: ["age"] },
+      ]);
     });
 
     it("should NOT reset timer on new operation (throttle, not debounce)", () => {

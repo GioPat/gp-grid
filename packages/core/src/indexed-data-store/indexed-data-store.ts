@@ -70,6 +70,10 @@ export class IndexedDataStore<TData = unknown> {
     return index === undefined ? undefined : this.rows[index];
   }
 
+  rowIdOf(row: TData): RowId {
+    return this.options.getRowId(row);
+  }
+
   getTotalRowCount(): number {
     return this.rows.length;
   }

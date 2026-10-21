@@ -36,10 +36,18 @@ export type Transaction<TData> =
   | UpdateCellTransaction
   | UpdateRowTransaction<TData>;
 
+/** One row a processed batch touched; an update names the fields written. */
+export type TransactionChange =
+  | { kind: "update"; rowId: RowId; fields: readonly string[] }
+  | { kind: "add"; rowId: RowId }
+  | { kind: "remove"; rowId: RowId };
+
 export interface TransactionResult {
   added: number;
   removed: number;
   updated: number;
+  /** The rows the batch touched, in processing order; absent when the source cannot say. */
+  changes?: readonly TransactionChange[];
 }
 
 export interface TransactionManagerOptions<TData> {
@@ -232,30 +240,36 @@ export class TransactionManager<TData = unknown> {
     this.queue = [];
 
     // Process transactions
+    const changes: TransactionChange[] = [];
     const result: TransactionResult = {
       added: 0,
       removed: 0,
       updated: 0,
+      changes,
     };
 
     try {
       for (const tx of transactions) {
         switch (tx.type) {
           case "ADD":
+            for (const row of tx.rows) changes.push({ kind: "add", rowId: this.options.store.rowIdOf(row) });
             this.options.store.addRows(tx.rows);
             result.added += tx.rows.length;
             break;
 
           case "REMOVE":
+            for (const rowId of tx.rowIds) changes.push({ kind: "remove", rowId });
             result.removed += this.options.store.removeRows(tx.rowIds);
             break;
 
           case "UPDATE_CELL":
+            changes.push({ kind: "update", rowId: tx.rowId, fields: [tx.field] });
             this.options.store.updateCell(tx.rowId, tx.field, tx.value);
             result.updated++;
             break;
 
           case "UPDATE_ROW":
+            changes.push({ kind: "update", rowId: tx.rowId, fields: Object.keys(tx.data) });
             this.options.store.updateRow(tx.rowId, tx.data);
             result.updated++;
             break;

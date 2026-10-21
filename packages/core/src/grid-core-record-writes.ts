@@ -28,6 +28,8 @@ export interface RecordWrites {
   reject(event: CellWriteRejectedEvent): void;
   /** Lists a target the command left out, without a rejection of its own. */
   skip(event: CellWriteRejectedEvent): void;
+  /** Tells the hierarchy which records changed outside a command, as a transaction refresh does. */
+  reportRecords(changes: readonly HierarchyRecordChange[]): void;
 }
 
 export interface RecordWritesDeps<TData> {
@@ -130,5 +132,5 @@ export const createRecordWrites = <TData>(deps: RecordWritesDeps<TData>): Record
     open?.skipped.push(event);
   };
 
-  return { run, setCellValue, setRecordValue, reject, skip };
+  return { run, setCellValue, setRecordValue, reject, skip, reportRecords: report };
 };

@@ -14,6 +14,7 @@ export {
 export {
   TransactionManager,
   type Transaction,
+  type TransactionChange,
   type TransactionResult,
   type TransactionManagerOptions,
 } from "./transaction-manager";
