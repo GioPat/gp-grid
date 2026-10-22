@@ -35,7 +35,8 @@ h1 {
   line-height: 1.1;
 }
 
-button {
+/* Core styles are :where() rules, so a bare `button` rule would restyle the grid's own controls. */
+button:not(.gp-grid-container *) {
   border-radius: 8px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
@@ -46,11 +47,11 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover {
+button:not(.gp-grid-container *):hover {
   border-color: #646cff;
 }
-button:focus,
-button:focus-visible {
+button:not(.gp-grid-container *):focus,
+button:not(.gp-grid-container *):focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
@@ -62,7 +63,7 @@ button:focus-visible {
   a:hover {
     color: #747bff;
   }
-  button {
+  button:not(.gp-grid-container *) {
     background-color: #f9f9f9;
   }
 }
