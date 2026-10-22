@@ -3,9 +3,8 @@
 // updates needs no query, since the records already hold the new values.
 
 import type { HierarchyRecordChange, RowId } from "./types";
-import type { TransactionChange, TransactionResult } from "./managers";
+import type { InstructionBatcher, TransactionChange, TransactionResult } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
-import type { InstructionBatcher } from "./managers";
 import type { SlotPoolManager } from "./slot-pool";
 import type { RecordWrites } from "./grid-core-record-writes";
 
