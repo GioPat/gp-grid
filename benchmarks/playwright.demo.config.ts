@@ -34,6 +34,7 @@ export default defineConfig({
     ...(executablePath ? {} : { channel: "chrome" }),
     baseURL: `http://127.0.0.1:${port}`,
     viewport: DEMO_VIEWPORT,
+    colorScheme: "dark",
     deviceScaleFactor: 1,
     video: { mode: "on", size: DEMO_VIEWPORT },
     launchOptions: {

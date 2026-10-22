@@ -20,27 +20,41 @@ test("pivot", async ({ page }, testInfo) => {
   });
   const pageErrors = await openDemo(page, testInfo);
 
-  await caption(page, "Pivot: a column per month, salaries summed");
+  await caption(page, "Pivot 1.5M rows by creation month");
   await hover(page, cell(page, 1, 1));
   await pause(300);
   await pressControl(page, "Pivot");
   await waitForRows(page);
-  await pause(1500);
+  await pause(2200);
 
   // The label column is narrow; widen it by hand so labels read.
   const resizer = page.locator('.gp-grid-header-cell[data-col-index="0"] .gp-grid-header-resize-handle');
   const grip = await centerOf(resizer);
   await drag(page, grip, { x: grip.x + 120, y: grip.y }, { ms: 600, holdMs: 150 });
+  await pause(900);
+
+  await caption(page, "One band per month, a column per measure");
+  const bands = page.locator(".gp-grid-header-group");
+  await hover(page, bands.nth(0), 700);
   await pause(500);
-
-  await caption(page, "Expand a status");
-  await click(page, groupToggle(page, 1));
-  await pause(1300);
-
-  await caption(page, "Months across, totals on the right");
-  await hover(page, cell(page, 2, 2));
-  await wheel(page, { dx: 220, bursts: 12, intervalMs: 80 });
+  await hover(page, bands.nth(1), 900);
+  await pause(500);
+  await hover(page, bands.nth(2), 900);
   await pause(1100);
 
-  await finish(page, pageErrors);
+  await caption(page, "Expand a status: one row per person");
+  await click(page, groupToggle(page, 1));
+  await pause(2000);
+  await hover(page, cell(page, 3, 1), 800);
+  await pause(400);
+  await hover(page, cell(page, 3, 4), 1200);
+  await pause(1200);
+
+  await caption(page, "Months across, totals on the right");
+  await wheel(page, { dx: 240, bursts: 16, intervalMs: 110 });
+  await pause(1800);
+  await hover(page, page.locator('[data-cell-row="1"][data-cell-col]').last(), 600);
+  await pause(1000);
+
+  await finish(page, pageErrors, 2000);
 });

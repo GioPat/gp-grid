@@ -21,6 +21,7 @@ import { LiveInsertDemo } from "./LiveInsertDemo";
 import { DebugOverlay } from "./DebugOverlay";
 import { createDemoServerSource } from "./demo-server-groups";
 import { createDemoPivotSource } from "./demo-pivot";
+import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from "./demo-columnar";
 import { usePivotSchema } from "./use-pivot-schema";
 
 type DemoPage = "main" | "live-insert";
@@ -103,14 +104,14 @@ const cellRenderers = {
   statusBadge: (params: CellRendererParams) => {
     // Raw value drives the color variant; params.value may be the formatted
     // display string when the column declares a valueFormatter.
-    const rawStatus = (params.rowData as Person | undefined)?.status;
+    const rawStatus = params.getValue?.("status");
     const colors = {
       active: { bg: "#dcfce7", text: "#166534" },
       inactive: { bg: "#fee2e2", text: "#991b1b" },
       pending: { bg: "#fef3c7", text: "#92400e" },
     };
-    if (rawStatus === undefined) return null;
-    const color = colors[rawStatus];
+    const color = typeof rawStatus === "string" ? colors[rawStatus as Person["status"]] : undefined;
+    if (color === undefined) return null;
 
     return (
       <span
@@ -476,9 +477,16 @@ function MainDemo() {
   useEffect(() => () => pivotSource?.destroy(), [pivotSource]);
   const pivotSchema = usePivotSchema(pivotSource);
   const pivotActive = pivotSource !== null;
+  const [columnar, setColumnar] = useState(false);
+  const [wide, setWide] = useState(false);
+  const columnarSource = useMemo(
+    () => (columnar || wide ? createDemoColumnarSource(initialRowData, wide ? WIDE_COLUMN_COUNT : 0) : null),
+    [columnar, wide],
+  );
+  const plainColumns = useMemo(() => (wide ? [...columns, ...createWideColumns(WIDE_COLUMN_COUNT)] : columns), [wide]);
   const plainColumnGroups = grouped ? demoColumnGroups : undefined;
   const plainBandHeights = tallBand ? tallBandHeights : undefined;
-  const flatSource = serverSource ?? dataSource;
+  const flatSource = serverSource ?? columnarSource ?? dataSource;
 
   const highlighting = useMemo(
     () => ({
@@ -729,6 +737,34 @@ function MainDemo() {
           Pivot
         </button>
         <button
+          onClick={() => setColumnar((value) => !value)}
+          aria-pressed={columnar}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: columnar ? "#3b82f6" : "#374151",
+            color: columnar ? "white" : "#9ca3af",
+          }}
+        >
+          Columnar
+        </button>
+        <button
+          onClick={() => setWide((value) => !value)}
+          aria-pressed={wide}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: wide ? "#3b82f6" : "#374151",
+            color: wide ? "white" : "#9ca3af",
+          }}
+        >
+          Wide
+        </button>
+        <button
           onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
           disabled={groupRows === false && serverGroups === false && pivot === false}
           style={{
@@ -759,7 +795,7 @@ function MainDemo() {
           onCellValueChanged={onCellUpdate}
           history={{ maxEntries: 100 }}
           onWriteCommitted={(event) => console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`)}
-          columns={pivotActive ? pivotSchema.columns : columns}
+          columns={pivotActive ? pivotSchema.columns : plainColumns}
           columnGroups={pivotActive ? pivotSchema.columnGroups : plainColumnGroups}
           headerBandHeights={pivotActive ? undefined : plainBandHeights}
           rowGrouping={serverSource === null && pivotActive === false ? rowGrouping : null}
