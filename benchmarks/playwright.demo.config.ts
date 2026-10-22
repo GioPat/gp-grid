@@ -30,6 +30,8 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     headless: true,
+    // The system Chrome, as the conformance suite uses: no Playwright-managed download needed.
+    ...(executablePath ? {} : { channel: "chrome" }),
     baseURL: `http://127.0.0.1:${port}`,
     viewport: DEMO_VIEWPORT,
     deviceScaleFactor: 1,
