@@ -374,6 +374,9 @@ const createColumnarFixture = () => {
           <button data-testid="writes-filter-names" (click)="withCore(writes.filterNames)">Filter names</button>
           <button data-testid="writes-clear-filter" (click)="withCore(writes.clearFilter)">Clear filter</button>
           <button data-testid="writes-conflict" (click)="withCore(conflictFirst)">Conflict</button>
+          <button data-testid="writes-app-update" (click)="writes.appUpdate()">App update</button>
+          <button data-testid="writes-app-add" (click)="writes.appAdd()">App add</button>
+          <button data-testid="writes-refresh" (click)="withCore(refreshCore)">Refresh</button>
         </section>
         <output data-testid="metrics">{{ metrics() }}</output>
       </div>
@@ -501,6 +504,9 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   );
   protected readonly conflictFirst = (core: GridCore<unknown>): void => {
     void this.writes.conflictFirst(core);
+  };
+  protected readonly refreshCore = (core: GridCore<unknown>): void => {
+    void core.refresh();
   };
   protected readonly enginePivotActive = computed(() => {
     const arm = this.arm();

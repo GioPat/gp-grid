@@ -102,6 +102,7 @@ export type { DistinctValueEntry } from "./filtering/distinct-entries";
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";
 export type {
   Transaction,
+  TransactionChange,
   TransactionResult,
   TransactionManagerOptions,
 } from "./managers";

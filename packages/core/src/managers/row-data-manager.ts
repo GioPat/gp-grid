@@ -116,12 +116,8 @@ export class RowDataManager<TData = unknown> {
   getRowId(viewRow: number): RowId | undefined {
     return this.store.getRowId(viewRow);
   }
-  getRecordById(rowId: RowId): TData | undefined {
-    return this.store.getRecordById(rowId);
-  }
-  findViewIndexById(rowId: RowId): number {
-    return this.store.findViewIndexById(rowId);
-  }
+  getRecordById(rowId: RowId): TData | undefined { return this.store.getRecordById(rowId); }
+  findViewIndexById(rowId: RowId): number { return this.store.findViewIndexById(rowId); }
   /** Whether the bound source exposes a stable row identity. */
   hasStableIdentity(): boolean { return this.store.hasStableIdentity(); }
   /** View indices of the requested identities, within `range` when given. */
@@ -136,6 +132,7 @@ export class RowDataManager<TData = unknown> {
   isWritable(): boolean {
     return this.dataSource.writable !== false;
   }
+  isPaginatedLoading(): boolean { return this.paginated.isPaginatedLoading(); }
   isLoading(): boolean {
     return this.isDataLoading;
   }

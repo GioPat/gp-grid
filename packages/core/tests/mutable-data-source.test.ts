@@ -198,3 +198,38 @@ describe("MutableClientDataSource", () => {
     });
   });
 });
+
+describe("MutableClientDataSource — change details (PRD 015 D1)", () => {
+  const rows = () => [
+    { id: 1, name: "Charlie", age: 35 },
+    { id: 2, name: "Alice", age: 25 },
+  ];
+
+  it("hands every listener the rows a batch touched", async () => {
+    const source = createMutableClientDataSource(rows(), { getRowId: (row) => row.id, debounceMs: 0, useWorker: false });
+    const seen: Array<ReturnType<typeof Object.freeze>> = [];
+    source.subscribe((result) => seen.push(result.changes ?? "none"));
+
+    source.updateRow(2, { age: 26, name: "Alicia" });
+    source.addRows([{ id: 3, name: "Bob", age: 30 }]);
+    source.removeRows([1]);
+    await source.flushTransactions();
+
+    expect(seen).toEqual([
+      [{ kind: "update", rowId: 2, fields: ["age", "name"] }],
+      [{ kind: "add", rowId: 3 }],
+      [{ kind: "remove", rowId: 1 }],
+    ]);
+  });
+
+  it("clear reports no details", () => {
+    const source = createMutableClientDataSource(rows(), { getRowId: (row) => row.id, debounceMs: 0, useWorker: false });
+    const seen: unknown[] = [];
+    source.subscribe((result) => seen.push(result.changes));
+
+    source.clear();
+
+    expect(seen).toEqual([undefined]);
+    expect(source.getTotalRowCount()).toBe(0);
+  });
+});

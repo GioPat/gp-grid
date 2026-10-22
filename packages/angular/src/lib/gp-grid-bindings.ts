@@ -192,7 +192,7 @@ export class GpGridBindings<TData = unknown> {
   private watchSource(dataSource: DataSource<TData>): void {
     this.unsubscribeSource?.();
     this.unsubscribeSource = isMutableDataSource(dataSource)
-      ? dataSource.subscribe(() => void this.coreRef?.refreshFromTransaction())
+      ? dataSource.subscribe((result) => void this.coreRef?.refreshFromTransaction(result))
       : null;
   }
 

@@ -438,8 +438,8 @@ export function useGpGrid<TData = unknown>(
     () => options.dataSource,
     (dataSource, _previous, onCleanup) => {
       if (dataSource !== undefined && isMutableDataSource(dataSource)) {
-        const unsubscribe = dataSource.subscribe(() => {
-          coreRef.value?.refreshFromTransaction();
+        const unsubscribe = dataSource.subscribe((result) => {
+          void coreRef.value?.refreshFromTransaction(result);
         });
         onCleanup(unsubscribe);
       }

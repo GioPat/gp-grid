@@ -8,7 +8,7 @@ import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
-import type { HighlightManager, SortFilterManager } from "./managers";
+import type { HighlightManager, SortFilterManager, TransactionResult } from "./managers";
 import { InstructionBatcher } from "./managers";
 import type { RowDataManager } from "./managers/row-data-manager";
 import { RowHeightOverrides, type LocateRowIds } from "./managers/row-height-overrides";
@@ -32,6 +32,8 @@ import type { ColumnGroupState } from "./grid-core-column-guard";
 import type { GridRowDragApi } from "./grid-core-row-drag";
 import type { RowGroupsController, GridRowGroupsApi } from "./grid-core-row-groups";
 import { applyViewRowsChange, reloadViewRows, type HierarchyChangeDeps } from "./grid-core-hierarchy-change";
+import type { RecordWrites } from "./grid-core-record-writes";
+import { applyTransactionRefresh } from "./grid-core-transaction-refresh";
 
 /**
  * The framework-agnostic grid. Owns lifecycle, the viewport sample and data
@@ -73,6 +75,7 @@ export class GridCore<TData = unknown> {
   private readonly scanRowIds: LocateRowIds = (ids) => this.rowData.locateRowIds(ids);
   private readonly rowData: RowDataManager<TData>;
   private readonly slotPool: SlotPoolManager;
+  private readonly recordWrites: RecordWrites;
   private readonly editManager: EditManager;
   private readonly rowGroupsController: RowGroupsController<TData>;
   private readonly hierarchyChange: HierarchyChangeDeps<TData>;
@@ -111,6 +114,7 @@ export class GridCore<TData = unknown> {
     this.highlight = managers.highlight;
     this.fill = managers.fill;
     this.slotPool = managers.slotPool;
+    this.recordWrites = managers.recordWrites;
     this.editManager = managers.editManager;
     this.sortFilter = managers.sortFilter;
     this.view = managers.view;
@@ -242,15 +246,18 @@ export class GridCore<TData = unknown> {
     await this.reload(() => this.rowData.loadInitial());
   }
 
-  /** Fast-path refresh after `MutableDataSource` transactions: only the visible window is re-fetched. */
-  async refreshFromTransaction(): Promise<void> {
-    await this.reload(() => this.rowData.refreshFromTransaction());
+  /** Refresh after `MutableDataSource` transactions; a batch of updates redraws without a query, the rest reloads. */
+  async refreshFromTransaction(result?: TransactionResult): Promise<void> {
+    await applyTransactionRefresh(result, {
+      rowData: this.rowData,
+      slotPool: this.slotPool,
+      batcher: this.batcher,
+      recordWrites: this.recordWrites,
+      reload: () => this.reload(() => this.rowData.refreshFromTransaction()),
+    });
   }
 
-  /**
-   * Swap the data source, keeping sort, filter and scroll position. An open
-   * edit is cancelled and the selection is cleared when it falls out of range.
-   */
+  /** Swap the data source, keeping sort, filter and scroll; an open edit is cancelled, an out-of-range selection cleared. */
   async setDataSource(dataSource: DataSource<TData>): Promise<void> {
     if (this.editManager.getState()) this.editManager.cancel();
     this.rowData.setDataSource(dataSource);

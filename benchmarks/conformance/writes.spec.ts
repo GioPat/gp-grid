@@ -3,14 +3,17 @@
 // skips a non-editable column and a type mismatch and reports each skip.
 // AC-013-03/04/05: undo and redo by record id through the keys, after a sort,
 // a filter and an application change, and the keys without history.
+// AC-015-01/02/03/05: the application's own transactions refresh without a
+// query for an update, keep the row in place, and reload for an add.
 // Runs in the react, vue and angular projects.
 
 import { expect, test } from "@playwright/test";
-import { cell, openFixture } from "./helpers";
+import { cell, openFixture, scrollBody } from "./helpers";
 import { activateCell } from "./pinning-helpers";
 import { pasteText } from "./row-groups-helpers";
 import {
   AMOUNT,
+  appTransaction,
   armWrites,
   canRedo,
   canUndo,
@@ -21,6 +24,7 @@ import {
   lastWrite,
   NAME,
   writeCommitted,
+  writesQueryCount,
   writesRecord,
 } from "./writes-helpers";
 
@@ -192,5 +196,73 @@ test("AC-013-05 Ctrl+Z without history leaves the flat grid unchanged", async ({
   await page.keyboard.press("Control+z");
 
   await expect(cell(page, 0, 1)).toHaveText("Edited row 0");
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-015-01 an application update shows without a query", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  const before = await writesQueryCount(page);
+
+  await appTransaction(page, "appUpdate");
+
+  await expect(cell(page, 1, AMOUNT)).toHaveText("777");
+  expect(await writesQueryCount(page)).toBe(before);
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-015-02 an application update outside the window shows after a scroll", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  const before = await writesQueryCount(page);
+
+  await appTransaction(page, "appUpdateLast");
+
+  expect(await writesQueryCount(page)).toBe(before);
+  await scrollBody(page, 6_000, 0);
+  await expect(cell(page, 199, AMOUNT)).toHaveText("555");
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-015-03 an updated sorted field keeps its row in place until a refresh", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  await page.getByTestId("writes-sort-name").click();
+  await expect(cell(page, 0, NAME)).toHaveText("Name 199");
+  const before = await writesQueryCount(page);
+
+  await appTransaction(page, "appRenameFirst");
+
+  await expect(cell(page, 0, NAME)).toHaveText("Aaa");
+  expect(await writesQueryCount(page)).toBe(before);
+
+  await page.getByTestId("writes-refresh").click();
+
+  await expect(cell(page, 0, NAME)).toHaveText("Name 198");
+  await scrollBody(page, 6_000, 0);
+  await expect(cell(page, 199, NAME)).toHaveText("Aaa");
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-015-03 an application add takes the full refresh and shows the row", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  const before = await writesQueryCount(page);
+
+  await appTransaction(page, "appAdd");
+
+  await expect.poll(() => writesQueryCount(page)).toBe(before + 1);
+  await scrollBody(page, 6_000, 0);
+  await expect(cell(page, 200, NAME)).toHaveText("Name new");
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-015-05 an open editor on another row survives an application update", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  await cell(page, 0, NAME).dblclick();
+  const input = cell(page, 0, NAME).locator(".gp-grid-edit-input");
+  await expect(input).toHaveCount(1);
+
+  await appTransaction(page, "appUpdate");
+
+  await expect(cell(page, 1, AMOUNT)).toHaveText("777");
+  await expect(input).toHaveCount(1);
+  await input.press("Escape");
   expect(pageErrors).toEqual([]);
 });

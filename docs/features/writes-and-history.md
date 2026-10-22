@@ -142,3 +142,6 @@ back.
   application's transactions.
 - An entry refused once is gone; the conflict will not resolve itself.
 - History does not survive `setDataSource`.
+- The application's own transactions on a mutable source are not commands,
+  but the grid refreshes from them proportionally: a batch of updates redraws
+  the changed mounted rows without a query, an add or a remove reloads.

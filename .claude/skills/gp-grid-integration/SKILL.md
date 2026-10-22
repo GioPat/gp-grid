@@ -596,7 +596,11 @@ The mutable API is the same in every framework:
 - `updateCell(id, field, value)` — patch one cell
 - `clear()`, `getRowById(id)`, `getTotalRowCount()`, `flushTransactions()`
 
-`getRowId` is required for any mutation.
+`getRowId` is required for any mutation. The wrapper refreshes the grid from each
+processed batch: a batch of updates redraws only the mounted rows that changed, with no
+query, and an updated row keeps its place under a sort or filter until the next
+query (a sort, a filter, `core.refresh()`); an add, a remove or `clear()` reloads
+every row. Under local row grouping an update refolds or regroups like an edit.
 
 #### Columnar (read-only) sources
 
