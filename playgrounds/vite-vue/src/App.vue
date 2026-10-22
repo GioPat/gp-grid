@@ -124,7 +124,6 @@ const columns: ColumnDefinition[] = [
     {
         field: "id",
         cellDataType: "number",
-        hidden: true,
         width: 80,
         headerName: "ID",
         cellRenderer: Bold,
