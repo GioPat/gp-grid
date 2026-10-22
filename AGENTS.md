@@ -15,6 +15,8 @@ gp-grid comes with a skill available under the `.claude` subfolder.
 
 The repo contains also playgrounds that are used to smoke and quick test features and are available under `playgrounds`.
 
+`benchmarks/` holds the performance benchmarks (`tests/`), the cross-framework conformance suite (`conformance/`) and the feature demos (`demo/`). The demos are short Playwright recordings of the React playground, one per feature, that the external `gridcast` tool cuts into release videos; see Demos below.
+
 ## Commands
 
 See `package.json`
@@ -66,6 +68,16 @@ Follow the WAI-ARIA grid pattern, identically in every wrapper:
 - The styling (CSS) is centralized in the `core` package. Use that one as much as you can. Use `:where` to enable styling rewriting from the users
 - Reduce inline styling
 - Before writing a helper, check `packages/core/src/utils` (e.g. `number-guards.ts` for sanitizing numeric inputs such as sizes, counts and page sizes against `NaN`/`Infinity`/negatives) and extend it instead of adding a local copy
+
+## Demos
+
+`benchmarks/demo/*.demo.ts` are not tests: they are screen recordings of the React playground used for release videos. They run on the conformance Playwright harness (`benchmarks/playwright.demo.config.ts`, served by `scripts/demo-server.mjs`) and are driven by the `gridcast` CLI, which lives in its own repository together with the marketing material (logo, music, post templates). Nothing of that belongs here.
+
+- One file per feature, named after the conventional-commit **scope**: `feat(fill-handle): …` → `demo/fill-handle.demo.ts`. gridcast matches changelog entries to demos by that scope, then by the `keywords` the demo declares. When adding a user-visible feature, add or update its demo in the same PR and use the scope in the commit message; without a demo the feature is announced as text only.
+- A demo declares its metadata through `describeDemo()` (title, summary, talking points, keywords) and uses the helpers in `demo/helpers.ts` (`openDemo`, `caption`, `hover`, `click`, `drag`, `wheel`, `jumpToRow`, `pressControl`, `finish`). Read `demo/README.md` before writing one.
+- Demos exercise the main playground page (realistic data, 1.5M rows), not the `?conformance=1` fixture. `pressControl(page, "<button label>")` clicks the playground's control buttons by their exact label, so renaming a button in `playgrounds/vite-react/src/App.tsx` requires updating the demos that use it.
+- No `expect` on grid state. The only assertion is `finish()` checking that the page threw no errors. Mouse motion must be human-paced (`hover`/`drag`/`wheel`), never instantaneous jumps, except through `jumpToRow`.
+- Run them with `npx playwright test --config playwright.demo.config.ts` from `benchmarks/` after building core, react and the React playground (`pnpm --filter @gp-grid/core build:production && pnpm --filter @gp-grid/react build:production && pnpm --filter vite-react exec vite build`). Recordings land in `benchmarks/results/demo/` (git-ignored). `GRIDCAST_PACE=1.5` slows every demo by 50%; `GRIDCAST_CAPTIONS=0` hides the captions.
 
 ## Gotchas
 
