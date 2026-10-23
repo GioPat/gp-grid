@@ -65,7 +65,8 @@
     "bench:memory:tanstack": "cross-env BENCH_GRID=tanstack-table playwright test memory-usage --grep tanstack",
     "bench:memory:handsontable": "cross-env BENCH_GRID=handsontable playwright test memory-usage --grep handsontable",
     "bench:memory:smart-grid": "cross-env BENCH_GRID=smart-grid playwright test memory-usage --grep smart-grid",
-    "bench:report": "node scripts/generate-report.js"
+    "bench:report": "node scripts/generate-report.js",
+    "inventory:exports": "node scripts/export-inventory.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
