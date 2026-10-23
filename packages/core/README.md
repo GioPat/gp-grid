@@ -396,6 +396,20 @@ const grid = new GridCore({
 });
 ```
 
+### Filter evaluation helpers
+
+The evaluation the client source runs is exported for a data source that filters its own rows, a server mock or a test:
+
+```typescript
+import { rowPassesFilter, evaluateColumnFilter, getFieldValue, setFieldValue } from "@gp-grid/core";
+
+const visible = rows.filter((row) => rowPassesFilter(row, request.filterModel ?? {}, getFieldValue));
+const matches = evaluateColumnFilter(cellValue, columnFilter, formatter);
+setFieldValue(record, "address.city", "Rome");
+```
+
+`rowPassesFilter(row, filterModel, getFieldValue, getValueFormatter?)` evaluates every column of a model against one record through the field reader you pass. `evaluateColumnFilter(value, filter, formatter?)` evaluates one column's model, canonical or legacy (`normalizeColumnFilterModel` converts the 0.x `conditions` shape, which stays accepted as input). `evaluateCondition`, `evaluateTextCondition`, `evaluateNumberCondition` and `evaluateDateCondition` evaluate one condition against one value. `getFieldValue` and `setFieldValue` read and write a dotted path on a record, as the grid does.
+
 ## Types Reference
 
 ### ColumnDefinition

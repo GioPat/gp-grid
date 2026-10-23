@@ -81,7 +81,6 @@ export {
   evaluateDateCondition,
   evaluateColumnFilter,
   rowPassesFilter,
-  isSameDay,
 } from "./indexed-data-store/index";
 export {
   isLegacyColumnFilterModel,
@@ -90,7 +89,6 @@ export {
 
 /** Values-mode filter popup helpers (raw values grouped under display labels) */
 export {
-  rawValueKey,
   groupDistinctValues,
   labelsForSelectedValues,
   rawValuesForLabels,
