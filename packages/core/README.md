@@ -531,6 +531,8 @@ Definitions are caller-owned and the grid treats them as read-only. Resizing, mo
 
 ### Migrating from 0.x
 
+The full list of changes from 0.23.x is in the [migration guide](../../docs/migration-1.0.md).
+
 ```ts
 // 0.x: mutated the caller's definition
 columns[2].width = newWidth;

@@ -326,6 +326,8 @@ writes nothing.
 
 ### Migration from 0.x
 
+The full list of changes from 0.23.x, with before/after code, is in the [migration guide](../../docs/migration-1.0.md).
+
 The old payloads `{ colIndex, newWidth }`, `{ fromIndex, toIndex }` and `{ source, target }` became `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }` and `{ rowId, fromViewIndex, toViewIndex }`. There is no compatibility adapter.
 
 Reassigning `columns` reconciles the schema by column id (`colId ?? field`) without recreating the core: retained columns keep their user width/order/visibility, unrelated sort/filter/scroll survives, and removed columns drop their headers and state. A definition `width`/`hidden` change only applies when the column has no user override for that property; otherwise call `columns.resetState(["id"])` on the exposed core.

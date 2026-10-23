@@ -506,7 +506,7 @@ Drive width, visibility and order from your own state with the controlled `colum
 
 ### Migration from 0.x
 
-Events are object-shaped in every wrapper; there is no compatibility adapter.
+Events are object-shaped in every wrapper; there is no compatibility adapter. The full list of changes from 0.23.x is in the [migration guide](../../docs/migration-1.0.md).
 
 ```tsx
 // 0.x

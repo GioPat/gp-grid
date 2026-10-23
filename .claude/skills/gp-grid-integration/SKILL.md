@@ -23,7 +23,8 @@ The library ships as a framework-agnostic core plus thin official wrappers:
    - Angular → `references/angular.md`
    - Vanilla JS / writing a custom adapter → `references/core.md`
 3. **Apply integration steps from that reference.** Imports, component names, and renderer signatures are specific — paraphrasing from memory is the most common way to produce broken code (e.g. mixing `<Grid>` with `:data-source` Vue syntax, or using a JSX renderer in an Angular column).
-4. **For anything beyond setup, also use the cross-framework guidance below.** Column shape, data sources, features, and gotchas are identical across wrappers; only syntax differs.
+4. **Upgrading a 0.x app:** read `docs/migration-1.0.md` in the gp-grid repository; it lists every change with before/after code per framework.
+5. **For anything beyond setup, also use the cross-framework guidance below.** Column shape, data sources, features, and gotchas are identical across wrappers; only syntax differs.
 
 If the user hasn't picked a framework yet and is asking which one to use, recommend whatever matches the rest of their stack — gp-grid feature parity is identical across wrappers.
 

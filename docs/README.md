@@ -18,6 +18,10 @@ A high-performance virtualized data grid for React applications.
 - [Write commands and history](./features/writes-and-history.md) - One event per edit, paste, fill or `cells.setValue` with its changes by record id and the targets it skipped, and opt-in undo and redo of those commands
 - [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only) - Borrowed columns, read-only access, and revision refresh with inferred or explicit row counts
 
+## Upgrading from 0.23.x
+
+The [migration guide](./migration-1.0.md) lists every change with before/after code per framework.
+
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md) for version history and release notes.

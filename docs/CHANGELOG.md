@@ -274,7 +274,12 @@ All notable changes to gp-grid will be documented in this file.
 ### Removed
 
 #### Frozen rows (PRD 005)
-- The React package's unused internal `useAutoScroll` hook — core computes the auto-scroll zones. The exported Vue `useAutoScroll` composable is unchanged.
+- The React package's unused internal `useAutoScroll` hook — core computes the auto-scroll zones.
+
+#### Release qualification (PRD 011)
+- `isSameDay` and `rawValueKey` from the core entry; the filter evaluation helpers stay and are documented
+- The Vue entry's internal composables (`useInputHandler`, `useAutoScroll`, `useFillHandle`, `useFilterPopup`, `useFilterConditions`, `useGridState`, `createInitialState`), render functions (`renderCell`, `renderEditCell`, `renderHeader`, `getCellValue`), their types, and its re-exports of the core helpers `buildCellClasses`, `isCellActive`, `isCellEditing`, `isCellInFillPreview`, `isCellSelected`, `calculateColumnPositions`, `findColumnAtX`, `getTotalWidth`, `isRowVisible`, `FilterPopupState`, `HeaderData`, `PointerEventData` and `SelectionState`, which `@gp-grid/core` still exports
+- The Angular entry's internal components (`GridHeaderComponent`, `GridBodyComponent`, `GridOverlaysComponent`, `FilterPopupComponent`, `CellPeekComponent`, `ResizeHandleComponent`), their pointer and sort event types, `ActiveFilterPopup`, `EditingCellState`, `ResizeAxis`, `RowClassFn` and `CellClassFn`
 
 #### Core geometry ownership (PRD 003)
 - Column widths, offsets and row geometry are resolved once in core; wrappers render `state.layout.columns` instead of computing scaled positions. `fit` is still the default and expands proportionally, but it never shrinks.
@@ -295,111 +300,9 @@ All notable changes to gp-grid will be documented in this file.
 - `GridCore.getRowTranslateY`, `getScrollTopForRow`, `getRowIndexAtDisplayY` — migrate to `core.geometry` (`getRowBounds`, `getScrollTarget`, `hitTest`). `getColumnPositions` and `getVisibleRowRange` are removed too (see the namespace migration below).
 - Resize back-solving (`computeStoredWidthForDisplayed`) and the wrapper-local scaled-width calculations
 
-### Migration examples
+### Migration
 
-Removed proportional helper:
-
-```ts
-// before
-const { positions, widths } = calculateScaledColumnPositions(columns, viewportWidth);
-
-// after — a wrapper renders the core-resolved snapshot
-for (const column of state.layout.columns) {
-  cell.style.left = `${column.offset}px`;
-  cell.style.width = `${column.width}px`;
-}
-```
-
-Width persistence and reset:
-
-```ts
-// an override is the only source of `width`
-core.columns.setState([{ columnId: "name", width: 240 }]);
-core.columns.getState(); // [{ columnId: "name", width: 240, resolvedWidth: 240, ... }]
-
-// reset removes the override and restores the proportional width
-core.columns.resetState(["name"]);
-core.columns.getState(); // [{ columnId: "name", resolvedWidth: 317, ... }]
-```
-
-Restoring an earlier snapshot after further edits requires a reset first:
-
-```ts
-const saved = core.columns.getState();
-// ...further edits...
-core.columns.resetState();
-core.columns.setState(saved); // `resolvedWidth` is output-only and ignored on input
-```
-
-Offscreen scroll alignment:
-
-```ts
-// before: an unmounted row was always top-aligned
-core.getScrollTarget(row, col); // aligns the start or the snapped end
-```
-
-Removed architecture helpers (custom adapters):
-
-```ts
-// before
-core.input.updateDeps({ getColumnPositions: () => positions, ... });
-
-// after
-core.geometry.getCellBounds(rowIndex, layoutIndex, "viewport");
-core.geometry.hitTest({ x, y });
-```
-
-Invalid widths and diagnostics:
-
-```ts
-// a declared/overridden width that is not positive and finite falls back to 50
-// and warns once per column id
-core.columns.setState([{ columnId: "name", width: 0 }]);
-// [gp-grid] Invalid width for column "name"
-```
-
-Pinned columns (PRD 004):
-
-```ts
-// declarative definition default
-const columns = [{ field: "id", pinned: "start" }, { field: "name" }];
-
-// runtime command; `null` unpins even against a definition default
-core.columns.setPinned("name", "end");
-core.columns.setPinned("name", null);
-core.columns.getState(); // region tells you where it actually rendered
-
-// event on GridCore and every wrapper
-new GridCore({ columns, onColumnPinned: ({ columnId, pinned }) => { /* ... */ } });
-```
-
-Rendering the mounted window (custom adapters and wrappers):
-
-```ts
-// before: every displayed column, positioned by its content offset
-for (const column of state.layout.columns) { /* ... */ }
-
-// after: pins plus the bounded center window, each in its own region container
-const { start, center, end } = state.columnWindow ?? {};
-for (const column of center) {
-  cell.style.insetInlineStart = `${column.regionOffset}px`;
-}
-```
-
-Viewport-space drag overlays and inline-relative input:
-
-```ts
-// before: a wrapper converted content x and assembled the bounds by hand
-line.style.left = `${dragState.lineX - container.scrollLeft}px`;
-
-// after: `lineX`/`dropIndicatorX` are already viewport x
-line.style.left = `${dragState.lineX}px`;
-
-// and its input bounds come from the adapter kit, so RTL is a value, not a branch
-import { readContainerBounds, toPointerEventData } from "@gp-grid/core";
-core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl));
-```
-
+See the [migration guide](./migration-1.0.md) for every change from 0.23.x with before/after code.
 
 #### Identity, column state and schema lifecycle (PRD 002)
 - `GridCore.columns.setState(updates)`, `columns.resetState(columnIds?)` and `columns.getState()`; an optional controlled `columnState` input on every wrapper
