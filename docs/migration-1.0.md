@@ -204,3 +204,7 @@ The grouped filter model (`groups`, one level of `combination`) is unchanged fro
 ## 14. Server rendering
 
 Import and construction touch no browser global. Pass the initial sizes the wrapper documents (`initialWidth`/`initialHeight` in Vue, the equivalent inputs elsewhere) so the server render is not 0×0; the configured `headerHeight` and band heights are the server sizes, and client measurements refine them after mount.
+
+## 15. Browsers and keyboard
+
+The conformance suite runs on Chrome in CI for React, Vue and Angular, and once on Firefox and WebKit for each release; the release notes carry that run's result. Every documented key works in 1.0: the Alt family for column and row resize, move and fit, Enter, F2, Escape and Tab in a cell, Delete, Ctrl+Z, Ctrl+Y, Ctrl+A, Ctrl+C, Shift+arrows, and Enter or Space on a group row. Sort, the filter popup and pin have no keyboard equivalent in 1.0: they are the header's pointer targets. Header focus in the WAI-ARIA grid shape is a feature after 1.0.
