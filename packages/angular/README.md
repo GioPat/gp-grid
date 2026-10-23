@@ -126,7 +126,7 @@ export class App {
 }
 ```
 
-`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source.
+`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source. `injectGridData` returns the `GridDataService` behind it, and `GRID_DATA_OPTIONS` is the injection token `provideGridData` registers its `GridDataOptions` under, for a test that wants to provide them by hand.
 
 ## Column state and events
 

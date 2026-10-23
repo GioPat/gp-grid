@@ -1,5 +1,9 @@
 export * from './lib/gp-grid.component';
-export * from './lib/components';
+export { GroupLabelComponent, GroupToggleComponent } from './lib/components/group-label-cell.component';
+export type { RowGroupCellContext } from './lib/components/row-group-cells';
+export type { GroupHeaderRendererTemplate, HeaderRendererRegistry } from './lib/components/grid-header-groups';
+export type { HeaderRendererTemplate } from './lib/components/grid-header.component';
+export type { CellRendererTemplate, EditRendererTemplate } from './lib/components/grid-body.component';
 export * from './lib/types';
 export * from './lib/createGridData';
 export * from './lib/grid-data.service';
