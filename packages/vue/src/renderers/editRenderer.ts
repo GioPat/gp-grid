@@ -1,6 +1,7 @@
 // packages/vue/src/renderers/editRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
+import { focusGridContainer } from "@gp-grid/core";
 import type {
   GridCore,
   ColumnDefinition,
@@ -112,7 +113,10 @@ export function renderEditCell(
         e.preventDefault();
         core.edit.commit(editId);
         core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
+      } else {
+        return;
       }
+      focusGridContainer(e.currentTarget as Element);
     },
     onBlur: (event: FocusEvent) => {
       const blurred = event.currentTarget as HTMLInputElement;

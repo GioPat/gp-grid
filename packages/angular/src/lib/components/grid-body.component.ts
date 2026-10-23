@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, TemplateRef, ViewChild } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
+import { focusGridContainer } from '@gp-grid/core';
 import {
   formatCellValue,
   getFieldValue,
@@ -464,6 +465,9 @@ export class GridBodyComponent {
       this.editCommit.emit();
     } else if (event.key === 'Escape') {
       this.editCancel.emit();
+    } else {
+      return;
     }
+    focusGridContainer(event.currentTarget as Element);
   }
 }

@@ -952,6 +952,9 @@ To integrate @gp-grid/core with any UI framework:
 5. **Render `COLUMNS_CHANGED.layout` / `SET_COLUMN_WINDOW`** and report viewport
    measurements through `setViewport`; never recompute widths, positions or the
    mounted window
+6. **Return the focus** to the container when your editor closes on Enter, Escape or
+   Tab: `focusGridContainer(inputElement)`, or honor `KeyboardResult.focusContainer`
+   when the core keyboard handler closed it
 
 ### Example: Minimal Adapter Pattern
 
