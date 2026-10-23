@@ -8,8 +8,10 @@
 // Runs in the react, vue and angular projects.
 
 import { expect, test } from "@playwright/test";
-import { cell, openFixture, scrollBody } from "./helpers";
+import { cell, openFixture, scrollBody, scrollMetrics } from "./helpers";
+import { rowHeightAt, waitForHeight } from "./row-heights-helpers";
 import { activateCell } from "./pinning-helpers";
+import { activeCell } from "./frozen-rows-helpers";
 import { pasteText } from "./row-groups-helpers";
 import {
   AMOUNT,
@@ -23,6 +25,7 @@ import {
   ID,
   lastWrite,
   NAME,
+  setRowHeights,
   writeCommitted,
   writesQueryCount,
   writesRecord,
@@ -264,5 +267,55 @@ test("AC-015-05 an open editor on another row survives an application update", a
   await expect(cell(page, 1, AMOUNT)).toHaveText("777");
   await expect(input).toHaveCount(1);
   await input.press("Escape");
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-011-08 application updates inside and outside the window keep manual row heights and the anchor", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  await setRowHeights(page, [{ rowId: 2, height: 64 }, { rowId: 200, height: 64 }]);
+  await waitForHeight(page, 1, 64);
+  await scrollBody(page, 300, 0);
+  const anchor = (await scrollMetrics(page)).scrollTop;
+  const before = await writesQueryCount(page);
+
+  await appTransaction(page, "appUpdate");
+  await appTransaction(page, "appUpdateLast");
+
+  expect(await writesQueryCount(page)).toBe(before);
+  expect((await scrollMetrics(page)).scrollTop).toBe(anchor);
+  expect(await rowHeightAt(page, 1)).toBe(64);
+  expect(await rowHeightAt(page, 199)).toBe(64);
+  await scrollBody(page, 0, 0);
+  await expect(cell(page, 1, AMOUNT)).toHaveText("777");
+  expect((await cell(page, 1, AMOUNT).boundingBox())?.height).toBe(64);
+  await scrollBody(page, 6_000, 0);
+  await expect(cell(page, 199, AMOUNT)).toHaveText("555");
+  expect((await cell(page, 199, AMOUNT).boundingBox())?.height).toBe(64);
+  expect(pageErrors).toEqual([]);
+});
+
+const focusInsideGrid = (page: Parameters<typeof armWrites>[0]): Promise<boolean> =>
+  page.evaluate(() => document.activeElement?.closest(".gp-grid-container") !== null);
+
+test("AC-011-03 Enter and Escape close the editor and return the focus to the grid", async ({ page }, testInfo) => {
+  const pageErrors = await armWrites(page, testInfo.project.name);
+  await cell(page, 0, NAME).dblclick();
+  const input = cell(page, 0, NAME).locator(".gp-grid-edit-input");
+  await input.fill("Edited");
+  await input.press("Enter");
+
+  await expect(cell(page, 0, NAME)).toHaveText("Edited");
+  await expect.poll(() => focusInsideGrid(page)).toBe(true);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => activeCell(page)).toEqual({ row: 1, col: NAME });
+
+  await page.keyboard.press("F2");
+  await expect(cell(page, 1, NAME).locator(".gp-grid-edit-input")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  await expect(cell(page, 1, NAME).locator(".gp-grid-edit-input")).toHaveCount(0);
+  await expect.poll(() => focusInsideGrid(page)).toBe(true);
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => activeCell(page)).toEqual({ row: 0, col: NAME });
   expect(pageErrors).toEqual([]);
 });

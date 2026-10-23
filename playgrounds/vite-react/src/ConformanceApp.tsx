@@ -978,7 +978,7 @@ const hideColumn = useCallback(() => {
             onCellValueChanged={onCellValueChanged}
             onWriteRejected={onWriteRejected}
             onWriteCommitted={writes.recordWrite}
-            history={writesActive ? WRITES_HISTORY : undefined}
+            history={writesActive || rowGroupsActive ? WRITES_HISTORY : undefined}
             onColumnResized={onColumnResized}
             onColumnMoved={onColumnMoved}
             onRowDragEnd={onRowDragEnd}

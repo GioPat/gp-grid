@@ -134,6 +134,8 @@ export interface GeometryHooks {
   columnWindow: () => ColumnWindowView | null;
   /** Activate a cell and scroll it into view; LTR-only, like the pinning suite. */
   activateCell: (row: number, layoutIndex: number) => void;
+  /** Manual heights by row id, as an application sets them (PRD 011 D5). */
+  setRowHeights: (updates: RowHeightUpdate[]) => void;
   rowRegions: () => RowRegionLayout | null;
   frozenRows: () => FrozenRowsState | null;
   /** Stored row heights, including the ones waiting for their row (PRD 006). */
@@ -192,6 +194,9 @@ export const createGeometryHooks = (
     });
     if (target.scrollTop !== undefined) body.scrollTop = target.scrollTop;
     if (target.scrollLeft !== undefined) body.scrollLeft = target.scrollLeft;
+  },
+  setRowHeights: (updates) => {
+    getCore()?.rowHeights.set(updates);
   },
   columnWindow: () => {
     const snapshot = getCore()?.geometry.getColumnWindow() ?? null;

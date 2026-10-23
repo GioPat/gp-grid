@@ -945,7 +945,7 @@ if (typeof window !== "undefined") {
         :on-cell-value-changed="onCellValueChanged"
         :on-write-rejected="onWriteRejected"
         :on-write-committed="writes.recordWrite"
-        :history="writesActive ? WRITES_HISTORY : undefined"
+        :history="writesActive || rowGroupsActive ? WRITES_HISTORY : undefined"
         :on-column-resized="onColumnResized"
         :on-column-moved="onColumnMoved"
         :on-row-drag-end="onRowDragEnd"
