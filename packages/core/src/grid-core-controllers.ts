@@ -111,6 +111,7 @@ export const buildRowControllers = <TData>(deps: RowControllersDeps<TData>): Row
     batcher,
     selection,
     editManager,
+    columnModel: deps.columnModel,
     getGeometry: deps.getGeometry,
     rowData,
     view: managers.view,

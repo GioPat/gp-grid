@@ -5,6 +5,7 @@
 
 import type { RowId } from "./types";
 import type { EditManager } from "./edit-manager";
+import type { ColumnModel } from "./column-model";
 import type { SelectionManager } from "./selection";
 import type { RowDataManager } from "./managers/row-data-manager";
 import type { RowAnchor } from "./geometry";
@@ -17,12 +18,13 @@ import {
 export interface HierarchyChangeDeps<TData> extends SizeChangeDeps<TData> {
   selection: SelectionManager;
   editManager: EditManager;
+  columnModel: ColumnModel;
 }
 
-/** The anchor row and the active cell's row, by identity and by their index at the capture. */
+/** The anchor row and the active cell, by identity and by their index at the capture. */
 export interface ViewRowsCapture {
   anchor: { id: RowId; index: number; intra: number } | null;
-  active: { id: RowId; row: number; col: number } | null;
+  active: { id: RowId; row: number; col: number; columnId: string | undefined } | null;
 }
 
 /** A hidden row answers its nearest visible ancestor; a flat grid only finds the row. */
@@ -46,7 +48,7 @@ const captureActive = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture
   const cell = deps.selection.getActiveCell();
   if (cell === null) return null;
   const id = deps.rowData.getRowId(cell.row);
-  return id === undefined ? null : { id, row: cell.row, col: cell.col };
+  return id === undefined ? null : { id, row: cell.row, col: cell.col, columnId: deps.columnModel.idAt(cell.col) };
 };
 
 export const captureViewRows = <TData>(deps: HierarchyChangeDeps<TData>): ViewRowsCapture => ({
@@ -65,6 +67,10 @@ const resolveAnchor = <TData>(
   return holdsPlaceholder(rowData, anchor.index) ? { index: anchor.index, intra: anchor.intra } : null;
 };
 
+/** A schema change while the rows reload may have removed or moved the column. */
+const resolveActiveColumn = (columnModel: ColumnModel, active: { col: number; columnId: string | undefined }): number =>
+  active.columnId === undefined ? -1 : columnModel.indexOf(active.columnId);
+
 const resolveActiveRow = <TData>(rowData: RowDataManager<TData>, active: { id: RowId; row: number }): number => {
   const row = locateRow(rowData, active.id);
   if (row >= 0) return row;
@@ -81,8 +87,9 @@ const restoreActive = <TData>(
     return;
   }
   const row = resolveActiveRow(deps.rowData, active);
-  if (row < 0) selection.clearSelection();
-  else selection.setActiveCell(row, active.col);
+  const col = resolveActiveColumn(deps.columnModel, active);
+  if (row < 0 || col < 0) selection.clearSelection();
+  else selection.setActiveCell(row, col);
 };
 
 /** Runs inside the caller's open batch, after the view rows changed. */
