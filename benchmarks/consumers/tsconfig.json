@@ -8,11 +8,27 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@gp-grid/core": ["../../packages/core/dist/index.d.ts"],
-      "@gp-grid/react": ["../../packages/react/dist/index.d.ts"],
-      "@gp-grid/vue": ["../../packages/vue/dist/index.d.ts"],
-      "@gp-grid/angular": ["../../packages/angular/dist/angular/types/gp-grid-angular.d.ts"]
-    }
+      "@gp-grid/core": [
+        "../../packages/core/dist/index.d.ts"
+      ],
+      "@gp-grid/react": [
+        "../../packages/react/dist/index.d.ts"
+      ],
+      "@gp-grid/vue": [
+        "../../packages/vue/dist/index.d.ts"
+      ],
+      "@gp-grid/angular": [
+        "../../packages/angular/dist/angular/types/gp-grid-angular.d.ts"
+      ]
+    },
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
-  "include": ["./*.ts"]
+  "include": [
+    "./*.ts",
+    "./*.tsx"
+  ]
 }
