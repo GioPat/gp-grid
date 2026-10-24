@@ -27,8 +27,8 @@ import {
   waitForHeight,
 } from "./row-heights-helpers";
 
-/** Firefox rounds a compressed scroll target to the device pixel: a row lands within 4 px there, 2 px elsewhere. */
-const SCROLL_TARGET_TOLERANCE = process.env.CONFORMANCE_BROWSER === "firefox" ? 4 : TOLERANCE + 1;
+/** Firefox and WebKit round a compressed scroll target to the device pixel: a row lands within 4 px there, 2 px on Chrome. */
+const SCROLL_TARGET_TOLERANCE = process.env.CONFORMANCE_BROWSER === "firefox" || process.env.CONFORMANCE_BROWSER === "webkit" ? 4 : TOLERANCE + 1;
 
 /** Mid-scroll offset inside the compressed range of the large arm. */
 const COMPRESSED_TOP = 50_000;
@@ -107,7 +107,7 @@ test("AC-006-05 places a pending height when its page arrives", async ({ page },
   await activateCell(page, PAGED_ANCHOR, 0);
   await waitForHeight(page, PAGED_ID, 96);
 
-  await expectRowsOnCoreBounds(page, TOLERANCE + 1);
+  await expectRowsOnCoreBounds(page, SCROLL_TARGET_TOLERANCE);
   const anchored = await boxAt(page, PAGED_ANCHOR);
   expect(Math.abs(anchored!.top - reference!.top)).toBeLessThanOrEqual(TOLERANCE + 1);
   // The axis extent takes the 64 px the placed row adds.
