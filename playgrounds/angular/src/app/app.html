@@ -146,6 +146,24 @@
     <button
       type="button"
       class="update-btn"
+      [attr.aria-pressed]="columnar()"
+      [style.opacity]="columnar() ? 1 : 0.5"
+      (click)="toggleColumnar()"
+    >
+      Columnar
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="wide()"
+      [style.opacity]="wide() ? 1 : 0.5"
+      (click)="toggleWide()"
+    >
+      Wide
+    </button>
+    <button
+      type="button"
+      class="update-btn"
       [disabled]="grouping() === false"
       (click)="expandAllGroups()"
     >

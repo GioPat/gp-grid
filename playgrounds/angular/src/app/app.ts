@@ -21,6 +21,7 @@ import type {
 import { createDemoServerSource } from './demo-server-groups';
 import { createDemoPivotSource } from './demo-pivot';
 import { createPivotSchemaBinding } from './pivot-schema-binding';
+import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from './demo-columnar';
 
 interface Person {
   id: number;
@@ -122,6 +123,9 @@ const generateRows = (count: number): Person[] =>
     salary: 30000 + (i % 121) * 1000,
   }));
 
+/** The main page's rows, shared by the mutable source and the columnar one. */
+const ROWS = generateRows(1_500_000);
+
 @Component({
   selector: 'app-root',
   imports: [GpGridComponent, FormsModule],
@@ -130,7 +134,7 @@ const generateRows = (count: number): Person[] =>
   providers: [
     provideGridData<Person>({
       getRowId: (row) => row.id,
-      initialData: generateRows(1_500_000),
+      initialData: ROWS,
     }),
   ],
 })
@@ -224,7 +228,17 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected readonly pivotLabelColumn = PIVOT_LABEL_COLUMN_ID;
 
-  protected readonly dataSource = computed(() => this.pivotSource() ?? this.serverSource() ?? this.grid.dataSource);
+  /** Columnar source and the wide grid: typed arrays for the same people, 200 accessor metric columns. */
+  protected readonly columnar = signal(false);
+  protected readonly wide = signal(false);
+  protected readonly columnarSource = computed(() =>
+    this.columnar() || this.wide() ? createDemoColumnarSource(ROWS, this.wide() ? WIDE_COLUMN_COUNT : 0) : null,
+  );
+  private readonly wideColumns = createWideColumns(WIDE_COLUMN_COUNT);
+
+  protected readonly dataSource = computed(
+    () => this.pivotSource() ?? this.serverSource() ?? this.columnarSource() ?? this.grid.dataSource,
+  );
 
   // The published input typing drops `| null` like `columnGroups` above.
   protected readonly rowGrouping = computed(
@@ -236,11 +250,20 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly grouping = computed(() => this.groupRows() || this.serverGroups() || this.pivot());
 
   protected shownColumns(): AngularColumnDefinition[] {
-    return this.pivotActive() ? this.pivotSchema.schema().columns : this.columns;
+    if (this.pivotActive()) return this.pivotSchema.schema().columns;
+    return this.wide() ? [...this.columns, ...this.wideColumns] : this.columns;
   }
 
   protected togglePivot(): void {
     this.pivot.update((value) => !value);
+  }
+
+  protected toggleColumnar(): void {
+    this.columnar.update((value) => !value);
+  }
+
+  protected toggleWide(): void {
+    this.wide.update((value) => !value);
   }
 
   protected toggleGroupRows(): void {
