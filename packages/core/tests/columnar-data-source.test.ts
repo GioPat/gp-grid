@@ -148,6 +148,22 @@ describe("createColumnarDataSource", () => {
     expect(scores).toEqual(before);
   });
 
+  it("yields a frame before sorting a large source and none before an unsorted query", async () => {
+    const values = Array.from({ length: 60_000 }, (_, index) => 60_000 - index);
+    const source = createColumnarDataSource({ fields: [{ field: "score", data: values }] });
+    const raf = vi.fn((callback: FrameRequestCallback) => setTimeout(() => callback(0), 0));
+    vi.stubGlobal("requestAnimationFrame", raf);
+    try {
+      await source.query({ range: { startRow: 0, endRow: 10 } });
+      expect(raf).not.toHaveBeenCalled();
+      const response = await source.query({ range: { startRow: 0, endRow: 10 }, sort: [{ colId: "score", direction: "asc" }] });
+      expect(raf).toHaveBeenCalledTimes(1);
+      expect(response.totalRows).toBe(60_000);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("filters through source indices and reports the filtered count", async () => {
     const { source } = makeSource();
     const response = await source.query({

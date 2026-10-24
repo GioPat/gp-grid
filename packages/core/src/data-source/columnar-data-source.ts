@@ -13,6 +13,10 @@ import type {
 } from "../types";
 import { applySort } from "../indexed-data-store/sorting";
 import { applyFilters } from "../filtering";
+import { yieldToPaint } from "../utils/yield-to-paint";
+
+/** Rows above which a sort or filter first yields a frame, so the loader shows. */
+const YIELD_THRESHOLD_ROWS = 50_000;
 
 // =============================================================================
 // Validation (O(c), no row traversal)
@@ -212,6 +216,8 @@ export function createColumnarDataSource(
       if (hasFilter === false && hasSort === false) {
         return { rows: [], totalRows: rowCount, access: identityAccess };
       }
+      // A synchronous pass over a large source would block the paint of the loading state.
+      if (rowCount >= YIELD_THRESHOLD_ROWS) await yieldToPaint();
 
       const fieldOf = resolveField(request);
       const getFieldValue = (sourceRow: number, field: string): CellValue =>
