@@ -27,6 +27,9 @@ import {
   waitForHeight,
 } from "./row-heights-helpers";
 
+/** Firefox rounds a compressed scroll target to the device pixel: a row lands within 4 px there, 2 px elsewhere. */
+const SCROLL_TARGET_TOLERANCE = process.env.CONFORMANCE_BROWSER === "firefox" ? 4 : TOLERANCE + 1;
+
 /** Mid-scroll offset inside the compressed range of the large arm. */
 const COMPRESSED_TOP = 50_000;
 /** The paged scroll target: the clip top sits 50 rows past the override. */
@@ -40,7 +43,7 @@ test("shows the tall last row at both scroll extremes", async ({ page }, testInf
 
   await activateCell(page, LAST_INDEX, 0);
   await expect.poll(async () => Math.abs((await rowBounds(page, LAST_INDEX, "viewport"))!.start))
-    .toBeLessThanOrEqual(TOLERANCE + 1);
+    .toBeLessThanOrEqual(SCROLL_TARGET_TOLERANCE);
   const top = await boxAt(page, LAST_INDEX);
   expect(Math.abs(top!.height - 480)).toBeLessThanOrEqual(TOLERANCE);
 
