@@ -11,7 +11,6 @@ import type {
   ColumnFilterModel,
   DragState,
   GridLabels,
-  VisibleColumnInfo,
 } from '@gp-grid/core';
 import { defaultGridLabels, formatLabel } from '@gp-grid/core';
 import { FilterPopupComponent } from './filter-popup.component';
@@ -38,12 +37,15 @@ const TEMPLATE = `
     />
   }
   @if (isResizing()) {
-    <div class="gp-grid-column-resize-line" [style.left.px]="resizeLineLeft()"></div>
+    <div class="gp-grid-column-resize-line" [style.inset-inline-start.px]="resizeLineLeft()"></div>
+  }
+  @if (rowResizeLineTop() !== null) {
+    <div class="gp-grid-row-resize-line" [style.top.px]="rowResizeLineTop()"></div>
   }
   @if (isLoading()) {
     <div
       style="position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; pointer-events: none;"
-      [style.top.px]="headerHeight()">
+      [style.top.px]="totalHeaderHeight()">
       <div class="gp-grid-loading-overlay"></div>
       <div class="gp-grid-loading">
         <div class="gp-grid-loading-spinner"></div>
@@ -65,17 +67,17 @@ const TEMPLATE = `
     @if (columnMoveDropLeft() !== null) {
       <div
         class="gp-grid-column-drop-indicator"
-        [style.left.px]="columnMoveDropLeft()"
-        [style.height.px]="headerHeight()"></div>
+        [style.inset-inline-start.px]="columnMoveDropLeft()"
+        [style.height.px]="totalHeaderHeight()"></div>
     }
   }
   @if (rowDragGhost(); as rd) {
     <div
       class="gp-grid-row-drag-ghost"
       [style.left.px]="rd.currentX + 12"
-      [style.top.px]="rd.currentY - rowHeight() / 2"
+      [style.top.px]="rd.currentY - rd.sourceRowHeight / 2"
       [style.width.px]="rowDragGhostWidth()"
-      [style.height.px]="rowHeight()"></div>
+      [style.height.px]="rd.sourceRowHeight"></div>
   }
 `;
 
@@ -91,11 +93,8 @@ export class GridOverlaysComponent {
   isLoading = input<boolean>(false);
   errorMessage = input<string | null>(null);
   labels = input<GridLabels>(defaultGridLabels);
-  headerHeight = input.required<number>();
-  rowHeight = input.required<number>();
+  totalHeaderHeight = input.required<number>();
   dragState = input.required<DragState>();
-  visibleColumnWithIndices = input.required<VisibleColumnInfo[]>();
-  columnPositions = input.required<number[]>();
   scrollLeft = input.required<number>();
   effectiveColumns = input.required<ColumnDefinition[]>();
   totalWidth = input.required<number>();
@@ -112,12 +111,14 @@ export class GridOverlaysComponent {
   protected resizeLineLeft = computed<number>(() => {
     const cr = this.dragState().columnResize;
     if (cr === null) return 0;
-    const visibleIndex = this.visibleColumnWithIndices().findIndex(
-      v => v.originalIndex === cr.colIndex
-    );
-    if (visibleIndex === -1) return 0;
-    const positions = this.columnPositions();
-    return (positions[visibleIndex] ?? 0) + cr.currentWidth - this.scrollLeft();
+    return cr.lineX;
+  });
+
+  /** `lineY` is body-viewport space; the line sits below the header. */
+  protected rowResizeLineTop = computed<number | null>(() => {
+    const rr = this.dragState().rowResize;
+    if (this.dragState().dragType !== 'row-resize' || rr === null) return null;
+    return this.totalHeaderHeight() + rr.lineY;
   });
 
   protected columnMove = computed(() => {
@@ -140,8 +141,7 @@ export class GridOverlaysComponent {
   protected columnMoveDropLeft = computed<number | null>(() => {
     const cm = this.columnMove();
     if (cm === null || cm.dropTargetIndex === null) return null;
-    const positions = this.columnPositions();
-    return (positions[cm.dropTargetIndex] ?? 0) - this.scrollLeft();
+    return cm.dropIndicatorX;
   });
 
   protected rowDragGhostWidth = computed<number>(() => Math.min(300, this.totalWidth()));

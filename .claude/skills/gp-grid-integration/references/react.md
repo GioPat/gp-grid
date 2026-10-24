@@ -308,6 +308,8 @@ const headerRenderers = {
 
 `HeaderRendererParams` exposes `column`, `colIndex`, `sortDirection`, `sortIndex`, and `onSort(direction, addToExisting)` if you want to drive sorting from the custom header.
 
+A column group's `headerRenderer` is a `ReactGroupHeaderRenderer` (inline, or a key of the same `headerRenderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `headerRenderer` does not apply to groups.
+
 ## Listening to changes
 
 ```tsx
@@ -316,14 +318,14 @@ const headerRenderers = {
   dataSource={dataSource}
   rowHeight={36}
   getRowId={(row) => row.id}
-  onCellValueChanged={(e) => console.log(e.field, e.oldValue, "→", e.newValue)}
-  onRowDragEnd={(from, to) => console.log("row", from, "→", to)}
-  onColumnResized={(colIndex, newWidth) => persist(colIndex, newWidth)}
-  onColumnMoved={(fromIndex, toIndex) => persistOrder(fromIndex, toIndex)}
+  onCellValueChanged={(e) => console.log(e.columnId, e.oldValue, "→", e.newValue)}
+  onRowDragEnd={(e) => console.log("row", e.rowId, e.fromViewIndex, "→", e.toViewIndex)}
+  onColumnResized={(e) => persist(e.columnId, e.width)}
+  onColumnMoved={(e) => persistOrder(e.columnId, e.fromViewIndex, e.toViewIndex)}
 />
 ```
 
-`getRowId` is **required** when `onCellValueChanged` is provided.
+`getRowId` is **required** when `onCellValueChanged` is provided. `onRowDragEnd` / `onColumnResized` / `onColumnMoved` deliver object payloads: `{ rowId, fromViewIndex, toViewIndex }`, `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }`. A `columns` replacement reconciles by id and does not reset width/order/visibility.
 
 For row drag, `onRowDragEnd` fires after the user drops. The consumer is responsible for actually reordering the underlying data — gp-grid does not mutate the array. With `useGridData` you'd typically rebuild and re-set, or use `removeRows` + `addRows`.
 
@@ -373,10 +375,10 @@ function PeopleGrid() {
           gridRef={gridRef}
         />
       </div>
-      <button onClick={() => gridRef.current?.core?.setSort("name", "asc", false)}>
+      <button onClick={() => gridRef.current?.core?.sortFilter.setSort("name", "asc", false)}>
         Sort by name
       </button>
-      <button onClick={() => gridRef.current?.core?.startEdit(0, 1)}>
+      <button onClick={() => gridRef.current?.core?.edit.start(0, 1)}>
         Edit cell (0, 1)
       </button>
     </>
@@ -418,8 +420,8 @@ function PeopleGrid() {
 ```
 
 ```css
-/* Global stylesheet — !important needed to override grid defaults */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* Keep the pinned container opaque by tinting its cells, not the row. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 ```
 
@@ -429,15 +431,314 @@ Use both callbacks together for an Excel-style crosshair. **Memoize** the `highl
 
 You can change the `dataSource` prop after mount. The wrapper detects the change and calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just make sure the new ds is referentially distinct from the old one (otherwise nothing happens).
 
+## Reactive `columns` and column state
+
+Replacing the `columns` array never recreates the core: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) are preserved. A new array reference is not a reset. To drive that state yourself, pass `columnState` (`ColumnStateUpdate[]`); the wrapper calls `core.columns.setState` whenever it changes:
+
+```tsx
+<Grid
+  columns={columns}
+  dataSource={dataSource}
+  columnState={[{ columnId: "age", hidden: true }, { columnId: "name", order: 0 }]}
+  rowHeight={36}
+/>
+```
+
+## Pinning columns
+
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `columnState` form is `{ columnId, pinned: "start" | "end" | null }`.
+At runtime use `gridRef.current?.core.columns.setPinned(columnId, pin)`.
+`onColumnPinned={({ columnId, pinned }) => ...}` fires for that call, the header
+toggle and a cross-region header drag.
+
+A pin that does not fit the viewport renders in the scrolling center until it
+is admitted, so persist the request but read the effective `region` from
+`core.columns.getState()`. `columnOverscan` (default `240` px) is how far past
+each clip edge center columns stay mounted; an open editor keeps its column
+mounted regardless. The default header action uses `pinIcon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `labels` for its accessible names. See
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
+
+## Frozen rows
+
+`freezeRows={{ count: 3 }}` keeps the first displayed rows below the header
+while the rest scroll (defaults `maxCount 100`, `minSuffixHeight 64`).
+`onFrozenRowsChanged={(state) => ...}` receives
+`{ requestedCount, effectiveCount, limit }` whenever either reported field
+changes — the effective count can be reduced by `maxCount`, the viewport or, for
+a paginated source, the page budget, and `state.limit` names the constraint
+(`"maxCount" | "viewport" | "cache" | null`). The core announces a reduced
+prefix as `labels.frozenRowsLimited` in a hidden live region.
+
+A changed prop is applied at runtime through `core.frozenRows.set`: the core is
+not recreated, the scroll position is corrected so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
+
+## Row heights
+
+Rows are `rowHeight` px tall unless you set a height by row identity through the
+core handle (no remount), or the user resizes or fits a row (next section):
+
+```tsx
+const gridRef = useRef<GridRef<Person> | null>(null);
+// <Grid gridRef={gridRef} getRowId={(row) => row.id} ... />
+gridRef.current?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+gridRef.current?.core?.rowHeights.reset([2]);   // or reset() for all of them
+gridRef.current?.core?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch, so the viewport does
+not jump. Cells carry no inline height — they fill the row through the shipped
+`.gp-grid-cell { height: 100% }` rule. See
+[docs/features/row-heights.md](../../../../docs/features/row-heights.md).
+
+## Row resize and auto-fit
+
+```tsx
+<Grid
+  gridRef={gridRef}
+  columns={columns}
+  rowData={rows}
+  rowHeight={32}
+  getRowId={(row) => row.id}
+  rowResize                                   // row edge drag; runtime-changeable
+  autoFit={{ maxColumnWidth: 400 }}           // creation-only clamps
+  onRowResized={({ rowId, height }) => saveHeight(rowId, height)}
+  onColumnResized={({ columnId, width }) => saveWidth(columnId, width)}
+/>
+
+// Commands: fit the mounted cells once. Call them after the render that follows a
+// column change — in the same task they return "stale" and apply nothing.
+requestAnimationFrame(() => gridRef.current?.core?.columns.fit());
+gridRef.current?.core?.rowHeights.fit([2, 3]);
+gridRef.current?.core?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. See
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```tsx
+import type { ColumnGroupChild } from "@gp-grid/react";
+
+const columnGroups: ColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+
+<Grid
+  columns={columns}
+  columnGroups={columnGroups}       // every column referenced once; reactive
+  headerBandHeights={[40]}          // band 0 is 40 px, the rest headerHeight; reactive
+  onColumnSchemaRejected={(error) => setSchemaError(error.message)}
+/>;
+```
+
+Keep `columnGroups` referentially stable (module constant or `useMemo`). A
+rejected hierarchy leaves the previous one on screen; the prop is re-applied with
+every later `columns` change, so put a valid one back. See
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
+
+## Row grouping
+
+```tsx
+import { useRef } from "react";
+import {
+  Grid,
+  createRowGrouping,
+  type GridRef,
+  type ReactCellRenderer,
+  type ReactGroupLabelRenderer,
+} from "@gp-grid/react";
+
+// Module scope (or useMemo): a new object regroups.
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const groupLabel: ReactGroupLabelRenderer = ({ row, label, toggle }) =>
+  row.kind === "total" ? <strong>{label}</strong> : <span onDoubleClick={toggle}>{label}</span>;
+
+// `rowData` is undefined on a group or total row: branch on `rowKind`.
+const amountCell: ReactCellRenderer = ({ value, rowKind }) =>
+  rowKind === "group" || rowKind === "total" ? <strong>{String(value)}</strong> : String(value ?? "");
+
+function SalesGrid() {
+  const gridRef = useRef<GridRef<Sale> | null>(null);
+  return (
+    <>
+      <button onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}>Expand all</button>
+      <Grid
+        columns={columns}
+        rowData={sales}
+        rowHeight={32}
+        getRowId={(row) => row.id}
+        gridRef={gridRef}
+        rowGrouping={grouping}            // reactive; null or undefined = flat
+        groupLabelColumn="country"        // default: first displayed column
+        groupLabelRenderer={groupLabel}
+        cellRenderers={{ amount: amountCell }}
+        onRowGroupToggled={({ rowId, expanded }) => console.log(rowId, expanded)}
+        onRowGroupingRejected={({ reason, field }) => console.warn(reason, field)}
+      />
+    </>
+  );
+}
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`. A
+group cell with no aggregate renders empty and calls no renderer. The grouping
+needs every row resident (`rowData`, a client source or `useGridData`); a server
+source is rejected with `partial-source`. See
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
+
+## Server grouping
+
+```tsx
+import { useEffect, useMemo } from "react";
+import { Grid, createServerGroupingSource, type ServerGroupingService } from "@gp-grid/react";
+
+function SalesGrid({ service }: { service: ServerGroupingService<Sale> }) {
+  // One source per grid, created once: a new source is a new data source.
+  const source = useMemo(
+    () =>
+      createServerGroupingSource(service, {
+        dimensions: [{ field: "country" }, { field: "city" }],
+        measures: [
+          { field: "amount", aggregate: "sum" },
+          { field: "score", aggregate: "avg" },
+        ],
+        getRowId: (row) => row.id,
+        grandTotal: "top",
+      }),
+    [service],
+  );
+  // The grid never destroys a source passed as `dataSource`. destroy() only
+  // releases the current view, so StrictMode's second mount still works.
+  useEffect(() => () => source.destroy(), [source]);
+
+  return (
+    <Grid
+      columns={columns}
+      dataSource={source}            // no rowGrouping: it would be rejected as hierarchical-source
+      rowHeight={32}
+      groupLabelColumn="country"
+      labels={{ rowGroups: { loadFailed: "Could not load. Expand to retry." } }}
+    />
+  );
+}
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `gridRef.current?.core?.rowGroups`
+and `onRowGroupToggled` work as for local grouping. See
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```tsx
+import { useEffect, useMemo, useState } from "react";
+import { Grid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource, type DataSource, type PivotConfig } from "@gp-grid/react";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+
+function SalesPivot({ inner }: { inner: DataSource<Sale> }) {
+  const source = useMemo(() => createPivotSource(inner, config), [inner]);
+  const [schema, setSchema] = useState(() => source.getSchema() ?? buildPivotSchema([], config));
+  useEffect(() => {
+    setSchema((shown) => source.getSchema() ?? shown); // the grid's first query may publish before this effect
+    return source.subscribeSchema(setSchema);
+  }, [source]);
+  useEffect(() => () => source.destroy(), [source]); // a later query rebuilds, so StrictMode's remount is fine
+
+  return (
+    <Grid
+      columns={schema.columns}
+      columnGroups={schema.columnGroups}
+      dataSource={source}             // no rowGrouping: it would be rejected as hierarchical-source
+      rowHeight={32}
+      groupLabelColumn={PIVOT_LABEL_COLUMN_ID}
+    />
+  );
+}
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `gridRef.current?.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
+
+## Writes, undo and redo
+
+```tsx
+<Grid
+  columns={columns}
+  dataSource={source}
+  rowHeight={32}
+  getRowId={(row) => row.id}            // required by both
+  history={{ maxEntries: 100 }}       // creation-only
+  onWriteCommitted={(event) => {
+    save(event.changes);                  // one request per paste, by record id
+    if (event.skipped.length > 0) notify(`${event.skipped.length} cells were not pasted`);
+  }}
+/>
+// gridRef.current?.core?.history.undo() / redo() / canUndo() / canRedo(); Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z
+```
+
+One event per editor commit, paste, fill or `cells.setValue`, with `changes`
+(`rowId`, `columnId`, `field`, `oldValue`, `newValue`) and `skipped`
+(`row`, `col`, `field`, `reason`). An undo writes the entry back by record id
+through the same command and is refused as a whole when a cell moved on
+(`onWriteRejected` with `"conflict"` or `"missing-record"`). See the SKILL.md
+"Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## All `<Grid>` props (cheatsheet)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `columns` | `ColumnDefinition[]` | required | |
+| `columnState` | `ColumnStateUpdate[]` | — | controlled width/hidden/order/pinned; applied via `columns.setState` |
+| `columnOverscan` | `number` | `240` | CSS px of center columns mounted past each clip edge |
+| `freezeRows` | `FreezeRowsOptions` | `{ count: 0 }` | `{ count, maxCount?, minSuffixHeight? }`; applied at runtime, no remount |
 | `dataSource` | `DataSource<TData>` | — | mutually exclusive with `rowData`; takes precedence |
 | `rowData` | `TData[]` | — | wrapped in a client data source by the wrapper |
 | `rowHeight` | `number` | required | px |
-| `headerHeight` | `number` | `rowHeight` | px |
+| `headerHeight` | `number` | `rowHeight` | px; default height of every header band |
+| `headerBandHeights` | `readonly number[]` | — | px per band; reactive |
+| `columnGroups` | `ColumnGroupChild[]` | — | nested header groups; applied with `columns` |
+| `columnGroupLimits` | `ColumnGroupLimits` | `64` / `100,000` / `100,000` | `{ maxDepth?, maxNodes?, maxFragments? }`; creation-only |
+| `rowResize` | `boolean` | `false` | row edge drag, Alt+ArrowUp/Down, Alt+Shift+Enter; reactive |
+| `autoFit` | `AutoFitOptions` | `600` / `rowHeight` / `10 × rowHeight` | fit and row-drag clamps; creation-only |
 | `overscan` | `number` | `3` | rows rendered above/below viewport |
 | `rowLoading` | `RowLoadingOptions` | — | server cache tuning |
 | `sortingEnabled` | `boolean` | `true` | global kill switch |
@@ -449,17 +750,30 @@ You can change the `dataSource` prop after mount. The wrapper detects the change
 | `cellRenderer` | `ReactCellRenderer` | — | global fallback |
 | `editRenderer` | `ReactEditRenderer` | — | global fallback |
 | `headerRenderer` | `ReactHeaderRenderer` | — | global fallback |
+| `pinIcon` | `GridIcon` | push-pin SVG | custom path and optional viewBox for the default header toggle |
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |
 | `highlighting` | `HighlightingOptions<TData>` | — | row/col/cell class callbacks |
-| `labels` | `GridLabelOverrides` | English defaults | override filter/grid text (localization) |
+| `labels` | `GridLabelOverrides` | English defaults | includes `pinLeftColumn`, `pinRightColumn`, `unpinColumn`, `frozenRowsLimited` and the nested `columnSchemaErrors` |
 | `getRowId` | `(row: TData) => RowId` | — | required for `onCellValueChanged` and `useGridData` |
 | `onCellValueChanged` | `(e: CellValueChangedEvent<TData>) => void` | — | requires `getRowId` |
+| `onWriteRejected` | `(e: CellWriteRejectedEvent) => void` | — | a write was refused; `e.reason` is `"read-only-source"`, `"not-a-record"` (group/total row), `"derived-view"` (row drag while grouped) or `"type-mismatch"` (edit the column type cannot hold), `e.operation` names the entry point |
+| `onWriteCommitted` | `(e: WriteCommittedEvent) => void` | — | once per write command (edit, paste, fill, `cells.setValue`, undo, redo): `e.operation`, `e.changes` by record id, `e.skipped` with reasons; requires `getRowId` |
+| `history` | `HistoryOptions` | — | `{ maxEntries? }` (default 100) turns on undo/redo of the write commands (`core.history`, Ctrl+Z / Ctrl+Y); creation-only, requires `getRowId` |
 | `loadingComponent` | `ComponentType<{ isLoading: boolean }>` | spinner | overrides default |
 | `rowDragEntireRow` | `boolean` | `false` | drag from any cell |
-| `onRowDragEnd` | `(src, tgt) => void` | — | consumer reorders |
-| `onColumnResized` | `(colIndex, newWidth) => void` | — | persist user state |
-| `onColumnMoved` | `(from, to) => void` | — | persist user state |
+| `onRowDragEnd` | `(e: RowDragEndEvent) => void` | — | consumer reorders |
+| `onColumnResized` | `(e: ColumnResizedEvent) => void` | — | persist user state |
+| `onColumnMoved` | `(e: ColumnMovedEvent) => void` | — | persist user state |
+| `onColumnPinned` | `(e: ColumnPinnedEvent) => void` | — | `{ columnId, pinned }`; fired by the pin command, header toggle or cross-region drag |
+| `onFrozenRowsChanged` | `(s: FrozenRowsState) => void` | — | `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution |
+| `onRowResized` | `(e: RowResizedEvent) => void` | — | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
+| `onColumnSchemaRejected` | `(e: ColumnSchemaError) => void` | — | `{ code, source, id?, limit?, message }`; the previous schema stays |
+| `rowGrouping` | `RowGrouping \| null` | — | `createRowGrouping(...)`; reactive, regroups without a remount |
+| `groupLabelColumn` | `string` | first displayed column | column of the expander and label |
+| `groupLabelRenderer` | `ReactGroupLabelRenderer` | — | `{ row, viewIndex, label, toggle }` |
+| `onRowGroupToggled` | `(e: RowGroupToggledEvent) => void` | — | `{ rowId, expanded }`; gestures only |
+| `onRowGroupingRejected` | `(r: RowGroupingRejection) => void` | — | `{ reason, field? }`; fires on every load while rejected |
 
 ## React-specific gotchas
 

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, input, output, TemplateRef, ViewChild } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
+import { focusGridContainer } from '@gp-grid/core';
 import {
   formatCellValue,
   getFieldValue,
@@ -8,20 +9,36 @@ import {
   isCellEditing,
   isCellInFillPreview,
   isCellSelected,
+  isEmptyGroupCell,
+  groupCellOf,
+  hierarchyRowAttributes,
   SlotData,
-  VisibleColumnInfo,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
   CellPosition,
   CellRange,
   CellValue,
   ColumnDefinition,
+  RowId,
   CellRendererParams,
   EditRendererParams,
   FillHandlePosition,
   DragState,
+  GridCore,
   GridLabels,
+  GroupCell,
+  HierarchyRow,
+  HierarchyRowAttributes,
+  HierarchyRowKind,
+  RowRegionLayout,
+  ResizeTarget,
   defaultGridLabels,
 } from "@gp-grid/core";
 import { GRID_BODY_TEMPLATE } from "./grid-body.template";
+import { ResizeHandleComponent } from "./resize-handle.component";
+import { GroupLabelComponent, GroupToggleComponent } from "./group-label-cell.component";
+import type { RowGroupCellContext } from "./row-group-cells";
+import type { ResizeHandlePointerDownEvent } from "./resize-handle.component";
 
 export type RowClassFn = (rowIndex: number, rowData: unknown) => string[];
 export type CellClassFn = (
@@ -44,6 +61,12 @@ export interface CellPointerDownEvent {
   event: PointerEvent;
 }
 
+export interface RowResizePointerDownEvent {
+  rowIndex: number;
+  rowHeight: number;
+  event: PointerEvent;
+}
+
 export interface CellPointerEnterEvent {
   rowIndex: number;
   colIndex: number;
@@ -58,32 +81,41 @@ export interface EditingCellState {
   row: number;
   col: number;
   initialValue: CellValue;
+  editId: number;
 }
 
 @Component({
   selector: "gp-grid-body",
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, ResizeHandleComponent, GroupToggleComponent, GroupLabelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`:host { display: flex; flex: 1; min-height: 0; overflow: hidden; }`],
   template: GRID_BODY_TEMPLATE,
 })
 export class GridBodyComponent {
   @ViewChild("scrollContainer") scrollContainer!: ElementRef<HTMLDivElement>;
-  rowHeight = input.required<number>();
   totalHeaderHeight = input.required<number>();
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount = input<number>(1);
   contentWidth = input.required<number>();
   contentHeight = input.required<number>();
   rowsWrapperOffset = input.required<number>();
-  slotsArray = input.required<SlotData[]>();
-  visibleColumnWithIndices = input.required<VisibleColumnInfo[]>();
+  /** C3 layout; the frozen band renders only while `frozenCount > 0`. */
+  rowRegions = input.required<RowRegionLayout>();
+  /** Height of the sticky frozen band. */
+  frozenHeight = input.required<number>();
+  frozenSlots = input.required<SlotData[]>();
+  suffixSlots = input.required<SlotData[]>();
   totalWidth = input.required<number>();
-  columnPositions = input.required<number[]>();
-  columnWidths = input.required<number[]>();
+  columnWindow = input.required<ColumnWindowSnapshot | null>();
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf = input<(columnId: string) => number>(() => 0);
   totalRows = input.required<number>();
   activeCell = input<CellPosition | null>(null);
   selectionRange = input<CellRange | null>(null);
   editingCell = input<EditingCellState | null>(null);
+  /** Bound core supplies the live draft when a region change remounts an editor. */
+  core = input<GridCore<unknown> | null>(null);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
   globalCellRenderer = input<CellRendererTemplate | null>(null);
   editRenderers = input<Record<string, EditRendererTemplate>>({});
@@ -93,7 +125,17 @@ export class GridBodyComponent {
   computeCellClasses = input<CellClassFn | null>(null);
   fillHandlePosition = input<FillHandlePosition | null>(null);
   dragState = input<DragState | null>(null);
+  /** Every non-editing cell renders the row edge handle. */
+  rowResize = input<boolean>(false);
   labels = input<GridLabels>(defaultGridLabels);
+  /** Raw value reader from the bound core (record-less rows). */
+  readCellValue = input<((rowIndex: number, colIndex: number) => CellValue) | null>(null);
+  /** Reader for another field's raw value at a row, without a record. */
+  readFieldValue = input<((rowIndex: number, field: string) => CellValue) | null>(null);
+  /** Lazily resolved row identity, when the source exposes one. */
+  readRowId = input<((rowIndex: number) => RowId | undefined) | null>(null);
+  /** Label column, labels and toggles of a hierarchy; `null` while flat. */
+  rowGroups = input<RowGroupCellContext | null>(null);
 
   scrolled = output<number>();
   cellPointerDown = output<CellPointerDownEvent>();
@@ -104,6 +146,8 @@ export class GridBodyComponent {
   editCommit = output<void>();
   editCancel = output<void>();
   fillHandlePointerDown = output<FillHandlePointerDownEvent>();
+  rowResizePointerDown = output<RowResizePointerDownEvent>();
+  resizeDoubleClick = output<ResizeTarget>();
 
   protected innerWidth = computed(() =>
     Math.max(this.contentWidth(), this.totalWidth()),
@@ -113,12 +157,61 @@ export class GridBodyComponent {
     Math.max(this.contentHeight() - this.totalHeaderHeight(), 0),
   );
 
+  /** Region partitions of the mounted column window; empty before it publishes. */
+  protected startColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.start ?? []);
+
+  protected centerColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.center ?? []);
+
+  protected endColumns = computed<readonly ResolvedColumn[]>(() => this.columnWindow()?.end ?? []);
+
+  protected startWidth = computed(() => this.columnWindow()?.layout.regions.startWidth ?? 0);
+
+  protected endWidth = computed(() => this.columnWindow()?.layout.regions.endWidth ?? 0);
+
   protected rowDropIndicator = computed(() => {
     const ds = this.dragState();
     if (ds?.dragType !== 'row-drag') return null;
     if (ds.rowDrag === null || ds.rowDrag.dropTargetIndex === null) return null;
     return ds.rowDrag;
   });
+
+  /** C10: the overlay follows the row it targets. */
+  protected frozenDropIndicator = computed(() => {
+    const drag = this.rowDropIndicator();
+    return drag?.dropIndicatorRegion === 'frozen' ? drag : null;
+  });
+
+  protected suffixDropIndicator = computed(() => {
+    const drag = this.rowDropIndicator();
+    if (drag === null) return null;
+    return drag.dropIndicatorRegion === 'frozen' ? null : drag;
+  });
+
+  /** Fill handle before the row-region split; `null` while it is hidden. */
+  private visibleHandle = computed<FillHandlePosition | null>(() => {
+    const position = this.fillHandlePosition();
+    if (position === null || this.editingCell() !== null) return null;
+    return position;
+  });
+
+  /** A frozen anchor hosts the handle in the frozen band, not in the wrapper. */
+  protected frozenHandle = computed<FillHandlePosition | null>(() => {
+    const handle = this.visibleHandle();
+    return handle?.rowRegion === 'frozen' ? handle : null;
+  });
+
+  protected suffixHandle = computed<FillHandlePosition | null>(() => {
+    const handle = this.visibleHandle();
+    if (handle === null) return null;
+    return handle.rowRegion === 'frozen' ? null : handle;
+  });
+
+  /** View index of the row whose edge is being dragged. */
+  protected resizingRow = computed(() => this.dragState()?.rowResize?.rowIndex ?? null);
+
+  protected onRowResizePointerDown(evt: ResizeHandlePointerDownEvent): void {
+    this.rowResizePointerDown.emit({ rowIndex: evt.index, rowHeight: evt.size, event: evt.event });
+  }
 
   protected rowDropIndicatorWidth = computed(() =>
     Math.max(this.contentWidth(), this.totalWidth()),
@@ -127,9 +220,40 @@ export class GridBodyComponent {
   protected wrapperTransform = computed(() =>
     `translateY(${this.rowsWrapperOffset()}px)`);
 
+  protected readonly rowAttributes = hierarchyRowAttributes;
+
+  protected groupCell(row: HierarchyRow | undefined, columnId: string): GroupCell {
+    return groupCellOf(row, columnId, this.rowGroups());
+  }
+
+  /** Only a label cell carries a tooltip; the input shows its own value while editing. */
+  protected cellTitle(column: ColumnDefinition, editing: boolean, cell: GroupCell): string | null {
+    if (column.tooltip === false || editing || cell.label === '') return null;
+    return cell.title ?? cell.label;
+  }
+
   protected onScroll(): void {
     const el = this.scrollContainer.nativeElement;
     this.scrolled.emit(el.scrollLeft);
+  }
+
+  private rawValueAt(
+    rowData: unknown,
+    column: ColumnDefinition,
+    rowIndex: number,
+    colIndex: number,
+  ): CellValue {
+    const read = this.readCellValue();
+    return read ? read(rowIndex, colIndex) : getFieldValue(rowData, column.field);
+  }
+
+  private identityAt(rowIndex: number): RowId | undefined {
+    return this.readRowId()?.(rowIndex);
+  }
+
+  private fieldReaderAt(rowIndex: number): (field: string) => CellValue {
+    const read = this.readFieldValue();
+    return (field) => (read ? read(rowIndex, field) : null);
   }
 
   protected cellParams(
@@ -137,21 +261,31 @@ export class GridBodyComponent {
     column: ColumnDefinition,
     rowIndex: number,
     colIndex: number,
+    rowKind?: HierarchyRowKind,
   ): CellRendererParams {
-    const rawValue = getFieldValue(rowData, column.field);
+    const rawValue = this.rawValueAt(rowData, column, rowIndex, colIndex);
     const displayValue = column.valueFormatter
       ? column.valueFormatter(rawValue)
       : rawValue;
     return {
       value: displayValue,
       rowData,
+      rowId: this.identityAt(rowIndex),
+      columnId: column.colId ?? column.field,
+      getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
       colIndex,
       isActive: isCellActive(rowIndex, colIndex, this.activeCell()),
       isSelected: isCellSelected(rowIndex, colIndex, this.selectionRange()),
       isEditing: false,
+      rowKind,
     };
+  }
+
+  protected emptyGroupCell(slot: SlotData, entry: ResolvedColumn): boolean {
+    const value = this.rawValueAt(slot.rowData, entry.column, slot.rowIndex, entry.layoutIndex);
+    return isEmptyGroupCell(slot.row?.kind, value);
   }
 
   protected cellTemplate(column: ColumnDefinition): CellRendererTemplate | null {
@@ -185,26 +319,34 @@ export class GridBodyComponent {
     colIndex: number,
   ): EditRendererParams {
     const ec = this.editingCell();
-    const rawValue = getFieldValue(rowData, column.field);
+    const rawValue = this.rawValueAt(rowData, column, rowIndex, colIndex);
     const displayValue = column.valueFormatter
       ? column.valueFormatter(rawValue)
       : rawValue;
     return {
       value: displayValue,
       rowData,
+      rowId: this.identityAt(rowIndex),
+      columnId: column.colId ?? column.field,
+      getValue: this.fieldReaderAt(rowIndex),
       column,
       rowIndex,
       colIndex,
       isActive: true,
       isSelected: true,
       isEditing: true,
-      initialValue: ec?.initialValue ?? null,
+      initialValue: this.currentEditValue(ec),
       onValueChange: (newValue) => {
+        if (this.isOpenEdit(ec?.editId) === false) return;
         const s = newValue === null || newValue === undefined ? '' : String(newValue);
         this.editValueChange.emit(s);
       },
-      onCommit: () => this.editCommit.emit(),
-      onCancel: () => this.editCancel.emit(),
+      onCommit: () => {
+        if (this.isOpenEdit(ec?.editId)) this.editCommit.emit();
+      },
+      onCancel: () => {
+        if (this.isOpenEdit(ec?.editId)) this.editCancel.emit();
+      },
     };
   }
 
@@ -213,11 +355,12 @@ export class GridBodyComponent {
     column: ColumnDefinition,
     rowIndex: number,
     colIndex: number,
+    rowKind?: HierarchyRowKind,
   ): string {
     const renderer = column.cellRenderer;
-    const value = getFieldValue(rowData, column.field);
+    const value = this.rawValueAt(rowData, column, rowIndex, colIndex);
     if (typeof renderer === 'function') {
-      const params = this.cellParams(rowData, column, rowIndex, colIndex);
+      const params = this.cellParams(rowData, column, rowIndex, colIndex, rowKind);
       const result = renderer(params);
       return result === null || result === undefined ? '' : String(result);
     }
@@ -229,8 +372,8 @@ export class GridBodyComponent {
     colIndex: number,
     column: ColumnDefinition,
     rowData: unknown,
+    group: GroupCell,
   ): string {
-    const editingCell = this.editingCell();
     // Read hoverPosition to register this signal as a dep so Angular re-renders on hover change.
     this.hoverPosition();
     const ds = this.dragState();
@@ -241,52 +384,79 @@ export class GridBodyComponent {
       ds?.fillSourceRange ?? null,
       ds?.fillTarget ?? null,
     );
-    const editing = isCellEditing(rowIndex, colIndex, editingCell);
-    const base = buildCellClasses(
-      isCellActive(rowIndex, colIndex, this.activeCell()),
-      isCellSelected(rowIndex, colIndex, this.selectionRange()),
-      editing,
-      inFillPreview,
-    );
-    const withHandle = column.rowDrag === true
-      ? `${base} gp-grid-cell--row-drag-handle`
-      : base;
+    const editing = isCellEditing(rowIndex, colIndex, this.editingCell());
     // Wrap only affects the default text content, so skip it in edit mode.
-    const withWrap = column.wrapText === true && !editing
-      ? `${withHandle} gp-grid-cell--wrap`
-      : withHandle;
-    const fn = this.computeCellClasses();
-    if (fn === null) return withWrap;
-    const extra = fn(rowIndex, colIndex, column, rowData);
-    if (extra.length === 0) return withWrap;
-    return `${withWrap} ${extra.join(' ')}`;
+    const wrap = column.wrapText === true && editing === false;
+    return [
+      buildCellClasses(
+        isCellActive(rowIndex, colIndex, this.activeCell()),
+        isCellSelected(rowIndex, colIndex, this.selectionRange()),
+        editing,
+        inFillPreview,
+      ),
+      column.rowDrag === true ? "gp-grid-cell--row-drag-handle" : "",
+      wrap ? "gp-grid-cell--wrap" : "",
+      group.className,
+      ...(this.computeCellClasses()?.(rowIndex, colIndex, column, rowData) ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
 
-  protected rowClass(rowIndex: number, rowData: unknown): string {
+  protected rowClass(rowIndex: number, rowData: unknown, hierarchy: HierarchyRowAttributes): string {
     this.hoverPosition();
-    const fn = this.computeRowClasses();
-    if (fn === null) return 'gp-grid-row';
-    const extra = fn(rowIndex, rowData);
-    if (extra.length === 0) return 'gp-grid-row';
-    return `gp-grid-row ${extra.join(' ')}`;
+    return [
+      'gp-grid-row',
+      hierarchy.className,
+      ...(this.computeRowClasses()?.(rowIndex, rowData) ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
 
   protected isEditing(rowIndex: number, colIndex: number): boolean {
     return isCellEditing(rowIndex, colIndex, this.editingCell());
   }
 
+  private currentEditValue(editing: EditingCellState | null): CellValue {
+    if (editing === null) return null;
+    const live = this.core()?.edit.getState();
+    return live?.editId === editing.editId ? live.currentValue : editing.initialValue;
+  }
+
   protected editInitialValue(): string {
-    const ec = this.editingCell();
-    if (ec === null || ec.initialValue === null || ec.initialValue === undefined) return '';
-    return String(ec.initialValue);
+    const value = this.currentEditValue(this.editingCell());
+    return value === null || value === undefined ? '' : String(value);
   }
 
   protected asInput(event: Event): HTMLInputElement {
     return event.target as HTMLInputElement;
   }
 
+  /** A renderer callback captured for an earlier edit session is stale. */
+  private isOpenEdit(editId: number | undefined): boolean {
+    return editId !== undefined && this.editingCell()?.editId === editId;
+  }
+
   protected onEditFocus(event: FocusEvent): void {
     (event.target as HTMLInputElement).select();
+  }
+
+  protected onEditBlur(event: FocusEvent): void {
+    const blurred = event.target as HTMLInputElement;
+    const grid = blurred.closest('.gp-grid-container');
+    const editId = this.editingCell()?.editId;
+    if (editId === undefined) return;
+    requestAnimationFrame(() => {
+      const replacement = grid?.querySelector<HTMLInputElement>(
+        `.gp-grid-edit-input[data-edit-id="${editId}"]`,
+      );
+      if (replacement && replacement !== blurred) {
+        replacement.focus();
+        return;
+      }
+      if (this.isOpenEdit(editId)) this.editCommit.emit();
+    });
   }
 
   protected onEditKeyDown(event: KeyboardEvent): void {
@@ -295,6 +465,9 @@ export class GridBodyComponent {
       this.editCommit.emit();
     } else if (event.key === 'Escape') {
       this.editCancel.emit();
+    } else {
+      return;
     }
+    focusGridContainer(event.currentTarget as Element);
   }
 }

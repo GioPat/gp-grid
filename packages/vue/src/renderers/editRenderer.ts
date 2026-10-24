@@ -1,7 +1,14 @@
 // packages/vue/src/renderers/editRenderer.ts
 
 import { h, createTextVNode, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
+import { focusGridContainer } from "@gp-grid/core";
+import type {
+  GridCore,
+  ColumnDefinition,
+  CellValue,
+  RowId,
+  EditRendererParams,
+} from "@gp-grid/core";
 import type { VueEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 import { invokeRenderer } from "./utils";
@@ -12,9 +19,17 @@ export interface RenderEditCellOptions {
   rowIndex: number;
   colIndex: number;
   initialValue: CellValue;
+  /** Session token of the open edit; tags every editor callback. */
+  editId: number;
   core: GridCore | null;
   editRenderers: Record<string, VueEditRenderer>;
   globalEditRenderer?: VueEditRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
 }
 
 /**
@@ -29,20 +44,27 @@ export function renderEditCell(
     rowIndex,
     colIndex,
     initialValue,
+    editId,
     core,
     editRenderers,
     globalEditRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
   } = options;
 
   if (!core) return createTextVNode("");
 
-  const rawValue = getCellValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getCellValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: EditRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    columnId: column.colId ?? column.field,
+    getValue,
     column,
     rowIndex,
     colIndex,
@@ -50,9 +72,9 @@ export function renderEditCell(
     isSelected: true,
     isEditing: true,
     initialValue,
-    onValueChange: (newValue) => core.updateEditValue(newValue),
-    onCommit: () => core.commitEdit(),
-    onCancel: () => core.cancelEdit(),
+    onValueChange: (newValue) => core.edit.updateValue(newValue, editId),
+    onCommit: () => core.edit.commit(editId),
+    onCancel: () => core.edit.cancel(editId),
   };
 
   // Check for column-specific renderer
@@ -75,23 +97,40 @@ export function renderEditCell(
   // Default input
   return h("input", {
     class: "gp-grid-edit-input",
+    "data-edit-id": editId,
     type: "text",
     value: initialValue == null ? "" : String(initialValue),
     autofocus: true,
     onFocus: (e: FocusEvent) => (e.target as HTMLInputElement).select(),
-    onInput: (e: Event) => core.updateEditValue((e.target as HTMLInputElement).value),
+    onInput: (e: Event) => core.edit.updateValue((e.target as HTMLInputElement).value, editId),
     onKeydown: (e: KeyboardEvent) => {
       e.stopPropagation();
       if (e.key === "Enter") {
-        core.commitEdit();
+        core.edit.commit(editId);
       } else if (e.key === "Escape") {
-        core.cancelEdit();
+        core.edit.cancel(editId);
       } else if (e.key === "Tab") {
         e.preventDefault();
-        core.commitEdit();
+        core.edit.commit(editId);
         core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
+      } else {
+        return;
       }
+      focusGridContainer(e.currentTarget as Element);
     },
-    onBlur: () => core.commitEdit(),
+    onBlur: (event: FocusEvent) => {
+      const blurred = event.currentTarget as HTMLInputElement;
+      const grid = blurred.closest(".gp-grid-container");
+      requestAnimationFrame(() => {
+        const replacement = grid?.querySelector<HTMLInputElement>(
+          `.gp-grid-edit-input[data-edit-id="${editId}"]`,
+        );
+        if (replacement && replacement !== blurred) {
+          replacement.focus();
+          return;
+        }
+        core.edit.commit(editId);
+      });
+    },
   });
 }

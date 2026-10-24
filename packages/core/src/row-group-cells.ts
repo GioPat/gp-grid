@@ -1,0 +1,119 @@
+// packages/core/src/row-group-cells.ts
+// What a row and a cell of a hierarchy add to their markup; the wrappers only bind it.
+
+import type {
+  ColumnDefinition,
+  GroupLabelRendererParams,
+  HierarchyGroupRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyTotalRow,
+} from "./types";
+import type { GridLabels } from "./i18n";
+import { formatGroupLabel } from "./row-group-layout";
+
+export interface HierarchyRowAttributes {
+  className: string;
+  "data-row-kind"?: HierarchyRowKind;
+  "data-row-error"?: boolean;
+  "aria-level"?: number;
+  "aria-expanded"?: boolean;
+}
+
+const ROW_KIND_CLASS: Record<HierarchyRowKind, string> = {
+  record: "",
+  group: "gp-grid-row--group",
+  total: "gp-grid-row--total",
+};
+
+const FLAT_ROW: HierarchyRowAttributes = { className: "" };
+
+/** A group whose children failed to load; expanding it again retries. */
+const hasLoadError = (row: HierarchyRow): boolean => row.kind === "group" && row.error !== undefined;
+
+/** A group row with children; a childless one, like the total row, never expands. */
+const isExpandable = (row: HierarchyRow): row is HierarchyGroupRow =>
+  row.kind === "group" && row.childCount > 0;
+
+export const hierarchyRowAttributes = (row: HierarchyRow | undefined): HierarchyRowAttributes => {
+  if (row === undefined) return FLAT_ROW;
+  const attributes: HierarchyRowAttributes = {
+    className: ROW_KIND_CLASS[row.kind],
+    "data-row-kind": row.kind,
+    "aria-level": row.depth + 1,
+    "aria-expanded": isExpandable(row) ? row.expanded : undefined,
+  };
+  if (hasLoadError(row)) {
+    attributes.className += " gp-grid-row--error";
+    attributes["data-row-error"] = true;
+  }
+  return attributes;
+};
+
+/** The custom property the label column's indent reads. */
+export const GROUP_DEPTH_PROPERTY = "--gp-grid-group-depth";
+
+export interface GroupCell {
+  /** The label column's cell on any row of a hierarchy. */
+  indent: boolean;
+  /** Set when the cell is the label cell of a group or total row. */
+  labelRow: HierarchyGroupRow | HierarchyTotalRow | null;
+  /** The formatted label of `labelRow`. */
+  label: string;
+  readOnly: boolean;
+  className: string;
+  /** The label cell's title on a group whose children failed to load. */
+  title?: string;
+}
+
+const FLAT_CELL: GroupCell = { indent: false, labelRow: null, label: "", readOnly: false, className: "" };
+const INDENT_CELL: GroupCell = { ...FLAT_CELL, indent: true, className: "gp-grid-cell--group-indent" };
+const READ_ONLY_CELL: GroupCell = { ...FLAT_CELL, readOnly: true };
+
+export interface GroupCellInput {
+  labelColumnId: string | undefined;
+  columns: readonly ColumnDefinition[];
+  labels: GridLabels;
+}
+
+/** What one cell of a hierarchy is: the indented label column, a label cell, or a plain read-only cell. */
+export const groupCellOf = (
+  row: HierarchyRow | undefined,
+  columnId: string,
+  input: GroupCellInput | null,
+): GroupCell => {
+  if (row === undefined || input === null) return FLAT_CELL;
+  const indent = columnId === input.labelColumnId;
+  if (row.kind === "record") return indent ? INDENT_CELL : FLAT_CELL;
+  if (indent === false) return READ_ONLY_CELL;
+  return {
+    indent,
+    labelRow: row,
+    label: formatGroupLabel(row, input.columns, input.labels),
+    readOnly: true,
+    className: "gp-grid-cell--group-indent gp-grid-cell--group-label",
+    ...(hasLoadError(row) && { title: input.labels.rowGroups.loadFailed }),
+  };
+};
+
+export const groupToggleClassName = (row: HierarchyGroupRow | HierarchyTotalRow): string => {
+  if (isExpandable(row)) {
+    return row.expanded ? "gp-grid-group-toggle gp-grid-group-toggle--expanded" : "gp-grid-group-toggle";
+  }
+  return "gp-grid-group-toggle gp-grid-group-toggle--none";
+};
+
+/** Renderer params of a label cell; `toggle` is a no-op on the total row and a childless group. */
+export const groupLabelParams = (
+  row: HierarchyGroupRow | HierarchyTotalRow,
+  viewIndex: number,
+  label: string,
+  onToggle: (viewIndex: number) => void,
+): GroupLabelRendererParams => ({
+  row,
+  viewIndex,
+  label,
+  toggle: () => {
+    if (isExpandable(row)) onToggle(viewIndex);
+  },
+});

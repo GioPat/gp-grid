@@ -18,5 +18,23 @@ export type { GridHeaderProps } from "./GridHeader";
 export { GridBody } from "./GridBody";
 export type { GridBodyProps } from "./GridBody";
 
+export { GridRow, GridRowPins } from "./GridRow";
+export type { GridRowProps, GridRowPinsProps, GridRowCellContext } from "./GridRow";
+
+export { GridFrozenRows } from "./GridFrozenRows";
+export type { GridFrozenRowsProps } from "./GridFrozenRows";
+
+export { GridCell } from "./GridCell";
+export type { GridCellProps } from "./GridCell";
+
+export { GridHeaderCell } from "./GridHeaderCell";
+export type { GridHeaderCellProps, LeafHeaderBands } from "./GridHeaderCell";
+
+export { GridHeaderGroupCell } from "./GridHeaderGroupCell";
+export type { GridHeaderGroupCellProps } from "./GridHeaderGroupCell";
+
 export { CellPeek } from "./CellPeek";
 export type { CellPeekProps } from "./CellPeek";
+export { GroupLabelCell } from "./GroupLabelCell";
+export type { GroupLabelCellProps } from "./GroupLabelCell";
+export type { RowGroupCellContext } from "../hooks/useRowGroups";

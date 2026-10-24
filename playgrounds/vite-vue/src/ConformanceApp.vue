@@ -1,0 +1,965 @@
+<script setup lang="ts">
+import { computed, h, nextTick, onMounted, ref, shallowRef, watch } from "vue";
+import { GpGrid, createColumnarDataSource } from "@gp-grid/vue";
+import "../../conformance-controls.css";
+import type {
+  CellRendererParams,
+  CellValue,
+  DataSource,
+  CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  ColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnMovedEvent,
+  ColumnPinnedEvent,
+  ColumnResizedEvent,
+  ColumnSchemaError,
+  ColumnStateSnapshot,
+  ColumnStateUpdate,
+  ColumnLayoutMode,
+  FreezeRowsOptions,
+  GridCore,
+  GroupLabelRendererParams,
+  PivotSchema,
+  RowDragEndEvent,
+  RowLoadingOptions,
+  RowResizedEvent,
+} from "@gp-grid/vue";
+import {
+  createFitHooks,
+  createGeometryHooks,
+  createLargeColumnarColumns,
+  createLargeColumnarSource,
+  createNarrowColumns,
+  createWideColumns,
+  createWideSource,
+} from "./conformance-geometry";
+import {
+  createFrozenFixture,
+  FROZEN_HEADER_HEIGHT,
+  FROZEN_HOST_HEIGHT,
+  FROZEN_HOST_NARROW_HEIGHT,
+  FROZEN_ROW_HEIGHT,
+  type FrozenMode,
+} from "./conformance-frozen";
+import {
+  createRowHeightsFixture,
+  ROW_HEIGHTS_HEADER_HEIGHT,
+  ROW_HEIGHTS_ROW_HEIGHT,
+  type RowHeightsMode,
+} from "./conformance-row-heights";
+import {
+  AUTO_FIT_COLUMN_LAYOUT,
+  AUTO_FIT_HEADER_HEIGHT,
+  AUTO_FIT_ROW_HEIGHT,
+  createAutoFitFixture,
+  type AutoFitMode,
+} from "./conformance-auto-fit";
+import {
+  COLUMN_GROUPS_COLUMN_LAYOUT,
+  COLUMN_GROUPS_HEADER_HEIGHT,
+  COLUMN_GROUPS_HOST_HEIGHT,
+  COLUMN_GROUPS_ROW_HEIGHT,
+  createColumnGroupHooks,
+  createColumnGroupsFixture,
+  type ColumnGroupsMode,
+  type ColumnGroupsSchema,
+} from "./conformance-column-groups";
+import {
+  createRowGroupsFixture,
+  ROW_GROUPS_COLUMN_LAYOUT,
+  ROW_GROUPS_HEADER_HEIGHT,
+  ROW_GROUPS_ROW_HEIGHT,
+  ROW_KIND_PROBE,
+  type RowGroupsArm,
+  type RowGroupsColumnsVariant,
+  type RowGroupsMode,
+} from "./conformance-row-groups";
+import {
+  createServerGroupsFixture,
+  SERVER_GROUPS_COLUMN_LAYOUT,
+  SERVER_GROUPS_HEADER_HEIGHT,
+  SERVER_GROUPS_LABEL_COLUMN,
+  SERVER_GROUPS_ROW_HEIGHT,
+  type ServerGroupsMode,
+} from "./conformance-server-groups";
+import {
+  createPivotFixture,
+  PIVOT_BAND_HEIGHTS,
+  PIVOT_COLUMN_LAYOUT,
+  PIVOT_HEADER_HEIGHT,
+  PIVOT_LABEL_COLUMN_ID,
+  PIVOT_ROW_HEIGHT,
+  type PivotMode,
+} from "./conformance-pivot-external";
+import { createEnginePivotFixture } from "./conformance-pivot";
+import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
+import { usePivotSchema } from "./use-pivot-schema";
+
+interface ConformanceRow {
+  id: number;
+  name: string;
+  city: string;
+  score: number;
+  team: string;
+  status: string;
+  note: string;
+  code: string;
+}
+
+const ROW_COUNT = 200;
+
+/** One fixture arm at a time; `none` keeps the fixture's own grid. */
+type FixtureArm =
+  | { fixture: "none" }
+  | { fixture: "frozen"; mode: FrozenMode }
+  | { fixture: "rowHeights"; mode: RowHeightsMode }
+  | { fixture: "autoFit"; mode: AutoFitMode }
+  | { fixture: "columnGroups"; mode: ColumnGroupsMode }
+  | { fixture: "rowGroups"; mode: RowGroupsMode }
+  | { fixture: "serverGroups"; mode: ServerGroupsMode }
+  | { fixture: "pivot"; mode: PivotMode | "engine" }
+  | { fixture: "writes" };
+
+const NO_ARM: FixtureArm = { fixture: "none" };
+
+const createRows = (): ConformanceRow[] => Array.from({ length: ROW_COUNT }, (_, index) => ({
+  id: index,
+  name: `Row ${index.toString().padStart(3, "0")}`,
+  city: `City ${index % 11}`,
+  score: index * 3,
+  team: `Team ${index % 7}`,
+  status: index % 2 === 0 ? "active" : "inactive",
+  note: `Note ${index}`,
+  code: `C-${index.toString().padStart(4, "0")}`,
+}));
+
+const createColumns = (): ColumnDefinition[] => [
+  { colId: "id", field: "id", headerName: "ID", width: 90, cellDataType: "number", sortable: true },
+  { colId: "name", field: "name", headerName: "Name", width: 180, cellDataType: "text", sortable: true, filterable: true, editable: true },
+  { colId: "city", field: "city", headerName: "City", width: 140, cellDataType: "text" },
+  { colId: "score", field: "score", headerName: "Score", width: 120, cellDataType: "number" },
+  { colId: "team", field: "team", headerName: "Team", width: 150, cellDataType: "text" },
+  { colId: "status", field: "status", headerName: "Status", width: 130, cellDataType: "text" },
+  { colId: "note", field: "note", headerName: "Note", width: 210, cellDataType: "text" },
+  { colId: "code", field: "code", headerName: "Code", width: 160, cellDataType: "text" },
+];
+
+/** Same columns, with a formatter so raw and displayed values differ. */
+const createColumnarColumns = (): ColumnDefinition[] =>
+  createColumns().map((column) =>
+    column.field === "score"
+      ? { ...column, valueFormatter: (value: CellValue) => `${value} pts` }
+      : column,
+  );
+
+const createColumnarFixture = () => {
+  let reads = 0;
+  const readRows = new Set<number>();
+  // Borrowed stores are proxied so every numeric cell read is observable.
+  const borrow = <T extends object>(target: T): T =>
+    new Proxy(target, {
+      get(source, property) {
+        if (typeof property === "string" && /^\d+$/.test(property)) {
+          reads += 1;
+          readRows.add(Number(property));
+        }
+        return Reflect.get(source, property, source);
+      },
+    });
+
+  const id = borrow(new Int32Array(ROW_COUNT));
+  const name = borrow(new Array<string>(ROW_COUNT));
+  const city = borrow(new Array<string>(ROW_COUNT));
+  const score = borrow(new Float64Array(ROW_COUNT));
+  const team = borrow(new Array<string>(ROW_COUNT));
+  const status = borrow(new Array<string>(ROW_COUNT));
+  const note = borrow(new Array<string>(ROW_COUNT));
+  const code = borrow(new Array<string>(ROW_COUNT));
+  for (let index = 0; index < ROW_COUNT; index += 1) {
+    id[index] = index;
+    name[index] = `Row ${index.toString().padStart(3, "0")}`;
+    city[index] = `City ${index % 11}`;
+    score[index] = index * 3;
+    team[index] = `Team ${index % 7}`;
+    status[index] = index % 2 === 0 ? "active" : "inactive";
+    note[index] = `Note ${index}`;
+    code[index] = `C-${index.toString().padStart(4, "0")}`;
+  }
+  const source = createColumnarDataSource({
+    rowCount: ROW_COUNT,
+    getRowId: (row) => id[row]!,
+    fields: [
+      { field: "id", data: id },
+      { field: "name", data: name },
+      { field: "city", data: city },
+      { field: "score", data: score },
+      { field: "team", data: team },
+      { field: "status", data: status },
+      { field: "note", data: note },
+      { field: "code", data: code },
+    ],
+  });
+
+  let materializations = 0;
+  const readRecord = source.getRecord.bind(source);
+  source.getRecord = (row) => {
+    materializations += 1;
+    return readRecord(row);
+  };
+
+  return {
+    source,
+    data: { id, name, score },
+    reads: () => reads,
+    distinctRows: () => readRows.size,
+    resetReads: () => {
+      reads = 0;
+      readRows.clear();
+    },
+    recordMaterializations: () => materializations,
+  };
+};
+
+const rows = ref<ConformanceRow[]>(createRows());
+const columns = ref<ColumnDefinition[]>(createColumns());
+const columnarColumns = ref<ColumnDefinition[]>(createColumnarColumns());
+const fixture = createColumnarFixture();
+const largeColumnarSource = ref<ReturnType<typeof createLargeColumnarSource> | null>(null);
+const frozen = createFrozenFixture();
+const rowHeights = createRowHeightsFixture();
+const autoFit = createAutoFitFixture();
+const columnGroups = createColumnGroupsFixture();
+const rowGroups = createRowGroupsFixture();
+const serverGroups = createServerGroupsFixture();
+const pivot = createPivotFixture();
+const pivotSchema = shallowRef<PivotSchema>({ columns: [], columnGroups: [] });
+const enginePivot = createEnginePivotFixture();
+const writes = createWritesFixture();
+// Shallow: the grouping and the columns reach the grid as the fixture's own objects.
+const rowGroupsArm = shallowRef<RowGroupsArm>({ columns: [], grouping: null });
+
+/** PRD 008: prints the renderer's `rowKind`, so a spec can read it. */
+const renderRowKindProbe = (params: CellRendererParams) =>
+  h("span", { class: "rg-kind-probe", "data-probe-kind": params.rowKind ?? "flat" }, String(params.value ?? ""));
+const rowGroupRenderers = { [ROW_KIND_PROBE]: renderRowKindProbe };
+
+/** The external arm's label: the formatted text and a button wired to `toggle`. */
+const renderExternalLabel = (params: GroupLabelRendererParams) =>
+  h("span", { class: "rg-custom-label", "data-row-kind": params.row.kind }, [
+    params.label,
+    params.row.kind === "group"
+      ? h("button", {
+        type: "button",
+        class: "rg-custom-toggle",
+        "aria-label": "Toggle group",
+        style: { width: "14px", height: "14px", marginInlineStart: "4px" },
+        onClick: params.toggle,
+      })
+      : null,
+  ]);
+const arm = ref<FixtureArm>(NO_ARM);
+// Shallow: the hierarchy reaches the core as the caller's own objects.
+const groupsSchema = shallowRef<ColumnGroupsSchema>(columnGroups.schemaFor("off"));
+const bandHeights = shallowRef<readonly number[] | undefined>(undefined);
+const groupLimits = shallowRef<ColumnGroupLimits | undefined>(undefined);
+const mode = ref<"object" | "columnar">("object");
+const revision = ref(0);
+const mounted = ref(true);
+const generation = ref(0);
+const rtl = ref(false);
+const editEvents = ref(0);
+const writeRejected = ref(0);
+const columnState = ref<ColumnStateUpdate[] | undefined>(undefined);
+const columnLayout = ref<ColumnLayoutMode>("fit");
+const hostWidth = ref(600);
+const hostHeight = ref(FROZEN_HOST_HEIGHT);
+const freezeOverride = ref<FreezeRowsOptions | undefined | null>(null);
+const gridRef = ref<InstanceType<typeof GpGrid> | null>(null);
+const eventCounts = { resized: 0, moved: 0, dragged: 0, pinned: 0, rowResized: 0 };
+const coreTokens = new WeakMap<object, number>();
+let nextCoreToken = 1;
+
+const coreOf = (): GridCore<unknown> | undefined =>
+  (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+
+const readCoreToken = (): number => {
+  const core = coreOf();
+  if (!core) return -1;
+  const existing = coreTokens.get(core);
+  if (existing !== undefined) return existing;
+  const token = nextCoreToken;
+  nextCoreToken += 1;
+  coreTokens.set(core, token);
+  return token;
+};
+
+const metrics = computed(() => JSON.stringify({
+  generation: generation.value,
+  editEvents: editEvents.value,
+  writeRejected: writeRejected.value,
+  mode: mode.value,
+  revision: revision.value,
+}));
+
+const replaceColumns = (): void => {
+  columns.value = [
+    { colId: "score", field: "score", headerName: "Score", width: 120, cellDataType: "number" },
+    { colId: "city", field: "city", headerName: "City", width: 140, cellDataType: "text" },
+    { colId: "replacement", field: "code", headerName: "Replacement", width: 190, cellDataType: "text" },
+  ];
+};
+
+const useNarrowColumns = (): void => {
+  columns.value = createNarrowColumns();
+};
+
+const useLargeColumnar = (): void => {
+  mode.value = "columnar";
+  columnarColumns.value = createLargeColumnarColumns();
+  largeColumnarSource.value = createLargeColumnarSource();
+  generation.value += 1;
+  revision.value = fixture.source.revision;
+};
+
+const frozenMode = computed<FrozenMode>(() => (arm.value.fixture === "frozen" ? arm.value.mode : "off"));
+const rowHeightsMode = computed<RowHeightsMode>(() => (arm.value.fixture === "rowHeights" ? arm.value.mode : "off"));
+const autoFitMode = computed<AutoFitMode>(() => (arm.value.fixture === "autoFit" ? arm.value.mode : "off"));
+const columnGroupsMode = computed<ColumnGroupsMode>(() => (arm.value.fixture === "columnGroups" ? arm.value.mode : "off"));
+const rowGroupsMode = computed<RowGroupsMode>(() => (arm.value.fixture === "rowGroups" ? arm.value.mode : "off"));
+const rowGroupsActive = computed(() => rowGroupsMode.value !== "off");
+const serverGroupsMode = computed<ServerGroupsMode>(() => (arm.value.fixture === "serverGroups" ? arm.value.mode : "off"));
+const serverGroupsActive = computed(() => serverGroupsMode.value !== "off");
+const pivotActive = computed(() => arm.value.fixture === "pivot");
+const enginePivotActive = computed(() => arm.value.fixture === "pivot" && arm.value.mode === "engine");
+const writesActive = computed(() => arm.value.fixture === "writes");
+const engineSchema = usePivotSchema(
+  // Reads `arm` itself, so re-arming the engine rebinds to its new source.
+  () => (arm.value.fixture === "pivot" && arm.value.mode === "engine" ? enginePivot.pivotSource() : null),
+  enginePivot.recordNotification,
+);
+const shownPivotSchema = computed(() => (enginePivotActive.value ? engineSchema.value : pivotSchema.value));
+const frozenActive = computed(() => frozenMode.value !== "off");
+const frozenObject = computed(() => frozenMode.value === "object");
+const rowHeightsActive = computed(() => rowHeightsMode.value !== "off");
+const autoFitActive = computed(() => autoFitMode.value !== "off");
+const columnGroupsActive = computed(() => columnGroupsMode.value !== "off");
+
+/** Arming swaps the data source and columns, so it remounts the grid. */
+const armFixture = (next: FixtureArm): void => {
+  arm.value = next;
+  generation.value += 1;
+};
+
+const useFreezeRows = (): void => armFixture({ fixture: "frozen", mode: "columnar" });
+const clearFreezeRows = (): void => armFixture(NO_ARM);
+const useFrozenPaged = (): void => armFixture({ fixture: "frozen", mode: "paged" });
+const useFrozenPagedTight = (): void => armFixture({ fixture: "frozen", mode: "paged-tight" });
+const useFrozenObject = (): void => armFixture({ fixture: "frozen", mode: "object" });
+
+const useRowHeights = (): void => armFixture({ fixture: "rowHeights", mode: "object" });
+const useRowHeightsLarge = (): void => armFixture({ fixture: "rowHeights", mode: "large" });
+const useRowHeightsPaged = (): void => armFixture({ fixture: "rowHeights", mode: "paged" });
+const useAutoFit = (): void => armFixture({ fixture: "autoFit", mode: "object" });
+const useAutoFitPaged = (): void => armFixture({ fixture: "autoFit", mode: "paged" });
+
+/** The group arms also reset the hierarchy, the band heights and the budgets. */
+const armColumnGroups = (next: ColumnGroupsMode): void => {
+  groupsSchema.value = columnGroups.schemaFor(next);
+  bandHeights.value = undefined;
+  groupLimits.value = undefined;
+  columnGroups.clearResult();
+  armFixture({ fixture: "columnGroups", mode: next });
+};
+const useColumnGroups = (): void => armColumnGroups("groups");
+
+/** Row group arms (PRD 008): fresh rows, source and grouping, then a remount. */
+/** Pivot arms (PRD 012): a fresh fixture and its schema, then a remount. */
+const armPivot = (next: PivotMode): void => {
+  pivotSchema.value = pivot.arm(next);
+  armFixture({ fixture: "pivot", mode: next });
+};
+/** The engine arm (PRD 012): fresh records and sources; its schema arrives through `usePivotSchema`. */
+const armEnginePivot = (): void => {
+  enginePivot.arm();
+  armFixture({ fixture: "pivot", mode: "engine" });
+};
+/** The writes arm (PRD 013): fresh records and source, then a remount. */
+const armWrites = (): void => {
+  writes.arm();
+  armFixture({ fixture: "writes" });
+};
+const armRowGroups = (next: RowGroupsMode): void => {
+  rowGroupsArm.value = rowGroups.arm(next);
+  armFixture({ fixture: "rowGroups", mode: next });
+};
+/** In place: the grid keeps its core and regroups or relabels. */
+const setRowGroupColumns = (variant: RowGroupsColumnsVariant): void => {
+  rowGroupsArm.value = { ...rowGroupsArm.value, columns: rowGroups.columnsFor(rowGroupsMode.value, variant) };
+};
+const ungroup = (): void => {
+  rowGroupsArm.value = { ...rowGroupsArm.value, grouping: null };
+};
+/** Server group arms (PRD 009): a fresh mock and source, then a remount. */
+const armServerGroups = (next: ServerGroupsMode): void => {
+  serverGroups.arm(next);
+  armFixture({ fixture: "serverGroups", mode: next });
+};
+const useWideGroups = (): void => armColumnGroups("wide");
+
+// In-place controls: the option stays reactive, so these never touch the
+// remount `generation`. `null` means "the armed mode's own option".
+const freezeCount = (count: number): void => {
+  freezeOverride.value = { count };
+};
+const freezeThrough5 = (): void => {
+  coreOf()?.frozenRows.freezeThrough(5);
+};
+const unfreezeInPlace = (): void => {
+  freezeOverride.value = undefined;
+};
+/** Drives the core's own setter: a button click would blur and commit. */
+const setFreezeCount = (count: number): void => {
+  coreOf()?.frozenRows.set({ count });
+};
+const toggleHostHeight = (): void => {
+  hostHeight.value = hostHeight.value === FROZEN_HOST_HEIGHT
+    ? FROZEN_HOST_NARROW_HEIGHT
+    : FROZEN_HOST_HEIGHT;
+};
+
+/** A row-height or frozen arm replaces the data source; otherwise the mode picks it. */
+const activeDataSource = (): DataSource<never> | undefined => {
+  if (writesActive.value) return writes.source();
+  if (pivotActive.value) return enginePivotActive.value ? enginePivot.source() : pivot.source();
+  if (serverGroupsActive.value) return serverGroups.source();
+  if (rowGroupsActive.value) return rowGroups.source();
+  if (columnGroupsActive.value) return undefined;
+  if (autoFitActive.value) return autoFit.sourceFor(autoFitMode.value);
+  if (rowHeightsActive.value) return rowHeights.sourceFor(rowHeightsMode.value);
+  if (frozenActive.value) return frozen.sourceFor(frozenMode.value);
+  if (mode.value === "columnar") return largeColumnarSource.value ?? fixture.source;
+  return undefined;
+};
+
+/** The writable arms keep the caller's object rows; every other one is sourced. */
+const activeRowData = (): ConformanceRow[] | undefined => {
+  if (rowGroupsActive.value || serverGroupsActive.value || pivotActive.value || writesActive.value) return undefined;
+  if (columnGroupsActive.value) {
+    return columnGroups.rowDataFor(columnGroupsMode.value) as unknown as ConformanceRow[] | undefined;
+  }
+  if (autoFitActive.value) return autoFit.rowDataFor(autoFitMode.value) as unknown as ConformanceRow[] | undefined;
+  if (rowHeightsActive.value) return rowHeights.rowDataFor(rowHeightsMode.value);
+  if (frozenActive.value) return frozenObject.value ? rows.value : undefined;
+  return mode.value === "columnar" ? undefined : rows.value;
+};
+
+const activeColumns = (): ColumnDefinition[] => {
+  if (writesActive.value) return WRITES_COLUMNS;
+  if (pivotActive.value) return shownPivotSchema.value.columns;
+  if (serverGroupsActive.value) return serverGroups.columns();
+  if (rowGroupsActive.value) return rowGroupsArm.value.columns;
+  if (columnGroupsActive.value) return groupsSchema.value.columns;
+  const fitColumns = autoFitActive.value ? autoFit.columnsFor(autoFitMode.value) : undefined;
+  if (fitColumns !== undefined) return fitColumns;
+  const heightColumns = rowHeightsActive.value ? rowHeights.columnsFor(rowHeightsMode.value) : undefined;
+  if (heightColumns !== undefined) return heightColumns;
+  const frozenColumns = frozenActive.value ? frozen.columnsFor(frozenMode.value) : undefined;
+  if (frozenColumns !== undefined) return frozenColumns;
+  return mode.value === "columnar" ? columnarColumns.value : columns.value;
+};
+
+const activeRowLoading = (): RowLoadingOptions | undefined => {
+  if (serverGroupsActive.value) return undefined;
+  if (rowGroupsActive.value) return rowGroups.rowLoading();
+  if (autoFitActive.value) return autoFit.rowLoadingFor(autoFitMode.value);
+  return rowHeightsActive.value
+    ? rowHeights.rowLoadingFor(rowHeightsMode.value)
+    : frozen.rowLoadingFor(frozenMode.value);
+};
+
+const activeRowHeight = (): number => {
+  if (frozenActive.value) return FROZEN_ROW_HEIGHT;
+  if (rowHeightsActive.value) return ROW_HEIGHTS_ROW_HEIGHT;
+  if (autoFitActive.value) return AUTO_FIT_ROW_HEIGHT;
+  if (columnGroupsActive.value) return COLUMN_GROUPS_ROW_HEIGHT;
+  if (rowGroupsActive.value) return ROW_GROUPS_ROW_HEIGHT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_ROW_HEIGHT;
+  if (pivotActive.value) return PIVOT_ROW_HEIGHT;
+  if (writesActive.value) return WRITES_ROW_HEIGHT;
+  return 32;
+};
+
+const activeHeaderHeight = (): number => {
+  if (frozenActive.value) return FROZEN_HEADER_HEIGHT;
+  if (rowHeightsActive.value) return ROW_HEIGHTS_HEADER_HEIGHT;
+  if (autoFitActive.value) return AUTO_FIT_HEADER_HEIGHT;
+  if (columnGroupsActive.value) return COLUMN_GROUPS_HEADER_HEIGHT;
+  if (rowGroupsActive.value) return ROW_GROUPS_HEADER_HEIGHT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_HEADER_HEIGHT;
+  if (pivotActive.value) return PIVOT_HEADER_HEIGHT;
+  if (writesActive.value) return WRITES_HEADER_HEIGHT;
+  return 36;
+};
+
+const activeColumnLayout = (): ColumnLayoutMode => {
+  if (autoFitActive.value) return AUTO_FIT_COLUMN_LAYOUT;
+  if (rowGroupsActive.value) return ROW_GROUPS_COLUMN_LAYOUT;
+  if (serverGroupsActive.value) return SERVER_GROUPS_COLUMN_LAYOUT;
+  if (pivotActive.value) return PIVOT_COLUMN_LAYOUT;
+  return columnGroupsActive.value ? COLUMN_GROUPS_COLUMN_LAYOUT : columnLayout.value;
+};
+
+const activeFreezeRows = (): FreezeRowsOptions | undefined => {
+  if (freezeOverride.value !== null) return freezeOverride.value;
+  return serverGroupsActive.value
+    ? serverGroups.freezeRowsFor(serverGroupsMode.value)
+    : frozen.freezeRowsFor(frozenMode.value);
+};
+
+const activeLabelColumn = (): string | undefined => {
+  if (pivotActive.value) return PIVOT_LABEL_COLUMN_ID;
+  if (serverGroupsActive.value) return SERVER_GROUPS_LABEL_COLUMN;
+  return rowGroupsActive.value ? rowGroups.labelColumn() : undefined;
+};
+
+const activeColumnGroups = (): readonly ColumnGroupChild[] | undefined => {
+  if (pivotActive.value) return shownPivotSchema.value.columnGroups;
+  return columnGroupsActive.value ? groupsSchema.value.groups : undefined;
+};
+
+const activeBandHeights = (): readonly number[] | undefined => {
+  if (pivotActive.value) return PIVOT_BAND_HEIGHTS;
+  return columnGroupsActive.value ? bandHeights.value : undefined;
+};
+
+/** Wide fixtures bind an accessor source: no per-row storage for 10k columns. */
+const useWideColumns = (count: number): void => {
+  mode.value = "columnar";
+  columnarColumns.value = createWideColumns(count);
+  largeColumnarSource.value = createWideSource(count);
+  generation.value += 1;
+};
+
+const pinColumns = (): void => {
+  columnState.value = [
+    { columnId: "id", pinned: "start" },
+    { columnId: "name", pinned: "start" },
+    { columnId: "code", pinned: "end" },
+  ];
+};
+
+const unpinAll = (): void => {
+  columnState.value = undefined;
+  const core = coreOf();
+  for (const column of core?.columns.get() ?? []) {
+    core?.columns.setPinned(column.colId ?? column.field, null);
+  }
+};
+
+const toggleColumnLayout = (): void => {
+  columnLayout.value = columnLayout.value === "fit" ? "fixed" : "fit";
+};
+
+const resizeHost = (): void => {
+  hostWidth.value = hostWidth.value === 600 ? 800 : 600;
+};
+
+const hideColumn = (): void => {
+  columnState.value = [...(columnState.value ?? []), { columnId: "id", hidden: true }];
+};
+
+const reset = (): void => {
+  arm.value = NO_ARM;
+  rows.value = createRows();
+  columns.value = createColumns();
+  columnarColumns.value = createColumnarColumns();
+  columnState.value = undefined;
+  columnLayout.value = "fit";
+  hostWidth.value = 600;
+  hostHeight.value = FROZEN_HOST_HEIGHT;
+  freezeOverride.value = null;
+  mode.value = "object";
+  mounted.value = true;
+  rtl.value = false;
+  generation.value += 1;
+  editEvents.value = 0;
+  writeRejected.value = 0;
+  eventCounts.resized = 0;
+  eventCounts.moved = 0;
+  eventCounts.dragged = 0;
+  eventCounts.pinned = 0;
+  eventCounts.rowResized = 0;
+};
+
+const remount = async (): Promise<void> => {
+  mounted.value = false;
+  await nextTick();
+  generation.value += 1;
+  mounted.value = true;
+};
+
+const toggleRtl = async (): Promise<void> => {
+  rtl.value = !rtl.value;
+  await remount();
+};
+
+const useColumnar = (): void => {
+  mode.value = "columnar";
+  generation.value += 1;
+  revision.value = fixture.source.revision;
+};
+
+const useObject = (): void => {
+  mode.value = "object";
+  generation.value += 1;
+};
+
+/** In-place same-array update followed by an explicit revision refresh. */
+const bumpRevision = async (): Promise<void> => {
+  fixture.data.name[0] = "Row revised";
+  fixture.data.score[0] = 7;
+  const next = fixture.source.revision + 1;
+  fixture.source.setRevision(next);
+  revision.value = next;
+  const exposed = gridRef.value as unknown as { core?: { refresh(): Promise<void> } } | null;
+  await exposed?.core?.refresh();
+};
+
+const onCellValueChanged = (event: CellValueChangedEvent<unknown>): void => {
+  rows.value = rows.value.map((row) => row.id === event.rowId ? { ...row, [event.field]: event.newValue } : row);
+  editEvents.value += 1;
+};
+
+const onWriteRejected = (event: CellWriteRejectedEvent): void => {
+  rowGroups.recordWriteRejected(event);
+  writeRejected.value += 1;
+};
+
+const onColumnResized = (_event: ColumnResizedEvent): void => {
+  eventCounts.resized += 1;
+};
+const onColumnMoved = (_event: ColumnMovedEvent): void => {
+  eventCounts.moved += 1;
+};
+const onRowDragEnd = (_event: RowDragEndEvent): void => {
+  eventCounts.dragged += 1;
+};
+const onColumnPinned = (_event: ColumnPinnedEvent): void => {
+  eventCounts.pinned += 1;
+};
+const onRowResized = (_event: RowResizedEvent): void => {
+  eventCounts.rowResized += 1;
+};
+const onColumnSchemaRejected = (error: ColumnSchemaError): void => {
+  columnGroups.recordRejection(error);
+};
+
+const applyColumnState = (): void => {
+  columnState.value = [{ columnId: "city", width: 260 }];
+};
+const resetColumnState = (): void => {
+  columnState.value = undefined;
+  coreOf()?.columns.resetState();
+};
+const applySort = (): void => {
+  void coreOf()?.sortFilter.setSort("score", "asc");
+};
+const applyFilter = (): void => {
+  void coreOf()?.sortFilter.setFilter("city", "City 1");
+};
+const moveColumn = (): void => {
+  coreOf()?.columns.move(0, 2);
+};
+const dragRow = (): void => {
+  coreOf()?.rowDrag.commit(0, 1);
+};
+
+/** In-place height controls: the arm stays mounted (AC-006-01/03/04). */
+const setRowHeightControls = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.setControlHeights(core);
+};
+
+const growAboveViewport = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.growAboveViewport(core);
+};
+
+const growFrozenRow = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.growFrozenRow(core);
+};
+
+const resetRowHeights = (): void => {
+  const core = coreOf();
+  if (core) rowHeights.resetHeights(core);
+};
+
+/** Group controls: commands go through the core, the schema through the props (PRD 007). */
+const withCore = (run: (core: GridCore<unknown>) => void) => (): void => {
+  const core = coreOf();
+  if (core) run(core);
+};
+const replaceSchema = (next: (schema: ColumnGroupsSchema) => ColumnGroupsSchema) => (): void => {
+  columnGroups.clearResult();
+  groupsSchema.value = next(groupsSchema.value);
+};
+const setColumnGroups = (groups: readonly ColumnGroupChild[] | undefined): void => {
+  groupsSchema.value = { columns: groupsSchema.value.columns, groups };
+};
+const moveXBetween = withCore((core) => columnGroups.moveXBetween(core));
+const moveXBack = withCore((core) => columnGroups.moveXBack(core));
+const hideB = withCore((core) => columnGroups.setHidden(core, "b", true));
+const showB = withCore((core) => columnGroups.setHidden(core, "b", false));
+const pinA = withCore((core) => columnGroups.pin(core, "a", "start"));
+const resetOrder = withCore((core) => columnGroups.resetOrder(core));
+const replaceGroups = replaceSchema(columnGroups.replacement);
+const rejectCycle = replaceSchema(columnGroups.cyclic);
+const rejectMissing = replaceSchema(columnGroups.missing);
+const tallBand = withCore((core) => {
+  bandHeights.value = columnGroups.tallBandHeights(core);
+});
+const pivotReplaceRevision = withCore((core) => {
+  pivotSchema.value = pivot.replaceRevision(core);
+});
+/** Budgets are creation-only, so arming one remounts the grid. */
+const overBudgetMove = withCore((core) => {
+  groupLimits.value = columnGroups.overBudgetLimits(core);
+  generation.value += 1;
+});
+
+if (typeof window !== "undefined") {
+  const rowGroupHooks = rowGroups.createHooks(() => coreOf());
+  (window as unknown as { __gpConformance?: unknown }).__gpConformance = {
+    getCellValue: (row: number, col: number): CellValue => coreOf()?.cells.getValue(row, col) ?? null,
+    getFieldValue: (row: number, field: string): CellValue => coreOf()?.cells.getFieldValue(row, field) ?? null,
+    revision: (): number => fixture.source.revision,
+    sourceReads: (): number => fixture.reads(),
+    sourceDistinctRows: (): number => fixture.distinctRows(),
+    resetSourceReads: (): void => fixture.resetReads(),
+    recordMaterializations: (): number => fixture.recordMaterializations(),
+    coreToken: readCoreToken,
+    columnIds: (): string[] =>
+      coreOf()?.columns.get().map((column: ColumnDefinition) => column.colId ?? column.field) ?? [],
+    columnState: (): ColumnStateSnapshot[] => coreOf()?.columns.getState() ?? [],
+    sortColumn: (): string | null => coreOf()?.sortFilter.getSortModel()[0]?.colId ?? null,
+    filterCount: (): number => Object.keys(coreOf()?.sortFilter.getFilterModel() ?? {}).length,
+    eventCounts: () => ({ ...eventCounts, ...rowGroups.eventCounts() }),
+    resetEventCounts: (): void => {
+      rowGroups.resetEventCounts();
+      eventCounts.resized = 0;
+      eventCounts.moved = 0;
+      eventCounts.dragged = 0;
+      eventCounts.pinned = 0;
+      eventCounts.rowResized = 0;
+    },
+    useWideColumns,
+    setFreezeCount,
+    ...createGeometryHooks(() => coreOf(), frozen),
+    ...createFitHooks(() => coreOf()),
+    ...createColumnGroupHooks(() => coreOf(), columnGroups, {
+      setGroups: setColumnGroups,
+      setBandHeights: (heights) => {
+        bandHeights.value = heights;
+      },
+    }),
+    ...rowGroupHooks,
+    ...enginePivot.createHooks(pivot.createHooks(() => coreOf(), rowGroupHooks)),
+    ...serverGroups.createHooks(),
+    ...writes.createHooks(() => coreOf()),
+    // Each arm records its own requests; the frozen reader is the other arms'.
+    requestedRanges: () => {
+      if (autoFitActive.value) return autoFit.requestedRanges();
+      return rowHeightsActive.value ? rowHeights.requestedRanges() : frozen.requestedRanges();
+    },
+  };
+  // Arming remounts the grid, so the announcement reader follows each core.
+  watch(generation, async () => {
+    await nextTick();
+    const core = coreOf();
+    frozen.track(core ?? null);
+    if (rowHeightsActive.value && core) rowHeights.applyPreset(core, rowHeightsMode.value);
+  }, { immediate: true });
+  onMounted(() => frozen.track(coreOf() ?? null));
+}
+</script>
+
+<template>
+  <main data-conformance-framework="vue">
+    <div class="cf-controls">
+      <section class="cf-group">
+        <h2>Session</h2>
+        <button data-testid="reset" @click="reset">Reset</button>
+        <button data-testid="remount" @click="remount">Remount</button>
+        <button data-testid="toggle-rtl" @click="toggleRtl">Toggle RTL</button>
+        <button data-testid="resize-host" @click="resizeHost">Resize host</button>
+        <button data-testid="toggle-host-height" @click="toggleHostHeight">Toggle host height</button>
+        <button data-testid="toggle-column-layout" @click="toggleColumnLayout">Toggle layout</button>
+      </section>
+      <section class="cf-group">
+        <h2>Data</h2>
+        <button data-testid="use-columnar" @click="useColumnar">Use columnar</button>
+        <button data-testid="use-object" @click="useObject">Use object</button>
+        <button data-testid="bump-revision" @click="bumpRevision">Bump revision</button>
+        <button data-testid="use-large-columnar" @click="useLargeColumnar">Large columnar</button>
+        <button
+          data-testid="replace-columns"
+          @click="rowGroupsActive ? setRowGroupColumns('replaced') : replaceColumns()"
+        >
+          Replace columns
+        </button>
+        <button data-testid="apply-sort" @click="applySort">Apply sort</button>
+        <button data-testid="apply-filter" @click="applyFilter">Apply filter</button>
+        <button data-testid="drag-row" @click="dragRow">Drag row</button>
+      </section>
+      <section class="cf-group">
+        <h2>Columns</h2>
+        <button data-testid="apply-column-state" @click="applyColumnState">Apply column state</button>
+        <button data-testid="reset-column-state" @click="resetColumnState">Reset column state</button>
+        <button data-testid="move-column" @click="moveColumn">Move column</button>
+        <button data-testid="hide-column" @click="hideColumn">Hide column</button>
+        <button data-testid="use-narrow-columns" @click="useNarrowColumns">Narrow columns</button>
+        <button data-testid="use-wide-columns" @click="useWideColumns(1000)">Wide columns</button>
+        <button data-testid="pin-columns" @click="pinColumns">Pin columns</button>
+        <button data-testid="unpin-all" @click="unpinAll">Unpin all</button>
+      </section>
+      <section class="cf-group">
+        <h2>Frozen rows</h2>
+        <button data-testid="use-freeze-rows" @click="useFreezeRows">Freeze rows</button>
+        <button data-testid="clear-freeze-rows" @click="clearFreezeRows">Clear freeze rows</button>
+        <button data-testid="use-frozen-paged" @click="useFrozenPaged">Frozen paged</button>
+        <button data-testid="use-frozen-paged-tight" @click="useFrozenPagedTight">Frozen paged tight</button>
+        <button data-testid="use-frozen-object" @click="useFrozenObject">Frozen object</button>
+        <button data-testid="freeze-two" @click="freezeCount(2)">Freeze 2</button>
+        <button data-testid="freeze-count-3" @click="freezeCount(3)">Freeze 3</button>
+        <button data-testid="freeze-three" @click="freezeCount(3)">Freeze 3 rows</button>
+        <button data-testid="freeze-count-5" @click="freezeCount(5)">Freeze 5</button>
+        <button data-testid="freeze-through-5" @click="freezeThrough5">Freeze through 5</button>
+        <button data-testid="unfreeze-in-place" @click="unfreezeInPlace">Unfreeze in place</button>
+      </section>
+      <section class="cf-group">
+        <h2>Row heights</h2>
+        <button data-testid="use-row-heights" @click="useRowHeights">Row heights</button>
+        <button data-testid="use-row-heights-large" @click="useRowHeightsLarge">Heights large</button>
+        <button data-testid="use-row-heights-paged" @click="useRowHeightsPaged">Heights paged</button>
+        <button data-testid="set-row-heights" @click="setRowHeightControls">Set heights</button>
+        <button data-testid="grow-above-viewport" @click="growAboveViewport">Grow above</button>
+        <button data-testid="grow-frozen-row" @click="growFrozenRow">Grow frozen row</button>
+        <button data-testid="reset-row-heights" @click="resetRowHeights">Reset heights</button>
+        <button data-testid="use-auto-fit" @click="useAutoFit">Auto fit</button>
+        <button data-testid="use-auto-fit-paged" @click="useAutoFitPaged">Auto fit paged</button>
+      </section>
+      <section class="cf-group">
+        <h2>Column groups</h2>
+        <button data-testid="use-column-groups" @click="useColumnGroups">Column groups</button>
+        <button data-testid="use-wide-groups" @click="useWideGroups">Wide groups</button>
+        <button data-testid="move-x-between" @click="moveXBetween">X between</button>
+        <button data-testid="move-x-back" @click="moveXBack">X back</button>
+        <button data-testid="hide-b" @click="hideB">Hide B</button>
+        <button data-testid="show-b" @click="showB">Show B</button>
+        <button data-testid="pin-a" @click="pinA">Pin A</button>
+        <button data-testid="reset-order" @click="resetOrder">Reset order</button>
+        <button data-testid="replace-groups" @click="replaceGroups">Replace groups</button>
+        <button data-testid="reject-cycle" @click="rejectCycle">Reject cycle</button>
+        <button data-testid="reject-missing" @click="rejectMissing">Reject missing</button>
+        <button data-testid="over-budget-move" @click="overBudgetMove">Over budget</button>
+        <button data-testid="tall-band" @click="tallBand">Tall band</button>
+      </section>
+      <section class="cf-group">
+        <h2>Row groups</h2>
+        <button data-testid="use-row-groups" @click="armRowGroups('object')">Groups: object</button>
+        <button data-testid="use-row-groups-columnar" @click="armRowGroups('columnar')">Groups: columnar</button>
+        <button data-testid="use-row-groups-external" @click="armRowGroups('external')">Groups: external</button>
+        <button data-testid="use-row-groups-paged" @click="armRowGroups('paged')">Groups: paged</button>
+        <button data-testid="expand-all" @click="withCore(rowGroups.expandAll)()">Expand all</button>
+        <button data-testid="collapse-all" @click="withCore(rowGroups.collapseAll)()">Collapse all</button>
+        <button data-testid="tall-leaf" @click="withCore(rowGroups.tallLeaf)()">Tall leaf</button>
+        <button data-testid="ungroup" @click="ungroup">Ungroup</button>
+        <button data-testid="replace-revision" @click="withCore((core) => void rowGroups.replaceRevision(core))()">Replace revision</button>
+        <button data-testid="format-country" @click="setRowGroupColumns('formatted')">Format country</button>
+      </section>
+      <section class="cf-group">
+        <h2>Server groups</h2>
+        <button data-testid="use-server-groups" @click="armServerGroups('immediate')">Server: immediate</button>
+        <button data-testid="use-server-groups-held" @click="armServerGroups('held')">Server: held</button>
+        <button data-testid="use-server-groups-frozen" @click="armServerGroups('frozen')">Server: frozen</button>
+        <button data-testid="release-responses" @click="serverGroups.releaseResponses()">Release responses</button>
+        <button data-testid="fail-next-leaves" @click="serverGroups.failNextLeaves()">Fail next leaves</button>
+        <button data-testid="collapse-first-group" @click="withCore(serverGroups.collapseFirstGroup)()">Collapse first group</button>
+        <button data-testid="scroll-deep" @click="withCore(serverGroups.scrollDeep)()">Scroll deep</button>
+      </section>
+      <section class="cf-group">
+        <h2>Pivot</h2>
+        <button data-testid="use-pivot-external" @click="armPivot('external')">Pivot: external</button>
+        <button data-testid="use-pivot-external-wide" @click="armPivot('wide')">Pivot: wide</button>
+        <button data-testid="pivot-replace-revision" @click="pivotReplaceRevision()">Replace revision</button>
+        <button data-testid="pivot-refresh" @click="withCore(pivot.refresh)()">Refresh</button>
+        <button data-testid="pivot-hold-next" @click="pivot.holdNext()">Hold next</button>
+        <button data-testid="pivot-release" @click="pivot.release()">Release</button>
+        <button data-testid="pivot-pin-label" @click="withCore(pivot.pinLabel)()">Pin label</button>
+        <button data-testid="pivot-move-leaf" @click="withCore(pivot.moveLeaf)()">Move leaf</button>
+        <button data-testid="pivot-set-total-width" @click="withCore(pivot.setTotalWidth)()">Total width</button>
+        <button data-testid="use-pivot" @click="armEnginePivot()">Pivot: engine</button>
+        <button data-testid="pivot-add-key" @click="withCore((core) => void enginePivot.addKey(core))()">Add key</button>
+        <button data-testid="pivot-sort-first-amount" @click="withCore(enginePivot.sortFirstAmount)()">Sort first amount</button>
+        <button data-testid="pivot-set-first-amount-width" @click="withCore(enginePivot.setFirstAmountWidth)()">First amount width</button>
+      </section>
+      <section class="cf-group">
+        <h2>Writes</h2>
+        <button data-testid="use-writes" @click="armWrites()">Writes</button>
+        <button data-testid="writes-sort-name" @click="withCore(writes.sortByName)()">Sort by name</button>
+        <button data-testid="writes-filter-names" @click="withCore(writes.filterNames)()">Filter names</button>
+        <button data-testid="writes-clear-filter" @click="withCore(writes.clearFilter)()">Clear filter</button>
+        <button data-testid="writes-conflict" @click="withCore((core) => void writes.conflictFirst(core))()">Conflict</button>
+        <button data-testid="writes-app-update" @click="void writes.appUpdate()">App update</button>
+        <button data-testid="writes-app-add" @click="void writes.appAdd()">App add</button>
+        <button data-testid="writes-refresh" @click="withCore((core) => void core.refresh())()">Refresh</button>
+      </section>
+      <output data-testid="metrics">{{ metrics }}</output>
+    </div>
+    <div
+      data-testid="grid-host"
+      :dir="rtl ? 'rtl' : 'ltr'"
+      :style="{ width: `${hostWidth}px`, height: `${columnGroupsActive ? COLUMN_GROUPS_HOST_HEIGHT : hostHeight}px` }"
+    >
+      <GpGrid
+        v-if="mounted"
+        ref="gridRef"
+        :key="generation"
+        :columns="activeColumns()"
+        :column-state="frozenActive ? frozen.columnState : columnState"
+        :column-layout="activeColumnLayout()"
+        :data-source="activeDataSource()"
+        :row-data="activeRowData()"
+        :row-height="activeRowHeight()"
+        :header-height="activeHeaderHeight()"
+        :column-groups="activeColumnGroups()"
+        :header-band-heights="activeBandHeights()"
+        :column-group-limits="columnGroupsActive ? groupLimits : undefined"
+        :freeze-rows="activeFreezeRows()"
+        :row-resize="autoFitActive"
+        :row-loading="activeRowLoading()"
+        :get-row-id="(row: unknown) => (row as ConformanceRow).id"
+        :on-cell-value-changed="onCellValueChanged"
+        :on-write-rejected="onWriteRejected"
+        :on-write-committed="writes.recordWrite"
+        :history="writesActive || rowGroupsActive ? WRITES_HISTORY : undefined"
+        :on-column-resized="onColumnResized"
+        :on-column-moved="onColumnMoved"
+        :on-row-drag-end="onRowDragEnd"
+        :on-column-pinned="onColumnPinned"
+        :on-row-resized="onRowResized"
+        :on-column-schema-rejected="onColumnSchemaRejected"
+        :on-frozen-rows-changed="frozen.recordFreezeEvent"
+        :cell-renderers="rowGroupRenderers"
+        :row-grouping="rowGroupsActive ? rowGroupsArm.grouping : undefined"
+        :group-label-column="activeLabelColumn()"
+        :group-label-renderer="rowGroupsMode === 'external' ? renderExternalLabel : undefined"
+        :on-row-group-toggled="rowGroups.recordToggle"
+        :on-row-grouping-rejected="rowGroups.recordRejection"
+      />
+    </div>
+  </main>
+</template>

@@ -15,16 +15,44 @@ import {
   ViewportState,
 } from "./managers";
 import { RowDataManager } from "./managers/row-data-manager";
+import type {
+  RowLoadContext,
+  RowPageBudgetInput,
+} from "./managers/row-window-loader";
 import { ViewSync } from "./grid-core-view-sync";
+import type { GridGeometryService } from "./geometry/grid-geometry";
+import type { FrozenRowsState } from "./geometry";
+import type { HeaderBandLayout } from "./types/geometry";
 import type { GridCoreConfig } from "./grid-core-config";
-import type { CellValue, ColumnDefinition } from "./types";
+import type { CellValue, ColumnDefinition, HierarchyChange } from "./types";
+import { createRecordWrites, type RecordWrites } from "./grid-core-record-writes";
+import { WriteHistory } from "./history/write-history";
 
 export interface GridManagersDeps<TData> {
   batcher: InstructionBatcher;
   config: GridCoreConfig<TData>;
-  // Columns and their positions are owned (and replaced) by GridCore.
+  // Columns are owned (and replaced) by GridCore.
   getColumns: () => ColumnDefinition[];
-  getColumnPositions: () => number[];
+  /** Built after the managers; only read once construction has finished. */
+  getGeometry: () => GridGeometryService;
+  /** C9 baseline: the core's first frozen-rows resolution. */
+  getFrozenRowsBaseline: () => FrozenRowsState;
+  /** D8 header bands; bound lazily to the header controller. */
+  getHeaderBands: () => HeaderBandLayout;
+  /** Bounded keep-alive for the edited column (B7). */
+  retainEditColumn: (columnId: string | null) => void;
+  /**
+   * A row window arrived from a fire-and-forget load (scroll-triggered), so
+   * nobody is awaiting it: the view must be synced from here. Bound lazily to
+   * the row-heights controller, which may place heights on arrival.
+   */
+  onRowsLoaded: (totalRowsChanged: boolean) => void;
+  /** The view-rows applier; it reads controllers built after the managers, so it is called lazily. */
+  applyViewRowsChange: (change: () => boolean) => boolean;
+  /** PRD 009 D4; bound lazily to the row-groups controller. */
+  onHierarchyChange: (change: HierarchyChange) => void;
+  /** The full reload, for a by-id write whose record has no view row (PRD 013 D3). */
+  reload: () => Promise<void>;
 }
 
 export interface GridManagers<TData> {
@@ -38,15 +66,16 @@ export interface GridManagers<TData> {
   editManager: EditManager;
   sortFilter: SortFilterManager<TData>;
   view: ViewSync<TData>;
+  recordWrites: RecordWrites;
+  history: WriteHistory | null;
 }
 
 export const buildGridManagers = <TData>(
   deps: GridManagersDeps<TData>,
 ): GridManagers<TData> => {
   const { batcher, config, getColumns } = deps;
-  const getRowHeight = (): number => config.rowHeight;
-  const getHeaderHeight = (): number => config.headerHeight;
-  const getOverscan = (): number => config.overscan;
+  const getRowGeometry = () => deps.getGeometry().getRowGeometry();
+  const getHeaderHeight = (): number => deps.getHeaderBands().totalHeight;
 
   // Managers cross-reference each other through lazy arrow-fn getters.
   // Forward-declare the late ones so callbacks resolve at call time, not at
@@ -57,18 +86,47 @@ export const buildGridManagers = <TData>(
   const getCachedRows = (): Map<number, TData> => rowData.getCachedRows();
   const getCellValue = (row: number, col: number): CellValue =>
     rowData.getCellValue(row, col);
-  const setCellValue = (row: number, col: number, value: CellValue): void => {
-    rowData.setCellValue(row, col, value);
+
+  // Viewport first: the scroll mapping and every later manager read it.
+  viewport = new ViewportState();
+
+  const slotPool = new SlotPoolManager({
+    getRowWindow: () => getRowGeometry().getWindow(),
+    getRowCount: getTotalRows,
+    getRowRegions: () => deps.getGeometry().getRowRegions(),
+    // Region-aware rows space: frozen rows keep their content offset (C4).
+    getRowOffset: (rowIndex) => getRowGeometry().getRowRegionPosition(rowIndex),
+    getRowSize: (rowIndex) => getRowGeometry().syncAxis().getSize(rowIndex),
+    getRowData: (rowIndex) => rowData.getRowData(rowIndex),
+    getRow: (rowIndex) => rowData.getHierarchyRow(rowIndex),
+    isRowAvailable: (rowIndex) => rowData.hasRow(rowIndex),
+    isHierarchical: () => rowData.getHierarchy() !== null,
+  });
+  slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
+
+  const history = config.history === null ? null : new WriteHistory(config.history.maxEntries);
+  const recordWrites = createRecordWrites<TData>({
+    getRowData: () => rowData,
+    getColumns,
+    applyViewRowsChange: (change) => deps.applyViewRowsChange(change),
+    refreshSlots: () => slotPool.refreshAllSlots(),
+    reload: () => deps.reload(),
+    recordEntry: history === null ? undefined : (entry) => history.record(entry),
+    onWriteRejected: config.onWriteRejected,
+    onWriteCommitted: config.onWriteCommitted,
+  });
+  const writes = {
+    setCellValue: recordWrites.setCellValue,
+    isWritable: () => rowData.isWritable(),
+    runWrites: recordWrites.run,
+    onWriteRejected: recordWrites.reject,
   };
 
   const scrollVirtualization = new ScrollVirtualizationManager({
-    getRowHeight,
     getHeaderHeight,
-    getTotalRows,
-    getScrollTop: () => viewport.getScrollTop(),
     getViewportHeight: () => viewport.getViewportHeight(),
+    getAxis: () => getRowGeometry().syncAxis(),
   });
-  viewport = new ViewportState(() => scrollVirtualization.getScrollRatio());
 
   // selection.onInstruction closes over `highlight`, populated below.
   let highlight: HighlightManager<TData> | null = null;
@@ -76,10 +134,12 @@ export const buildGridManagers = <TData>(
   const selection = new SelectionManager({
     getRowCount: getTotalRows,
     getColumnCount: () => getColumns().length,
+    isColumnDisplayed: (col) => getColumns()[col]?.hidden !== true,
     getCellValue,
-    getRowData: (row) => getCachedRows().get(row),
+    getRowData: (row) => rowData.getRowData(row),
     getColumn: (col) => getColumns()[col],
-    setCellValue,
+    ...writes,
+    onWriteSkipped: recordWrites.skip,
   });
   selection.onInstruction((instruction) => {
     batcher.emit(instruction);
@@ -103,28 +163,22 @@ export const buildGridManagers = <TData>(
     getColumnCount: () => getColumns().length,
     getCellValue,
     getColumn: (col) => getColumns()[col],
-    setCellValue,
+    ...writes,
   });
   fill.onInstruction((instruction) => batcher.emit(instruction));
-
-  const slotPool = new SlotPoolManager({
-    getRowHeight,
-    getHeaderHeight,
-    getOverscan,
-    getScrollTop: () => viewport.getScrollTop(),
-    getViewportHeight: () => viewport.getViewportHeight(),
-    getTotalRows,
-    getScrollRatio: () => scrollVirtualization.getScrollRatio(),
-    getVirtualContentHeight: () => scrollVirtualization.getVirtualContentHeight(),
-    getRowData: (rowIndex) => getCachedRows().get(rowIndex),
-  });
-  slotPool.onBatchInstruction((instructions) => batcher.emitBatch(instructions));
 
   const editManager = new EditManager({
     getColumn: (col) => getColumns()[col],
     getCellValue,
-    setCellValue,
+    ...writes,
+    isRowWritable: (row) => rowData.isRowWritable(row),
     onCommit: (row) => slotPool.updateSlot(row),
+    getSlotGeneration: (row) => slotPool.getSlotGeneration(row),
+    getRowId: (row) => rowData.getRowId(row),
+    // The edited column stays mounted while the editor is open, so a window
+    // move cannot unmount it mid-edit.
+    onEditStart: (columnId) => deps.retainEditColumn(columnId),
+    onEditEnd: () => deps.retainEditColumn(null),
   });
   editManager.onInstruction((instruction) => batcher.emit(instruction));
 
@@ -132,14 +186,17 @@ export const buildGridManagers = <TData>(
     getColumns,
     isSortingEnabled: () => config.sortingEnabled,
     getCachedRows,
+    getRowAccess: () => rowData.getRowAccess(),
+    isLoading: () => rowData.isLoading(),
     onSortFilterChange: async () => {
-      await rowData.loadInitial();
-      // Filtered/sorted results are a new view — start from the top.
+      // Size the first request from the view the reset is about to show, not
+      // from the scroll position the user left behind.
       viewport.resetScrollTop();
+      await rowData.loadInitial();
       batcher.start();
       try {
         batcher.emit({ type: "SCROLL_TO", scrollTop: 0 });
-        view.reconcile();
+        view.reconcileAfterLoad();
       } finally {
         batcher.flush();
       }
@@ -160,8 +217,33 @@ export const buildGridManagers = <TData>(
     highlight,
     overscan: config.overscan,
     getColumns,
-    getColumnPositions: deps.getColumnPositions,
+    getGeometry: deps.getGeometry,
     getTotalRows,
+    labels: config.labels,
+    getFrozenRowsBaseline: deps.getFrozenRowsBaseline,
+    onFrozenRowsChanged: config.onFrozenRowsChanged,
+    getHeaderBands: deps.getHeaderBands,
+    requestHierarchyRows: () => rowData.requestHierarchyRows(),
+  });
+
+  // C8 paging context. The budget input deliberately reads no region layout:
+  // `row-geometry` resolves the layout lazily and calls `admitsPrefix` inside
+  // that resolution, so a region read here would recurse.
+  const getPageBudgetInput = (): RowPageBudgetInput => {
+    const geometry = getRowGeometry();
+    const mapper = geometry.getMapper();
+    return {
+      axis: geometry.syncAxis(),
+      viewportHeight: viewport.getViewportHeight(),
+      scrollTop: mapper.getLogicalScrollTop(),
+      maxScrollTop: mapper.getMaxLogicalScrollTop(),
+    };
+  };
+  const getLoadContext = (): RowLoadContext => ({
+    ...getPageBudgetInput(),
+    visibleWindow: getRowGeometry().getVisibleWindow(),
+    overscanWindow: getRowGeometry().getWindow(),
+    regions: deps.getGeometry().getRowRegions(),
   });
 
   rowData = new RowDataManager<TData>({
@@ -171,17 +253,23 @@ export const buildGridManagers = <TData>(
     getColumns,
     getSortModel: () => sortFilter.getSortModel(),
     getFilterModel: () => sortFilter.getFilterModel(),
-    getRowHeight,
-    getOverscan,
-    getScrollTop: () => viewport.getScrollTop(),
-    getViewportHeight: () => viewport.getViewportHeight(),
+    getRowWindow: () => getRowGeometry().getWindow(),
+    getVisibleRowWindow: () => getRowGeometry().getVisibleWindow(),
+    getBootstrapRowCount: () => getRowGeometry().getBootstrapRowCount(),
+    getPageBudgetInput,
+    getLoadContext,
     onCellValueChanged: config.onCellValueChanged,
+    onWriteRejected: recordWrites.reject,
     getRowId: config.getRowId,
-    onRowsLoaded: (totalRowsChanged) => view.syncVisibleRows(totalRowsChanged),
+    rowGrouping: config.rowGrouping,
+    onRowGroupingRejected: config.onRowGroupingRejected,
+    onHierarchyChange: (change) => deps.onHierarchyChange(change),
+    onRowsLoaded: (totalRowsChanged) => deps.onRowsLoaded(totalRowsChanged),
   });
 
   return {
     rowData,
+    history,
     selection,
     highlight,
     fill,
@@ -191,5 +279,6 @@ export const buildGridManagers = <TData>(
     editManager,
     sortFilter,
     view,
+    recordWrites,
   };
 };

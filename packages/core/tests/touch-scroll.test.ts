@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GridCore } from "../src/grid-core";
 import { TouchScrollController } from "../src/adapter/touch-scroll";
+import { createMotionSlot } from "./motion-slot";
 import { MAX_FLING_VELOCITY } from "../src/utils/touch-scroll-physics";
 
 interface MockCoreOptions {
@@ -9,6 +10,7 @@ interface MockCoreOptions {
   isDragging?: boolean;
   maxFlingVelocity?: number;
   rowHeight?: number;
+  topOverride?: number | null;
 }
 
 type MockBatchListener = (instructions: { type: string }[]) => void;
@@ -20,14 +22,23 @@ const createCore = (options: MockCoreOptions = {}): GridCore<unknown> => {
     isDragging: options.isDragging ?? false,
     maxFlingVelocity: options.maxFlingVelocity ?? MAX_FLING_VELOCITY,
     rowHeight: options.rowHeight ?? 32,
+    topOverride: options.topOverride ?? null,
   };
   let batchListener: MockBatchListener | null = null;
+  const setTopOverride = vi.fn((value: number | null) => {
+    state.topOverride = value;
+  });
   const core = {
-    isScalingActive: () => state.scalingActive,
-    getScrollRatio: () => state.scrollRatio,
-    getMaxFlingVelocity: () => state.maxFlingVelocity,
-    getRowHeight: () => state.rowHeight,
-    setScrollTopOverride: vi.fn(),
+    viewport: {
+      isScaling: () => state.scalingActive,
+      getScrollRatio: () => state.scrollRatio,
+      getMaxFlingVelocity: () => state.maxFlingVelocity,
+      getRowHeight: () => state.rowHeight,
+      getTopOverride: () => state.topOverride,
+      setTopOverride,
+      ...createMotionSlot(),
+    },
+    setTopOverride,
     setViewport: vi.fn(),
     onBatchInstruction: (listener: MockBatchListener) => {
       batchListener = listener;
@@ -54,7 +65,7 @@ const emitBatch = (
   );
 
 interface MockedCore {
-  setScrollTopOverride: ReturnType<typeof vi.fn>;
+  setTopOverride: ReturnType<typeof vi.fn>;
   setViewport: ReturnType<typeof vi.fn>;
 }
 
@@ -326,6 +337,39 @@ describe("TouchScrollController", () => {
     expect(el.scrollTop).toBeGreaterThan(afterRelease);
   });
 
+  it("adopts a scroll correction made while the fling is in flight", () => {
+    const { core, el } = setup({ scrollRatio: 1 });
+    fastSwipe(el);
+    raf.pump(116);
+    const before = el.scrollTop;
+
+    // A row size change corrects the top through the viewport override (D5).
+    getState(core).topOverride = before + 1000;
+    raf.pump(132);
+
+    expect(el.scrollTop).toBeGreaterThan(before + 900);
+
+    // The fling continues from the corrected top instead of snapping back.
+    const corrected = el.scrollTop;
+    raf.pump(148);
+    expect(el.scrollTop).toBeGreaterThan(corrected);
+  });
+
+  it("maps the logical position through a ratio that changed mid-fling", () => {
+    const { core, el } = setup({ scrollRatio: 0.5 });
+    fastSwipe(el);
+    raf.pump(116);
+    const before = el.scrollTop;
+
+    // Scroll scaling re-tuned mid-fling: the same logical position now costs
+    // 2 DOM px per logical px instead of 0.5, so the next tick jumps ~4x.
+    getState(core).scrollRatio = 2;
+    raf.pump(132);
+
+    expect(el.scrollTop).toBeGreaterThanOrEqual(before * 3.9);
+    expect(el.scrollTop).toBeLessThanOrEqual(before * 5.1);
+  });
+
   it("does not fling on a slow release", () => {
     const { el } = setup();
     el.dispatchEvent(touchEvent("touchstart", [{ clientY: 300 }], 0));
@@ -380,6 +424,104 @@ describe("TouchScrollController", () => {
     }
     expect(el.scrollTop).toBe(10000 - 500);
     expect(frames).toBeLessThan(2000);
+  });
+
+  /** Fast engaged sideways swipe: 100 DOM px in 100 ms toward the inline end. */
+  const fastSideSwipe = (el: HTMLElement, dy = 0): void => {
+    el.dispatchEvent(touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 0));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 250, clientY: 300 - dy / 2 }], 50));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 200, clientY: 300 - dy }], 100));
+    el.dispatchEvent(touchEvent("touchend", [{ clientX: 200, clientY: 300 - dy }], 100));
+  };
+
+  const runFlings = (): number => {
+    let now = 100;
+    let frames = 0;
+    while (raf.pending() > 0 && frames < 2000) {
+      now += 16;
+      raf.pump(now);
+      frames++;
+    }
+    return frames;
+  };
+
+  it("flings the inline axis after a fast sideways release", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el);
+
+    const afterRelease = el.scrollLeft;
+    expect(afterRelease).toBeGreaterThan(0);
+    const frames = runFlings();
+    expect(frames).toBeGreaterThan(1);
+    expect(frames).toBeLessThan(2000);
+    expect(el.scrollLeft).toBeGreaterThan(afterRelease);
+    expect(el.scrollTop).toBe(0);
+  });
+
+  it("a diagonal release flings both axes", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el, 100);
+
+    const left = el.scrollLeft;
+    const top = el.scrollTop;
+    runFlings();
+    expect(el.scrollLeft).toBeGreaterThan(left);
+    expect(el.scrollTop).toBeGreaterThan(top);
+  });
+
+  it("stops the inline fling at the inline bound", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    el.scrollLeft = 1150;
+    fastSideSwipe(el);
+
+    const frames = runFlings();
+    expect(el.scrollLeft).toBe(2000 - 800);
+    expect(frames).toBeLessThan(2000);
+  });
+
+  it("flings toward the negative range in RTL", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    // jsdom computes no `direction`; the gesture reads it from the computed style.
+    const computed = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((target) => {
+      const style = computed(target);
+      return new Proxy(style, {
+        get: (real, key) => {
+          if (key === "direction") return "rtl";
+          const value = Reflect.get(real, key, real) as unknown;
+          return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(real) : value;
+        },
+      });
+    });
+    try {
+      el.scrollLeft = -600;
+      fastSideSwipe(el);
+
+      const afterRelease = el.scrollLeft;
+      runFlings();
+      expect(el.scrollLeft).toBeGreaterThan(afterRelease);
+      expect(el.scrollLeft).toBeLessThanOrEqual(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a new touch stops the inline fling and a same-direction flick carries its speed", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el);
+    raf.pump(116);
+    const caught = el.scrollLeft;
+
+    el.dispatchEvent(touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 120));
+    expect(el.scrollLeft).toBe(caught);
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 250, clientY: 300 }], 170));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 200, clientY: 300 }], 220));
+    el.dispatchEvent(touchEvent("touchend", [{ clientX: 200, clientY: 300 }], 220));
+
+    const before = el.scrollLeft;
+    raf.pump(236);
+    raf.pump(252);
+    expect(el.scrollLeft - before).toBeGreaterThan(70);
   });
 
   it("ignores touches that start on the fill handle", () => {
@@ -453,7 +595,7 @@ describe("TouchScrollController", () => {
 
     const mocks = getMocks(core);
     // 1 finger px past the slop offset → fractional DOM position 0.5
-    expect(mocks.setScrollTopOverride).toHaveBeenLastCalledWith(0.5);
+    expect(mocks.setTopOverride).toHaveBeenLastCalledWith(0.5);
     expect(mocks.setViewport).toHaveBeenLastCalledWith(
       0.5,
       el.scrollLeft,
@@ -470,7 +612,7 @@ describe("TouchScrollController", () => {
     el.dispatchEvent(touchEvent("touchend", [{ clientY: 200 }], 310));
 
     const mocks = getMocks(core);
-    expect(mocks.setScrollTopOverride).toHaveBeenLastCalledWith(null);
+    expect(mocks.setTopOverride).toHaveBeenLastCalledWith(null);
     // The final sync re-reads the element's (quantized) scroll position.
     expect(mocks.setViewport).toHaveBeenLastCalledWith(
       el.scrollTop,
@@ -490,7 +632,7 @@ describe("TouchScrollController", () => {
       raf.pump(now);
       frames++;
     }
-    expect(getMocks(core).setScrollTopOverride).toHaveBeenLastCalledWith(null);
+    expect(getMocks(core).setTopOverride).toHaveBeenLastCalledWith(null);
   });
 
   it("renders a fast fling every frame while the device keeps pace", () => {
@@ -536,6 +678,24 @@ describe("TouchScrollController", () => {
     expect(mocks.setViewport.mock.calls.length).toBeLessThanOrEqual(3);
     expect(mocks.setViewport.mock.calls.length).toBeGreaterThan(0);
     expect(el.scrollTop).toBeGreaterThan(before);
+  });
+
+  it("keeps a throttled fling moving forward between pipeline runs", () => {
+    const { el } = setup({ scrollRatio: 0.5, rowHeight: 2 });
+    fastSwipe(el);
+
+    const tops: number[] = [el.scrollTop];
+    let now = 100;
+    for (let i = 0; i < 6; i++) {
+      now += 40;
+      raf.pump(now);
+      tops.push(el.scrollTop);
+    }
+
+    // The override left behind by the last pipeline run is not a correction.
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i]).toBeGreaterThan(tops[i - 1]!);
+    }
   });
 
   it("keeps rendering every frame at low row flux even when frames are heavy", () => {

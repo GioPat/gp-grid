@@ -6,7 +6,7 @@
 .gp-grid-header {
   position: sticky;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   flex-shrink: 0;
   z-index: 11;
   overflow: hidden;
@@ -29,7 +29,7 @@
 :where(.gp-grid-header-cell) {
   align-items: center;
   padding: 0 12px;
-  border-right: 1px solid var(--gp-grid-border);
+  border-inline-end: 1px solid var(--gp-grid-border);
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.5px;
@@ -63,7 +63,81 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
+  margin-inline-start: auto;
+}
+
+/* =============================================================================
+   Pinned Header Containers
+   ============================================================================= */
+
+/* Absolute above the translated center strip, which scrolls beneath them. */
+.gp-grid-pin-header {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  overflow: hidden;
+}
+
+:where(.gp-grid-pin-header) {
+  background-color: var(--gp-grid-header-bg);
+}
+
+/* Mask the strip between the body client edge and the outer edge when a
+   vertical scrollbar consumes part of the body's width. */
+.gp-grid-header-gutter {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  z-index: 3;
+}
+
+:where(.gp-grid-header-gutter) {
+  background-color: var(--gp-grid-header-bg);
+}
+
+/* The end pin's center-facing edge has no cell border of its own. */
+.gp-grid-pin-header[data-pin-region="end"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  z-index: 1;
+  pointer-events: none;
+  background-color: var(--gp-grid-border);
+}
+
+/* Pin toggle rendered by the default header */
+.gp-grid-pin-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-inline-end: 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gp-grid-text-secondary);
+  touch-action: none;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.gp-grid-pin-button:hover {
+  opacity: 1;
+  background-color: var(--gp-grid-hover);
+  color: var(--gp-grid-primary);
+}
+
+.gp-grid-pin-button.active {
+  opacity: 1;
+  color: var(--gp-grid-primary);
+  background-color: var(--gp-grid-primary-light);
 }
 
 /* Stacked sort arrows */
@@ -72,7 +146,7 @@
   flex-direction: row;
   align-items: center;
   gap: 2px;
-  margin-left: 6px;
+  margin-inline-start: 6px;
 }
 
 .gp-grid-sort-arrows-stack {
@@ -115,7 +189,7 @@
   cursor: pointer;
   color: var(--gp-grid-text-secondary);
   transition: background-color 0.15s ease, color 0.15s ease;
-  margin-left: 2px;
+  margin-inline-start: 2px;
 }
 
 :where(.gp-grid-filter-icon:hover) {
@@ -128,8 +202,9 @@
   background-color: var(--gp-grid-primary-light);
 }
 
-/* Touch device: larger tap target for filter icon */
+/* Touch device: larger tap targets for header controls */
 @media (pointer: coarse) and (hover: none) and (max-width: 768px) {
+  .gp-grid-pin-button,
   .gp-grid-filter-icon {
     min-width: 44px;
     min-height: 44px;
@@ -137,10 +212,15 @@
     height: 44px;
   }
   :where(.gp-grid-filter-icon) {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .gp-grid-filter-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .gp-grid-pin-button svg {
     width: 20px;
     height: 20px;
   }
@@ -162,7 +242,7 @@
 
 .gp-grid-header-resize-handle {
   position: absolute;
-  right: -3px;
+  inset-inline-end: -3px;
   top: 0;
   width: 6px;
   height: 100%;
@@ -181,7 +261,7 @@
 @media (pointer: coarse) and (hover: none) and (max-width: 768px) {
   .gp-grid-header-resize-handle {
     width: 24px;
-    right: -12px;
+    inset-inline-end: -12px;
   }
 }
 
@@ -230,7 +310,7 @@
 .gp-grid-column-drop-indicator {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   width: 3px;
   height: 100%;
   z-index: 1000;

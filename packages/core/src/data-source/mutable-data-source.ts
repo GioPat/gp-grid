@@ -34,6 +34,10 @@ export type DataChangeListener = (result: TransactionResult) => void;
  * Data source with mutation capabilities.
  * Extends DataSource with add, remove, and update operations.
  */
+/** Whether a source notifies transactions, so a wrapper can refresh on them. */
+export const isMutableDataSource = <TData>(source: DataSource<TData>): source is MutableDataSource<TData> =>
+  typeof (source as Partial<MutableDataSource<TData>>).subscribe === "function";
+
 export interface MutableDataSource<TData = unknown> extends DataSource<TData> {
   /** Add rows to the data source. Queued and processed after debounce. */
   addRows(rows: TData[]): void;
@@ -241,6 +245,10 @@ export function createMutableClientDataSource<TData = unknown>(
     },
 
     getRowById(id: RowId): TData | undefined {
+      return store.getRowById(id);
+    },
+
+    getRecordById(id: RowId): TData | undefined {
       return store.getRowById(id);
     },
 

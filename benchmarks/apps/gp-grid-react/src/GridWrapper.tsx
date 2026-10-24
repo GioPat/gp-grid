@@ -20,18 +20,61 @@ import { waitForBrowserIdle } from "../../../src/data/row-processing";
 
 interface GridWrapperProps {
   initialRowCount: number;
+  columnCount?: number;
 }
 
 function isReady(): boolean {
   return document.querySelectorAll(".gp-grid-row").length > 0;
 }
 
-export function GridWrapper({ initialRowCount }: GridWrapperProps) {
+interface CoreReads {
+  getScrollRatio(): number;
+  getRowCount(): number;
+  getRowData(rowIndex: number): BenchmarkRow | undefined;
+}
+
+/** Row reads across the published baseline (flat API) and the candidate (namespaces). */
+const readCore = (core: unknown): CoreReads | undefined => {
+  if (core === null || core === undefined) return undefined;
+  const candidate = core as {
+    rows?: { getCount(): number; getData(rowIndex: number): BenchmarkRow | undefined };
+    viewport: { getScrollRatio(): number };
+  };
+  if (typeof candidate.rows?.getCount !== "function") return core as CoreReads;
+  const { rows, viewport } = candidate;
+  return {
+    getScrollRatio: () => viewport.getScrollRatio(),
+    getRowCount: () => rows.getCount(),
+    getRowData: (rowIndex) => rows.getData(rowIndex),
+  };
+};
+
+export function GridWrapper({ initialRowCount, columnCount = BENCHMARK_COLUMNS.length }: GridWrapperProps) {
   const [data, setData] = useState<BenchmarkRow[]>([]);
   const gridRef = useRef<GridRef<BenchmarkRow> | null>(null);
   const prevDataSourceRef = useRef<DataSource<BenchmarkRow> | null>(null);
 
-  const columns = useMemo(() => toGpGridColumns(BENCHMARK_COLUMNS) as ColumnDefinition[], []);
+  const setupMetricsRef = useRef({ dataGenerationMs: 0, bindStartedAt: 0 });
+  const columns = useMemo(() => {
+    const baseColumns = toGpGridColumns(BENCHMARK_COLUMNS) as ColumnDefinition[];
+    if (columnCount <= baseColumns.length) {
+      return baseColumns.slice(0, columnCount);
+    }
+
+    return Array.from({ length: columnCount }, (_, index) => {
+      const source = baseColumns[index % baseColumns.length];
+      if (source === undefined) {
+        throw new Error("The benchmark needs at least one base column.");
+      }
+      return {
+        ...source,
+        colId: `wide-${index}`,
+        headerName: `${source.headerName} ${index}`,
+        sortable: false,
+        filterable: false,
+      };
+    });
+  }, [columnCount]);
 
   const dataSource = useMemo(() => {
     return createClientDataSource(data);
@@ -51,7 +94,12 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
 
   // Load data function
   const loadData = useCallback((count: number) => {
+    const generationStartedAt = performance.now();
     const newData = generateData(count);
+    setupMetricsRef.current = {
+      dataGenerationMs: performance.now() - generationStartedAt,
+      bindStartedAt: performance.now(),
+    };
     setData(newData);
   }, []);
 
@@ -65,7 +113,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     async (field: string, direction: "asc" | "desc"): Promise<void> => {
       const core = gridRef.current?.core;
       if (core) {
-        await core.setSort(field, direction);
+        await core.sortFilter.setSort(field, direction);
       }
     },
     [],
@@ -75,7 +123,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     const core = gridRef.current?.core;
     if (core) {
       // Passing null direction clears all sorts when addToExisting is false (default)
-      await core.setSort("", null);
+      await core.sortFilter.setSort("", null);
     }
   }, []);
 
@@ -84,10 +132,10 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     if (!core || rules.length === 0) return;
 
     const [firstRule, ...remainingRules] = rules;
-    await core.setSort(firstRule.field, firstRule.direction);
+    await core.sortFilter.setSort(firstRule.field, firstRule.direction);
 
     for (const rule of remainingRules) {
-      await core.setSort(rule.field, rule.direction, true);
+      await core.sortFilter.setSort(rule.field, rule.direction, true);
     }
   }, []);
 
@@ -145,7 +193,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
           return;
       }
 
-      await core.setFilter(field, {
+      await core.sortFilter.setFilter(field, {
         conditions: [coreCondition],
         combination: "and",
       });
@@ -157,8 +205,8 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     const core = gridRef.current?.core;
     if (core) {
       // Only active filters need clearing; each call refreshes the data source.
-      for (const field of Object.keys(core.getFilterModel())) {
-        await core.setFilter(field, null);
+      for (const field of Object.keys(core.sortFilter.getFilterModel())) {
+        await core.sortFilter.setFilter(field, null);
       }
     }
   }, []);
@@ -178,10 +226,10 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
       getRowCount: () => data.length,
       // Above ~312k rows gp-grid compresses its DOM scroll space (ratio < 1);
       // the scroll benchmark reads this to recover the true logical travel.
-      getScrollRatio: () => gridRef.current?.core?.getScrollRatio() ?? 1,
-      getDisplayedRowCount: () => gridRef.current?.core?.getRowCount() ?? 0,
+      getScrollRatio: () => readCore(gridRef.current?.core)?.getScrollRatio() ?? 1,
+      getDisplayedRowCount: () => readCore(gridRef.current?.core)?.getRowCount() ?? 0,
       getDisplayedRows: (start, count) => {
-        const core = gridRef.current?.core;
+        const core = readCore(gridRef.current?.core);
         if (!core) return [];
 
         const rows: BenchmarkRow[] = [];
@@ -194,6 +242,11 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
 
         return rows;
       },
+      getSetupMetrics: () => ({
+        dataGenerationMs: setupMetricsRef.current.dataGenerationMs,
+        bindElapsedMs: Math.max(0, performance.now() - setupMetricsRef.current.bindStartedAt),
+        columnCount: columns.length,
+      }),
     };
 
     window.gridApi = api;
@@ -206,6 +259,7 @@ export function GridWrapper({ initialRowCount }: GridWrapperProps) {
     filter,
     clearFilters,
     data.length,
+    columns.length,
   ]);
 
   // Initial data load

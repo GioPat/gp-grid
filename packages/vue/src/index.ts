@@ -16,45 +16,21 @@ export type {
   UseGpGridResult,
 } from "./composables/useGpGrid";
 
+export { useRowGroupCellContext, useRowGroupingSync } from "./composables/useRowGroupingSync";
+export type { RowGroupCellContext } from "./composables/useRowGroupingSync";
+
 export { useGridData } from "./composables/useGridData";
 export type {
   UseGridDataOptions,
   UseGridDataResult,
 } from "./composables/useGridData";
 
-export { useInputHandler } from "./composables/useInputHandler";
-export type {
-  UseInputHandlerOptions,
-  UseInputHandlerResult,
-} from "./composables/useInputHandler";
-
-export { useAutoScroll } from "./composables/useAutoScroll";
-
-export { useFillHandle } from "./composables/useFillHandle";
-export type {
-  UseFillHandleOptions,
-  UseFillHandleResult,
-} from "./composables/useFillHandle";
-
-export { useFilterPopup } from "./composables/useFilterPopup";
-export type { UseFilterPopupOptions } from "./composables/useFilterPopup";
-
-export { useFilterConditions } from "./composables/useFilterConditions";
-export type {
-  LocalFilterCondition,
-  LocalFilterGroup,
-  UseFilterConditionsResult,
-} from "./composables/useFilterConditions";
-
-export { useGridState, createInitialState } from "./gridState";
-
 // =============================================================================
 // Renderers
 // =============================================================================
 
-export { renderCell, getCellValue } from "./renderers/cellRenderer";
-export { renderEditCell } from "./renderers/editRenderer";
-export { renderHeader } from "./renderers/headerRenderer";
+export { renderGroupHeader } from "./renderers/headerRenderer";
+export { renderGroupLabel } from "./renderers/groupLabelRenderer";
 
 // =============================================================================
 // Types
@@ -64,6 +40,9 @@ export type {
   VueCellRenderer,
   VueEditRenderer,
   VueHeaderRenderer,
+  VueGroupHeaderRenderer,
+  VueGroupLabelRenderer,
+  VueHeaderRendererRegistry,
   GpGridProps,
   ColumnDefinition,
 } from "./types";
@@ -78,18 +57,23 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  createColumnarDataSource,
+  isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
-  // Utils
-  calculateColumnPositions,
-  getTotalWidth,
-  findColumnAtX,
-  isCellSelected,
-  isCellActive,
-  isRowVisible,
-  isCellEditing,
-  isCellInFillPreview,
-  buildCellClasses,
+  // Row grouping
+  createRowGrouping,
+  isHierarchicalRowAccess,
+  // Server grouping
+  createServerGroupingSource,
+  createPivotSource,
+  encodeGroupId,
+  decodeGroupId,
+  buildPivotSchema,
+  encodePivotColumnId,
+  decodePivotColumnId,
+  encodePivotGroupId,
+  PIVOT_LABEL_COLUMN_ID,
   // GridCore class (for typing component refs)
   GridCore,
 } from "@gp-grid/core";
@@ -99,6 +83,46 @@ export type {
   CellDataType,
   CellValue,
   RowId,
+  ViewRow,
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  HierarchyChange,
+  // Server grouping (PRD 009)
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+  ServerGroupingConfig,
+  ServerGroupingSource,
+  // Pivot (PRD 012)
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
   SortDirection,
   SortModel,
   // Cell coordinates
@@ -106,8 +130,35 @@ export type {
   CellRange,
   // Events
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
+  WriteCommittedEvent,
+  WriteChange,
+  WriteOperation,
+  HistoryOptions,
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  ColumnPinnedEvent,
+  RowDragEndEvent,
+  RowResizedEvent,
+  // Column identity and state
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
+  // Column groups and header bands
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
   // Selection
-  SelectionState,
   // Data source
   DataSource,
   DataSourceRequest,
@@ -115,10 +166,17 @@ export type {
   DataSourceRange,
   DataSourceLoadMode,
   RowLoadingOptions,
+  FreezeRowsOptions,
   RowLoadingMode,
   RowCacheOptions,
   RowCacheEviction,
   MutableDataSource,
+  // Columnar read-only source
+  ColumnarAccess,
+  ColumnarDataSource,
+  ColumnarDataSourceOptions,
+  ColumnarField,
+  RowAccess,
   // Filters
   FilterModel,
   ColumnFilterModel,
@@ -141,14 +199,53 @@ export type {
   GridLabels,
   GridLabelOverrides,
   GridFilterOperatorLabels,
+  GridIcon,
   // UI State (shared with React)
   SlotData,
-  HeaderData,
-  FilterPopupState,
   GridState,
+  GridAnnouncement,
+  // Geometry
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  // Column virtualization and pinning
+  ColumnPin,
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
+  FillHandlePosition,
+  // GridCore namespaces
+  GridRowsApi,
+  GridCellsApi,
+  GridEditApi,
+  GridColumnsApi,
+  GridFrozenRowsApi,
+  GridHeaderApi,
+  GridRowDragApi,
+  GridRowHeightsApi,
+  GridViewportApi,
+  RowRegion,
+  RowHeightUpdate,
+  FrozenRowsState,
+  RowRegionLayout,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
+  // Fit and row resize
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
   // Input handler types
-  PointerEventData,
   KeyEventData,
   ContainerBounds,
   DragState,
+  ResizeTarget,
+  RowResizeDragState,
 } from "@gp-grid/core";

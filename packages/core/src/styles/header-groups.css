@@ -1,0 +1,30 @@
+
+/* =============================================================================
+   Header Bands and Column Groups
+   ============================================================================= */
+
+/* A header taller than its band is clipped. Only the block axis clips, so the
+   column resize handle keeps straddling the inline edge. */
+.gp-grid-container .gp-grid-header-cell {
+  overflow-y: clip;
+}
+
+/* wrapHeaderText: the text box is capped at the band, which clips the lines
+   that do not fit. */
+.gp-grid-container .gp-grid-header-cell--wrap .gp-grid-header-text {
+  max-height: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+:where(.gp-grid-header-group) {
+  border-bottom: 1px solid var(--gp-grid-border);
+  cursor: default;
+}
+
+/* Fragments carry no action, so they give no pointer feedback. */
+:where(.gp-grid-header-group:hover),
+:where(.gp-grid-header-group:active) {
+  background-color: transparent;
+}

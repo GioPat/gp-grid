@@ -2,15 +2,38 @@
 
 import type { VNode, Component } from "vue";
 import type {
+  AutoFitOptions,
+  HistoryOptions,
   RowId,
   ColumnDefinition as CoreColumnDefinition,
+  ColumnGroupChild,
+  ColumnGroupHeaderParams,
+  ColumnGroupLimits,
+  ColumnSchemaError,
   CellRendererParams,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteCommittedEvent,
+  ColumnMovedEvent,
+  ColumnPinnedEvent,
+  ColumnResizedEvent,
+  ColumnStateUpdate,
+  ColumnLayoutMode,
   EditRendererParams,
+  FreezeRowsOptions,
+  FrozenRowsState,
   GridLabelOverrides,
+  GridIcon,
+  GroupLabelRendererParams,
   HeaderRendererParams,
+  HighlightingOptions,
   DataSource,
+  RowDragEndEvent,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
+  RowResizedEvent,
 } from "@gp-grid/core";
 
 // =============================================================================
@@ -48,6 +71,31 @@ export type VueHeaderRenderer =
   | ((params: HeaderRendererParams) => VNode | string | null)
   | Component;
 
+/**
+ * Vue group header renderer: renders one fragment of a column group, as a
+ * render function or a component taking ColumnGroupHeaderParams as props.
+ */
+export type VueGroupHeaderRenderer =
+  | ((params: ColumnGroupHeaderParams) => VNode | string | null)
+  | Component;
+
+/**
+ * Vue group label renderer: the label of a group or total row, beside its
+ * expander, as a render function or a component taking GroupLabelRendererParams.
+ */
+export type VueGroupLabelRenderer =
+  | ((params: GroupLabelRendererParams) => VNode | string | null)
+  | Component;
+
+/**
+ * Header renderer registry, shared by columns and groups: a key receives the
+ * params of whichever definition names it.
+ */
+export type VueHeaderRendererRegistry = Record<
+  string,
+  VueHeaderRenderer | VueGroupHeaderRenderer
+>;
+
 // =============================================================================
 // Column Definition
 // =============================================================================
@@ -70,12 +118,37 @@ export interface ColumnDefinition<TData = unknown>
 
 export interface GpGridProps<TData = unknown> {
   columns: ColumnDefinition<TData>[];
+  /** Controlled per-column state; applied through the core whenever it changes. */
+  columnState?: ColumnStateUpdate[];
   dataSource?: DataSource<TData>;
   rowData?: TData[];
   rowHeight: number;
+  /** Header height in pixels, the default height of every band. Default: rowHeight */
   headerHeight?: number;
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights?: readonly number[];
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups?: readonly ColumnGroupChild[];
+  /** Budgets of `columnGroups`. Read at creation. */
+  columnGroupLimits?: ColumnGroupLimits;
+  /** Called when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected?: (error: ColumnSchemaError) => void;
   overscan?: number;
+  /** Column overscan in CSS px per side for the mounted center window. */
+  columnOverscan?: number;
+  /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
+  columnLayout?: ColumnLayoutMode;
   rowLoading?: RowLoadingOptions;
+  /**
+   * Number of leading displayed rows kept visible below the header. Applied
+   * at runtime; a new identity never rebuilds the core.
+   */
+  freezeRows?: FreezeRowsOptions;
+  /** Called when the effective frozen count or its limiting reason changes. */
+  onFrozenRowsChanged?: (state: FrozenRowsState) => void;
   sortingEnabled?: boolean;
   darkMode?: boolean;
   wheelDampening?: number;
@@ -83,16 +156,61 @@ export interface GpGridProps<TData = unknown> {
   maxFlingVelocity?: number;
   cellRenderers?: Record<string, VueCellRenderer<TData>>;
   editRenderers?: Record<string, VueEditRenderer<TData>>;
-  headerRenderers?: Record<string, VueHeaderRenderer>;
+  /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+  headerRenderers?: VueHeaderRendererRegistry;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
+  /** SVG used by the default header's pin toggle. */
+  pinIcon?: GridIcon;
+  /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
+  initialWidth?: number;
+  /** Initial viewport height for SSR (pixels). ResizeObserver takes over on client. */
+  initialHeight?: number;
+  /** Row/column/cell highlighting configuration. */
+  highlighting?: HighlightingOptions<TData>;
   /** Function to extract unique ID from row. Required when onCellValueChanged is provided. */
   getRowId?: (row: TData) => RowId;
   /** Called when a cell value is changed via editing, fill drag, or paste. Requires getRowId. */
   onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
+  /** Called when a write is refused because the bound source is read-only. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** Called once per write command with its changes and skips. Requires getRowId. */
+  onWriteCommitted?: (event: WriteCommittedEvent) => void;
   /** Custom loading component to render instead of default spinner */
   loadingComponent?: Component<{ isLoading: boolean }>;
+  /** Whether clicking and dragging any cell in a row drags the entire row. Default: false */
+  rowDragEntireRow?: boolean;
+  /** Called when a row is dropped after dragging. Consumer handles data reordering. */
+  onRowDragEnd?: (event: RowDragEndEvent) => void;
+  /** Called when a column is resized. */
+  onColumnResized?: (event: ColumnResizedEvent) => void;
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   * Default: false
+   */
+  rowResize?: boolean;
+  /** Called per row resized by a drag, a key or a fit. */
+  onRowResized?: (event: RowResizedEvent) => void;
+  /** Clamps for the fit commands and the row resize gesture. Read at creation. */
+  autoFit?: AutoFitOptions;
+  /** Undo and redo of the write commands, `maxEntries` deep. Creation-only; requires getRowId. */
+  history?: HistoryOptions;
+  /** Called when a column is moved/reordered. */
+  onColumnMoved?: (event: ColumnMovedEvent) => void;
+  /** Called when a column is pinned or unpinned. */
+  onColumnPinned?: (event: ColumnPinnedEvent) => void;
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping?: RowGrouping | null;
+  /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+  groupLabelColumn?: string;
+  /** Renders the label of a group or total row. */
+  groupLabelRenderer?: VueGroupLabelRenderer;
+  /** Called per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled?: (event: RowGroupToggledEvent) => void;
+  /** Called when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected?: (rejection: RowGroupingRejection) => void;
   /** Override any user-visible grid label. Unspecified labels fall back to English defaults. */
   labels?: GridLabelOverrides;
 }

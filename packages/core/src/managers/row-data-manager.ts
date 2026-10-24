@@ -1,155 +1,212 @@
 import type {
   CellValue,
-  CellValueChangedEvent,
-  ColumnDefinition,
   DataSource,
-  FilterModel,
+  DataSourceResponse,
+  HierarchicalRowAccess,
+  HierarchyRow,
+  RowAccess,
+  RowGrouping,
+  RowGroupingResult,
   RowId,
-  RowLoadingOptions,
-  SortModel,
+  WriteChange,
+  WriteRejectionOperation,
+  WriteRejectionReason,
 } from "../types";
-import type { InstructionBatcher } from "./instruction-batcher";
-import { buildDataSourceRequest, readCell, writeCell } from "../utils";
-import {
-  RowWindowLoader,
-  type RowWindowRange,
-} from "./row-window-loader";
+import type { AxisBounds } from "../types/geometry";
+import { buildDataSourceRequest } from "../utils";
+import { PaginatedRowLoader } from "./paginated-row-loader";
+import { RowIdDiagnostics } from "./row-id-diagnostics";
+import { RowStore } from "./row-store";
+import type { RecordFieldRead } from "../history/history-apply";
+import { RowViewBinder } from "./row-view-binder";
+import { hierarchyLoadRanges } from "./hierarchy-load-ranges";
 import { refreshTransactionData } from "../grid-core-operations";
+import type { RowDataManagerOptions } from "./row-data-manager-options";
 
-export interface RowDataManagerOptions<TData> {
-  dataSource: DataSource<TData>;
-  rowLoading: RowLoadingOptions | undefined;
-  batcher: InstructionBatcher;
-  getColumns: () => ColumnDefinition[];
-  getSortModel: () => SortModel[];
-  getFilterModel: () => FilterModel;
-  getRowHeight: () => number;
-  getOverscan: () => number;
-  getScrollTop: () => number;
-  getViewportHeight: () => number;
-  onCellValueChanged?: (event: CellValueChangedEvent<TData>) => void;
-  getRowId?: (row: TData) => RowId;
-  /**
-   * A row window arrived from a fire-and-forget load (scroll-triggered), so
-   * nobody is awaiting it: the view must be synced from here.
-   */
-  onRowsLoaded: (totalRowsChanged: boolean) => void;
-}
-
-interface PaginatedFetchOptions {
-  range: RowWindowRange;
-  resetCache: boolean;
-  showLoading: boolean;
-  /** false when the caller awaits the load and reconciles the view itself. */
-  notifyRowsLoaded: boolean;
-}
+export type { RowDataManagerOptions } from "./row-data-manager-options";
 
 export class RowDataManager<TData = unknown> {
   private dataSource: DataSource<TData>;
   private readonly options: RowDataManagerOptions<TData>;
-  private readonly rowLoading: RowLoadingOptions;
-  private readonly rowWindowLoader: RowWindowLoader<TData>;
-  private cachedRows: Map<number, TData> = new Map();
-  private totalRows = 0;
+  private readonly store: RowStore<TData>;
+  private readonly diagnostics: RowIdDiagnostics<TData>;
+  private readonly paginated: PaginatedRowLoader<TData>;
+  private readonly binder: RowViewBinder<TData>;
   private isDataLoading = false;
+  /** Guards against an obsolete load applying after a newer one. */
+  private loadGeneration = 0;
 
   constructor(options: RowDataManagerOptions<TData>) {
     this.options = options;
     this.dataSource = options.dataSource;
-    this.rowLoading = options.rowLoading ?? {};
-    this.rowWindowLoader = new RowWindowLoader<TData>(
-      {
-        getDataSource: () => this.dataSource,
-        getCachedRows: () => this.cachedRows,
-        getTotalRows: () => this.totalRows,
-        setTotalRows: (count) => {
-          this.totalRows = count;
-        },
-        getSortModel: options.getSortModel,
-        getFilterModel: options.getFilterModel,
-        getColumns: options.getColumns,
+    this.store = new RowStore<TData>({
+      getColumns: options.getColumns,
+      getDataSource: () => this.dataSource,
+      isWritable: () => this.isWritable(),
+      getRowId: options.getRowId,
+      onCellValueChanged: options.onCellValueChanged,
+      onWriteRejected: options.onWriteRejected,
+    });
+
+    // The window diagnostic sizes its scan from the paginated load range, so
+    // the two reference each other, lazily on the first load.
+    this.diagnostics = new RowIdDiagnostics<TData>({
+      getCachedRows: () => this.store.getCachedRows(),
+      getRowId: options.getRowId,
+      getLoadRange: () => this.paginated.getPaginatedLoadRange(true),
+    });
+    this.paginated = new PaginatedRowLoader<TData>({
+      getDataSource: () => this.dataSource,
+      rowLoading: options.rowLoading,
+      batcher: options.batcher,
+      getCachedRows: () => this.store.getCachedRows(),
+      getTotalRows: () => this.store.getTotalRows(),
+      setTotalRows: (count) => this.store.setTotalRows(count),
+      getSortModel: options.getSortModel,
+      getFilterModel: options.getFilterModel,
+      getColumns: options.getColumns,
+      getRowWindow: options.getRowWindow,
+      getVisibleRowWindow: options.getVisibleRowWindow,
+      getBootstrapRowCount: options.getBootstrapRowCount,
+      getPageBudgetInput: options.getPageBudgetInput,
+      getLoadContext: options.getLoadContext,
+      diagnostics: this.diagnostics,
+      emitDataError: (error) => this.emitDataError(error),
+      setDataLoading: (loading) => {
+        this.isDataLoading = loading;
       },
-      this.rowLoading.cache,
+      onRowsLoaded: options.onRowsLoaded,
+      bumpDataRevision: () => this.bumpDataRevision(),
+    });
+    this.binder = new RowViewBinder(
+      this.store,
+      { ...options, getDataSource: () => this.dataSource },
+      () => this.paginated.isPaginatedLoading(),
     );
   }
 
   getCachedRows(): Map<number, TData> {
-    return this.cachedRows;
+    return this.store.getCachedRows();
   }
-
-  setCachedRows(rows: Map<number, TData>): void {
-    this.cachedRows = rows;
-  }
-
   getTotalRows(): number {
-    return this.totalRows;
+    return this.store.getTotalRows();
   }
-
   setTotalRows(count: number): void {
-    this.totalRows = count;
+    this.store.setTotalRows(count);
   }
-
   getDataSource(): DataSource<TData> {
     return this.dataSource;
   }
 
   getRowData(rowIndex: number): TData | undefined {
-    return this.cachedRows.get(rowIndex);
+    return this.store.getRowData(rowIndex);
   }
+  hasRow(rowIndex: number): boolean {
+    return this.store.hasRow(rowIndex);
+  }
+  getRowAccess(): RowAccess | null {
+    return this.store.getRowAccess();
+  }
+  getHierarchy(): HierarchicalRowAccess<TData> | null {
+    return this.store.getHierarchy();
+  }
+  getHierarchyRow(viewIndex: number): HierarchyRow | undefined {
+    return this.store.getHierarchyRow(viewIndex);
+  }
+  getRowId(viewRow: number): RowId | undefined {
+    return this.store.getRowId(viewRow);
+  }
+  getRecordById(rowId: RowId): TData | undefined { return this.store.getRecordById(rowId); }
+  findViewIndexById(rowId: RowId): number { return this.store.findViewIndexById(rowId); }
+  /** Whether the bound source exposes a stable row identity. */
+  hasStableIdentity(): boolean { return this.store.hasStableIdentity(); }
+  /** View indices of the requested identities, within `range` when given. */
+  locateRowIds(ids: ReadonlySet<RowId>, range?: AxisBounds): Map<RowId, number> {
+    return this.store.locateIds(ids, range);
+  }
+  /** Changes whenever row order or membership may have changed. */
+  getDataRevision(): number { return this.store.getRevision(); }
+  bumpDataRevision(): void { this.store.bumpRevision(); }
 
+  /** False when the bound source declares itself read-only. */
+  isWritable(): boolean {
+    return this.dataSource.writable !== false;
+  }
+  isPaginatedLoading(): boolean { return this.paginated.isPaginatedLoading(); }
   isLoading(): boolean {
     return this.isDataLoading;
   }
 
   getCellValue(row: number, col: number): CellValue {
-    return readCell(this.cachedRows, this.options.getColumns(), row, col);
+    return this.store.getCellValue(row, col);
+  }
+  getFieldValue(viewIndex: number, field: string): CellValue {
+    return this.store.getFieldValue(viewIndex, field);
+  }
+  /** False when the write was refused, and reported as `operation`. */
+  setCellValue(row: number, col: number, value: CellValue, operation?: WriteRejectionOperation): boolean {
+    return this.store.setCellValue(row, col, value, operation);
   }
 
-  setCellValue(row: number, col: number, value: CellValue): void {
-    writeCell(this.cachedRows, this.options.getColumns(), row, col, value, {
-      onCellValueChanged: this.options.onCellValueChanged,
-      getRowId: this.options.getRowId,
-    });
+  readRecordField(rowId: RowId, field: string): RecordFieldRead {
+    return this.store.readRecordField(rowId, field);
+  }
+
+  setRecordValue(rowId: RowId, columnId: string, field: string, value: CellValue): WriteChange | WriteRejectionReason {
+    return this.store.setRecordValue(rowId, columnId, field, value);
+  }
+  /** A group or total row takes no write. */
+  isRowWritable(row: number): boolean {
+    return this.store.isRowWritable(row);
+  }
+  rejectWrite(row: number, col: number, operation: WriteRejectionOperation, reason: WriteRejectionReason): void {
+    this.store.rejectWrite(row, col, operation, reason);
   }
 
   async loadInitial(): Promise<void> {
-    if (this.isPaginatedLoading()) {
-      await this.fetchPaginatedData({
-        range: this.getInitialPaginatedRange(),
-        resetCache: true,
-        showLoading: true,
-        notifyRowsLoaded: false,
-      });
+    if (this.paginated.isPaginatedLoading()) {
+      this.binder.bindPaginated();
+      await this.paginated.loadInitial();
       return;
     }
 
     await this.fetchAllData();
   }
 
+  /** Regroup the resident flat rows with no query. */
+  setGrouping(grouping: RowGrouping | null): RowGroupingResult {
+    return this.binder.setGrouping(grouping);
+  }
+
+  /** A hierarchy that loads its own rows is asked for them instead of any page. */
   requestVisibleRows(): void {
-    if (this.isPaginatedLoading() === false) return;
+    if (this.store.getHierarchy()?.requestRows) {
+      this.requestHierarchyRows();
+      return;
+    }
+    this.paginated.requestVisibleRows();
+  }
 
-    const range = this.getPaginatedLoadRange(true);
-    if (range.endRow <= range.startRow) return;
+  /** The hierarchy branch of `requestVisibleRows` alone; a no-op without a self-loading hierarchy. */
+  requestHierarchyRows(): void {
+    const hierarchy = this.store.getHierarchy();
+    if (hierarchy?.requestRows === undefined) return;
+    hierarchy.requestRows(hierarchyLoadRanges(this.options.getLoadContext(), hierarchy.rowCount));
+  }
 
-    const visibleRange = this.getPaginatedLoadRange(false);
-    const showLoading = this.rowWindowLoader.hasMissingRows(visibleRange);
-    void this.fetchPaginatedData({
-      range,
-      resetCache: false,
-      showLoading,
-      notifyRowsLoaded: true,
-    });
+  /** C2's prefix budget for a paginated source; see C8's cache predicate. */
+  getPrefixAdmission(): ((count: number) => boolean) | undefined {
+    return this.paginated.getPrefixAdmission();
   }
 
   async refreshFromTransaction(): Promise<void> {
-    if (this.isPaginatedLoading()) {
-      await this.fetchPaginatedData({
-        range: this.getPaginatedLoadRange(true),
-        resetCache: true,
-        showLoading: false,
-        notifyRowsLoaded: false,
-      });
+    // A hierarchy has no flat cache to patch: it is re-bound from a full query.
+    if (this.dataSource.writable === false || this.store.getHierarchy()) {
+      await this.fetchAllData();
+      return;
+    }
+    if (this.paginated.isPaginatedLoading()) {
+      await this.paginated.refreshFromTransaction();
       return;
     }
 
@@ -157,34 +214,39 @@ export class RowDataManager<TData = unknown> {
       dataSource: this.dataSource,
       sortModel: this.options.getSortModel(),
       filterModel: this.options.getFilterModel(),
-      cachedRows: this.cachedRows,
+      cachedRows: this.store.getCachedRows(),
       setTotalRows: (count) => {
-        this.totalRows = count;
+        this.store.setTotalRows(count);
       },
       getColumns: this.options.getColumns,
     });
 
     // Keep wrapper row counts in sync without showing a loading indicator.
-    this.options.batcher.emit({
-      type: "DATA_LOADED",
-      totalRows: this.totalRows,
-    });
+    this.bumpDataRevision();
+    this.emitLoaded();
   }
 
   setDataSource(dataSource: DataSource<TData>): void {
     this.dataSource = dataSource;
-    this.rowWindowLoader.reset();
-    this.totalRows = 0;
+    this.paginated.reset();
+    this.store.setRowAccess(null);
+    this.binder.reset();
+    this.loadGeneration += 1;
+    this.store.setTotalRows(0);
+    this.bumpDataRevision();
   }
 
   destroy(): void {
-    this.rowWindowLoader.reset();
-    this.cachedRows.clear();
-    this.totalRows = 0;
+    this.paginated.reset();
+    this.store.setRowAccess(null);
+    this.binder.reset();
+    this.loadGeneration += 1;
+    this.store.clear();
     this.isDataLoading = false;
   }
 
   private async fetchAllData(): Promise<void> {
+    const generation = ++this.loadGeneration;
     this.isDataLoading = true;
     this.options.batcher.emit({ type: "DATA_LOADING" });
 
@@ -197,55 +259,32 @@ export class RowDataManager<TData = unknown> {
       });
 
       const response = await this.dataSource.query(request);
-      this.cachedRows.clear();
-      response.rows.forEach((row, index) => {
-        this.cachedRows.set(index, row);
-      });
-      this.totalRows = response.totalRows;
-
-      this.options.batcher.emit({
-        type: "DATA_LOADED",
-        totalRows: this.totalRows,
-      });
+      if (generation !== this.loadGeneration) return;
+      this.applyResponse(response);
+      this.emitLoaded();
     } catch (error) {
+      if (generation !== this.loadGeneration) return;
       this.emitDataError(error);
     } finally {
-      this.isDataLoading = false;
-    }
-  }
-
-  private async fetchPaginatedData(
-    options: PaginatedFetchOptions,
-  ): Promise<void> {
-    if (options.showLoading) {
-      this.isDataLoading = true;
-      this.options.batcher.emit({ type: "DATA_LOADING" });
-    }
-
-    try {
-      const result = await this.rowWindowLoader.loadRange(
-        options.range,
-        options.resetCache,
-      );
-      if (result.applied === false) return;
-
-      if (options.showLoading || result.totalRowsChanged) {
-        this.options.batcher.emit({
-          type: "DATA_LOADED",
-          totalRows: this.totalRows,
-        });
-      }
-
-      if (options.notifyRowsLoaded) {
-        this.options.onRowsLoaded(result.totalRowsChanged);
-      }
-    } catch (error) {
-      this.emitDataError(error);
-    } finally {
-      if (options.showLoading) {
+      if (generation === this.loadGeneration) {
         this.isDataLoading = false;
       }
     }
+  }
+
+  private applyResponse(response: DataSourceResponse<TData>): void {
+    this.bumpDataRevision();
+    if (this.binder.bind(response) === "rows") this.diagnostics.diagnoseLoadedRows();
+  }
+
+  /** A flat load omits `hierarchical`, so the flat payload stays exact. */
+  emitLoaded(): void {
+    const totalRows = this.store.getTotalRows();
+    if (this.store.getHierarchy()) {
+      this.options.batcher.emit({ type: "DATA_LOADED", totalRows, hierarchical: true });
+      return;
+    }
+    this.options.batcher.emit({ type: "DATA_LOADED", totalRows });
   }
 
   private emitDataError(error: unknown): void {
@@ -253,37 +292,5 @@ export class RowDataManager<TData = unknown> {
       type: "DATA_ERROR",
       error: error instanceof Error ? error.message : String(error),
     });
-  }
-
-  private isPaginatedLoading(): boolean {
-    const mode = this.rowLoading.mode ?? "auto";
-    if (mode === "paginated") return true;
-    if (mode === "all") return false;
-    return this.dataSource.loadMode === "paginated";
-  }
-
-  private getInitialPaginatedRange(): RowWindowRange {
-    const visibleRange = this.getPaginatedLoadRange(true);
-    return {
-      startRow: 0,
-      endRow: Math.max(
-        this.rowWindowLoader.getPageSize(),
-        visibleRange.endRow,
-      ),
-    };
-  }
-
-  private getPaginatedLoadRange(includeOverscan: boolean): RowWindowRange {
-    const rowHeight = this.options.getRowHeight();
-    const viewportHeight = this.options.getViewportHeight();
-    const scrollTop = this.options.getScrollTop();
-    const extraRows = includeOverscan ? this.options.getOverscan() : 0;
-    const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - extraRows);
-    const estimatedEndRow =
-      Math.ceil((scrollTop + viewportHeight) / rowHeight) + extraRows + 1;
-    const endRow = this.totalRows > 0
-      ? Math.min(this.totalRows, estimatedEndRow)
-      : estimatedEndRow;
-    return { startRow, endRow: Math.max(startRow, endRow) };
   }
 }

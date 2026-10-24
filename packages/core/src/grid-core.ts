@@ -1,517 +1,299 @@
 // @gp-grid/core/src/grid-core.ts
 
-import type {
-  GridCoreOptions,
-  BatchInstructionListener,
-  ColumnDefinition,
-  CellValue,
-  DataSource,
-  SortModel,
-  SortDirection,
-  FilterModel,
-  ColumnFilterInput,
-  EditState,
-} from "./types";
+import type { GridCoreOptions, BatchInstructionListener, DataSource } from "./types";
 import type { SelectionManager } from "./selection";
+import { toReadonlyGeometry, type FrozenRowsRequest, type GridGeometryService } from "./geometry";
+import type { GridGeometry } from "./types/geometry";
 import type { FillManager } from "./fill";
 import type { SlotPoolManager } from "./slot-pool";
 import type { EditManager } from "./edit-manager";
 import { InputHandler } from "./input-handler";
-import type {
-  HighlightManager,
-  ScrollVirtualizationManager,
-  SortFilterManager,
-  ViewportState,
-} from "./managers";
+import type { HighlightManager, SortFilterManager, TransactionResult } from "./managers";
 import { InstructionBatcher } from "./managers";
-import { computeColumnPositions } from "./utils";
 import type { RowDataManager } from "./managers/row-data-manager";
+import { RowHeightOverrides, type LocateRowIds } from "./managers/row-height-overrides";
 import { type GridCoreConfig, resolveGridCoreConfig } from "./grid-core-config";
 import { buildGridManagers } from "./grid-core-managers";
+import { createCoreGeometry } from "./grid-core-geometry";
+import { ColumnModel } from "./column-model";
 import type { ViewSync } from "./grid-core-view-sync";
-import {
-  type ColumnOperationDeps,
-  applyColumnMove,
-  applyColumnResize,
-  applyRowDragCommit,
-} from "./grid-core-operations";
+import { FrozenRowsController, type GridFrozenRowsApi } from "./grid-core-frozen-rows";
+import { RowHeightsController, type GridRowHeightsApi } from "./grid-core-row-heights";
+import { ViewportController, type GridViewportApi } from "./grid-core-viewport";
+import type { GridEditApi } from "./grid-core-edit";
+import type { GridCellsApi } from "./grid-core-cells";
+import type { GridHistoryApi } from "./grid-core-history";
+import type { GridRowsApi } from "./grid-core-rows";
+import type { GridColumnsApi } from "./grid-core-column-api";
+import type { GridHeaderApi } from "./grid-core-header";
+import { buildColumnControllers, buildRowControllers } from "./grid-core-controllers";
+import { adoptInitialColumnGroups } from "./grid-core-column-groups";
+import type { ColumnGroupState } from "./grid-core-column-guard";
+import type { GridRowDragApi } from "./grid-core-row-drag";
+import type { RowGroupsController, GridRowGroupsApi } from "./grid-core-row-groups";
+import { applyViewRowsChange, reloadViewRows, type HierarchyChangeDeps } from "./grid-core-hierarchy-change";
+import type { RecordWrites } from "./grid-core-record-writes";
+import { applyTransactionRefresh } from "./grid-core-transaction-refresh";
 
-// =============================================================================
-// GridCore
-// =============================================================================
-
+/**
+ * The framework-agnostic grid. Owns lifecycle, the viewport sample and data
+ * loading; every feature lives on a namespace (`rows`, `cells`, `edit`, …).
+ */
 export class GridCore<TData = unknown> {
-  // Options with defaults applied; immutable for the grid's lifetime
-  private readonly config: GridCoreConfig<TData>;
-
-  // Columns are the one option that changes after construction
-  private columns: ColumnDefinition[];
-  private columnPositions: number[] = [];
-
-  // Instruction dispatch
-  private readonly batcher = new InstructionBatcher();
-
-  // Viewport state
-  private readonly viewport: ViewportState;
-  // Fractional DOM scrollTop set by the synthetic touch scroller (see
-  // setScrollTopOverride); null when native scroll positions are in charge.
-  private scrollTopOverride: number | null = null;
-
-  // Data state
-  private readonly rowData: RowDataManager<TData>;
-
-  // Managers
+  /** Single owner of column/row geometry; wrappers read this, never recompute. */
+  public readonly geometry: GridGeometry;
+  public readonly rows: GridRowsApi<TData>;
+  public readonly cells: GridCellsApi;
+  public readonly history: GridHistoryApi;
+  public readonly edit: GridEditApi;
+  public readonly columns: GridColumnsApi;
+  /** Header bands, shared by every pin region (PRD 007). */
+  public readonly header: GridHeaderApi;
+  public readonly frozenRows: GridFrozenRowsApi;
+  /** Application-set row heights by identity (PRD 006). */
+  public readonly rowHeights: GridRowHeightsApi;
+  public readonly rowDrag: GridRowDragApi;
+  /** Expansion of a bound hierarchy (PRD 008). */
+  public readonly rowGroups: GridRowGroupsApi;
+  /** Scroll hooks for adapters driving a synthetic touch scroller. */
+  public readonly viewport: GridViewportApi;
   public readonly selection: SelectionManager;
   public readonly fill: FillManager;
   public readonly input: InputHandler<TData>;
   public readonly highlight: HighlightManager<TData> | null;
   public readonly sortFilter: SortFilterManager<TData>;
-  private readonly slotPool: SlotPoolManager;
-  private readonly editManager: EditManager;
-  private readonly scrollVirtualization: ScrollVirtualizationManager;
 
+  private readonly config: GridCoreConfig<TData>;
+  private readonly batcher = new InstructionBatcher();
+  private readonly columnModel: ColumnModel;
+  private readonly columnGroups: ColumnGroupState;
+  private readonly geometryService: GridGeometryService;
+  private readonly viewportController: ViewportController<TData>;
+  private readonly frozenRowsController: FrozenRowsController<TData>;
+  private readonly rowHeightsController: RowHeightsController<TData>;
+  private readonly rowHeightOverrides: RowHeightOverrides;
+  private readonly scanRowIds: LocateRowIds = (ids) => this.rowData.locateRowIds(ids);
+  private readonly rowData: RowDataManager<TData>;
+  private readonly slotPool: SlotPoolManager;
+  private readonly recordWrites: RecordWrites;
+  private readonly editManager: EditManager;
+  private readonly rowGroupsController: RowGroupsController<TData>;
+  private readonly hierarchyChange: HierarchyChangeDeps<TData>;
   // Derived-view emission: content size, headers, visible range, slots
   private readonly view: ViewSync<TData>;
-
-  // Lifecycle state
   private isDestroyed: boolean = false;
 
   constructor(options: GridCoreOptions<TData>) {
     this.config = resolveGridCoreConfig(options);
-    this.columns = options.columns;
-    this.computeColumnPositions();
+    const adopted = adoptInitialColumnGroups(options.columns, this.config);
+    this.columnGroups = adopted.state;
+    this.columnModel = new ColumnModel(adopted.columns);
 
     const managers = buildGridManagers<TData>({
       batcher: this.batcher,
       config: this.config,
-      getColumns: () => this.columns,
-      getColumnPositions: () => this.columnPositions,
+      getColumns: () => this.columnModel.getLayout(),
+      getGeometry: () => this.geometryService,
+      getFrozenRowsBaseline: () => this.frozenRowsController.getBaseline(),
+      getHeaderBands: () => this.header.getBands(),
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      onRowsLoaded: (totalRowsChanged) =>
+        this.rowHeightsController.onRowsLoaded(totalRowsChanged),
+      applyViewRowsChange: (change) => applyViewRowsChange(this.hierarchyChange, change),
+      onHierarchyChange: (change) => this.rowGroupsController.applyHierarchyChange(change),
+      reload: () => this.refresh(),
     });
     this.rowData = managers.rowData;
+    this.rowHeightOverrides = new RowHeightOverrides({
+      getRowHeight: () => this.config.rowHeight,
+      getRowCount: () => this.rowData.getTotalRows(),
+      hasStableIdentity: () => this.rowData.hasStableIdentity(),
+      getDataRevision: () => this.rowData.getDataRevision(),
+    });
     this.selection = managers.selection;
     this.highlight = managers.highlight;
     this.fill = managers.fill;
-    this.scrollVirtualization = managers.scrollVirtualization;
-    this.viewport = managers.viewport;
     this.slotPool = managers.slotPool;
+    this.recordWrites = managers.recordWrites;
     this.editManager = managers.editManager;
     this.sortFilter = managers.sortFilter;
     this.view = managers.view;
 
+    this.viewportController = new ViewportController<TData>({
+      batcher: this.batcher,
+      state: managers.viewport,
+      scrollVirtualization: managers.scrollVirtualization,
+      maxFlingVelocity: this.config.maxFlingVelocity,
+      rowHeight: this.config.rowHeight,
+      getGeometry: () => this.geometryService,
+      getRowData: () => this.rowData,
+      getView: () => this.view,
+    });
+    this.frozenRowsController = new FrozenRowsController<TData>({
+      initial: this.config.freezeRows,
+      batcher: this.batcher,
+      getGeometry: () => this.geometryService,
+      rowData: this.rowData,
+      view: this.view,
+      editManager: this.editManager,
+      viewport: this.viewportController,
+      isDestroyed: () => this.isDestroyed,
+    });
+    this.geometryService = createCoreGeometry({
+      config: this.config,
+      columnModel: this.columnModel,
+      rowData: this.rowData,
+      viewport: managers.viewport,
+      scrollVirtualization: managers.scrollVirtualization,
+      getDomScrollTop: () => this.viewportController.getDomScrollTop(),
+      getFrozenRowsRequest: () => this.frozenRowsController.getRequest(),
+      columnGroups: this.columnGroups,
+      getPlacedRowSizes: () =>
+        this.rowHeightOverrides.getPlaced({
+          revision: this.rowData.getDataRevision(),
+          rowCount: this.rowData.getTotalRows(),
+          defaultSize: this.config.rowHeight,
+          stableIdentity: this.rowData.hasStableIdentity(),
+          scan: this.scanRowIds,
+        }),
+    });
+    this.geometry = toReadonlyGeometry(this.geometryService);
+    // Before the first refresh: the scroll mapping reads the header height.
+    const controllers = buildColumnControllers<TData>({
+      config: this.config,
+      batcher: this.batcher,
+      columnModel: this.columnModel,
+      groups: this.columnGroups,
+      managers,
+      viewportController: this.viewportController,
+      getGeometry: () => this.geometryService,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      reloadAfterSchemaChange: () => this.refresh(),
+      isDestroyed: () => this.isDestroyed,
+    });
+    this.header = controllers.header;
+    this.columns = controllers.columns;
+    this.geometryService.refresh();
+    this.frozenRowsController.captureBaseline();
+    this.rowHeightsController = new RowHeightsController<TData>({
+      batcher: this.batcher,
+      overrides: this.rowHeightOverrides,
+      getGeometry: () => this.geometryService,
+      rowData: this.rowData,
+      view: this.view,
+      viewport: this.viewportController,
+      isDestroyed: () => this.isDestroyed,
+      measurementHost: this.config.measurementHost,
+      fitLimits: { min: this.config.autoFit.minRowHeight, max: this.config.autoFit.maxRowHeight },
+      onRowResized: this.config.onRowResized,
+      resizable: this.config.rowResize,
+    });
+
+    this.viewport = this.viewportController;
+    this.frozenRows = this.frozenRowsController;
+    this.rowHeights = this.rowHeightsController;
+    const rowControllers = buildRowControllers<TData>({
+      config: this.config,
+      batcher: this.batcher,
+      columnModel: this.columnModel,
+      managers,
+      viewportController: this.viewportController,
+      getGeometry: () => this.geometryService,
+      geometry: this.geometry,
+      retainEditColumn: (columnId) => this.retainEditColumn(columnId),
+      onRowsMoved: () => this.rowHeightsController.onRowsMoved(),
+      onRowsLoaded: (changed) => this.rowHeightsController.onRowsLoaded(changed),
+      isDestroyed: () => this.isDestroyed,
+    });
+    this.rows = rowControllers.rows;
+    this.cells = rowControllers.cells;
+    this.history = rowControllers.history;
+    this.edit = rowControllers.edit;
+    this.rowDrag = rowControllers.rowDrag;
+    this.rowGroupsController = rowControllers.rowGroups;
+    this.rowGroups = this.rowGroupsController;
+    this.hierarchyChange = rowControllers.hierarchyChange;
     this.input = new InputHandler(this, {
-      getHeaderHeight: () => this.config.headerHeight,
-      getRowHeight: () => this.config.rowHeight,
-      getColumnPositions: () => this.columnPositions,
-      getColumnCount: () => this.columns.length,
+      maxRowHeight: this.config.autoFit.maxRowHeight,
+      resizeRow: (viewIndex, height) => this.rowHeightsController.resize(viewIndex, height),
+      toggleGroupAt: (viewIndex) => this.rowGroupsController.toggleAt(viewIndex),
     });
   }
 
-  // ===========================================================================
-  // Instruction System
-  // ===========================================================================
-
-  /**
-   * Subscribe to batched instructions for efficient React/Vue state updates.
-   * Batch listeners receive arrays of instructions instead of individual ones.
-   */
+  /** Subscribe to batched instructions: a listener receives arrays, never single ones. */
   onBatchInstruction(listener: BatchInstructionListener): () => void {
     return this.batcher.subscribe(listener);
   }
 
-  // ===========================================================================
-  // Initialization
-  // ===========================================================================
-
-  /**
-   * Initialize the grid and load initial data.
-   */
+  /** Load the initial data. */
   async initialize(): Promise<void> {
     await this.rowData.loadInitial();
-    this.view.reconcile();
+    this.view.reconcileAfterLoad();
   }
 
-  // ===========================================================================
-  // Viewport Management
-  // ===========================================================================
-
-  /**
-   * Update viewport measurements and sync slots.
-   * When scroll virtualization is active, maps the DOM scroll position to the actual row position.
-   */
-  setViewport(
-    scrollTop: number,
-    scrollLeft: number,
-    width: number,
-    height: number,
-  ): void {
-    const { changed, viewportSizeChanged } = this.viewport.update(
-      this.scrollTopOverride ?? scrollTop,
-      scrollLeft,
-      width,
-      height,
-    );
-    if (!changed) return;
-
-    this.rowData.requestVisibleRows();
-    this.view.syncVisibleRows(viewportSizeChanged);
+  /** Update the viewport measurements and sync the slots; a virtualized DOM scroll maps to the logical row position. */
+  setViewport(scrollTop: number, scrollLeft: number, width: number, height: number): void {
+    this.viewportController.update(scrollTop, scrollLeft, width, height);
   }
 
-  // ===========================================================================
-  // Sort & Filter (facade methods delegating to SortFilterManager)
-  // ===========================================================================
-
-  async setSort(
-    colId: string,
-    direction: SortDirection | null,
-    addToExisting: boolean = false,
-  ): Promise<void> {
-    if (this.rowData.isLoading()) return;
-    return this.sortFilter.setSort(colId, direction, addToExisting);
+  /** The C2 frozen-rows request seam, applied in one atomic batch. @internal */
+  setFrozenRowsRequest(request: FrozenRowsRequest | null): void {
+    this.frozenRowsController.apply(request);
   }
 
-  async setFilter(colId: string, filter: ColumnFilterInput | string | null): Promise<void> {
-    if (this.rowData.isLoading()) return;
-    return this.sortFilter.setFilter(colId, filter);
+  /** Reload everything from the data source. */
+  async refresh(): Promise<void> {
+    await this.reload(() => this.rowData.loadInitial());
   }
 
-  hasActiveFilter(colId: string): boolean {
-    return this.sortFilter.hasActiveFilter(colId);
+  /** Refresh after `MutableDataSource` transactions; a batch of updates redraws without a query, the rest reloads. */
+  async refreshFromTransaction(result?: TransactionResult): Promise<void> {
+    await applyTransactionRefresh(result, {
+      rowData: this.rowData,
+      slotPool: this.slotPool,
+      batcher: this.batcher,
+      recordWrites: this.recordWrites,
+      reload: () => this.reload(() => this.rowData.refreshFromTransaction()),
+    });
   }
 
-  /**
-   * Open a column filter popup.
-   * Adapters can skip distinct-value computation when their popup only uses
-   * condition inputs, such as number and date filters.
-   */
-  openFilterPopup(
-    colIndex: number,
-    anchorRect: { top: number; left: number; width: number; height: number },
-    computeDistinctValues: boolean = true,
-  ): void {
-    if (this.rowData.isLoading()) return;
-    this.sortFilter.openFilterPopup(
-      colIndex,
-      anchorRect,
-      computeDistinctValues,
-    );
-  }
-
-  closeFilterPopup(): void {
-    this.sortFilter.closeFilterPopup();
-  }
-
-  getSortModel(): SortModel[] {
-    return this.sortFilter.getSortModel();
-  }
-
-  getFilterModel(): FilterModel {
-    return this.sortFilter.getFilterModel();
-  }
-
-  // ===========================================================================
-  // Editing
-  // ===========================================================================
-
-  startEdit(row: number, col: number): void {
-    this.editManager.startEdit(row, col);
-  }
-
-  /**
-   * Open a read-only peek overlay on a cell. The default cell renderer is
-   * shown in a multi-line container so long values are fully visible.
-   * Returns true if the peek opened (column must be `peekable !== false`
-   * and not currently being edited).
-   */
-  startPeek(row: number, col: number): boolean {
-    const column = this.columns[col];
-    if (!column || column.peekable === false) return false;
-    return this.editManager.startPeek(row, col);
-  }
-
-  /** Close any active peek overlay. */
-  stopPeek(): void {
-    this.editManager.stopPeek();
-  }
-
-  getPeekState(): { row: number; col: number } | null {
-    return this.editManager.getPeekState();
-  }
-
-  updateEditValue(value: CellValue): void {
-    this.editManager.updateValue(value);
-  }
-
-  commitEdit(): void {
-    this.editManager.commit();
-  }
-
-  cancelEdit(): void {
-    this.editManager.cancel();
-  }
-
-  pasteClipboardText(text: string): boolean {
-    if (this.editManager.getState()) return false;
-
-    const result = this.selection.pasteClipboardText(text);
-    if (result.changedCells.length > 0) {
-      this.refreshSlotData();
-    }
-
-    return result.handled;
-  }
-
-  getEditState(): EditState | null {
-    return this.editManager.getState();
-  }
-
-  // ===========================================================================
-  // Cell Value Access
-  // ===========================================================================
-
-  getCellValue(row: number, col: number): CellValue {
-    return this.rowData.getCellValue(row, col);
-  }
-
-  setCellValue(row: number, col: number, value: CellValue): void {
-    this.rowData.setCellValue(row, col, value);
-  }
-
-  // ===========================================================================
-  // Layout Helpers
-  // ===========================================================================
-
-  private clearSelectionIfInvalid(maxValidRow: number): void {
+  /** Swap the data source, keeping sort, filter and scroll; an open edit is cancelled, an out-of-range selection cleared. */
+  async setDataSource(dataSource: DataSource<TData>): Promise<void> {
+    if (this.editManager.getState()) this.editManager.cancel();
+    this.rowData.setDataSource(dataSource);
+    this.history.clear();
+    await this.refresh();
     const activeCell = this.selection.getActiveCell();
-    if (activeCell && activeCell.row >= maxValidRow) {
+    if (activeCell && activeCell.row >= this.rowData.getTotalRows()) {
       this.selection.clearSelection();
     }
   }
 
-  private computeColumnPositions(): void {
-    this.columnPositions = computeColumnPositions(this.columns);
-  }
-
-  private columnOperationDeps(): ColumnOperationDeps<TData> {
-    return {
-      columns: this.columns,
-      computeColumnPositions: () => this.computeColumnPositions(),
-      view: this.view,
-    };
-  }
-
-  // ===========================================================================
-  // Column & Row Interaction
-  // ===========================================================================
-
-  /**
-   * Set the displayed width of a column and recompute layout. `width` is the
-   * post-redistribution displayed width — the stored `column.width` is
-   * back-solved so the column ends up exactly `width` pixels wide.
-   */
-  setColumnWidth(colIndex: number, width: number): void {
-    const applied = applyColumnResize(
-      colIndex,
-      width,
-      this.viewport.getViewportWidth(),
-      this.columnOperationDeps(),
-    );
-    if (applied) this.config.onColumnResized?.(colIndex, width);
-  }
-
-  /**
-   * Move a column from one index to another and recompute layout.
-   */
-  moveColumn(fromIndex: number, toIndex: number): void {
-    const adjustedTo = applyColumnMove(fromIndex, toIndex, this.columnOperationDeps());
-    if (adjustedTo !== null) this.config.onColumnMoved?.(fromIndex, adjustedTo);
-  }
-
-  /**
-   * Commit a row drag operation. Reorders data if the data source supports it,
-   * then invokes the onRowDragEnd callback.
-   *
-   * Optimized: instead of a full refresh (fetchData + rebuild all slots), we
-   * update the cachedRows map in-place to mirror the splice the data source
-   * performed, then only update the affected slots.
-   */
-  commitRowDrag(sourceIndex: number, targetIndex: number): void {
-    applyRowDragCommit(sourceIndex, targetIndex, {
-      dataSource: this.rowData.getDataSource(),
-      cachedRows: this.rowData.getCachedRows(),
-      slotPool: this.slotPool,
-      highlight: this.highlight,
-    });
-    this.config.onRowDragEnd?.(sourceIndex, targetIndex);
-  }
-
-  /**
-   * Whether the entire row is draggable.
-   */
-  isRowDragEntireRow(): boolean {
-    return this.config.rowDragEntireRow;
-  }
-
-  // ===========================================================================
-  // Public Accessors
-  // ===========================================================================
-
-  getColumns(): ColumnDefinition[] {
-    return this.columns;
-  }
-
-  getColumnPositions(): number[] {
-    return [...this.columnPositions];
-  }
-
-  getRowCount(): number {
-    return this.rowData.getTotalRows();
-  }
-
-  getRowHeight(): number {
-    return this.config.rowHeight;
-  }
-
-  getHeaderHeight(): number {
-    return this.config.headerHeight;
-  }
-
-  getTotalWidth(): number {
-    return this.columnPositions.at(- 1) ?? 0;
-  }
-
-  getTotalHeight(): number {
-    return this.scrollVirtualization.getVirtualHeight();
-  }
-
-  isScalingActive(): boolean {
-    return this.scrollVirtualization.isScalingActive();
-  }
-
-  /**
-   * Maximum accumulated touch-fling velocity (logical px/ms) used by the
-   * synthetic scroller while scroll virtualization is active.
-   */
-  getMaxFlingVelocity(): number {
-    return this.config.maxFlingVelocity;
-  }
-
-  /**
-   * Override the DOM scrollTop that setViewport uses, at sub-pixel
-   * resolution. When scroll virtualization compresses the DOM scroll space,
-   * the browser quantizes scrollTop to device pixels — at high compression
-   * one DOM pixel can span a full row of logical scroll, so positions
-   * derived from native scroll events step row-by-row. The synthetic touch
-   * scroller sets its fractional position here so native scroll events
-   * (which fire with the quantized value) cannot clobber it. Pass null to
-   * return to native scroll positions.
-   * @internal
-   */
-  setScrollTopOverride(domScrollTop: number | null): void {
-    this.scrollTopOverride = domScrollTop;
-  }
-
-  getScrollRatio(): number {
-    return this.scrollVirtualization.getScrollRatio();
-  }
-
-  getVisibleRowRange(): { start: number; end: number } {
-    return this.scrollVirtualization.getVisibleRowRange();
-  }
-
-  /** Used structurally by `scrollCellIntoView` in the framework wrappers. */
-  getScrollTopForRow(rowIndex: number): number {
-    return this.scrollVirtualization.getScrollTopForRow(rowIndex);
-  }
-
-  getRowIndexAtDisplayY(viewportY: number, virtualScrollTop: number): number {
-    return this.scrollVirtualization.getRowIndexAtDisplayY(
-      viewportY,
-      virtualScrollTop,
-    );
-  }
-
-  /**
-   * Get the translateY position for a row inside the rows wrapper.
-   * Accounts for scroll virtualization (compressed coordinates).
-   */
-  getRowTranslateY(rowIndex: number): number {
-    return this.slotPool.getRowTranslateYForIndex(rowIndex);
-  }
-
-  getRowData(rowIndex: number): TData | undefined {
-    return this.rowData.getRowData(rowIndex);
-  }
-
-  // ===========================================================================
-  // Data Updates
-  // ===========================================================================
-
-  /**
-   * Refresh data from the data source.
-   */
-  async refresh(): Promise<void> {
-    await this.rowData.loadInitial();
-    this.view.reconcile();
-  }
-
-  /**
-   * Fast-path refresh for transaction-based mutations.
-   * Only re-fetches the visible window instead of all rows.
-   * Use this when data was mutated via MutableDataSource transactions.
-   */
-  async refreshFromTransaction(): Promise<void> {
-    await this.rowData.refreshFromTransaction();
-    this.view.reconcile();
-  }
-
-  /**
-   * Refresh slot display without refetching data.
-   * Useful after in-place data modifications like fill operations.
-   */
-  refreshSlotData(): void {
-    this.slotPool.refreshAllSlots();
-  }
-
-  /**
-   * Update the data source and refresh.
-   * Preserves grid state (sort, filter, scroll position).
-   * Cancels any active edit and clamps selection to valid range.
-   */
-  async setDataSource(dataSource: DataSource<TData>): Promise<void> {
-    if (this.editManager.getState()) {
-      this.editManager.cancel();
-    }
-    this.rowData.setDataSource(dataSource);
-    await this.refresh();
-    this.clearSelectionIfInvalid(this.rowData.getTotalRows());
-  }
-
-  /**
-   * Update columns and recompute layout.
-   */
-  setColumns(columns: ColumnDefinition[]): void {
-    this.columns = columns;
-    this.computeColumnPositions();
-    this.view.reconcile();
-  }
-
-  /**
-   * Destroy the grid core and release all references.
-   * Call this before discarding the GridCore to ensure proper cleanup.
-   * This method is idempotent - safe to call multiple times.
-   */
+  /** Release every listener and manager; idempotent. */
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
-
-    // Destroy child managers
+    this.rowHeightsController.clear();
     this.slotPool.destroy();
     this.highlight?.destroy();
     this.sortFilter.destroy();
     this.rowData.destroy();
-
-    // Clear listeners
     this.batcher.clearListeners();
+  }
 
+  /** Under a hierarchy the anchor and the active row follow their identity. */
+  private async reload(load: () => Promise<void>): Promise<void> {
+    if (this.rowData.getHierarchy()) {
+      await reloadViewRows(this.hierarchyChange, load);
+      return;
+    }
+    await load();
+    this.view.reconcileAfterLoad();
+  }
+
+  /** Bounded keep-alive for the edited column (B7), published as a batch. */
+  private retainEditColumn(columnId: string | null): void {
+    this.geometryService.retainColumns("edit", columnId === null ? [] : [columnId]);
+    this.view.syncEditRetention();
   }
 }

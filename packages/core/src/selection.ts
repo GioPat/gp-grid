@@ -3,28 +3,47 @@
 import type {
   CellPosition,
   CellRange,
+  CellWriteRejectedEvent,
+  WriteOperation,
   SelectionState,
   CellValue,
   ColumnDefinition,
+  WriteRejectionOperation,
 } from "./types";
-import { createInstructionEmitter, normalizeRange, formatCellValue } from "./utils";
 import {
-  coerceClipboardValue,
+  createInstructionEmitter,
+  createWriteRejection,
+  normalizeRange,
+  formatCellValue,
+} from "./utils";
+import {
   normalizeClipboardText,
   parseClipboardText,
   type ClipboardCell,
   type ClipboardMatrix,
 } from "./utils/clipboard-helpers";
+import { coerceCellValue } from "./utils/cell-coercion";
 
 export type Direction = "up" | "down" | "left" | "right";
 
 export interface SelectionManagerOptions {
   getRowCount: () => number;
   getColumnCount: () => number;
+  /** Whether a layout column is displayed; omitted means every column is. */
+  isColumnDisplayed?: (col: number) => boolean;
   getCellValue: (row: number, col: number) => CellValue;
   getRowData: (row: number) => unknown;
   getColumn: (col: number) => ColumnDefinition | undefined;
-  setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the cell refused the write, which it reports itself. */
+  setCellValue: (row: number, col: number, value: CellValue, operation: WriteRejectionOperation) => boolean | void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
+  /** Runs one write command, so its writes are reported together. */
+  runWrites?: <T>(operation: WriteOperation, command: () => T) => T;
+  /** Called when a paste is refused before any cell is written, or a pasted value cannot be converted. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
+  /** A paste target in a non-editable column: listed by the command, no rejection of its own. */
+  onWriteSkipped?: (event: CellWriteRejectedEvent) => void;
 }
 
 export interface PasteResult {
@@ -150,10 +169,10 @@ export class SelectionManager {
         newRow = Math.min(this.options.getRowCount() - 1, row + 1);
         break;
       case "left":
-        newCol = Math.max(0, col - 1);
+        newCol = this.nextDisplayedColumn(col, -1) ?? col;
         break;
       case "right":
-        newCol = Math.min(this.options.getColumnCount() - 1, col + 1);
+        newCol = this.nextDisplayedColumn(col, 1) ?? col;
         break;
     }
 
@@ -180,6 +199,19 @@ export class SelectionManager {
       this.emit({ type: "SET_ACTIVE_CELL", position: this.state.activeCell });
       this.emit({ type: "SET_SELECTION_RANGE", range: null });
     }
+  }
+
+  /**
+   * Next displayed column in a direction, or `null` when the edge is reached.
+   * Hidden columns have no rendered cell, so arrow navigation skips them.
+   */
+  private nextDisplayedColumn(from: number, step: number): number | null {
+    const isDisplayed = this.options.isColumnDisplayed;
+    const columnCount = this.options.getColumnCount();
+    for (let col = from + step; col >= 0 && col < columnCount; col += step) {
+      if (isDisplayed === undefined || isDisplayed(col)) return col;
+    }
+    return null;
   }
 
   /**
@@ -241,6 +273,12 @@ export class SelectionManager {
     this.emit({ type: "SET_SELECTION_RANGE", range: this.state.range });
   }
 
+  /** Drop the selection rectangle, keeping the active cell. */
+  clearSelectionRange(): void {
+    this.state.range = null;
+    this.emit({ type: "SET_SELECTION_RANGE", range: null });
+  }
+
   // ===========================================================================
   // Data Extraction
   // ===========================================================================
@@ -296,18 +334,30 @@ export class SelectionManager {
     if (effectiveRange === null) {
       return { handled: false, changedCells: [] };
     }
+    if (this.options.isWritable?.() === false) {
+      const { minRow, minCol } = normalizeRange(effectiveRange);
+      const column = this.options.getColumn(minCol);
+      this.runWrites("paste", () => {
+        this.options.onWriteRejected?.(
+          createWriteRejection(minRow, minCol, column?.field ?? "", "paste", "read-only-source"),
+        );
+      });
+      return { handled: false, changedCells: [] };
+    }
 
     const sourceCells = this.getPasteSourceCells(text);
     if (sourceCells.length === 0) {
       return { handled: false, changedCells: [] };
     }
 
-    const changedCells = this.applyPasteSource(
-      sourceCells,
-      effectiveRange,
-      this.state.range !== null,
+    const changedCells = this.runWrites("paste", () =>
+      this.applyPasteSource(sourceCells, effectiveRange, this.state.range !== null),
     );
     return { handled: true, changedCells };
+  }
+
+  private runWrites<T>(operation: WriteOperation, command: () => T): T {
+    return this.options.runWrites === undefined ? command() : this.options.runWrites(operation, command);
   }
 
   // ===========================================================================
@@ -442,12 +492,18 @@ export class SelectionManager {
     const column = this.options.getColumn(col);
     if (column === undefined) return;
     if (column.hidden === true) return;
-    if (column.editable !== true) return;
+    if (column.editable !== true) {
+      this.options.onWriteSkipped?.(createWriteRejection(row, col, column.field, "paste", "not-editable"));
+      return;
+    }
 
-    const coerced = coerceClipboardValue(sourceCell, column);
-    if (coerced.ok === false) return;
+    const coerced = coerceCellValue(sourceCell, column);
+    if (coerced.ok === false) {
+      this.options.onWriteRejected?.(createWriteRejection(row, col, column.field, "paste", "type-mismatch"));
+      return;
+    }
 
-    this.options.setCellValue(row, col, coerced.value);
+    if (this.options.setCellValue(row, col, coerced.value, "paste") === false) return;
     changedCells.push({ row, col, value: coerced.value });
   }
 

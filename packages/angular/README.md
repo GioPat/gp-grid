@@ -126,7 +126,213 @@ export class App {
 }
 ```
 
-`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source.
+`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source. `injectGridData` returns the `GridDataService` behind it, and `GRID_DATA_OPTIONS` is the injection token `provideGridData` registers its `GridDataOptions` under, for a test that wants to provide them by hand.
+
+## Column state and events
+
+`columnState` is an optional input of type `ColumnStateUpdate[]` — `{ columnId, width?, hidden?, order?, pinned? }` — applied through the core whenever it changes.
+
+`columnLayout` is an optional input of type `"fit" | "fixed"` (default `"fit"`).
+`"fit"` expands columns without an explicit pixel override so their total
+reaches the body scroll container's width; `"fixed"` keeps declared/overridden
+widths and scrolls horizontally. Changing the input switches the mode without
+recreating the core. `columns.getState()` reports `width` only while an explicit
+override exists, plus `resolvedWidth` (displayed CSS px, `0` while hidden).
+
+`columnOverscan` (default `240` CSS px) is how far past each clip edge center
+columns stay mounted. The default header cycles through physical left, physical
+right and unpinned. `pinIcon` replaces its SVG; `labels.pinLeftColumn`,
+`labels.pinRightColumn` and `labels.unpinColumn` replace its accessible names.
+
+Pinning: set `pinned: "start"` or `"end"` on a definition, or call
+`core.columns.setPinned(columnId, "start" | "end" | null)` on the exposed core
+(`grid.core` via `@ViewChild`). A pin is a request — when the viewport cannot
+fit it the column renders in the scrolling center and is admitted again once
+there is room, so read `region` from `columns.getState()`. Only the admitted pins
+plus a window of center columns are mounted. See
+[Column pinning](../../docs/features/column-pinning.md).
+
+Frozen rows: `freezeRows` is an optional input of type
+`{ count, maxCount?, minSuffixHeight? }` (defaults `count 0`, `maxCount 100`,
+`minSuffixHeight 64`) that keeps the displayed rows `[0, count)` fixed below
+the header. `count` is a request — the effective count is bounded by
+`maxCount`, by the viewport (a frozen prefix always leaves `minSuffixHeight`
+for the suffix) and, with a paginated source, by the page budget — so read
+`grid.core.frozenRows.get()` for `{ requestedCount, effectiveCount, limit }`.
+The `(onFrozenRowsChanged)` output fires whenever either reported field
+changes, not for the initial resolution and not per scroll. A reduced prefix is
+announced through `labels.frozenRowsLimited` in a visually hidden live region.
+Changing the input after mount applies the new count through
+`core.frozenRows.set` without recreating the component or resetting scroll; the
+runtime setter also corrects the scroll position so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[Frozen rows](../../docs/features/frozen-rows.md).
+
+Row heights: rows are `rowHeight` px tall unless you set a height by row
+identity through the exposed core (`grid.core` via `@ViewChild`):
+
+```ts
+grid.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+grid.core?.rowHeights.reset([2]);   // or reset() for all of them
+grid.core?.rowHeights.getOverrides();
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws a `RangeError` and applies nothing. With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded yet waits for its row. Without `getRowId`, an integer `rowId`
+addresses a view index and is dropped at the next data revision. Applying a
+height anchors the row at the clip top and corrects the scroll position in the
+same batch, so the viewport does not jump; row boxes are sized from
+`slot.height` and the row drag ghost from `rd.sourceRowHeight`. Nothing is
+measured continuously; a fit measures once (below). See
+[Row heights](../../docs/features/row-heights.md).
+
+Row resize and auto-fit: `[rowResize]="true"` lets the user drag a row edge, and
+a double-click on a row or column edge fits it to its rendered content once.
+`[autoFit]` (`{ maxColumnWidth?, minRowHeight?, maxRowHeight? }`, defaults 600,
+`rowHeight` and `10 × rowHeight`) bounds the fits and the row drag, and
+`(onRowResized)` reports each changed row. The commands are on the exposed core:
+
+```ts
+grid.core?.columns.fit(["name"]); // { status, columns, skipped, ... }
+grid.core?.rowHeights.fit();       // every mounted row
+grid.core?.columns.setState([{ columnId: "name", width: null }]); // drop the width
+```
+
+A fit reads the mounted cells only and stores the result like a resize. Call it
+after the render that follows a column change: a fit in the same task returns
+`"stale"` and applies nothing. The edge handles are pointer-only (`aria-hidden`);
+the keyboard equivalents are Alt+ArrowLeft/Right and Alt+ArrowUp/Down (resize),
+Alt+Shift+ArrowLeft/Right (move the column), Alt+Enter (fit the column) and
+Alt+Shift+Enter (fit the row). See
+[Auto-fit and row resize](../../docs/features/auto-fit.md).
+
+Column groups: `[columnGroups]` (`AngularColumnGroupChild[]`) nests the headers
+over the column ids, every column referenced once and ungrouped ones at the
+root, and `[headerBandHeights]` sets each band's height (default
+`headerHeight`); both apply at runtime. An invalid hierarchy is rejected: the
+grid keeps the previous one and emits `(onColumnSchemaRejected)` with
+`{ code, source, id?, limit?, message }`. The input stays as given and is
+re-applied with every later `columns` change, so restore a valid hierarchy.
+`[columnGroupLimits]` (`maxDepth` 64, `maxNodes` 100,000, `maxFragments` 100,000)
+is read at creation. A group's `headerRenderer` is a `TemplateRef` receiving
+`ColumnGroupHeaderParams` as `$implicit`, or a key of `[headerRenderers]`. Under
+strict templates the published input typings do not accept `undefined`: cast an
+absent hierarchy and bind `[]` for no band heights. See
+[Column groups and header bands](../../docs/features/column-groups.md).
+
+Row grouping: `[rowGrouping]` takes a `createRowGrouping({ dimensions, measures?,
+grandTotal? })` and groups the rows of a source loaded in full; keep it in a
+field, because a new object regroups. Every group starts collapsed. The expander
+and label sit in `[groupLabelColumn]` (default: the first displayed column) and
+each aggregate under the column named by the measure's `field`; aggregates are
+displayed unrounded, so give a numeric measure column a `valueFormatter`.
+`[groupLabelRenderer]` is a `TemplateRef` (`GroupLabelRendererTemplate`) whose
+`$implicit` is `{ row, viewIndex, label, toggle }`. A cell template receives
+`rowKind` on an aggregate cell, with `rowData` undefined, and is not rendered for
+a group cell without an aggregate.
+
+```ts
+import { createRowGrouping } from "@gp-grid/angular";
+
+protected readonly grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  grandTotal: "top",
+});
+```
+
+```html
+<gp-grid #grid [columns]="columns" [rows]="rows" [rowHeight]="32" [getRowId]="getRowId"
+  [rowGrouping]="grouping" groupLabelColumn="country"
+  (onRowGroupToggled)="onToggled($event)"
+  (onRowGroupingRejected)="onRejected($event)" />
+<button (click)="grid.core?.rowGroups.setExpanded(null, true)">Expand all</button>
+```
+
+A pointer down on the expander, a double-click on a group row, and Enter or
+Space on its active cell toggle it. Editing a measure cell updates the
+aggregates on its path; editing a dimension cell moves the record, expands its
+new groups and keeps the active cell on it. Group and total rows are read-only,
+and row drag is disabled while grouped. A paginated source, an unknown field or
+an object key without `toKey` is rejected: the grid stays flat and emits
+`(onRowGroupingRejected)`. A data source can also return rows it grouped itself
+as a `HierarchicalRowAccess`. Under strict templates the published input typings
+do not accept `null` or `undefined`: cast to ungroup
+(`null as unknown as RowGrouping`). Angular creates its core on the server, so a
+server render may already contain the collapsed group rows (`role="treegrid"`).
+The label cell's parts, `GroupToggleComponent` and `GroupLabelComponent`, are
+exported. See [Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+Server grouping: for a dataset that stays on a server, bind
+`createServerGroupingSource(service, config)` to `[dataSource]`, and no `[rowGrouping]`. The grid asks your service for one
+group's children or leaves a page at a time and never loads a collapsed group's
+leaves. Rows not loaded yet render as loading rows, and a group whose page failed
+collapses with an error and retries when expanded again. The source is read-only
+unless created with `writable: true`; keep it in a field. See
+[Server grouping](../../docs/features/server-grouping.md).
+
+```html
+<gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" groupLabelColumn="country" />
+```
+
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. Pass it as `[dataSource]` and the schema from `subscribeSchema` as
+`[columns]` and `[columnGroups]`, kept in a signal; `buildPivotSchema(keys, options)` builds the same schema from keys
+you computed yourself, without the engine. See
+[Pivot](../../docs/features/pivot.md).
+
+```html
+<gp-grid [columns]="schema().columns" [columnGroups]="schema().columnGroups" [dataSource]="source"
+  [rowHeight]="32" [groupLabelColumn]="labelColumnId" />
+```
+
+Writes and history: every edit, paste, fill and `cells.setValue` is one write
+command reported through the `(onWriteCommitted)` output with its changes by
+record id and the targets it skipped; `[history]="{ maxEntries: 100 }"` turns
+on undo and redo of those commands by record id (`core.history.undo()`,
+Ctrl+Z, Ctrl+Y). See
+[Write commands and history](../../docs/features/writes-and-history.md).
+
+An editor commit is coerced by the column's `cellDataType`, like paste: `"60000"`
+typed into a `number` column stores `60000`, and a draft the type cannot hold
+writes nothing.
+
+| Output | Payload |
+| --- | --- |
+| `(onColumnResized)` | `{ columnId, width, viewIndex }` |
+| `(onColumnMoved)` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `(onColumnPinned)` | `{ columnId, pinned }` (`null` when unpinned) |
+| `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
+| `(onRowResized)` | `{ rowId, height, viewIndex }` per row a drag, a key or a fit changed |
+| `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
+| `(onRowGroupToggled)` | `{ rowId, expanded }` per group a pointer or key gesture toggled |
+| `(onRowGroupingRejected)` | `RowGroupingRejection` — `{ reason, field? }` |
+| `(onRowDragEnd)` | `{ rowId, fromViewIndex, toViewIndex }` |
+| `(onCellValueChanged)` | `CellValueChangedEvent<TData>`; it gained `columnId`, and `colIndex` is the current view column index |
+
+```html
+<gp-grid
+  [columns]="columns"
+  [columnState]="columnState"
+  [dataSource]="grid.dataSource"
+  [rowHeight]="36"
+  (onColumnResized)="onResized($event)"
+  (onColumnMoved)="onMoved($event)"
+  (onColumnPinned)="onPinned($event)" />
+```
+
+### Migration from 0.x
+
+The full list of changes from 0.23.x, with before/after code, is in the [migration guide](../../docs/migration-1.0.md).
+
+The old payloads `{ colIndex, newWidth }`, `{ fromIndex, toIndex }` and `{ source, target }` became `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }` and `{ rowId, fromViewIndex, toViewIndex }`. There is no compatibility adapter.
+
+Reassigning `columns` reconciles the schema by column id (`colId ?? field`) without recreating the core: retained columns keep their user width/order/visibility, unrelated sort/filter/scroll survives, and removed columns drop their headers and state. A definition `width`/`hidden` change only applies when the column has no user override for that property; otherwise call `columns.resetState(["id"])` on the exposed core.
+
+The public website documentation for this package lives outside this repository and should be updated by the maintainer.
 
 ## License
 

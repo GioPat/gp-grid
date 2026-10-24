@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import benchmarkDefaults from "../src/config/benchmark-defaults.json" with { type: "json" };
 import gridPackages from "../src/config/grid-packages.json" with { type: "json" };
 import { collectPackageSizes } from "./collect-package-sizes.js";
+import { collectArtifactProvenance, readBenchmarkSource } from "./artifact-resolution.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, "../results");
@@ -26,12 +27,13 @@ const readPackageVersion = (packageName) => {
   }
 };
 
-const collectLibraryVersions = () => {
+const collectLibraryVersions = (packagesByGrid, artifactProvenance) => {
   const versions = {};
-  for (const [grid, packageNames] of Object.entries(gridPackages)) {
+  for (const [grid, packageNames] of Object.entries(packagesByGrid)) {
     const packages = {};
     for (const name of packageNames) {
-      packages[name] = readPackageVersion(name);
+      const artifact = artifactProvenance.packages.find((item) => item.name === name);
+      packages[name] = artifact?.version ?? readPackageVersion(name);
     }
     versions[grid] = { packages };
   }
@@ -57,6 +59,19 @@ const parseRowCounts = () => {
   return parsed.length > 0 ? parsed : benchmarkDefaults.rowCounts;
 };
 
+const parseColumnCounts = () => {
+  const raw = process.env.BENCH_COLUMN_COUNTS;
+  if (raw === undefined) {
+    return benchmarkDefaults.columnCounts;
+  }
+
+  const parsed = raw
+    .split(",")
+    .map((entry) => Number.parseInt(entry.trim(), 10))
+    .filter((entry) => Number.isFinite(entry) && entry > 0);
+  return parsed.length > 0 ? parsed : benchmarkDefaults.columnCounts;
+};
+
 const createRunId = () => {
   return process.env.BENCH_RUN_ID ?? new Date().toISOString().replace(/[:.]/g, "-");
 };
@@ -65,6 +80,12 @@ fs.mkdirSync(RUNS_DIR, { recursive: true });
 
 const cpus = os.cpus();
 const runId = createRunId();
+const benchmarkSource = readBenchmarkSource();
+const artifacts = collectArtifactProvenance(benchmarkSource);
+const selectedGrid = process.env.BENCH_GRID;
+const selectedPackages = selectedGrid && gridPackages[selectedGrid]
+  ? { [selectedGrid]: gridPackages[selectedGrid] }
+  : gridPackages;
 const manifest = {
   runId,
   timestamp: new Date().toISOString(),
@@ -78,6 +99,7 @@ const manifest = {
   },
   config: {
     rowCounts: parseRowCounts(),
+    columnCounts: parseColumnCounts(),
     iterations: parsePositiveInteger(
       process.env.BENCH_ITERATIONS,
       benchmarkDefaults.iterations,
@@ -89,8 +111,9 @@ const manifest = {
     viewport: benchmarkDefaults.viewport,
     headless: benchmarkDefaults.headless,
   },
-  libraryVersions: collectLibraryVersions(),
-  packageSizes: await collectPackageSizes(gridPackages),
+  libraryVersions: collectLibraryVersions(selectedPackages, artifacts),
+  artifacts,
+  packageSizes: await collectPackageSizes(selectedPackages, benchmarkSource),
 };
 
 const runDir = path.join(RUNS_DIR, runId);

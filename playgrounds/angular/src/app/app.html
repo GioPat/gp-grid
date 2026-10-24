@@ -52,15 +52,124 @@
 
   <section class="grid-card">
     <gp-grid
-      [columns]="columns"
+      [columns]="shownColumns()"
+      [columnGroups]="columnGroups()"
+      [headerHeight]="headerHeight"
+      [headerBandHeights]="headerBandHeights()"
       [labels]="gridLabels"
       [overscan]="12"
-      [dataSource]="grid.dataSource"
+      [dataSource]="dataSource()"
       [darkMode]="darkMode()"
       [highlighting]="highlighting"
       [rowDragEntireRow]="true"
+      [rowResize]="true"
+      [freezeRows]="freezeRows()"
+      [rowGrouping]="rowGrouping()"
+      [groupLabelColumn]="pivotActive() ? pivotLabelColumn : ''"
+      [getRowId]="getRowId"
+      [history]="history"
+      (onWriteCommitted)="onWriteCommitted($event)"
+      (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
       (onRowDragEnd)="onRowDragEnd($event)" />
   </section>
+
+  <div class="row-update-controls">
+    <span>Frozen Rows:</span>
+    @for (value of freezeCounts; track value) {
+      <button
+        type="button"
+        class="update-btn"
+        [style.opacity]="freezeCount() === value ? 1 : 0.5"
+        (click)="freezeCount.set(value)"
+      >
+        {{ value }}
+      </button>
+    }
+    <span>{{ frozenStatus() }}</span>
+  </div>
+
+  <!-- Row Heights (PRD 006): heights by identity, no remount -->
+  <div class="row-update-controls">
+    <span>Row heights:</span>
+    <button type="button" class="update-btn" (click)="tallRows()">Tall rows</button>
+    <button type="button" class="update-btn" (click)="resetRowHeights()">Reset heights</button>
+    <!-- Auto-fit (PRD 007): one-shot fits of the mounted cells, no remount -->
+    <button type="button" class="update-btn" (click)="fitColumns()">Fit columns</button>
+    <button type="button" class="update-btn" (click)="fitRows()">Fit rows</button>
+    <!-- Column groups (PRD 007): hierarchy and band heights, no remount -->
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="grouped()"
+      [style.opacity]="grouped() ? 1 : 0.5"
+      (click)="toggleGrouped()"
+    >
+      Grouped headers
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="tallBand()"
+      [style.opacity]="tallBand() ? 1 : 0.5"
+      (click)="toggleTallBand()"
+    >
+      Tall band
+    </button>
+    <!-- Row grouping (PRD 008): regroup and expand, no remount -->
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="groupRows()"
+      [style.opacity]="groupRows() ? 1 : 0.5"
+      (click)="toggleGroupRows()"
+    >
+      Group rows
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="serverGroups()"
+      [style.opacity]="serverGroups() ? 1 : 0.5"
+      (click)="toggleServerGroups()"
+    >
+      Server groups
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="pivot()"
+      [style.opacity]="pivot() ? 1 : 0.5"
+      (click)="togglePivot()"
+    >
+      Pivot
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="columnar()"
+      [style.opacity]="columnar() ? 1 : 0.5"
+      (click)="toggleColumnar()"
+    >
+      Columnar
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [attr.aria-pressed]="wide()"
+      [style.opacity]="wide() ? 1 : 0.5"
+      (click)="toggleWide()"
+    >
+      Wide
+    </button>
+    <button
+      type="button"
+      class="update-btn"
+      [disabled]="grouping() === false"
+      (click)="expandAllGroups()"
+    >
+      Expand all
+    </button>
+  </div>
 
   <div class="row-update-controls">
     <label>

@@ -35,6 +35,7 @@ const measureInitialRender = async (
   const domContentLoaded = Date.now() - navigationStart;
   await waitForGridReady(page, rowCount);
   const timeToFullRender = Date.now() - navigationStart;
+  const setupMetrics = await page.evaluate(() => window.gridApi.getSetupMetrics?.());
 
   // Measured durations are already captured; this wait only lets late paint
   // work (and its performance entries) land before the metrics are read.
@@ -55,6 +56,12 @@ const measureInitialRender = async (
   return {
     timeToFirstPaint: Math.round(firstContentfulPaint?.startTime ?? 0),
     timeToFullRender,
+    dataGenerationMs: setupMetrics === undefined
+      ? undefined
+      : Math.round(setupMetrics.dataGenerationMs * 10) / 10,
+    gridBindToReadyMs: setupMetrics === undefined
+      ? undefined
+      : Math.round(setupMetrics.bindElapsedMs * 10) / 10,
     domContentLoaded,
     largestContentfulPaint: performanceMetrics.largestContentfulPaint,
     totalBlockingTime: performanceMetrics.totalBlockingTime,

@@ -11,15 +11,20 @@ import type { SlotData, HeaderData, GridState } from "./types/ui-state";
 export const applyInstruction = <TData = unknown>(
   instruction: GridInstruction,
   slots: Map<string, SlotData<TData>>,
-  headers: Map<number, HeaderData>,
+  headers: Map<string, HeaderData>,
 ): Partial<GridState<TData>> | null => {
   switch (instruction.type) {
     case "CREATE_SLOT":
       slots.set(instruction.slotId, {
         slotId: instruction.slotId,
         rowIndex: -1,
-        rowData: {} as TData,
+        rowData: undefined,
+        generation: instruction.generation,
         translateY: 0,
+        height: 0,
+        // The flat payload omits both; the reducer owns the defaults (C7).
+        region: instruction.region ?? "suffix",
+        loading: instruction.loading ?? false,
       });
       return null;
 
@@ -30,11 +35,17 @@ export const applyInstruction = <TData = unknown>(
     case "ASSIGN_SLOT": {
       const existing = slots.get(instruction.slotId);
       if (existing) {
-        slots.set(instruction.slotId, {
-          ...existing,
+        const { row: _previousRow, ...rest } = existing;
+        const next: SlotData<TData> = {
+          ...rest,
           rowIndex: instruction.rowIndex,
           rowData: instruction.rowData as TData,
-        });
+          generation: instruction.generation,
+          region: instruction.region ?? "suffix",
+          loading: instruction.loading ?? false,
+        };
+        if (instruction.row) next.row = instruction.row;
+        slots.set(instruction.slotId, next);
       }
       return null;
     }
@@ -45,13 +56,20 @@ export const applyInstruction = <TData = unknown>(
         slots.set(instruction.slotId, {
           ...existing,
           translateY: instruction.translateY,
+          height: instruction.height,
         });
       }
       return null;
     }
 
-    case "SCROLL_TO":
-      return { pendingScrollTop: instruction.scrollTop };
+    case "SCROLL_TO": {
+      // Only the axes present: adapters assign every non-null pending value,
+      // and the DOM reads an assigned `undefined` as 0.
+      const pending: Partial<GridState<TData>> = {};
+      if (instruction.scrollTop !== undefined) pending.pendingScrollTop = instruction.scrollTop;
+      if (instruction.scrollLeft !== undefined) pending.pendingScrollLeft = instruction.scrollLeft;
+      return pending;
+    }
 
     case "SET_ACTIVE_CELL":
       return { activeCell: instruction.position };
@@ -74,6 +92,7 @@ export const applyInstruction = <TData = unknown>(
           row: instruction.row,
           col: instruction.col,
           initialValue: instruction.initialValue,
+          editId: instruction.editId,
         },
       };
 
@@ -93,15 +112,20 @@ export const applyInstruction = <TData = unknown>(
         viewportWidth: instruction.viewportWidth,
         viewportHeight: instruction.viewportHeight,
         rowsWrapperOffset: instruction.rowsWrapperOffset,
+        geometryRevision: instruction.revision,
       };
 
     case "UPDATE_HEADER":
-      headers.set(instruction.colIndex, {
+      headers.set(instruction.columnId, {
         column: instruction.column,
         sortDirection: instruction.sortDirection,
         sortIndex: instruction.sortIndex,
         hasFilter: instruction.hasFilter,
       });
+      return null;
+
+    case "REMOVE_HEADERS":
+      for (const columnId of instruction.columnIds) headers.delete(columnId);
       return null;
 
     case "OPEN_FILTER_POPUP":
@@ -123,13 +147,42 @@ export const applyInstruction = <TData = unknown>(
       return { isLoading: true, error: null };
 
     case "DATA_LOADED":
-      return { isLoading: false, totalRows: instruction.totalRows };
+      return {
+        isLoading: false,
+        totalRows: instruction.totalRows,
+        hierarchical: instruction.hierarchical === true,
+      };
 
     case "DATA_ERROR":
       return { isLoading: false, error: instruction.error };
 
     case "COLUMNS_CHANGED":
-      return { columns: instruction.columns };
+      return {
+        columns: instruction.columns,
+        layout: instruction.layout,
+        geometryRevision: instruction.revision,
+      };
+
+    case "SET_COLUMN_WINDOW":
+      return {
+        columnWindow: instruction.window,
+        geometryRevision: instruction.revision,
+      };
+
+    case "SET_ROW_REGIONS":
+      return {
+        rowRegions: instruction.regions,
+        geometryRevision: instruction.revision,
+      };
+
+    case "SET_HEADER_BANDS":
+      return {
+        headerBands: instruction.bands,
+        geometryRevision: instruction.revision,
+      };
+
+    case "SET_ANNOUNCEMENT":
+      return { announcement: instruction.announcement };
 
     default:
       return null;

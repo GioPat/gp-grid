@@ -1,31 +1,36 @@
 // packages/core/src/slot-pool.ts
 
-import type { SlotState, GridInstruction } from "./types";
+import type { SlotState, GridInstruction, HierarchyRow } from "./types";
+import type { RowRegionLayout } from "./geometry";
 import { createBatchInstructionEmitter } from "./utils";
+import { planSlotRefresh, planSlotSync, planSlotUpdate, type SlotPlanInput } from "./slot-pool-plan";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface SlotPoolManagerOptions {
-  /** Get current row height */
-  getRowHeight: () => number;
-  /** Get current header height */
-  getHeaderHeight: () => number;
-  /** Get overscan count */
-  getOverscan: () => number;
-  /** Get current scroll top position (natural, not virtual) */
-  getScrollTop: () => number;
-  /** Get viewport height */
-  getViewportHeight: () => number;
-  /** Get total row count */
-  getTotalRows: () => number;
-  /** Get scroll ratio for virtualization (1 = no virtualization) */
-  getScrollRatio: () => number;
-  /** Get virtual content height */
-  getVirtualContentHeight: () => number;
+  /** Overscanned half-open suffix row window the pool should keep mounted. */
+  getRowWindow: () => { start: number; end: number };
+  /** Displayed view-row count. */
+  getRowCount: () => number;
+  /** C3 layout; the frozen prefix is required in every window (C7). */
+  getRowRegions: () => RowRegionLayout;
+  /** `translateY` of a row inside the rows wrapper (rows space). */
+  getRowOffset: (rowIndex: number) => number;
+  /** Row height from the row axis. */
+  getRowSize: (rowIndex: number) => number;
   /** Get row data by index */
   getRowData: (rowIndex: number) => unknown;
+  /** Kind and depth of a hierarchy row; omitted or `undefined` while flat. */
+  getRow?: (rowIndex: number) => HierarchyRow | undefined;
+  /**
+   * Whether the row exists and can be rendered. Distinct from row data: a
+   * columnar row renders with no source record.
+   */
+  isRowAvailable: (rowIndex: number) => boolean;
+  /** Whether a hierarchy is bound, whose unavailable rows mount as loading slots; flat when omitted. */
+  isHierarchical?: () => boolean;
 }
 
 interface SlotPoolState {
@@ -33,6 +38,8 @@ interface SlotPoolState {
   /** Maps rowIndex to slotId for quick lookup */
   rowToSlot: Map<number, string>;
   nextSlotId: number;
+  /** Monotonic assignment generation; every ASSIGN_SLOT increments it. */
+  nextGeneration: number;
 }
 
 // =============================================================================
@@ -48,6 +55,7 @@ export class SlotPoolManager {
     slots: new Map(),
     rowToSlot: new Map(),
     nextSlotId: 0,
+    nextGeneration: 1,
   };
 
   private readonly options: SlotPoolManagerOptions;
@@ -82,132 +90,45 @@ export class SlotPoolManager {
     return this.state.slots;
   }
 
+  /**
+   * Get the current assignment generation for a row, or -1 when no slot
+   * currently serves it. Callbacks captured with an older generation are stale.
+   */
+  getSlotGeneration(rowIndex: number): number {
+    const slotId = this.state.rowToSlot.get(rowIndex);
+    if (slotId === undefined) return -1;
+    return this.state.slots.get(slotId)?.generation ?? -1;
+  }
+
   // ===========================================================================
   // Slot Synchronization
   // ===========================================================================
 
   /**
-   * Synchronize slots with current viewport position.
-   * This implements the slot recycling strategy.
+   * Synchronize slots with the frozen prefix and the current suffix window.
+   * The window is half-open and already overscanned, so no row arithmetic
+   * happens here beyond inserting the prefix (C7).
    */
   syncSlots(): void {
-    const scrollTop = this.options.getScrollTop();
-    const rowHeight = this.options.getRowHeight();
-    const viewportHeight = this.options.getViewportHeight();
-    const totalRows = this.options.getTotalRows();
-    const overscan = this.options.getOverscan();
-
-    // The header is rendered outside the scroll container, so viewportHeight
-    // already represents only the body content area
-    const contentHeight = viewportHeight;
-
-    const visibleStartRow = Math.max(
-      0,
-      Math.floor(scrollTop / rowHeight) - overscan
-    );
-    const visibleEndRow = Math.min(
-      totalRows - 1,
-      Math.ceil((scrollTop + contentHeight) / rowHeight) + overscan
-    );
-
-    if (totalRows === 0 || visibleEndRow < visibleStartRow) {
-      // No rows to display - destroy all slots
-      this.destroyAllSlots();
-      return;
-    }
-
-    const requiredRows = new Set<number>();
-    for (let row = visibleStartRow; row <= visibleEndRow; row++) {
-      requiredRows.add(row);
-    }
-
-    const instructions: GridInstruction[] = [];
-
-    const slotsToRecycle = this.partitionSlots(requiredRows);
-
-    let recycleIdx = 0;
-    for (const rowIndex of requiredRows) {
-      const rowData = this.options.getRowData(rowIndex);
-      if (rowData === undefined) continue;
-      const recycledSlotId = recycleIdx < slotsToRecycle.length
-        ? slotsToRecycle[recycleIdx++]
-        : undefined;
-      this.assignSlotToRow(rowIndex, rowData, recycledSlotId, instructions);
-    }
-
-    for (let i = recycleIdx; i < slotsToRecycle.length; i++) {
-      const slotId = slotsToRecycle[i]!;
-      this.state.slots.delete(slotId);
-      instructions.push({ type: "DESTROY_SLOT", slotId });
-    }
-
-    this.updateSlotPositions(instructions);
-
-    this.emitBatch(instructions);
+    this.emitBatch(planSlotSync(this.planInput()));
   }
 
   /**
-   * Partition existing slots into recyclable and still-needed.
-   * Mutates requiredRows: rows that already have a slot are removed.
+   * Refresh all slot data without changing which rows are displayed.
+   * Used after filtering/sorting when data changes.
    */
-  private partitionSlots(requiredRows: Set<number>): string[] {
-    const slotsToRecycle: string[] = [];
-    for (const [slotId, slot] of this.state.slots) {
-      if (requiredRows.has(slot.rowIndex)) {
-        requiredRows.delete(slot.rowIndex);
-      } else {
-        slotsToRecycle.push(slotId);
-        this.state.rowToSlot.delete(slot.rowIndex);
-      }
-    }
-    return slotsToRecycle;
+  refreshAllSlots(): void {
+    this.emitBatch(planSlotRefresh(this.planInput()));
+    // Also sync slots to handle any rows that went out of bounds
+    this.syncSlots();
   }
 
   /**
-   * Assign a row to a recycled or newly created slot.
+   * Update a single slot's data.
    */
-  private assignSlotToRow(
-    rowIndex: number,
-    rowData: unknown,
-    recycledSlotId: string | undefined,
-    instructions: GridInstruction[],
-  ): void {
-    let slotId: string;
-
-    if (recycledSlotId === undefined) {
-      slotId = `slot-${this.state.nextSlotId++}`;
-      this.state.slots.set(slotId, {
-        slotId,
-        rowIndex,
-        rowData,
-        translateY: this.getRowTranslateY(rowIndex),
-      });
-      instructions.push({ type: "CREATE_SLOT", slotId });
-    } else {
-      slotId = recycledSlotId;
-      const slot = this.state.slots.get(slotId)!;
-      slot.rowIndex = rowIndex;
-      slot.rowData = rowData;
-      slot.translateY = this.getRowTranslateY(rowIndex);
-    }
-
-    this.state.rowToSlot.set(rowIndex, slotId);
-    instructions.push(
-      { type: "ASSIGN_SLOT", slotId, rowIndex, rowData },
-      { type: "MOVE_SLOT", slotId, translateY: this.getRowTranslateY(rowIndex) },
-    );
-  }
-
-  /**
-   * Push MOVE_SLOT instructions for slots whose position has drifted.
-   */
-  private updateSlotPositions(instructions: GridInstruction[]): void {
-    for (const [slotId, slot] of this.state.slots) {
-      const expectedY = this.getRowTranslateY(slot.rowIndex);
-      if (slot.translateY !== expectedY) {
-        slot.translateY = expectedY;
-        instructions.push({ type: "MOVE_SLOT", slotId, translateY: expectedY });
-      }
+  updateSlot(rowIndex: number): void {
+    for (const instruction of planSlotUpdate(this.planInput(), rowIndex)) {
+      this.emit(instruction);
     }
   }
 
@@ -238,121 +159,23 @@ export class SlotPoolManager {
     this.emitter.clearListeners();
   }
 
-  /**
-   * Refresh all slot data without changing which rows are displayed.
-   * Used after filtering/sorting when data changes.
-   */
-  refreshAllSlots(): void {
-    const instructions: GridInstruction[] = [];
-    const totalRows = this.options.getTotalRows();
-
-    for (const [slotId, slot] of this.state.slots) {
-      // Check if row index is still valid and data is available
-      if (slot.rowIndex >= 0 && slot.rowIndex < totalRows) {
-        const rowData = this.options.getRowData(slot.rowIndex);
-        if (rowData === undefined) continue;
-
-        const translateY = this.getRowTranslateY(slot.rowIndex);
-
-        slot.rowData = rowData;
-        slot.translateY = translateY;
-
-        instructions.push(
-          { type: "ASSIGN_SLOT", slotId, rowIndex: slot.rowIndex, rowData },
-          { type: "MOVE_SLOT", slotId, translateY },
-        );
-      }
-    }
-
-    this.emitBatch(instructions);
-
-    // Also sync slots to handle any rows that went out of bounds
-    this.syncSlots();
-  }
-
-  /**
-   * Update a single slot's data.
-   */
-  updateSlot(rowIndex: number): void {
-    const slotId = this.state.rowToSlot.get(rowIndex);
-    if (slotId) {
-      const rowData = this.options.getRowData(rowIndex);
-      if (rowData) {
-        this.emit({
-          type: "ASSIGN_SLOT",
-          slotId,
-          rowIndex,
-          rowData,
-        });
-      }
-    }
-  }
-
-  // ===========================================================================
-  // Position Calculation
-  // ===========================================================================
-
-  /**
-   * Calculate the translateY position for a row.
-   * Handles scroll virtualization for very large datasets.
-   *
-   * When virtualization is active (scrollRatio < 1), we use viewport-relative
-   * positioning to keep translateY values small. This prevents browser rendering
-   * issues that occur at extreme pixel values (millions of pixels).
-   *
-   * Note: The header is rendered outside the content sizer, so row positions
-   * start at 0 (not headerHeight) within the rows container.
-   */
-  private getRowTranslateY(rowIndex: number): number {
-    const rowHeight = this.options.getRowHeight();
-    const scrollRatio = this.options.getScrollRatio();
-    const scrollTop = this.options.getScrollTop();
-
-    // Calculate the natural position for this row (no headerHeight since header is outside)
-    const naturalY = rowIndex * rowHeight;
-
-    if (scrollRatio >= 1) {
-      return naturalY;
-    }
-
-    // With virtualization active, position rows relative to the first visible row.
-    // This keeps translateY values small (0 to viewportHeight + overscan buffer)
-    // instead of millions of pixels.
-    const firstVisibleRowIndex = Math.floor(scrollTop / rowHeight);
-    const firstVisibleRowY = firstVisibleRowIndex * rowHeight;
-
-    // Row's position relative to first visible row
-    return naturalY - firstVisibleRowY;
-  }
-
-  /**
-   * Get the translateY position for a row inside the rows wrapper.
-   * Public accessor for use by input handler (e.g., drop indicator positioning).
-   */
-  getRowTranslateYForIndex(rowIndex: number): number {
-    return this.getRowTranslateY(rowIndex);
-  }
-
-  /**
-   * Get the Y offset for the rows wrapper container.
-   * When virtualization is active, this positions the wrapper so rows
-   * with small translateY values appear at the correct scroll position.
-   */
-  getRowsWrapperOffset(): number {
-    const scrollRatio = this.options.getScrollRatio();
-    const scrollTop = this.options.getScrollTop();
-    const rowHeight = this.options.getRowHeight();
-
-    if (scrollRatio >= 1) {
-      return 0; // No wrapper offset needed without virtualization
-    }
-
-    // Position the wrapper so the first visible row lands exactly at its
-    // logical position: wrapper + translateY(row) - domScrollTop must equal
-    // rowY - logicalScrollTop. The sub-row remainder is kept at logical
-    // scale — compressing it by the scroll ratio would make rows crawl
-    // between row boundaries and then snap a full row when crossing one.
-    const subRowOffset = scrollTop % rowHeight;
-    return scrollTop * scrollRatio - subRowOffset;
+  /** Live view of the pool's maps and the injected accessors, for the planner. */
+  private planInput(): SlotPlanInput {
+    const { options, state } = this;
+    return {
+      slots: state.slots,
+      rowToSlot: state.rowToSlot,
+      nextSlotId: () => `slot-${state.nextSlotId++}`,
+      nextGeneration: () => state.nextGeneration++,
+      window: options.getRowWindow(),
+      rowCount: options.getRowCount(),
+      regions: options.getRowRegions(),
+      isRowAvailable: (rowIndex) => options.isRowAvailable(rowIndex),
+      isHierarchical: () => options.isHierarchical?.() ?? false,
+      getRowData: (rowIndex) => options.getRowData(rowIndex),
+      getRow: (rowIndex) => options.getRow?.(rowIndex),
+      getRowOffset: (rowIndex) => options.getRowOffset(rowIndex),
+      getRowSize: (rowIndex) => options.getRowSize(rowIndex),
+    };
   }
 }

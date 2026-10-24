@@ -1,7 +1,8 @@
 // packages/core/src/types/input.ts
 // Framework-agnostic input types for InputHandler
 
-import type { CellPosition, CellRange } from "./basic";
+import type { CellPosition, CellRange, RowId } from "./basic";
+import type { RowRegion } from "./geometry";
 
 // =============================================================================
 // Event Data Types (framework-agnostic)
@@ -37,22 +38,39 @@ export interface KeyEventData {
   ctrlKey: boolean;
   /** Whether Meta/Command key is pressed */
   metaKey: boolean;
+  /** Whether Alt/Option is pressed; Alt+Arrow resizes or moves, Alt+Enter fits (PRD 007). */
+  altKey?: boolean;
 }
 
-/** Container bounds and scroll position */
+/** The edge handle a double-click acts on. */
+export type ResizeTarget =
+  | { axis: "column"; colIndex: number }
+  | { axis: "row"; rowIndex: number };
+
+/**
+ * Container bounds and scroll position.
+ *
+ * Describes the client box (border and, in RTL, the left-hand scrollbar
+ * excluded) with inline-start-relative scroll positions, so core input stays
+ * direction-agnostic: `scrollLeft` is the offset from the inline-start edge,
+ * which is the DOM value negated in RTL. Build it with the `readIsRtl`,
+ * `toInlineX` and `toPhysicalX` helpers from the adapter kit.
+ */
 export interface ContainerBounds {
-  /** Top position relative to viewport */
+  /** Top of the client box, relative to the viewport */
   top: number;
-  /** Left position relative to viewport */
+  /** Left edge of the client box, relative to the viewport */
   left: number;
-  /** Container width */
+  /** Client box width */
   width: number;
-  /** Container height */
+  /** Client box height */
   height: number;
   /** Current scroll top position */
   scrollTop: number;
-  /** Current scroll left position */
+  /** Inline-start-relative scroll position (the DOM value, negated in RTL) */
   scrollLeft: number;
+  /** Inline direction of the container; defaults to LTR */
+  rtl?: boolean;
 }
 
 // =============================================================================
@@ -68,7 +86,14 @@ export interface InputResult {
   /** Whether framework should focus the container element */
   focusContainer?: boolean;
   /** Type of drag operation to start (framework manages global listeners) */
-  startDrag?: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | "row-drag-pending";
+  startDrag?:
+    | "selection"
+    | "fill"
+    | "column-resize"
+    | "row-resize"
+    | "column-move"
+    | "row-drag"
+    | "row-drag-pending";
   /**
    * Whether the framework should track a pending cell tap (touch only).
    * Selection is deferred until the tap is confirmed on pointerup within
@@ -83,6 +108,8 @@ export interface KeyboardResult {
   preventDefault: boolean;
   /** Cell to scroll into view (if navigation occurred) */
   scrollToCell?: CellPosition;
+  /** The key closed the editor: the wrapper focuses the grid container before the input unmounts. */
+  focusContainer?: boolean;
 }
 
 /** Result from drag move handler */
@@ -96,30 +123,6 @@ export interface DragMoveResult {
 }
 
 // =============================================================================
-// InputHandler Options
-// =============================================================================
-
-/** Options for InputHandler constructor */
-export interface InputHandlerDeps {
-  /** Get header height */
-  getHeaderHeight: () => number;
-  /** Get row height */
-  getRowHeight: () => number;
-  /** Get column positions array (indexed by visible column) */
-  getColumnPositions: () => number[];
-  /** Get visible column count */
-  getColumnCount: () => number;
-  /**
-   * Convert visible column index to original column index.
-   * Used when columns can be hidden. Returns the original index for selection tracking.
-   * If not provided, visible index is used directly (no hidden columns).
-   */
-  getOriginalColumnIndex?: (visibleIndex: number) => number;
-  /** Get column widths array (indexed by visible column) */
-  getColumnWidths?: () => number[];
-}
-
-// =============================================================================
 // Drag State (exposed for UI rendering)
 // =============================================================================
 
@@ -128,6 +131,19 @@ export interface ColumnResizeDragState {
   colIndex: number;
   initialWidth: number;
   currentWidth: number;
+  /** Viewport-space x of the preview edge. */
+  lineX: number;
+}
+
+/** Row resize drag state */
+export interface RowResizeDragState {
+  rowIndex: number;
+  rowId: RowId;
+  initialHeight: number;
+  currentHeight: number;
+  /** Viewport-space y of the preview edge; wrappers draw it below the header. */
+  lineY: number;
+  region: RowRegion;
 }
 
 /** Column move drag state */
@@ -138,14 +154,23 @@ export interface ColumnMoveDragState {
   dropTargetIndex: number | null;
   ghostWidth: number;
   ghostHeight: number;
+  /** Viewport-space x of the drop indicator. */
+  dropIndicatorX: number;
 }
 
 /** Row drag state */
 export interface RowDragState {
   sourceRowIndex: number;
+  /** Axis height of the dragged row; 0 when it has no bounds. */
+  sourceRowHeight: number;
   currentX: number;
   currentY: number;
   dropTargetIndex: number | null;
+  /**
+   * Region the drop indicator renders in. A drop at the frozen boundary is
+   * the last frozen row's bottom edge, inside the frozen container (C10).
+   */
+  dropIndicatorRegion: RowRegion;
   /** Pre-computed translateY for the drop indicator inside the rows wrapper */
   dropIndicatorY: number;
 }
@@ -155,13 +180,22 @@ export interface DragState {
   /** Whether any drag operation is active */
   isDragging: boolean;
   /** Type of active drag operation */
-  dragType: "selection" | "fill" | "column-resize" | "column-move" | "row-drag" | null;
+  dragType:
+    | "selection"
+    | "fill"
+    | "column-resize"
+    | "row-resize"
+    | "column-move"
+    | "row-drag"
+    | null;
   /** Source range for fill operations */
   fillSourceRange: CellRange | null;
   /** Current fill target position */
   fillTarget: { row: number; col: number } | null;
   /** Column resize state (when dragType is "column-resize") */
   columnResize: ColumnResizeDragState | null;
+  /** Row resize state (when dragType is "row-resize") */
+  rowResize: RowResizeDragState | null;
   /** Column move state (when dragType is "column-move") */
   columnMove: ColumnMoveDragState | null;
   /** Row drag state (when dragType is "row-drag") */

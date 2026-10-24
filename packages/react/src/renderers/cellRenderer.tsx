@@ -2,7 +2,13 @@
 
 import React from "react";
 import { getFieldValue, formatCellValue } from "@gp-grid/core";
-import type { ColumnDefinition, CellRendererParams } from "@gp-grid/core";
+import type {
+  CellValue,
+  RowId,
+  ColumnDefinition,
+  CellRendererParams,
+  HierarchyRowKind,
+} from "@gp-grid/core";
 import type { ReactCellRenderer } from "../types";
 
 export { getFieldValue as getCellValue } from "@gp-grid/core";
@@ -17,6 +23,14 @@ export interface RenderCellOptions {
   isEditing: boolean;
   cellRenderers: Record<string, ReactCellRenderer>;
   globalCellRenderer?: ReactCellRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
+  /** Kind of the row under a hierarchy; absent while flat. */
+  rowKind?: HierarchyRowKind;
 }
 
 /**
@@ -33,21 +47,29 @@ export function renderCell(options: RenderCellOptions): React.ReactNode {
     isEditing,
     cellRenderers,
     globalCellRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
+    rowKind,
   } = options;
 
-  const rawValue = getFieldValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getFieldValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: CellRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    columnId: column.colId ?? column.field,
+    getValue,
     column,
     rowIndex,
     colIndex,
     isActive,
     isSelected,
     isEditing,
+    rowKind,
   };
 
   // Check for column-specific renderer

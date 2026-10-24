@@ -67,16 +67,19 @@ export const isCellActive = (
 ): boolean => activeCell?.row === row && activeCell?.col === col;
 
 /**
- * Check if a row is within the visible range (not in overscan)
+ * Check if a row is within the visible range (not in overscan). Frozen rows
+ * are always visible: the range covers the suffix region only (C7).
  */
 export const isRowVisible = (
   row: number,
   visibleRowRange: { start: number; end: number } | null,
+  frozenCount: number = 0,
 ): boolean => {
-  // No range or invalid range means show everything (permissive default)
+  if (row < frozenCount) return true;
+  // `null` means "not initialized yet": show everything.
   if (!visibleRowRange) return true;
-  // If end is negative or less than start, the range is invalid - show everything
-  if (visibleRowRange.end < 0 || visibleRowRange.start > visibleRowRange.end) return true;
+  // `{ start: 0, end: -1 }` is the empty inclusive range: no visible rows.
+  if (visibleRowRange.end < visibleRowRange.start) return false;
   return row >= visibleRowRange.start && row <= visibleRowRange.end;
 };
 

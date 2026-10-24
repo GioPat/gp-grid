@@ -29,6 +29,8 @@ A framework-agnostic TypeScript library for building high-performance data grids
 - [Architecture Overview](#architecture-overview)
 - [Data Sources](#data-sources)
 - [Types Reference](#types-reference)
+- [Column identity and state](#column-identity-and-state)
+- [Column layout and geometry](#column-layout-and-geometry)
 - [Creating a Framework Adapter](#creating-a-framework-adapter)
 - [API Reference](#api-reference)
 - [Donations](#donations)
@@ -139,14 +141,15 @@ The core emits these instruction types:
 | --------------------------------------------- | --------------------------------- |
 | `CREATE_SLOT`                                 | Create a new slot in the DOM pool |
 | `DESTROY_SLOT`                                | Remove a slot from the pool       |
-| `ASSIGN_SLOT`                                 | Assign row data to a slot         |
+| `ASSIGN_SLOT`                                 | Assign row data to a slot; `row` carries the hierarchy row under row grouping |
 | `MOVE_SLOT`                                   | Update slot position (translateY) |
 | `SET_ACTIVE_CELL`                             | Update active cell highlight      |
 | `SET_SELECTION_RANGE`                         | Update selection range            |
-| `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode                  |
+| `START_EDIT` / `STOP_EDIT`                    | Toggle edit mode; `START_EDIT` carries `editId` and is re-sent with the draft when the edited column moves |
 | `COMMIT_EDIT`                                 | Commit edited value               |
 | `UPDATE_HEADER`                               | Update header with sort state     |
-| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle              |
+| `SET_HEADER_BANDS`                            | Publish the header bands (`GridState.headerBands`) |
+| `DATA_LOADING` / `DATA_LOADED` / `DATA_ERROR` | Data fetch lifecycle; `DATA_LOADED.hierarchical` is `true` while a hierarchy is bound |
 
 ## Data Sources
 
@@ -186,6 +189,112 @@ const dataSource = createClientDataSource(data, {
   },
 });
 ```
+
+**Mutable client source.** `createMutableClientDataSource(data, { getRowId })`
+queues `updateCell`, `updateRow`, `addRows` and `removeRows`, processes them
+after `debounceMs` (default 50, `0` for sync) and notifies its subscribers
+with the batch's `TransactionResult`: the counts and `changes`, one entry per
+row touched (`kind`, `rowId`, and an update's `fields`). The wrappers pass that
+result to `refreshFromTransaction(result)`: a batch of updates redraws only the
+mounted rows that changed, without a query, and the row keeps its place under
+a sort or filter until the next query; an add, a remove or `clear()` reloads
+every row. Under local row grouping an update refolds a measure or regroups a
+dimension as an edit does.
+
+```typescript
+const source = createMutableClientDataSource(data, { getRowId: (row) => row.id });
+source.updateCell(42, "price", 10.5); // the grid redraws row 42 if it is mounted, no query
+source.addRows([{ id: 1001, name: "New" }]); // the grid reloads every row
+```
+
+### Columnar Data Source (read-only)
+
+`createColumnarDataSource` reads caller-owned arrays, typed-array views, and scalar accessors without converting them into row objects. Construction and revision validation take O(columns) work. Pass the source through the ordinary `dataSource` input in React, Vue, or Angular, or use it with `GridCore` directly.
+
+The source is read-only from the grid's perspective. The caller can update its own data, then notify the source and refresh the bound grid:
+
+```typescript
+import { GridCore, createColumnarDataSource } from "@gp-grid/core";
+
+const values = [10, 20];
+const source = createColumnarDataSource({
+  rowCount: values.length,
+  fields: [
+    { field: "value", data: values },
+    { field: "label", getValue: (row) => `Value ${values[row]}` },
+  ],
+});
+const grid = new GridCore({
+  columns: [
+    { field: "value", cellDataType: "number", width: 100 },
+    { field: "label", cellDataType: "text", width: 180 },
+  ],
+  dataSource: source,
+  rowHeight: 32,
+});
+await grid.initialize();
+
+// Same row count: only the revision needs to change.
+values[0] = 15;
+source.setRevision(1);
+await grid.refresh();
+
+// Append: pass the new count because this source declares rowCount explicitly.
+values.push(30);
+source.setRevision(2, values.length);
+await grid.refresh();
+
+// Shrink: update the declared count in the same way.
+values.pop();
+source.setRevision(3, values.length);
+await grid.refresh();
+
+grid.destroy(); // Wrappers manage their core's lifetime automatically.
+```
+
+`setRevision(revision, rowCount?)` updates source metadata; `await grid.refresh()` reloads the view, including any active sorting/filtering. Array-reference equality does not signal an update. When using a wrapper, call `refresh()` on its exposed core.
+
+- **Inferred count:** omit `rowCount` when constructing the source and use `setRevision(nextRevision)`. The source re-reads the fields' declared lengths (`length`, falling back to `data.length`). Keep explicit field lengths current when data grows or shrinks.
+- **Explicit count:** pass `setRevision(nextRevision, nextRowCount)` whenever the count changes. Omitting the second argument retains the last declared count.
+- **Accessor-only fields:** the explicit count is authoritative, so `setRevision(nextRevision, nextRowCount)` works without replacing accessor functions or updating their length hints.
+
+Update all resident columns to consistent lengths before adopting a revision. An invalid count or inconsistent declared lengths throws, leaving the source's previous revision and row-count metadata unchanged. This does not undo changes the caller has already made to its arrays. Keep data stable while the grid reads it.
+
+Columnar rows have no materialized record: `grid.rows.getData(viewIndex)` returns `undefined`. Read raw values with `grid.cells.getValue(viewIndex, colIndex)` or `grid.cells.getFieldValue(viewIndex, field)`, including source fields without a grid column. Cell renderers use `params.getValue(field)` and `params.rowId`; `params.value` remains the formatted display value.
+
+#### Read-only write rejection
+
+Every write entry point refuses a columnar source and reports it through the
+`onWriteRejected` option, independently of a column's `editable` flag:
+
+```typescript
+const grid = new GridCore({
+  columns,
+  dataSource: source,
+  rowHeight: 32,
+  onWriteRejected: (event) => {
+    // event.reason is "read-only-source" here; a grouped grid also reports
+    // "not-a-record" and "derived-view", and an edit commit the column type
+    // cannot hold reports "type-mismatch".
+    // event.operation is one of:
+    //   "setCellValue" | "edit" | "paste" | "fill" | "row-move" | "undo" | "redo"
+    console.warn(`Refused ${event.operation} on row ${event.row}, col ${event.col}`);
+  },
+});
+```
+
+| Attempt | Result on a columnar source | `operation` |
+| --- | --- | --- |
+| `grid.cells.setValue(row, col, value)` | value unchanged; rejection event | `"setCellValue"` |
+| `grid.edit.start(row, col)` on an `editable` column | no edit state; rejection event | `"edit"` |
+| `grid.edit.paste(text)` | returns `false`; rejection event | `"paste"` |
+| `grid.fill.startFillDrag(range)` | no active fill; rejection event | `"fill"` |
+| `grid.rowDrag.commit(from, to)` | no reorder and no `onRowDragEnd`; rejection event | `"row-move"` |
+
+A non-editable column is a disabled control and emits no attempted-command
+event. A rejected write never emits `onCellValueChanged`. React and Vue accept
+`onWriteRejected` as a prop and Angular exposes it as an `(onWriteRejected)`
+output; all three re-export `createColumnarDataSource` and friends.
 
 ### Server-Side Data Source
 
@@ -287,6 +396,20 @@ const grid = new GridCore({
 });
 ```
 
+### Filter evaluation helpers
+
+The evaluation the client source runs is exported for a data source that filters its own rows, a server mock or a test:
+
+```typescript
+import { rowPassesFilter, evaluateColumnFilter, getFieldValue, setFieldValue } from "@gp-grid/core";
+
+const visible = rows.filter((row) => rowPassesFilter(row, request.filterModel ?? {}, getFieldValue));
+const matches = evaluateColumnFilter(cellValue, columnFilter, formatter);
+setFieldValue(record, "address.city", "Rome");
+```
+
+`rowPassesFilter(row, filterModel, getFieldValue, getValueFormatter?)` evaluates every column of a model against one record through the field reader you pass. `evaluateColumnFilter(value, filter, formatter?)` evaluates one column's model, canonical or legacy (`normalizeColumnFilterModel` converts the 0.x `conditions` shape, which stays accepted as input). `evaluateCondition`, `evaluateTextCondition`, `evaluateNumberCondition` and `evaluateDateCondition` evaluate one condition against one value. `getFieldValue` and `setFieldValue` read and write a dotted path on a record, as the grid does.
+
 ## Types Reference
 
 ### ColumnDefinition
@@ -296,12 +419,14 @@ interface ColumnDefinition {
   field: string; // Property path in row data
   colId?: string; // Unique column ID (defaults to field)
   cellDataType: CellDataType; // "text" | "number" | "boolean" | "date" | "object"
-  width: number; // Column width in pixels
+  width: number; // Initial width in pixels; live width lives in the core
+  hidden?: boolean; // Initial visibility; live visibility lives in the core
   headerName?: string; // Display name (defaults to field)
   editable?: boolean; // Enable cell editing
   cellRenderer?: string; // Custom renderer key
   editRenderer?: string; // Custom edit renderer key
   headerRenderer?: string; // Custom header renderer key
+  wrapHeaderText?: boolean; // Wrap header text inside its band
 }
 ```
 
@@ -310,15 +435,26 @@ interface ColumnDefinition {
 When building framework adapters, these params are passed to custom renderers:
 
 ```typescript
-interface CellRendererParams {
+interface CellRendererParams<TData = unknown> {
   value: CellValue;
-  rowData: Row;
+  rowData?: TData;
+  rowId?: RowId;
+  columnId: string;
+  getValue?: (field: string) => CellValue;
   column: ColumnDefinition;
   rowIndex: number;
   colIndex: number;
   isActive: boolean;
   isSelected: boolean;
   isEditing: boolean;
+  rowKind?: "record" | "group" | "total"; // under row grouping; absent while flat
+}
+
+interface GroupLabelRendererParams {
+  row: HierarchyGroupRow | HierarchyTotalRow;
+  viewIndex: number;
+  label: string; // formatted from labels.rowGroups
+  toggle: () => void; // a no-op on the total row
 }
 
 interface EditRendererParams extends CellRendererParams {
@@ -330,12 +466,485 @@ interface EditRendererParams extends CellRendererParams {
 
 interface HeaderRendererParams {
   column: ColumnDefinition;
+  columnId: string;
   colIndex: number;
   sortDirection?: SortDirection;
   sortIndex?: number;
   onSort: (direction: SortDirection | null, addToExisting: boolean) => void;
 }
 ```
+
+## Column identity and state
+
+### The three layers
+
+1. **Caller definitions** — the `columns` array you pass in. Immutable input: the grid never writes to it.
+2. **Live column state** — per-column `width`, `hidden` and order, owned by the core and keyed by column id.
+3. **Resolved layout** — ordered definitions with the live state applied, plus positions, hit-testing and rendering.
+
+A column id is `colId ?? field`, a plain string.
+
+### Precedence
+
+Definition defaults < retained user state < explicit commands.
+
+A definition's `width`, `hidden`, `pinned` and position are initial defaults only. State retained from resizing, moving, hiding or pinning survives a `columns` replacement; passing a new array reference is never a reset. Definition order stays authoritative until a column is moved with `moveColumn`/`setColumnState({ order })`.
+
+### Commands
+
+```typescript
+interface ColumnStateUpdate {
+  columnId: string;
+  width?: number;
+  hidden?: boolean;
+  order?: number;
+  pinned?: "start" | "end" | null;
+}
+
+interface ColumnStateSnapshot {
+  columnId: string;
+  width?: number; // present only while an explicit pixel override exists
+  resolvedWidth: number; // displayed CSS px, 0 while hidden
+  hidden: boolean;
+  order: number;
+  pinned: "start" | "end" | null; // requested pin
+  region: "start" | "center" | "end" | null; // effective, null while hidden
+}
+```
+
+| Command | Behavior |
+| --- | --- |
+| `columns.setState(updates)` | Apply explicit state; values win over retained state and defaults. Unset properties are untouched. `pinned: null` unpins even against a definition default. Silent, like every state command. |
+| `columns.resetState(columnIds?)` | Drop user state. No argument resets every column to its definition defaults; IDs reset only those columns. |
+| `columns.getState()` | Effective width, visibility, order and pin per column, in layout order. |
+| `columns.setPinned(columnId, pinned)` | Pin a column to the inline start or end (`null` unpins). Fires `onColumnPinned`. |
+
+Only a pin change moves a column between regions; `order` clamps into the column's own region, and unpinning returns it to its base-order slot.
+
+### Duplicate ids
+
+Definitions with the same column id warn once with `[gp-grid] Duplicate column id "x"` and the first definition wins.
+
+### Frozen definitions
+
+Definitions are caller-owned and the grid treats them as read-only. Resizing, moving and hiding record state in the core; they never mutate the definitions array or the objects inside it.
+
+### Migrating from 0.x
+
+The full list of changes from 0.23.x is in the [migration guide](../../docs/migration-1.0.md).
+
+```ts
+// 0.x: mutated the caller's definition
+columns[2].width = newWidth;
+// 1.0
+grid.columns.setState([{ columnId: "city", width: newWidth }]);
+grid.columns.resetState(["city"]);
+```
+
+### Events
+
+Column and row interaction events are object-shaped.
+
+| Event | Payload |
+| --- | --- |
+| `onColumnResized` | `{ columnId, width, viewIndex }` |
+| `onColumnMoved` | `{ columnId, fromViewIndex, toViewIndex }` |
+| `onColumnPinned` | `{ columnId, pinned }` (`null` when unpinned) |
+| `onRowDragEnd` | `{ rowId, fromViewIndex, toViewIndex }` |
+
+`onColumnPinned` fires for `columns.setPinned`, the header pin toggle and a cross-region header drag — not for `columns.setState`.
+
+`CellValueChangedEvent` gained `columnId`; `colIndex` remains and is the current view column index. Cell, edit and header renderer params gained `columnId` as well.
+
+### Record access
+
+On `grid.rows`:
+
+- `getViewRow(viewIndex): ViewRow<TData> | undefined` — `ViewRow` is `{ kind: "record"; id: RowId; viewIndex: number; record?: TData }`, built on request. `id` falls back to the source position when no `getRowId` is configured.
+- `getRecordById(rowId): TData | undefined` — answers for resident rows and for sources that provide a direct lookup; columnar and server windows outside the resident set are not searched. Under a hierarchy it also answers the loaded record row `locate` finds, so a server grouping source finds its loaded leaves; a group id answers `undefined`.
+- `has(viewIndex)` — whether the view row exists; a `null` cell is a value, not an unloaded row.
+- `getSlotGeneration(viewIndex)` / `isSlotGenerationCurrent(viewIndex, generation)` — tag async renderer callbacks so stale slot assignments can be dropped.
+- `getData(viewIndex)` — the source record, or `undefined` for record-less/unloaded rows.
+- `getCount()` — the number of displayed view rows (after sort/filter).
+
+## Column layout and geometry
+
+Core owns grid geometry. `columnLayout` selects how displayed widths are
+resolved and is changeable at runtime with `GridCore.columns.setLayout(mode)`:
+
+- `"fit"` (default) expands columns without an explicit pixel override so
+  their total reaches the viewport. It never shrinks; a manual override keeps
+  its exact width and the slack is shared by the rest.
+- `"fixed"` keeps declared/overridden widths and leaves leftover space empty.
+
+`core.geometry` is a read-only query surface over the committed layout:
+
+| Query | Answer |
+| --- | --- |
+| `revision` | Committed layout revision (columns, row axis, viewport dimensions and mapping parameters — not raw scroll) |
+| `getColumnLayout()` | `{ revision, mode, columns, totalWidth }` per displayed column |
+| `getRowWindow()` / `getVisibleRowWindow()` | Half-open `{ start, end }` |
+| `getRowBounds(i, space?)` / `getColumnBounds(layoutIndex, space?)` / `getCellBounds(i, layoutIndex, space?)` | Bounds in the requested space |
+| `hitTest({ x, y })` / `getScrollTarget(row, col)` | Pointer target (with the resolved `region`) / DOM scroll offsets |
+| `getColumnClip(layoutIndex)` | Viewport x-range of the region a column renders in |
+| `getColumnWindow()` | The mounted window: `{ layout, range, start, center, end }` |
+| `getRowRegions()` | The frozen/suffix layout: `{ frozenCount, frozenExtent, suffixViewportHeight, frozen }` |
+| `getRowClip(i)` | Viewport y-range the row renders in: the frozen band or the suffix clip |
+| `getRowScrollRange()` / `hasVerticalScrollRange()` | Reachable logical row scroll range and whether it scrolls |
+| `getRowScrollEdges(scrollTop, containerHeight)` | Auto-scroll rectangle and its vertical step limits |
+| `getContentSize()` | Logical body size in `"content"` coordinates |
+
+`GridCore.cells.getBounds(rowId, columnId, space?)` resolves identities through
+the bounded current row window and the resident records; a remote or columnar
+identity outside that window answers `undefined` and is never materialized.
+
+### Coordinate spaces
+
+- **`content`** — logical, uncompressed px; the header is excluded.
+- **`viewport`** — content minus the logical scroll offsets, relative to the
+  body client area's top-left (the default).
+- **`rows`** — local to the rows wrapper (the space of `MOVE_SLOT.translateY`);
+  equal to `content` unless vertical scrolling is compressed.
+
+Adapters report raw DOM scroll samples and normalized dimensions; core maps
+them to logical coordinates and clamps them, emitting a `SCROLL_TO` correction
+when the sample was out of range. A measured zero-height viewport renders no
+rows; until the first measurement core assumes 600 px. A width-only viewport
+update performs no row work. Windows are half-open; legacy inclusive APIs adapt at
+the boundary as `{ start, end: end - 1 }` (`{ start: 0, end: -1 }` when empty).
+
+### Column pinning and the mounted window
+
+`ColumnDefinition.pinned` and `ColumnStateUpdate.pinned` request `"start"` or
+`"end"`. The resolved layout is the stable partition `start | center | end`, so
+index spaces, selection and fill stay contiguous in visual order; unpinning
+returns a column to its base-order slot. Admission walks start pins outer to
+inner while `used + width <= viewportWidth`, then end pins on what is left; the
+first rejection closes its region, and a rejected pin keeps its request while
+rendering as a center column until it fits. An unmeasured viewport admits all.
+
+`GridState.columnWindow` is what a wrapper mounts:
+
+```ts
+interface ColumnWindowSnapshot {
+  layout: ColumnLayoutSnapshot;
+  range: AxisBounds; // half-open displayed-index range of center columns
+  start: readonly ResolvedColumn[];
+  center: readonly ResolvedColumn[]; // range plus retained columns
+  end: readonly ResolvedColumn[];
+}
+```
+
+`columnOverscan` (default `240`) is the CSS px of center columns kept mounted
+past each clip edge. A `scrollLeft`-only `setViewport` runs only this sync — no
+source queries, no slot work and no batch unless the mounted range moved. An
+open editor's column is retained outside the range until the edit ends, and
+hiding it commits the edit first.
+
+Core never reads `direction`: every x is an offset from the inline-start edge,
+and `adapter/inline-axis.ts` is the only direction-aware code. `readIsRtl`,
+`toInlineX`, `toPhysicalX`, `inlineOffset`, `readContainerBounds`,
+`fixedLeftForInline` and `normalizeHorizontalKey` are exported for adapters;
+`ContainerBounds` describes the client box with an inline-relative `scrollLeft`
+and an optional `rtl`. A `dir` flip without a resize needs a remount. See
+[Column pinning](../../docs/features/column-pinning.md).
+
+### Frozen rows
+
+`freezeRows: { count, maxCount?, minSuffixHeight? }` keeps the displayed rows
+`[0, count)` below the header while the rest scroll. Defaults are `count 0`,
+`maxCount 100` and `minSuffixHeight 64`; invalid values throw a `RangeError`
+naming the field.
+
+`frozenRows.set(config?)` replaces the whole configuration at runtime: omitted
+fields take the option defaults, `undefined` unfreezes and a value-equal call
+emits nothing, so calling it on every prop change is
+safe. `frozenRows.freezeThrough(viewIndex)` sets `count = viewIndex + 1` (`-1`
+unfreezes) over the current limits. Growing the prefix corrects the scroll top to
+`max(0, logicalTop − Δ)` in the same batch, so the first visible suffix row
+stays put below the bigger block; shrinking keeps the logical top clamped and
+uncovers what was beneath it. An open edit whose row changes region is committed
+first, as hiding a column does.
+
+`count` is a request. `frozenRows.get()` answers the effective result:
+
+```ts
+interface FrozenRowsState {
+  requestedCount: number; // the configured count
+  effectiveCount: number; // 0 .. requestedCount
+  limit: "maxCount" | "viewport" | "cache" | null; // last constraint that reduced it
+}
+```
+
+`maxCount` applies first, then the viewport (`frozenExtent + minSuffixHeight`
+must fit the body, while the all-rows candidate needs no suffix), then the page
+budget for paginated sources. A zero request or an empty data set answers
+`limit: null`; a constraint that reduced the count names itself. The state is a
+pure function of the current inputs and is re-resolved on row-count, size,
+viewport and cache-configuration changes — never per scroll.
+
+`onFrozenRowsChanged(state)` fires on every later change of `effectiveCount` or
+`limit`; the core's first resolution is the baseline and never fires, and a
+change that leaves both fields equal is silent. The core formats
+`labels.frozenRowsLimited` (`"{effective} of {requested} rows frozen"` by
+default) and publishes it as the live-region announcement on every limit
+change; `GridLabelOverrides` stays optional. `GridState.rowRegions` and
+`GridState.announcement` carry both to a wrapper, with `SET_ROW_REGIONS` and
+`SET_ANNOUNCEMENT` emitted in one atomic batch. See
+[Frozen rows](../../docs/features/frozen-rows.md).
+
+### Row heights
+
+Rows are `rowHeight` px tall unless the application sets a height by row
+identity. `rowHeights.set(updates)` stores `{ rowId, height }` pairs,
+`rowHeights.reset(rowIds?)` drops the named heights (all of them without the
+argument) and `rowHeights.getOverrides()` lists every stored height in insertion
+order, including the ones still waiting for their row.
+
+```ts
+const core = new GridCore({ columns, dataSource, rowHeight: 32, getRowId: (row) => row.id });
+core.rowHeights.set([{ rowId: 2, height: 96 }, { rowId: 10, height: 64 }]);
+core.rowHeights.reset([10]);
+```
+
+A `height` must be finite and `> 0`; `set` is all or nothing, so one invalid
+entry throws `RangeError('Invalid row height for row "<rowId>": <height>')` and
+applies nothing. A value equal to `rowHeight` is stored but places nothing and
+emits no instruction, and both commands are no-ops after `destroy()`.
+
+With a stable identity (`getRowId`, or a columnar source's row access) a height
+follows its row through sort, filter, refresh and paging; an ID the source does
+not hold yet stays pending until its row arrives — including a page that has not
+loaded. Without one, an integer `rowId` in `[0, rowCount)` places at that view
+index and is dropped at the next data revision (sort, filter, refresh,
+transaction, cache reset, data-source swap or row move).
+
+Applying a height is one atomic size change: the core captures the row at the
+clip top, re-resolves the geometry and corrects the scroll position so that row
+keeps its viewport position, all in the same batch as the content size and the
+row sync. A viewport resize, a sort or filter, a data revision and a user scroll
+keep their own anchoring rules. A data revision re-resolves every placement in
+one resident-row pass, so a consumer that keeps a very large object cache
+resident pays that pass on each sort or refresh.
+
+The height reaches a wrapper as `SlotData.height`, published in the same
+`MOVE_SLOT` instruction as `slot.translateY`; a row drag ghost sizes itself from
+`RowDragState.sourceRowHeight`; and `SET_CONTENT_SIZE.height` follows the row
+extent plus the header's total height, so a change reaches the scroll range. See
+[Row heights](../../docs/features/row-heights.md).
+
+### Row resize and auto-fit
+
+`rowResize: true` lets the user resize rows: the row edge drag and double-click,
+Alt+ArrowUp/Down and Alt+Shift+Enter. `rowHeights.setResizable(enabled)` changes
+it at runtime and `isResizable()` reads it. `onRowResized({ rowId, height,
+viewIndex })` fires per row a drag, a key or a fit changed.
+
+`rowHeights.fit(rowIds?)` and `columns.fit(columnIds?)` fit mounted rows and
+columns to their rendered content once. They read through the `measurementHost`
+option; a custom adapter passes `createDomMeasurementHost(() => root)` in the
+browser and renders `data-layout-revision` (from `columnWindow.layout.revision`)
+on that root.
+
+```ts
+const core = new GridCore({
+  columns, dataSource, rowHeight: 32, rowResize: true,
+  autoFit: { maxColumnWidth: 600 },
+  measurementHost: createDomMeasurementHost(() => rootEl),
+});
+const result = core.columns.fit(["name"]); // { status, scope: "rendered", consideredRows, columns, skipped }
+```
+
+`status` is `"applied"`, `"unchanged"`, `"unsupported"` (no host, a host that
+answered `null`, or after `destroy()`) or `"stale"`: the host read under a
+layout revision that is not the core's, which happens when the fit runs in the
+same task as a column layout change, before the adapter rendered it. Rows clamp
+into `[autoFit.minRowHeight, autoFit.maxRowHeight]` (defaults `rowHeight` and
+`10 × rowHeight`) and are stored as row heights; columns clamp into
+`[minWidth ?? 50, min(maxWidth ?? ∞, autoFit.maxColumnWidth)]` (default 600) and
+are stored as pixel overrides. `columns.setState([{ columnId, width: null }])`
+drops a width override. See
+[Auto-fit and row resize](../../docs/features/auto-fit.md).
+
+### Column groups and header bands
+
+`columnGroups` nests the headers: a `ColumnGroupDefinition` (`groupId`,
+`headerName?`, `wrapHeaderText?`, `headerRenderer?`, `children`) holds groups and
+leaf column ids, and every column is referenced exactly once, ungrouped ones at
+the root. The hierarchy is validated before adoption; `columns.set(columns,
+groups ?? null)` and `columns.setGroups(groups)` replace it, and the guarded
+column commands return a `ColumnSchemaResult`. A rejection keeps the previous
+schema, calls `onColumnSchemaRejected(error)` and announces
+`labels.columnSchemaErrors[code]`. `columnGroupLimits` (`maxDepth` 64,
+`maxNodes` 100,000, `maxFragments` 100,000) bounds the work.
+
+The header is `bandCount` bands of `headerBandHeights[b] ?? headerHeight`.
+`core.header.getBands()` returns `{ count, heights, offsets, totalHeight }` and
+`core.header.setBandHeights(heights)` replaces the heights in one anchored batch.
+An adapter renders `GridState.headerBands` (`SET_HEADER_BANDS`) and the
+fragments in `columnWindow.groups`, takes the header height from
+`headerBands.totalHeight`, and builds ids and ARIA associations with the exported
+`leafHeaderId`, `fragmentHeaderId`, `leafHeaderBox`, `fragmentHeaderBox` and
+`resolveHeaderAssociations`. See
+[Column groups and header bands](../../docs/features/column-groups.md).
+
+### Row grouping and aggregation
+
+`createRowGrouping(config)` groups the resident rows of a source loaded in full
+by ordered dimensions, with aggregates under their own columns and an optional
+total row. Group rows are ordinary rows of cells; every group starts collapsed.
+
+```typescript
+import { GridCore, createRowGrouping } from "@gp-grid/core";
+
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const grid = new GridCore({
+  columns,
+  dataSource,
+  rowHeight: 32,
+  rowGrouping: grouping,
+  onRowGroupToggled: ({ rowId, expanded }) => console.log(rowId, expanded),
+  onRowGroupingRejected: (rejection) => console.warn(rejection.reason),
+});
+
+grid.rowGroups.setExpanded(null, true); // expand every group
+grid.rowGroups.setGrouping(null);       // back to the flat rows, no query
+```
+
+- Keys are typed: `null` and `undefined` share one bucket, `0`, `"0"`, `""` and
+  `false` are distinct, a `Date` groups by timestamp and an object needs `toKey`.
+  Group ids (`"gp-group:…"`, `"gp-total"`) never depend on labels.
+- Aggregates are `"sum"`, `"count"`, `"avg"`, `"min"`, `"max"` or a
+  `RowGroupAggregator` (`init`, `add`, `result`, optional `merge`). `init()`
+  returns a fresh state and `merge` leaves `from` intact. Numbers are displayed
+  unrounded: round them with the column's `valueFormatter`.
+- A sorted dimension column orders its groups, a measure column sorted first
+  orders groups by its aggregate, and filters apply before grouping.
+- A measure edit refolds its path; a dimension edit regroups, expands the
+  record's new groups and moves the active cell with it. Group and total rows
+  refuse writes (`reason: "not-a-record"`), and row drag is disabled.
+- A paginated or partial source, a source that already returns a hierarchy, an
+  unknown field or an object key without `toKey` is rejected
+  (`onRowGroupingRejected`); the grid renders the source's rows.
+- A data source can supply rows it grouped itself by returning a
+  `HierarchicalRowAccess` (`hierarchical: true`, `getRow`, `getRowId`,
+  `getValue`, `locate`, optional `setExpanded`, `getRecord`, `recordsChanged`)
+  as `DataSourceResponse.access`, with no import of the engine.
+- An adapter renders `SlotData.row` and `GridState.hierarchical`
+  (`role="treegrid"`, `aria-level`, `aria-expanded`), places the label cell with
+  `resolveGroupLabelColumnId` and `formatGroupLabel`, skips renderers when
+  `isEmptyGroupCell(rowKind, value)`, and routes the expander to
+  `input.handleGroupToggle(rowIndex, pointerType?)`.
+
+See [Row grouping and aggregation](../../docs/features/row-grouping.md).
+
+Server grouping: `createServerGroupingSource(service, config)` returns a data
+source over an application `ServerGroupingService` (`fetchChildren`,
+`fetchLeaves`). The grid asks for one group's children or leaves a page at a
+time, shows unloaded rows as loading rows, and never loads a collapsed group's
+leaves; the server owns membership, order, filtering and aggregates. A failed
+page collapses its group with `error`, and expanding it again retries.
+`encodeGroupId`/`decodeGroupId` convert group ids and paths, and the optional
+`HierarchicalRowAccess.requestRows`/`subscribe` let any supplied hierarchy load
+on demand. See [Server grouping](../../docs/features/server-grouping.md).
+
+```typescript
+import { GridCore, createServerGroupingSource } from "@gp-grid/core";
+
+const source = createServerGroupingSource(service, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  getRowId: (row) => row.id,
+});
+const grid = new GridCore({ columns, dataSource: source, rowHeight: 32 });
+```
+
+Pivot: `createPivotSource(source, config)` wraps a flat source that holds every
+record and answers a read-only hierarchy over columns generated per key tuple
+and measure. `getSchema()` and `subscribeSchema(listener)` give the
+`PivotSchema` (`columns`, `columnGroups`) to pass to `columns.set`.
+`buildPivotSchema(keys, options)` builds the same schema from keys the
+application computed itself, without the engine. Exports: `createPivotSource`,
+`buildPivotSchema`, `encodePivotColumnId`, `decodePivotColumnId`,
+`encodePivotGroupId`, `PIVOT_LABEL_COLUMN_ID` and the types `PivotConfig`,
+`PivotSource`, `PivotSchema`, `PivotSchemaOptions` and `PivotMeasure`. See
+[Pivot](../../docs/features/pivot.md).
+
+```typescript
+import { GridCore, buildPivotSchema, createPivotSource, type PivotConfig } from "@gp-grid/core";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+};
+const source = createPivotSource(inner, config);
+const initial = buildPivotSchema([], config); // the label column until the first query
+const grid = new GridCore({ columns: initial.columns, columnGroups: initial.columnGroups, dataSource: source, rowHeight: 32 });
+source.subscribeSchema((schema) => grid.columns.set(schema.columns, schema.columnGroups));
+```
+
+### Write commands and history
+
+An editor commit, a paste, a fill and `cells.setValue` each run as one write
+command: `onCellValueChanged` per cell, one `recordsChanged` under a hierarchy,
+then one `onWriteCommitted` with the `operation`, the `changes` (record id,
+column id, field, the value before and after) and the `skipped` targets with
+their reason. A paste lists a non-editable column as `"not-editable"` and a
+value the type cannot hold as `"type-mismatch"`, which also fires
+`onWriteRejected`. `history: { maxEntries }` keeps one entry per command that
+changed a cell; `grid.history.undo()` and `redo()` write it back by record id
+through the same command, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z call them while no
+editor is open, and an entry whose cell changed since is refused, dropped and
+reported once with `"conflict"` or `"missing-record"`. Both need `getRowId`.
+See [Write commands and history](../../docs/features/writes-and-history.md).
+
+```typescript
+const grid = new GridCore({
+  columns,
+  dataSource,
+  rowHeight: 32,
+  getRowId: (row) => row.id,
+  history: { maxEntries: 100 },
+  onWriteCommitted: (event) => {
+    if (event.skipped.length > 0) console.warn(`${event.operation}: ${event.skipped.length} cells skipped`);
+  },
+});
+grid.history.undo(); // false on an empty stack or a refused entry
+```
+
+### Editing and scroll motion
+
+An editor commit is coerced by the column's `cellDataType`, like paste:
+`"60000"` on a `number` column stores `60000`, and a draft the type cannot hold
+writes nothing. A value a custom editor already typed is stored unchanged.
+
+On a scaled grid the synthetic touch scroller owns the gesture on both axes:
+the content follows the finger 1:1, and a release flings the vertical axis in
+logical px and the inline axis in DOM px, each with the same decay and clamped
+to its own range, so a diagonal flick keeps gliding on both.
+
+While a touch fling or a wheel glide moves the content
+(`viewport.isScrollMotionActive()`), a press only stops it: the `InputHandler`
+pointer entry points return `{ preventDefault: true, stopPropagation: true }`
+and select, drag or toggle nothing. `viewport.interruptScrollMotion()` stops the
+motion on demand. `TouchScrollController` registers itself; an adapter with its
+own scroller registers a `ScrollMotionHandle` (`isActive()`, `interrupt()`)
+through `viewport.setScrollMotionHandle` and drops it with
+`clearScrollMotionHandle`.
+
+`input.handleWheel(deltaY, deltaX, dampening, deltaMode?)` returns `null` unless
+the grid is scaled, else `{ dy, dx }` in pixels: `dy` dampened, `dx` not, and
+line or page deltas converted first. `InputEventAdapter.wheel(event, dampening)`
+forwards a `WheelEvent`.
 
 ## Creating a Framework Adapter
 
@@ -345,6 +954,12 @@ To integrate @gp-grid/core with any UI framework:
 2. **Maintain UI state** by processing instructions
 3. **Render slots** based on the slot pool state
 4. **Forward user interactions** back to GridCore
+5. **Render `COLUMNS_CHANGED.layout` / `SET_COLUMN_WINDOW`** and report viewport
+   measurements through `setViewport`; never recompute widths, positions or the
+   mounted window
+6. **Return the focus** to the container when your editor closes on Enter, Escape or
+   Tab: `focusGridContainer(inputElement)`, or honor `KeyboardResult.focusContainer`
+   when the core keyboard handler closed it
 
 ### Example: Minimal Adapter Pattern
 
@@ -420,18 +1035,31 @@ class MyGridAdapter {
 
 ### GridCore Methods
 
-| Method                                              | Description                           |
-| --------------------------------------------------- | ------------------------------------- |
-| `initialize()`                                      | Initialize grid and load initial data |
-| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize      |
-| `setSort(colId, direction, addToExisting)`          | Set column sort                       |
-| `setFilter(colId, value)`                           | Set column filter                     |
-| `startEdit(row, col)`                               | Start editing a cell                  |
-| `commitEdit()`                                      | Commit current edit                   |
-| `cancelEdit()`                                      | Cancel current edit                   |
-| `refresh()`                                         | Refetch data from source              |
-| `getRowCount()`                                     | Get total row count                   |
-| `getRowData(rowIndex)`                              | Get data for a specific row           |
+| Method                                              | Description                                |
+| --------------------------------------------------- | ------------------------------------------ |
+| `initialize()`                                      | Initialize grid and load initial data      |
+| `setViewport(scrollTop, scrollLeft, width, height)` | Update viewport on scroll/resize           |
+| `setDataSource(dataSource)`                         | Swap the source, keeping sort, filter and scroll |
+| `refresh()`                                         | Refetch data from source                   |
+| `refreshFromTransaction(result?)`                   | After a mutable source's batch: a batch of updates redraws the changed mounted rows without a query, anything else reloads |
+| `onBatchInstruction(listener)`                      | Subscribe to instruction batches           |
+| `destroy()`                                         | Release listeners and managers             |
+
+### GridCore Namespaces
+
+| Namespace    | Members |
+| ------------ | ------- |
+| `rows`       | `getCount()`, `getId(i)`, `getData(i)`, `has(i)`, `getViewRow(i)`, `getRecordById(id)`, `isWritable()`, `getSlotGeneration(i)`, `isSlotGenerationCurrent(i, generation)`, `refreshSlotData()` |
+| `cells`      | `getValue(row, col)`, `setValue(row, col, value)`, `getFieldValue(i, field)`, `getBounds(rowId, columnId, space?)` |
+| `edit`       | `start(row, col)`, `updateValue(value, editId?)`, `commit(editId?)`, `cancel(editId?)`, `getState()`, `startPeek(row, col)`, `stopPeek()`, `getPeekState()`, `paste(text)` |
+| `columns`    | `get()`, `set(columns, groups?)`, `setGroups(groups)`, `getGroups()`, `getGroup(groupId)`, `setWidth(colIndex, width)`, `move(from, to)`, `setPinned(columnId, pinned)`, `getState()`, `setState(updates)`, `resetState(columnIds?)`, `setLayout(mode)`, `fit(columnIds?)` |
+| `frozenRows` | `set(config?)`, `freezeThrough(viewIndex)`, `get()` |
+| `rowHeights` | `set(updates)`, `reset(rowIds?)`, `getOverrides()`, `fit(rowIds?)`, `setResizable(enabled)`, `isResizable()` |
+| `header`     | `getBands()`, `setBandHeights(heights)` |
+| `rowGroups`  | `isActive()`, `setExpanded(ids, expanded)`, `toggle(id)`, `setGrouping(grouping)` |
+| `rowDrag`    | `commit(from, to)`, `isEntireRow()` |
+| `sortFilter` | `setSort(colId, direction, addToExisting?)`, `setFilter(colId, filter)`, `getSortModel()`, `getFilterModel()`, `hasActiveFilter(colId)`, `openFilterPopup(colIndex, anchorRect, computeDistinctValues?)`, `closeFilterPopup()`; ignored while a load is in flight |
+| `viewport`   | Touch-scroller hooks: `setTopOverride(domScrollTop)`, `isScaling()`, `getScrollRatio()`, `getTopOverride()`, `getMaxFlingVelocity()`, `getRowHeight()`, `isScrollMotionActive()`, `interruptScrollMotion()`, `setScrollMotionHandle(handle)`, `clearScrollMotionHandle(handle)` |
 
 ### GridCore Properties
 
@@ -439,6 +1067,9 @@ class MyGridAdapter {
 | ----------- | ------------------------- |
 | `selection` | SelectionManager instance |
 | `fill`      | FillManager instance      |
+| `input`     | InputHandler instance     |
+| `highlight` | HighlightManager instance, or `null` without highlighting |
+| `geometry`  | Read-only geometry queries (bounds, hit test, scroll target, layout) |
 
 ## Donations
 

@@ -14,6 +14,8 @@ const expectedExports = [
   "createServerDataSource",
   "createDataSourceFromArray",
   "createMutableClientDataSource",
+  "isHierarchicalRowAccess",
+  "createRowGrouping",
   // Transaction system
   "IndexedDataStore",
   // Filtering utilities
@@ -22,13 +24,11 @@ const expectedExports = [
   "evaluateDateCondition",
   "evaluateColumnFilter",
   "rowPassesFilter",
-  "isSameDay",
   // Field helpers
   "getFieldValue",
   "setFieldValue",
   // Positioning utilities
   "calculateColumnPositions",
-  "calculateScaledColumnPositions",
   "getTotalWidth",
   "findColumnAtX",
   // Class name utilities
@@ -52,11 +52,19 @@ const expectedExports = [
   "calculateFilterPopupPosition",
   // Adapter kit
   "toPointerEventData",
+  "readIsRtl",
+  "toInlineX",
+  "toPhysicalX",
+  "inlineOffset",
+  "readContainerBounds",
+  "fixedLeftForInline",
+  "normalizeHorizontalKey",
   "AutoScrollDriver",
   "PendingRowDragController",
   "applyBatchInstructions",
   "DataSourceOwner",
   "InputEventAdapter",
+  "createDomMeasurementHost",
 ] as const;
 
 describe("public entry point", () => {
@@ -82,7 +90,7 @@ describe("public entry point", () => {
     expect(a.totalRows).toBe(0);
     expect(a.visibleRowRange).toBeNull();
     expect(a.hoverPosition).toBeNull();
-    expect(a.columns).toBeNull();
+    expect(a.columns).toEqual([]);
     expect(a.pendingScrollTop).toBeNull();
     expect(a.contentWidth).toBe(0);
     expect(a.contentHeight).toBe(0);

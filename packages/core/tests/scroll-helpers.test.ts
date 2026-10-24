@@ -1,73 +1,101 @@
 import { describe, expect, it } from "vitest";
-import {
-  scrollCellIntoView,
-  type ColumnScrollGeometry,
-} from "../src/utils/scroll-helpers";
-import type { SlotData } from "../src/types/ui-state";
+import { GridCore } from "../src/grid-core";
+import { createClientDataSource } from "../src/data-source";
+import { scrollCellIntoView } from "../src/utils/scroll-helpers";
+import type { ColumnDefinition } from "../src/types";
 
-const createContainer = (): HTMLElement => {
+interface Row {
+  id: number;
+  a: string;
+  b: string;
+}
+
+const column = (field: string, width: number): ColumnDefinition => ({
+  field,
+  cellDataType: "text",
+  width,
+});
+
+const createGrid = (rowCount = 100): GridCore<Row> =>
+  new GridCore<Row>({
+    columns: [column("id", 100), column("a", 100), column("b", 100)],
+    dataSource: createClientDataSource(
+      Array.from({ length: rowCount }, (_, index) => ({
+        id: index,
+        a: `a${index}`,
+        b: `b${index}`,
+      })),
+    ),
+    rowHeight: 32,
+  });
+
+const createContainer = (clientWidth = 300): HTMLElement => {
   const el = document.createElement("div");
-  Object.defineProperty(el, "clientWidth", { configurable: true, value: 300 });
-  Object.defineProperty(el, "clientHeight", { configurable: true, value: 400 });
+  Object.defineProperty(el, "clientWidth", { configurable: true, value: clientWidth });
+  Object.defineProperty(el, "clientHeight", { configurable: true, value: 320 });
   return el;
 };
 
-const core = { getScrollTopForRow: (row: number) => row * 32 };
-const noSlots = new Map<string, SlotData>();
-
-// Columns: original index 1 is hidden; positions/widths are per VISIBLE column.
-const geometry = (colIndex: number): ColumnScrollGeometry => ({
-  colIndex,
-  visibleColumns: [
-    { originalIndex: 0 },
-    { originalIndex: 2 },
-    { originalIndex: 3 },
-  ],
-  columnPositions: [0, 100, 250],
-  columnWidths: [100, 150, 120],
-});
-
 describe("scrollCellIntoView", () => {
-  it("scrolls vertically to a row without a slot", () => {
+  it("scrolls vertically to a row below the viewport", async () => {
+    const grid = createGrid();
+    await grid.initialize();
+    grid.setViewport(0, 0, 300, 320);
     const container = createContainer();
-    scrollCellIntoView(core, container, 50, 32, noSlots);
-    expect(container.scrollTop).toBe(50 * 32);
+
+    scrollCellIntoView(grid, container, 40, 0);
+
+    // Row 40 ends at 1312; a 320 px viewport needs logical top 992.
+    expect(container.scrollTop).toBe(992);
   });
 
-  it("right-aligns a column that ends beyond the right edge", () => {
+  it("leaves a fully visible cell untouched", async () => {
+    const grid = createGrid();
+    await grid.initialize();
+    grid.setViewport(0, 0, 300, 320);
     const container = createContainer();
-    // Column 3 (visible index 2): left 250, right 370 > viewport right 300.
-    scrollCellIntoView(core, container, 0, 32, noSlots, 0, geometry(3));
-    expect(container.scrollLeft).toBe(370 - 300);
-  });
 
-  it("left-aligns a column that starts left of the viewport", () => {
-    const container = createContainer();
-    container.scrollLeft = 120;
-    // Column 0: left 0 < scrollLeft 120.
-    scrollCellIntoView(core, container, 0, 32, noSlots, 0, geometry(0));
+    scrollCellIntoView(grid, container, 1, 0);
+
+    expect(container.scrollTop).toBe(0);
     expect(container.scrollLeft).toBe(0);
   });
 
-  it("keeps scrollLeft when the column is fully visible", () => {
+  it("assigns both axes from the supplied DOM sample", async () => {
+    const grid = createGrid();
+    await grid.initialize();
+    grid.setViewport(0, 0, 300, 320);
     const container = createContainer();
-    // Column 2 (visible index 1): left 100, right 250 within [0, 300].
-    scrollCellIntoView(core, container, 0, 32, noSlots, 0, geometry(2));
+
+    scrollCellIntoView(grid, container, 40, 2, { scrollTop: 0, scrollLeft: 0 });
+
+    expect(container.scrollTop).toBe(992);
+    // Column 2 ends at 300, exactly the viewport width: already visible.
     expect(container.scrollLeft).toBe(0);
   });
 
-  it("ignores the horizontal axis for a hidden column", () => {
-    const container = createContainer();
-    container.scrollLeft = 40;
-    // Original index 1 is not among the visible columns.
-    scrollCellIntoView(core, container, 0, 32, noSlots, 0, geometry(1));
-    expect(container.scrollLeft).toBe(40);
+  it("scrolls horizontally for an oversized cell", async () => {
+    const grid = createGrid();
+    await grid.initialize();
+    grid.setViewport(0, 0, 150, 320);
+    const container = createContainer(150);
+
+    scrollCellIntoView(grid, container, 0, 2);
+
+    expect(container.scrollLeft).toBe(150);
   });
 
-  it("does not scroll horizontally when no geometry is provided", () => {
+  it("ignores an invalid row and an invalid column", async () => {
+    const grid = createGrid();
+    await grid.initialize();
+    grid.setViewport(0, 0, 300, 320);
     const container = createContainer();
     container.scrollLeft = 40;
-    scrollCellIntoView(core, container, 0, 32, noSlots, 0);
+
+    scrollCellIntoView(grid, container, 9999, 0);
+    scrollCellIntoView(grid, container, 0, 99);
+
+    expect(container.scrollTop).toBe(0);
     expect(container.scrollLeft).toBe(40);
   });
 });

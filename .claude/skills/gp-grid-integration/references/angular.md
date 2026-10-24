@@ -348,9 +348,9 @@ export class PeopleGridComponent implements AfterViewInit {
 Important details:
 
 - **Templates are resolved at `AfterViewInit`** with `{ static: true }`. Build the columns array there, then call `cdr.detectChanges()` to push the new columns into the grid input. Building columns in the constructor or class fields gives `undefined` template refs.
-- **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, etc.).
+- **`let-params`** receives the full renderer params object. Use property access in the template (`params.value`, `params.rowData`, `params.column`, `params.columnId`, etc.); `params.columnId` is the normalized `colId ?? field` and `params.rowId` is present when the row has a stable id.
 - **For edit renderers**, call `event.stopPropagation()` in `keydown` so the grid's keyboard handler doesn't intercept arrow keys / Enter while the user types in the editor.
-- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input.
+- **Column TemplateRef changes**: if you reassign `this.columns` later, run `cdr.detectChanges()` (or use signals — see below) so Angular pushes the new array into the `[columns]` input. Reassignment reconciles by column id (`colId ?? field`) without recreating the core — sort, filter, scroll and each surviving column's user state survive, and a new array reference is never a reset. To control that state yourself, bind `[columnState]` (`ColumnStateUpdate[]`); the component applies it through `core.columns.setState` whenever it changes.
 
 `AngularColumnDefinition` accepts three forms for each renderer:
 
@@ -380,7 +380,7 @@ Template: `<gp-grid [columns]="columns()" ... />`. The `<gp-grid>` inputs are si
 
 ## Listening to changes
 
-The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onColumnResized)`, `(onColumnMoved)` outputs:
+The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onWriteRejected)`, `(onWriteCommitted)`, `(onColumnResized)`, `(onRowResized)`, `(onColumnMoved)`, `(onColumnPinned)`, `(onFrozenRowsChanged)`, `(onColumnSchemaRejected)` outputs:
 
 ```html
 <gp-grid
@@ -388,21 +388,52 @@ The component exposes `(onRowDragEnd)`, `(onCellValueChanged)`, `(onColumnResize
   [dataSource]="grid.dataSource"
   [rowHeight]="36"
   [getRowId]="getRowId"
+  [columnOverscan]="240"
+  [freezeRows]="freezeRows"
   (onCellValueChanged)="onCellValueChanged($event)"
+  (onWriteRejected)="onWriteRejected($event)"
+  (onWriteCommitted)="onWriteCommitted($event)"
   (onRowDragEnd)="onRowDragEnd($event)"
   (onColumnResized)="onColumnResized($event)"
   (onColumnMoved)="onColumnMoved($event)"
+  (onColumnPinned)="onColumnPinned($event)"
+  (onFrozenRowsChanged)="onFrozenRowsChanged($event)"
 />
 ```
 
 Output payloads:
 
 - `onCellValueChanged: CellValueChangedEvent<TData>` — full event from core
-- `onRowDragEnd: { source: number; target: number }`
-- `onColumnResized: { colIndex: number; newWidth: number }`
-- `onColumnMoved: { fromIndex: number; toIndex: number }`
+- `onWriteRejected: CellWriteRejectedEvent` — a read-only source refused a write; `operation` names the entry point
+- `onWriteCommitted: WriteCommittedEvent` — once per write command (edit, paste, fill, `cells.setValue`, undo, redo): `operation`, `changes` by record id, `skipped` with reasons; needs `[getRowId]`
+- `onRowDragEnd: { rowId: RowId; fromViewIndex: number; toViewIndex: number }`
+- `onColumnResized: { columnId: string; width: number; viewIndex: number }`
+- `onColumnMoved: { columnId: string; fromViewIndex: number; toViewIndex: number }`
+- `onColumnPinned: { columnId: string; pinned: "start" | "end" | null }` — fired by `columns.setPinned`, the header toggle or a cross-region drag
+- `onFrozenRowsChanged: FrozenRowsState` — `{ requestedCount, effectiveCount, limit }`; not fired for the initial resolution
 
-`getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference).
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `[columnState]` form is `{ columnId, pinned }`. At runtime call
+`this.grid.core?.columns.setPinned(id, pin)`. A pin that does not fit the
+viewport renders in the scrolling center until it is admitted, so persist the
+request but read the effective `region` from `columns.getState()`.
+`[columnOverscan]` (default `240` px) is how far past each clip edge center
+columns stay mounted; an open editor keeps its column mounted regardless. The
+default pin action cycles through physical left, physical right and unpinned;
+its labels are `pinLeftColumn`, `pinRightColumn` and `unpinColumn`. See
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
+
+Frozen rows: `[freezeRows]="{ count: 3 }"` keeps the first displayed rows below
+the header (defaults `maxCount 100`, `minSuffixHeight 64`). `count` is a request
+— `this.grid.core?.frozenRows.get()` answers
+`{ requestedCount, effectiveCount, limit }` where `limit` is
+`"maxCount" | "viewport" | "cache" | null`. A changed input is applied at
+runtime through `core.frozenRows.set`, so the component is not recreated and the
+scroll position is corrected to keep the visible suffix anchored; a reduced
+prefix is announced through `labels.frozenRowsLimited`. See
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
+
+`getRowId` is **required** when listening to `onCellValueChanged`. Pass it as `[getRowId]` (a function reference). The component also exposes a `core` getter (`@ViewChild(GpGridComponent)`), so you can `await this.grid.core?.refresh()` after a columnar source adopts a revision.
 
 ## Localization and text wrapping
 
@@ -436,9 +467,267 @@ const columns: AngularColumnDefinition[] = [
 
 ## Programmatic API
 
-Get the `GridCore` via `@ViewChild`. The component holds an internal `bindings.coreRef`; for now, the public path is to read it from a wrapper / proxy you maintain, or escalate by using `ViewChild` + accessing the underlying core through the component's bindings (the long-term API for this is evolving — check `packages/angular/src/lib/gp-grid.component.ts` for current exposure).
+Get the `GridCore` through the component's public `get core()` accessor:
+
+```ts
+@ViewChild(GpGridComponent) private grid?: GpGridComponent;
+
+this.grid?.core?.sortFilter.setSort("name", "asc");
+```
 
 For the common operations (sort, filter, edit), you'll usually drive them via `[columns]` / `[dataSource]` inputs and `output()` events instead of imperative calls.
+
+## Row heights
+
+Rows are `rowHeight` px tall unless you set a height by row identity through the
+exposed core (no remount), or the user resizes or fits a row (next section):
+
+```ts
+this.grid?.core?.rowHeights.set([{ rowId: 2, height: 96 }]);
+this.grid?.core?.rowHeights.reset([2]);   // or reset() for all of them
+this.grid?.core?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch, so the viewport does
+not jump. See [docs/features/row-heights.md](../../../../docs/features/row-heights.md).
+
+## Row resize and auto-fit
+
+```html
+<gp-grid
+  [columns]="columns"
+  [dataSource]="grid.dataSource"
+  [rowHeight]="32"
+  [getRowId]="getRowId"
+  [rowResize]="true"
+  [autoFit]="{ maxColumnWidth: 400 }"
+  (onRowResized)="saveHeight($event.rowId, $event.height)"
+/>
+```
+
+```ts
+// Fit the mounted cells once. Call it after the render that follows a column
+// change — in the same task it returns "stale" and applies nothing.
+requestAnimationFrame(() => this.grid?.core?.columns.fit());
+this.grid?.core?.rowHeights.fit([2, 3]);
+this.grid?.core?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. `[rowResize]` is
+reactive, `[autoFit]` is read at creation. See
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```ts
+import type { AngularColumnGroupChild } from "@gp-grid/angular";
+
+protected readonly columnGroups: AngularColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+```
+
+```html
+<gp-grid
+  [columns]="columns"
+  [columnGroups]="columnGroups"
+  [headerBandHeights]="[40]"
+  (onColumnSchemaRejected)="schemaError.set($event.message)"
+/>
+```
+
+Every column is referenced once, ungrouped ones at the root. `[columnGroups]` and
+`[headerBandHeights]` apply at runtime. A group's `headerRenderer` is a
+`TemplateRef` (`GroupHeaderRendererTemplate`, `$implicit: ColumnGroupHeaderParams`)
+or a key of `[headerRenderers]`; a function renderer is ignored. A rejected
+hierarchy leaves the previous one on screen; the input is re-applied with every
+later `columns` change, so put a valid one back. See
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
+
+## Row grouping
+
+```ts
+import { Component, ViewChild } from "@angular/core";
+import {
+  GpGridComponent,
+  createRowGrouping,
+  type RowGroupToggledEvent,
+  type RowGroupingRejection,
+} from "@gp-grid/angular";
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  templateUrl: "./sales.component.html",
+})
+export class SalesComponent {
+  @ViewChild(GpGridComponent) private grid?: GpGridComponent;
+
+  // A field, created once: a new object regroups.
+  protected readonly grouping = createRowGrouping({
+    dimensions: [{ field: "country" }, { field: "city" }],
+    measures: [
+      { field: "amount", aggregate: "sum" },
+      { field: "score", aggregate: "avg" },
+    ],
+    grandTotal: "top",
+  });
+
+  protected expandAll(): void {
+    this.grid?.core?.rowGroups.setExpanded(null, true);
+  }
+
+  protected onToggled(event: RowGroupToggledEvent): void {
+    console.log(event.rowId, event.expanded);
+  }
+
+  protected onRejected(rejection: RowGroupingRejection): void {
+    console.warn(rejection.reason, rejection.field);
+  }
+}
+```
+
+```html
+<ng-template #groupLabel let-params>
+  <strong>{{ params.label }}</strong>
+</ng-template>
+
+<button (click)="expandAll()">Expand all</button>
+<gp-grid
+  [columns]="columns"
+  [rows]="sales"
+  [rowHeight]="32"
+  [getRowId]="getRowId"
+  [rowGrouping]="grouping"
+  groupLabelColumn="country"
+  [groupLabelRenderer]="groupLabel"
+  (onRowGroupToggled)="onToggled($event)"
+  (onRowGroupingRejected)="onRejected($event)"
+/>
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`.
+`[groupLabelRenderer]` is a `GroupLabelRendererTemplate` whose `$implicit` is
+`{ row, viewIndex, label, toggle }`. A cell template gets `rowKind` on an
+aggregate cell, where `rowData` is undefined, and is not rendered for a group
+cell with no aggregate. `[rowGrouping]` is reactive, but its published typing
+does not accept `null`: cast to ungroup (`null as unknown as RowGrouping`). The
+grouping needs every row resident (`[rows]`, a client source or
+`createGridData`); a server source is rejected with `partial-source`.
+`GroupToggleComponent` and `GroupLabelComponent`, the label cell's parts, are
+exported. See
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
+
+## Server grouping
+
+```ts
+import { Component, OnDestroy } from "@angular/core";
+import { GpGridComponent, createServerGroupingSource } from "@gp-grid/angular";
+import { salesService } from "./sales-service"; // a ServerGroupingService<Sale>
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  // No [rowGrouping]: it would be rejected as hierarchical-source.
+  template: `
+    <gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" groupLabelColumn="country" />
+  `,
+})
+export class SalesComponent implements OnDestroy {
+  protected readonly columns = columns;
+
+  // A field, created once: one source per grid.
+  protected readonly source = createServerGroupingSource(salesService, {
+    dimensions: [{ field: "country" }, { field: "city" }],
+    measures: [
+      { field: "amount", aggregate: "sum" },
+      { field: "score", aggregate: "avg" },
+    ],
+    getRowId: (row) => row.id,
+    grandTotal: "top",
+  });
+
+  // The grid never destroys a source bound to [dataSource].
+  ngOnDestroy(): void {
+    this.source.destroy();
+  }
+}
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `grid.core?.rowGroups` and
+`(onRowGroupToggled)` work as for local grouping. See
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```ts
+import { Component, OnDestroy, signal } from "@angular/core";
+import { GpGridComponent, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createClientDataSource, createPivotSource, type PivotConfig } from "@gp-grid/angular";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+
+@Component({
+  standalone: true,
+  imports: [GpGridComponent],
+  // No [rowGrouping]: it would be rejected as hierarchical-source.
+  template: `
+    <gp-grid [columns]="schema().columns" [columnGroups]="schema().columnGroups" [dataSource]="source"
+      [rowHeight]="32" [groupLabelColumn]="labelColumnId" />
+  `,
+})
+export class SalesPivotComponent implements OnDestroy {
+  protected readonly labelColumnId = PIVOT_LABEL_COLUMN_ID;
+  // A field, created once: one source per grid.
+  protected readonly source = createPivotSource(createClientDataSource(sales), config);
+  protected readonly schema = signal(this.source.getSchema() ?? buildPivotSchema([], config));
+  private readonly stop = this.source.subscribeSchema((next) => this.schema.set(next));
+
+  ngOnDestroy(): void {
+    this.stop();
+    this.source.destroy();
+  }
+}
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `grid.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
+
+## Writes, undo and redo
+
+```html
+<gp-grid [columns]="columns" [dataSource]="source" [rowHeight]="32" [getRowId]="getRowId"
+  [history]="{ maxEntries: 100 }" (onWriteCommitted)="onWriteCommitted($event)" />
+```
+
+`[history]` is creation-only and needs `[getRowId]`; the `core` getter's
+`history.undo()` / `redo()` write an entry back by record id, and Ctrl+Z,
+Ctrl+Y and Ctrl+Shift+Z do the same while no editor is open. See the SKILL.md
+"Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
 
 ## Highlighting
 
@@ -462,7 +751,7 @@ protected readonly highlighting: HighlightingOptions = {
 
 ```css
 /* Global stylesheet (NOT a component-scoped stylesheet) — gp-grid renders cells outside Angular's view encapsulation by default for these classes. Use ViewEncapsulation.None on the component, or move the styles to a global file. */
-.pg-row--hover { background: rgba(59, 130, 246, 0.2) !important; }
+.gp-grid-row.pg-row--hover .gp-grid-cell { background: rgba(59, 130, 246, 0.2) !important; }
 .pg-col--hover { background: rgba(16, 185, 129, 0.2) !important; }
 ```
 
@@ -473,17 +762,26 @@ Inputs:
 | Input | Type | Default |
 |---|---|---|
 | `[columns]` | `AngularColumnDefinition[]` | required |
+| `[columnState]` | `ColumnStateUpdate[]` | `null` |
+| `[columnOverscan]` | `number` | `240` |
+| `[freezeRows]` | `FreezeRowsOptions \| undefined` | `undefined` |
 | `[rows]` | `unknown[]` | `[]` |
 | `[dataSource]` | `DataSource<unknown> \| null` | `null` |
 | `[getRowId]` | `((row: unknown) => RowId) \| null` | `null` |
 | `[rowHeight]` | `number` | `32` |
 | `[headerHeight]` | `number` | `32` |
+| `[headerBandHeights]` | `readonly number[]` | `undefined` |
+| `[columnGroups]` | `readonly AngularColumnGroupChild[]` | `undefined` |
+| `[columnGroupLimits]` | `ColumnGroupLimits` | `undefined` (64 / 100,000 / 100,000), creation-only |
+| `[rowResize]` | `boolean` | `false` |
+| `[autoFit]` | `AutoFitOptions` | `undefined` (600 / `rowHeight` / `10 × rowHeight`), creation-only |
 | `[darkMode]` | `boolean` | `false` |
 | `[cellRenderers]` | `Record<string, CellRendererTemplate>` | `{}` |
-| `[headerRenderers]` | `Record<string, HeaderRendererTemplate>` | `{}` |
+| `[headerRenderers]` | `HeaderRendererRegistry` (column and group templates) | `{}` |
 | `[editRenderers]` | `Record<string, EditRendererTemplate>` | `{}` |
 | `[cellRenderer]` | `CellRendererTemplate \| null` | `null` |
 | `[headerRenderer]` | `HeaderRendererTemplate \| null` | `null` |
+| `[pinIcon]` | `GridIcon` | push-pin SVG |
 | `[editRenderer]` | `EditRendererTemplate \| null` | `null` |
 | `[highlighting]` | `HighlightingOptions \| null` | `null` |
 | `[rowDragEntireRow]` | `boolean` | `false` |
@@ -491,16 +789,27 @@ Inputs:
 | `[rowLoading]` | `RowLoadingOptions \| null` | `null` |
 | `[sortingEnabled]` | `boolean` | `true` |
 | `[wheelDampening]` | `number` | `0.1` |
+| `[rowGrouping]` | `RowGrouping` | `undefined` (flat) |
+| `[groupLabelColumn]` | `string` | `undefined` (first displayed column) |
+| `[groupLabelRenderer]` | `GroupLabelRendererTemplate` | `null` |
 | `[labels]` | `GridLabelOverrides` | English defaults |
 
 Outputs:
 
 | Output | Payload |
 |---|---|
-| `(onRowDragEnd)` | `{ source: number; target: number }` |
+| `(onRowDragEnd)` | `{ rowId: RowId; fromViewIndex: number; toViewIndex: number }` |
 | `(onCellValueChanged)` | `CellValueChangedEvent<unknown>` |
-| `(onColumnResized)` | `{ colIndex: number; newWidth: number }` |
-| `(onColumnMoved)` | `{ fromIndex: number; toIndex: number }` |
+| `(onWriteRejected)` | `CellWriteRejectedEvent` |
+| `(onWriteCommitted)` | `WriteCommittedEvent` |
+| `(onColumnResized)` | `{ columnId: string; width: number; viewIndex: number }` |
+| `(onColumnMoved)` | `{ columnId: string; fromViewIndex: number; toViewIndex: number }` |
+| `(onColumnPinned)` | `{ columnId: string; pinned: "start" \| "end" \| null }` |
+| `(onFrozenRowsChanged)` | `FrozenRowsState` — `{ requestedCount, effectiveCount, limit }` |
+| `(onRowResized)` | `{ rowId: RowId; height: number; viewIndex: number }` |
+| `(onColumnSchemaRejected)` | `ColumnSchemaError` — `{ code, source, id?, limit?, message }` |
+| `(onRowGroupToggled)` | `{ rowId: RowId; expanded: boolean }` |
+| `(onRowGroupingRejected)` | `RowGroupingRejection` — `{ reason, field? }` |
 
 ## Angular-specific gotchas
 
@@ -508,7 +817,8 @@ Outputs:
 - **Edit renderer doesn't capture keys** → call `event.stopPropagation()` in the `(keydown)` handler so the grid's global key handler doesn't fire while the user types.
 - **Highlight CSS in component-scoped stylesheet with default encapsulation** → won't apply to grid cells. Move to a global stylesheet or set `encapsulation: ViewEncapsulation.None` on the component.
 - **`provideGridData` registered at the root injector** → all `<gp-grid>` instances share one data source. Register it on each consuming component instead.
-- **SSR (Angular Universal)**: the wrapper checks `isPlatformBrowser` before touching `document` and `ResizeObserver`. Just don't try to use the imperative `core` API during SSR.
+- **SSR (Angular Universal)**: the wrapper checks `isPlatformBrowser` before touching `document` and `ResizeObserver`. Just don't try to use the imperative `core` API during SSR. The core is created in `ngOnInit`, so a server render can already contain loaded rows, including collapsed group rows (`role="treegrid"`) under row grouping.
+- **Strict templates and optional inputs**: the published input typings drop `undefined` (ng-packagr builds them without `strictNullChecks`). Cast an absent `columnGroups` (`undefined as unknown as AngularColumnGroupChild[]`) and bind `[]` for no `headerBandHeights` — an empty `columnGroups` array is a hierarchy that misses every column and is rejected. `rowGrouping` and `groupLabelRenderer` drop `null` the same way: cast (`null as unknown as RowGrouping`) to ungroup.
 - **OnPush change detection**: the component uses `ChangeDetectionStrategy.OnPush` and signals internally. Mutating an array passed to `[columns]` won't trigger CD — replace it (`this.columns = [...this.columns, newCol]`) or use a signal.
 
 ## Working playground

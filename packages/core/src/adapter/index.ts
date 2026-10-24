@@ -1,4 +1,13 @@
 export { toPointerEventData } from "./pointer-event";
+export {
+  readIsRtl,
+  toInlineX,
+  toPhysicalX,
+  inlineOffset,
+  readContainerBounds,
+  fixedLeftForInline,
+  normalizeHorizontalKey,
+} from "./inline-axis";
 export { AutoScrollDriver } from "./auto-scroll";
 export { PendingRowDragController } from "./pending-row-drag";
 export type { PendingRowDragDeps } from "./pending-row-drag";
@@ -7,9 +16,12 @@ export type { PendingCellTapDeps } from "./pending-cell-tap";
 export { TouchScrollController } from "./touch-scroll";
 export type { TouchScrollDeps } from "./touch-scroll";
 export { applyBatchInstructions } from "./batch-applier";
+export { PendingScrollLatch } from "./pending-scroll";
+export type { PendingScroll } from "./pending-scroll";
 export type { BatchChangeSetters } from "./batch-applier";
 export { DataSourceOwner } from "./data-source-owner";
 export { InputEventAdapter } from "./input-event-adapter";
+export { createDomMeasurementHost } from "./measure-dom";
 export type {
   InputEventAdapterDeps,
   CellPointerAction,

@@ -113,14 +113,14 @@ const filter: ColumnFilterModel = {
 
 ### Migrating flat condition models
 
-`GridCore.setFilter()` still accepts the previous flat model with
+`GridCore.sortFilter.setFilter()` still accepts the previous flat model with
 per-condition `nextOperator` values. It preserves the old left-to-right truth
 table and immediately converts the input into equivalent one-level groups.
 When a condition must appear in more than one group to preserve the expression,
 the compact form with the fewest repeated conditions is selected.
 
 Use `normalizeColumnFilterModel(legacyFilter)` to migrate stored filters
-explicitly. `getFilterModel()` and `DataSourceRequest.filter` always return the
+explicitly. `sortFilter.getFilterModel()` and `DataSourceRequest.filter` always return the
 new grouped shape; server serializers must read `model.groups`.
 
 ### Values mode stores raw values
@@ -177,16 +177,16 @@ interface DateFilterCondition {
 
 ```typescript
 // Set filter on a column
-core.setFilter(
+core.sortFilter.setFilter(
   colId: string,
   filter: ColumnFilterInput | string | null,
 );
 
 // Open filter popup
-core.openFilterPopup(colIndex: number, anchorRect: DOMRect);
+core.sortFilter.openFilterPopup(colIndex: number, anchorRect: DOMRect);
 
 // Close filter popup
-core.closeFilterPopup();
+core.sortFilter.closeFilterPopup();
 
 // Get distinct values for a column (for checkbox list)
 core.getDistinctValuesForColumn(colId: string): CellValue[];
@@ -195,8 +195,18 @@ core.getDistinctValuesForColumn(colId: string): CellValue[];
 core.isColumnFilterable(colIndex: number): boolean;
 
 // Check if column has active filter
-core.hasActiveFilter(colId: string): boolean;
+core.sortFilter.hasActiveFilter(colId: string): boolean;
 ```
+
+## Row grouping
+
+Filters apply before [row grouping](./row-grouping.md): groups, counts,
+aggregates and the total row describe the filtered rows, and a group with no
+remaining row disappears. A filter change rebuilds the grouping and keeps the
+expansion of the groups that survive. The popup lists the distinct values of the
+flat rows. A hierarchy supplied by a data source has no flat rows: it receives
+the filter model in its query request, and a filterable column lists its values
+through `ColumnDefinition.distinctValues`.
 
 ## Keyboard Shortcuts
 
@@ -244,6 +254,7 @@ Angular: `[labels]="{ emptyState: 'No rows to show' }"`.
 | `blanks` | `(Blanks)` | |
 | `tooManyValues` | `Too many unique values ({count}). Use conditions to filter.` | `{count}` → entry count |
 | `emptyState` | `No data to display` | |
+| `pinLeftColumn` / `pinRightColumn` / `unpinColumn` | `Pin left` / `Pin right` / `Unpin` | Next pin action |
 | `errorPrefix` | `Error: {message}` | `{message}` → error text |
 
 `labels.operators` keys: `contains`, `notContains`, `startsWith`, `endsWith`,

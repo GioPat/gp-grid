@@ -51,6 +51,20 @@ describe("InstructionBatcher", () => {
     expect(batches).toEqual([[scrollTo, loading, scrollTo]]);
   });
 
+  it("lets a re-sync replace the buffered instructions of the types it re-emits", () => {
+    const batcher = new InstructionBatcher();
+    const batches = collectBatches(batcher);
+    const scrolledTo: GridInstruction = { type: "SCROLL_TO", scrollTop: 10 };
+
+    batcher.start();
+    batcher.emit(scrollTo);
+    batcher.emit(loading);
+    batcher.replacing(new Set(["SCROLL_TO", "DATA_LOADING"]), () => batcher.emit(scrolledTo));
+    batcher.flush();
+
+    expect(batches).toEqual([[loading, scrolledTo]]);
+  });
+
   it("ignores a flush without a matching start", () => {
     const batcher = new InstructionBatcher();
     const batches = collectBatches(batcher);

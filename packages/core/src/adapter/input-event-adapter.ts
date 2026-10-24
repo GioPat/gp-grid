@@ -4,8 +4,11 @@ import type {
   DragState,
   InputResult,
   KeyboardResult,
+  ResizeTarget,
 } from "../types/input";
+import { groupTogglePointerDown as toggleGroupOnPointerDown } from "../input";
 import { toPointerEventData } from "./pointer-event";
+import { normalizeHorizontalKey, readContainerBounds, readIsRtl } from "./inline-axis";
 import type { AutoScrollDriver } from "./auto-scroll";
 import type { PendingRowDragController } from "./pending-row-drag";
 import type { PendingCellTapController } from "./pending-cell-tap";
@@ -82,6 +85,21 @@ export class InputEventAdapter<TData = unknown> {
     return result.preventDefault;
   }
 
+  rowResizePointerDown(rowIndex: number, rowHeight: number, event: PointerEvent): boolean {
+    const core = this.deps.getCore();
+    if (core === null) return false;
+    const result = core.input.handleRowResizeMouseDown(
+      rowIndex,
+      rowHeight,
+      toPointerEventData(event),
+    );
+    return result.preventDefault;
+  }
+
+  resizeDoubleClick(target: ResizeTarget): void {
+    this.deps.getCore()?.input.handleResizeDoubleClick(target);
+  }
+
   cellPointerDown(rowIndex: number, colIndex: number, event: PointerEvent): CellPointerAction {
     const core = this.deps.getCore();
     if (core === null) return { preventDefault: false, focusContainer: false };
@@ -95,6 +113,11 @@ export class InputEventAdapter<TData = unknown> {
       preventDefault: result.preventDefault,
       focusContainer: result.focusContainer ?? false,
     };
+  }
+
+  /** The expander toggles its group; the cell beneath sees no pointer down. */
+  groupTogglePointerDown(rowIndex: number, event: PointerEvent): void {
+    toggleGroupOnPointerDown(this.deps.getCore(), rowIndex, event);
   }
 
   cellPointerEnter(rowIndex: number, colIndex: number): void {
@@ -131,15 +154,7 @@ export class InputEventAdapter<TData = unknown> {
     const core = this.deps.getCore();
     const bodyEl = this.deps.getBodyEl();
     if (core === null || bodyEl === null) return;
-    const rect = bodyEl.getBoundingClientRect();
-    const result = core.input.handleDragMove(toPointerEventData(event), {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: bodyEl.scrollTop,
-      scrollLeft: bodyEl.scrollLeft,
-    });
+    const result = core.input.handleDragMove(toPointerEventData(event), readContainerBounds(bodyEl));
     this.deps.onDragStateChange(core.input.getDragState());
     if (result?.autoScroll) {
       this.deps.autoScroll.start(result.autoScroll.dx, result.autoScroll.dy);
@@ -168,10 +183,10 @@ export class InputEventAdapter<TData = unknown> {
     return { wasRowDrag };
   }
 
-  wheel(deltaY: number, deltaX: number, dampening: number): { dy: number; dx: number } | null {
+  wheel(event: WheelEvent, dampening: number): { dy: number; dx: number } | null {
     const core = this.deps.getCore();
     if (core === null) return null;
-    return core.input.handleWheel(deltaY, deltaX, dampening);
+    return core.input.handleWheel(event.deltaY, event.deltaX, dampening, event.deltaMode);
   }
 
   keyDown(
@@ -182,12 +197,16 @@ export class InputEventAdapter<TData = unknown> {
   ): KeyboardResult {
     const core = this.deps.getCore();
     if (core === null) return { preventDefault: false };
+    // Arrows are normalized here, not in core: selection is direction-agnostic
+    // and the editor must still see the physical key.
+    const rtl = readIsRtl(this.deps.getBodyEl());
     return core.input.handleKeyDown(
       {
-        key: event.key,
+        key: normalizeHorizontalKey(event.key, rtl),
         shiftKey: event.shiftKey,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
+        altKey: event.altKey,
       },
       activeCell,
       editingCell,
@@ -204,7 +223,7 @@ export class InputEventAdapter<TData = unknown> {
     if (core === null) return false;
     if (editingCell !== null) return false;
     if (filterPopupOpen) return false;
-    return core.pasteClipboardText(text);
+    return core.edit.paste(text);
   }
 
   private dispatchCellDragStart(result: InputResult, event: PointerEvent): void {

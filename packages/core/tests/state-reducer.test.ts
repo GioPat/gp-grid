@@ -24,7 +24,7 @@ const column: ColumnDefinition = {
 
 describe("applyInstruction", () => {
   let slots: Map<string, SlotData<Row>>;
-  let headers: Map<number, HeaderData>;
+  let headers: Map<string, HeaderData>;
 
   beforeEach(() => {
     slots = new Map();
@@ -34,7 +34,7 @@ describe("applyInstruction", () => {
   describe("slot lifecycle", () => {
     it("creates a slot with default values and returns null", () => {
       const result = applyInstruction<Row>(
-        { type: "CREATE_SLOT", slotId: "s1" },
+        { type: "CREATE_SLOT", slotId: "s1", generation: 0 },
         slots,
         headers,
       );
@@ -45,8 +45,12 @@ describe("applyInstruction", () => {
       expect(slot).toEqual({
         slotId: "s1",
         rowIndex: -1,
-        rowData: {},
+        rowData: undefined,
+        generation: 0,
         translateY: 0,
+        height: 0,
+        region: "suffix",
+        loading: false,
       });
     });
 
@@ -55,7 +59,11 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: 0,
         rowData: { id: 1, name: "a" },
+        generation: 1,
         translateY: 0,
+        height: 32,
+        region: "suffix",
+        loading: false,
       });
 
       const result = applyInstruction<Row>(
@@ -84,7 +92,11 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: -1,
         rowData: {} as Row,
+        generation: 0,
         translateY: 64,
+        height: 32,
+        region: "suffix",
+        loading: false,
       });
 
       const rowData: Row = { id: 42, name: "Alice" };
@@ -94,6 +106,7 @@ describe("applyInstruction", () => {
           slotId: "s1",
           rowIndex: 3,
           rowData,
+          generation: 7,
         },
         slots,
         headers,
@@ -104,8 +117,47 @@ describe("applyInstruction", () => {
         slotId: "s1",
         rowIndex: 3,
         rowData,
+        generation: 7,
         translateY: 64,
+        height: 32,
+        region: "suffix",
+        loading: false,
       });
+    });
+
+    it("keeps the region and loading fields an instruction carries", () => {
+      applyInstruction<Row>(
+        { type: "CREATE_SLOT", slotId: "s1", generation: 0, region: "frozen", loading: true },
+        slots,
+        headers,
+      );
+      expect(slots.get("s1")).toMatchObject({ region: "frozen", loading: true });
+
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 2, rowData: undefined, generation: 1 },
+        slots,
+        headers,
+      );
+      // The defaults apply on every assign: an unfrozen row returns to suffix.
+      expect(slots.get("s1")).toMatchObject({ region: "suffix", loading: false });
+    });
+
+    it("sets the hierarchy row an instruction carries and drops it when absent", () => {
+      applyInstruction<Row>({ type: "CREATE_SLOT", slotId: "s1", generation: 0 }, slots, headers);
+      const row = { kind: "group", id: "g", depth: 0, expanded: false, childCount: 1, leafCount: 2, field: "name", value: "x" } as const;
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 0, rowData: undefined, generation: 1, row },
+        slots,
+        headers,
+      );
+      expect(slots.get("s1")?.row).toEqual(row);
+
+      applyInstruction<Row>(
+        { type: "ASSIGN_SLOT", slotId: "s1", rowIndex: 1, rowData: undefined, generation: 2 },
+        slots,
+        headers,
+      );
+      expect("row" in slots.get("s1")!).toBe(false);
     });
 
     it("ASSIGN_SLOT on an unknown slot id is ignored", () => {
@@ -115,6 +167,7 @@ describe("applyInstruction", () => {
           slotId: "missing",
           rowIndex: 1,
           rowData: { id: 1, name: "x" },
+          generation: 2,
         },
         slots,
         headers,
@@ -124,29 +177,56 @@ describe("applyInstruction", () => {
       expect(slots.size).toBe(0);
     });
 
-    it("moves a slot's translateY while preserving other fields", () => {
+    it("moves a slot's translateY and height while preserving other fields", () => {
       slots.set("s1", {
         slotId: "s1",
         rowIndex: 2,
         rowData: { id: 2, name: "b" },
+        generation: 1,
         translateY: 0,
+        height: 32,
+        region: "suffix",
+        loading: false,
       });
 
       const result = applyInstruction<Row>(
-        { type: "MOVE_SLOT", slotId: "s1", translateY: 256 },
+        { type: "MOVE_SLOT", slotId: "s1", translateY: 256, height: 48 },
         slots,
         headers,
       );
 
       expect(result).toBeNull();
       expect(slots.get("s1")?.translateY).toBe(256);
+      expect(slots.get("s1")?.height).toBe(48);
       expect(slots.get("s1")?.rowIndex).toBe(2);
       expect(slots.get("s1")?.rowData).toEqual({ id: 2, name: "b" });
     });
 
+    it("a height-only MOVE_SLOT keeps the position", () => {
+      slots.set("s1", {
+        slotId: "s1",
+        rowIndex: 2,
+        rowData: { id: 2, name: "b" },
+        generation: 1,
+        translateY: 64,
+        height: 32,
+        region: "suffix",
+        loading: false,
+      });
+
+      applyInstruction<Row>(
+        { type: "MOVE_SLOT", slotId: "s1", translateY: 64, height: 96 },
+        slots,
+        headers,
+      );
+
+      expect(slots.get("s1")?.translateY).toBe(64);
+      expect(slots.get("s1")?.height).toBe(96);
+    });
+
     it("MOVE_SLOT on an unknown slot id is ignored", () => {
       const result = applyInstruction<Row>(
-        { type: "MOVE_SLOT", slotId: "missing", translateY: 10 },
+        { type: "MOVE_SLOT", slotId: "missing", translateY: 10, height: 32 },
         slots,
         headers,
       );
@@ -164,6 +244,22 @@ describe("applyInstruction", () => {
         headers,
       );
       expect(result).toEqual({ pendingScrollTop: 512 });
+    });
+
+    it("SCROLL_TO leaves an omitted axis out of the changes", () => {
+      const horizontal = applyInstruction<Row>(
+        { type: "SCROLL_TO", scrollLeft: 120 },
+        slots,
+        headers,
+      );
+      expect(horizontal).toStrictEqual({ pendingScrollLeft: 120 });
+
+      const vertical = applyInstruction<Row>(
+        { type: "SCROLL_TO", scrollTop: 512 },
+        slots,
+        headers,
+      );
+      expect(vertical).toStrictEqual({ pendingScrollTop: 512 });
     });
 
     it("SET_ACTIVE_CELL returns the provided position", () => {
@@ -282,11 +378,11 @@ describe("applyInstruction", () => {
       });
     });
 
-    it("UPDATE_HEADER stores header data under colIndex and returns null", () => {
+    it("UPDATE_HEADER stores header data under columnId and returns null", () => {
       const result = applyInstruction<Row>(
         {
           type: "UPDATE_HEADER",
-          colIndex: 2,
+          columnId: "name",
           column,
           sortDirection: "asc",
           sortIndex: 0,
@@ -296,7 +392,7 @@ describe("applyInstruction", () => {
         headers,
       );
       expect(result).toBeNull();
-      expect(headers.get(2)).toEqual({
+      expect(headers.get("name")).toEqual({
         column,
         sortDirection: "asc",
         sortIndex: 0,
@@ -305,7 +401,7 @@ describe("applyInstruction", () => {
     });
 
     it("UPDATE_HEADER overwrites a previously stored header", () => {
-      headers.set(1, {
+      headers.set("name", {
         column,
         sortDirection: "desc",
         sortIndex: 1,
@@ -315,7 +411,7 @@ describe("applyInstruction", () => {
       applyInstruction<Row>(
         {
           type: "UPDATE_HEADER",
-          colIndex: 1,
+          columnId: "name",
           column,
           hasFilter: false,
         },
@@ -323,12 +419,27 @@ describe("applyInstruction", () => {
         headers,
       );
 
-      expect(headers.get(1)).toEqual({
+      expect(headers.get("name")).toEqual({
         column,
         sortDirection: undefined,
         sortIndex: undefined,
         hasFilter: false,
       });
+    });
+
+    it("REMOVE_HEADERS drops only the named columns", () => {
+      headers.set("a", { column, hasFilter: false });
+      headers.set("b", { column, hasFilter: false });
+
+      const result = applyInstruction<Row>(
+        { type: "REMOVE_HEADERS", columnIds: ["a"] },
+        slots,
+        headers,
+      );
+
+      expect(result).toBeNull();
+      expect(headers.has("a")).toBe(false);
+      expect(headers.has("b")).toBe(true);
     });
   });
 
@@ -385,7 +496,16 @@ describe("applyInstruction", () => {
         slots,
         headers,
       );
-      expect(result).toEqual({ isLoading: false, totalRows: 123 });
+      expect(result).toEqual({ isLoading: false, totalRows: 123, hierarchical: false });
+    });
+
+    it("DATA_LOADED mirrors hierarchical and a flat load clears it", () => {
+      expect(
+        applyInstruction<Row>({ type: "DATA_LOADED", totalRows: 3, hierarchical: true }, slots, headers),
+      ).toMatchObject({ hierarchical: true });
+      expect(
+        applyInstruction<Row>({ type: "DATA_LOADED", totalRows: 3 }, slots, headers),
+      ).toMatchObject({ hierarchical: false });
     });
 
     it("DATA_ERROR sets isLoading false and records error", () => {
@@ -410,6 +530,83 @@ describe("applyInstruction", () => {
         headers,
       );
       expect(result).toEqual({ columns });
+    });
+
+    it("SET_COLUMN_WINDOW and COLUMNS_CHANGED report the committed revision", () => {
+      const layout = {
+        revision: 2,
+        mode: "fit" as const,
+        totalWidth: 120,
+        regions: {
+          centerStart: 0,
+          centerEnd: 1,
+          startWidth: 0,
+          endWidth: 0,
+          endOffset: 120,
+          centerViewportWidth: 400,
+        },
+        columns: [],
+      };
+      const window = {
+        layout,
+        range: { start: 0, end: 0 },
+        start: [],
+        center: [],
+        end: [],
+      };
+
+      expect(applyInstruction<Row>(
+        { type: "SET_COLUMN_WINDOW", window, revision: 9 },
+        slots,
+        headers,
+      )).toEqual({ columnWindow: window, geometryRevision: 9 });
+
+      expect(applyInstruction<Row>(
+        { type: "COLUMNS_CHANGED", columns: [column], layout, revision: 10 },
+        slots,
+        headers,
+      )).toEqual({ columns: [column], layout, geometryRevision: 10 });
+    });
+  });
+
+  describe("row regions and announcements", () => {
+    const rowRegions = {
+      frozenCount: 3,
+      frozenExtent: 96,
+      suffixViewportHeight: 224,
+      frozen: { requestedCount: 5, effectiveCount: 3, limit: "viewport" as const },
+    };
+
+    it("SET_ROW_REGIONS publishes the layout with the committed revision", () => {
+      expect(applyInstruction<Row>(
+        { type: "SET_ROW_REGIONS", regions: rowRegions, revision: 11 },
+        slots,
+        headers,
+      )).toEqual({ rowRegions, geometryRevision: 11 });
+    });
+
+    it("SET_HEADER_BANDS publishes the bands with the committed revision", () => {
+      const bands = { count: 2, heights: [36, 48], offsets: [0, 36], totalHeight: 84 };
+      expect(applyInstruction<Row>(
+        { type: "SET_HEADER_BANDS", bands, revision: 12 },
+        slots,
+        headers,
+      )).toEqual({ headerBands: bands, geometryRevision: 12 });
+    });
+
+    it("SET_ANNOUNCEMENT publishes the message and its clear", () => {
+      const announcement = { message: "3 of 5 rows frozen", revision: 11 };
+      expect(applyInstruction<Row>(
+        { type: "SET_ANNOUNCEMENT", announcement, revision: 11 },
+        slots,
+        headers,
+      )).toEqual({ announcement });
+
+      expect(applyInstruction<Row>(
+        { type: "SET_ANNOUNCEMENT", announcement: null, revision: 12 },
+        slots,
+        headers,
+      )).toEqual({ announcement: null });
     });
   });
 

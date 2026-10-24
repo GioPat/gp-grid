@@ -1,8 +1,20 @@
 // packages/vue/src/renderers/headerRenderer.ts
 
 import { h, Fragment, type VNode } from "vue";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderRendererParams } from "@gp-grid/core";
-import type { VueHeaderRenderer } from "../types";
+import type {
+  GridCore,
+  GridIcon,
+  ColumnDefinition,
+  ColumnGroupDefinition,
+  ColumnGroupHeaderParams,
+  ColumnPin,
+  HeaderFragment,
+  ResolvedColumn,
+  SortDirection,
+  HeaderRendererParams,
+  GridLabels,
+} from "@gp-grid/core";
+import type { VueGroupHeaderRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types";
 import { invokeRenderer } from "./utils";
 
 const needsDistinctValues = (column: ColumnDefinition): boolean => {
@@ -22,11 +34,33 @@ export interface RenderHeaderOptions {
   sortable: boolean;
   filterable: boolean;
   hasFilter: boolean;
+  rtl: boolean;
+  labels: GridLabels;
+  pinIcon: GridIcon;
   core: GridCore | null;
   container: HTMLDivElement | null;
-  headerRenderers: Record<string, VueHeaderRenderer>;
+  headerRenderers: VueHeaderRendererRegistry;
   globalHeaderRenderer?: VueHeaderRenderer;
 }
+
+const nextPin = (pinned: ColumnPin | null, rtl: boolean): ColumnPin | null => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  const right: ColumnPin = rtl ? "start" : "end";
+  if (pinned === null) return left;
+  if (pinned === left) return right;
+  return null;
+};
+
+const nextPinLabel = (
+  pinned: ColumnPin | null,
+  rtl: boolean,
+  labels: GridLabels,
+): string => {
+  const left: ColumnPin = rtl ? "end" : "start";
+  if (pinned === null) return labels.pinLeftColumn;
+  if (pinned === left) return labels.pinRightColumn;
+  return labels.unpinColumn;
+};
 
 /**
  * Render header content based on column configuration and renderer registries
@@ -42,6 +76,9 @@ export function renderHeader(
     sortable,
     filterable,
     hasFilter,
+    rtl,
+    labels,
+    pinIcon,
     core,
     container,
     headerRenderers,
@@ -49,16 +86,21 @@ export function renderHeader(
   } = options;
   const params: HeaderRendererParams = {
     column,
+    columnId: column.colId ?? column.field,
     colIndex,
     sortDirection,
     sortIndex,
     sortable,
     filterable,
     hasFilter,
+    pinned: column.pinned ?? null,
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
-        core.setSort(column.colId ?? column.field, direction, addToExisting);
+        void core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
       }
+    },
+    onPinChange: (pinned) => {
+      core?.columns.setPinned(column.colId ?? column.field, pinned);
     },
     onFilterClick: () => {
       if (core && filterable) {
@@ -67,7 +109,7 @@ export function renderHeader(
         ) as HTMLElement | null;
         if (headerCell) {
           const rect = headerCell.getBoundingClientRect();
-          core.openFilterPopup(
+          core.sortFilter.openFilterPopup(
             colIndex,
             {
               top: rect.top,
@@ -85,7 +127,7 @@ export function renderHeader(
   // Check for column-specific renderer
   if (column.headerRenderer != null) {
     if (typeof column.headerRenderer === "string") {
-      const renderer = headerRenderers[column.headerRenderer];
+      const renderer = headerRenderers[column.headerRenderer] as VueHeaderRenderer | undefined;
       if (renderer) {
         return invokeRenderer(renderer, params);
       }
@@ -99,8 +141,36 @@ export function renderHeader(
     return invokeRenderer(globalHeaderRenderer, params);
   }
 
-  // Default header with stacked sort arrows and filter icon
+  // Default header controls
+  const isPinned = params.pinned !== null;
+  const pinLabel = nextPinLabel(params.pinned, rtl, labels);
+  const pinButton = h(
+    "button",
+    {
+      type: "button",
+      class: `gp-grid-pin-button${isPinned ? " active" : ""}`,
+      "aria-label": pinLabel,
+      "aria-pressed": isPinned,
+      title: pinLabel,
+      onPointerdown: (e: PointerEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+      },
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation();
+        params.onPinChange(nextPin(params.pinned, rtl));
+      },
+    },
+    [
+      h(
+        "svg",
+        { "aria-hidden": "true", width: "16", height: "16", viewBox: pinIcon.viewBox ?? "0 0 24 24" },
+        [h("path", { d: pinIcon.path, fill: "currentColor" })],
+      ),
+    ],
+  );
   const children: VNode[] = [
+    pinButton,
     h("span", { class: "gp-grid-header-text" }, column.headerName ?? column.field),
   ];
 
@@ -172,4 +242,53 @@ export function renderHeader(
   }
 
   return h(Fragment, children);
+}
+
+export interface RenderGroupHeaderOptions {
+  fragment: HeaderFragment;
+  /** The definition: from the core, or from the `columnGroups` prop before the core exists. */
+  group: ColumnGroupDefinition | undefined;
+  /** `ColumnLayoutSnapshot.columns`, which the fragment's leaves index. */
+  layoutColumns: readonly ResolvedColumn[];
+  headerRenderers: VueHeaderRendererRegistry;
+}
+
+const resolveGroupRenderer = (
+  group: ColumnGroupDefinition,
+  headerRenderers: VueHeaderRendererRegistry,
+): VueGroupHeaderRenderer | undefined => {
+  const { headerRenderer } = group;
+  if (typeof headerRenderer === "function") {
+    return (params) => headerRenderer(params) as VNode | string | null;
+  }
+  if (headerRenderer === undefined) return undefined;
+  return headerRenderers[headerRenderer] as VueGroupHeaderRenderer | undefined;
+};
+
+const groupHeaderParams = (
+  fragment: HeaderFragment,
+  group: ColumnGroupDefinition,
+  layoutColumns: readonly ResolvedColumn[],
+): ColumnGroupHeaderParams => ({
+  group,
+  groupId: fragment.groupId,
+  band: fragment.band,
+  region: fragment.region,
+  leafCount: fragment.leafCount,
+  columnIds: layoutColumns
+    .slice(fragment.firstDisplayIndex, fragment.firstDisplayIndex + fragment.leafCount)
+    .map((column) => column.columnId),
+});
+
+/**
+ * Render a group fragment through the group's renderer, resolved like a
+ * column's, or as its `headerName ?? groupId` text.
+ */
+export function renderGroupHeader(options: RenderGroupHeaderOptions): VNode {
+  const { fragment, group, layoutColumns, headerRenderers } = options;
+  const renderer = group && resolveGroupRenderer(group, headerRenderers);
+  if (group && renderer) {
+    return invokeRenderer(renderer, groupHeaderParams(fragment, group, layoutColumns));
+  }
+  return h("span", { class: "gp-grid-header-text" }, group?.headerName ?? fragment.groupId);
 }

@@ -3,80 +3,112 @@
 // function encapsulates the batch-emit + cache-maintenance sequence for
 // a single mutation so the GridCore facade stays thin.
 
-import type { DataSource, ColumnDefinition, FilterModel, SortModel } from "./types";
+import type {
+  DataSource,
+  ColumnDefinition,
+  ColumnPin,
+  FilterModel,
+  SortModel,
+} from "./types";
+import { getColumnId } from "./column-model";
+import type { ColumnMoveResult } from "./column-model";
+import { normalizeColumnWidth } from "./geometry/column-widths";
 import type { SlotPoolManager } from "./slot-pool";
 import type { HighlightManager } from "./managers";
+import type { InstructionBatcher } from "./managers/instruction-batcher";
 import type { ViewSync } from "./grid-core-view-sync";
+import {
+  captureColumnTargets,
+  reconcileColumnTargets,
+  syncEditRetention,
+  type ColumnTargetDeps,
+  type EditRetentionDeps,
+} from "./grid-core-column-targets";
+import { admitEveryChange, type AdmitColumnChange } from "./grid-core-column-guard";
 import { buildDataSourceRequest, reorderCachedRows } from "./utils";
 
-export interface ColumnOperationDeps<TData> {
-  /** GridCore's live column array; operations mutate it in place. */
-  columns: ColumnDefinition[];
-  computeColumnPositions: () => void;
+export interface ColumnOperationDeps<TData> extends ColumnTargetDeps, EditRetentionDeps {
+  /** Current resolved layout. Never mutated by these operations. */
+  getLayout: () => ColumnDefinition[];
+  /** Write the pixel width override for a column ID and re-resolve the layout. */
+  setColumnWidth: (columnId: string, width: number) => void;
+  /** Move a column and re-resolve; returns the applied target or null. */
+  moveColumn: (fromIndex: number, toIndex: number) => ColumnMoveResult | null;
+  /** Commit column/row geometry before a batch captures its revision. */
+  refreshGeometry: () => void;
+  batcher: InstructionBatcher;
   view: ViewSync<TData>;
 }
 
-/**
- * Convert a desired displayed width to the stored width that produces it
- * after `calculateScaledColumnPositions` redistributes leftover viewport
- * space across visible columns.
- *
- * Why: the resize handle reports the scaled (displayed) width the user
- * dragged to, but redistribution would scale it up again on the next
- * render, leaving the column wider than the ghost. Back-solving keeps
- * the post-redistribution width equal to the displayed width.
- */
-const computeStoredWidthForDisplayed = (
-  colIndex: number,
-  displayedWidth: number,
-  viewportWidth: number,
-  columns: ColumnDefinition[],
-): number => {
-  if (viewportWidth <= 0) return displayedWidth;
-  let otherTotal = 0;
-  for (let i = 0; i < columns.length; i++) {
-    if (i === colIndex) continue;
-    const col = columns[i];
-    if (!col || col.hidden) continue;
-    otherTotal += col.width;
-  }
-  if (otherTotal <= 0) return displayedWidth;
-  if (displayedWidth + otherTotal >= viewportWidth) return displayedWidth;
-  return (displayedWidth * otherTotal) / (viewportWidth - displayedWidth);
-};
+/** Result of a resize/move for the caller to emit as an identity event. */
+export interface ColumnOperationResult {
+  columnId: string;
+  fromViewIndex: number;
+  toViewIndex: number;
+  /** Requested pin the move adopted, when the move changed it. */
+  pinned?: ColumnPin | null;
+  pinChanged: boolean;
+}
 
+/**
+ * Manual resize writes the pixel override directly: an override is never
+ * rescaled, so the displayed width matches what the user dragged.
+ */
 export const applyColumnResize = <TData>(
   colIndex: number,
   displayedWidth: number,
-  viewportWidth: number,
   deps: ColumnOperationDeps<TData>,
-): boolean => {
-  const column = deps.columns[colIndex];
-  if (column === undefined) return false;
-  column.width = column.hidden
-    ? displayedWidth
-    : computeStoredWidthForDisplayed(colIndex, displayedWidth, viewportWidth, deps.columns);
-  deps.computeColumnPositions();
-  deps.view.syncColumnLayout("geometry");
-  return true;
+): { columnId: string; width: number } | null => {
+  const column = deps.getLayout()[colIndex];
+  if (column === undefined) return null;
+  // The stored width and the reported width agree with the applied one.
+  const width = normalizeColumnWidth(displayedWidth);
+  const columnId = getColumnId(column);
+  // Commit the window through the shared geometry path before the batch
+  // publishes it: an uncommitted resolve would make the next scroll sample
+  // look like a window move (B6 requires no batch for an unchanged window).
+  deps.batcher.start();
+  try {
+    deps.setColumnWidth(columnId, width);
+    deps.refreshGeometry();
+    deps.view.syncColumnLayout("geometry");
+  } finally {
+    deps.batcher.flush();
+  }
+  return { columnId, width };
 };
 
 export const applyColumnMove = <TData>(
   fromIndex: number,
   toIndex: number,
   deps: ColumnOperationDeps<TData>,
-): number | null => {
-  if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= deps.columns.length) return null;
-  const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
-  if (adjustedTo < 0 || adjustedTo >= deps.columns.length) return null;
-  if (fromIndex === adjustedTo) return null;
-
-  const [col] = deps.columns.splice(fromIndex, 1);
-  deps.columns.splice(adjustedTo, 0, col!);
-
-  deps.computeColumnPositions();
-  deps.view.syncColumnLayout("order");
-  return adjustedTo;
+  admit: AdmitColumnChange = admitEveryChange,
+): ColumnOperationResult | null => {
+  const column = deps.getLayout()[fromIndex];
+  if (column === undefined) return null;
+  // A move repartitions by pin, so everything addressed by a column index
+  // follows its identity, exactly like a column-state command (B7).
+  const targets = captureColumnTargets(deps);
+  let applied: ColumnMoveResult | null = null;
+  deps.batcher.start();
+  try {
+    applied = deps.moveColumn(fromIndex, toIndex);
+    if (applied === null || admit() === false) return null;
+    deps.refreshGeometry();
+    deps.view.syncColumnLayout("order");
+    deps.selection.clearSelectionRange();
+    reconcileColumnTargets(deps, targets);
+    syncEditRetention(deps);
+  } finally {
+    deps.batcher.flush();
+  }
+  return {
+    columnId: getColumnId(column),
+    fromViewIndex: fromIndex,
+    toViewIndex: applied.toIndex,
+    pinned: applied.pinned,
+    pinChanged: applied.pinChanged,
+  };
 };
 
 export interface RowDragCommitDeps<TData> {
@@ -86,13 +118,14 @@ export interface RowDragCommitDeps<TData> {
   highlight: HighlightManager<TData> | null;
 }
 
+/** False when the source cannot move rows, so nothing changed. */
 export const applyRowDragCommit = <TData>(
   sourceIndex: number,
   targetIndex: number,
   deps: RowDragCommitDeps<TData>,
-): void => {
+): boolean => {
   const ds = deps.dataSource as { moveRow?: (from: number, to: number) => void };
-  if (!ds.moveRow) return;
+  if (!ds.moveRow) return false;
 
   ds.moveRow(sourceIndex, targetIndex);
   reorderCachedRows(deps.cachedRows, sourceIndex, targetIndex);
@@ -101,6 +134,7 @@ export const applyRowDragCommit = <TData>(
   const lo = Math.min(sourceIndex, targetIndex);
   const hi = Math.max(sourceIndex, targetIndex);
   for (let i = lo; i <= hi; i++) deps.slotPool.updateSlot(i);
+  return true;
 };
 
 export interface RefreshTransactionDeps<TData> {

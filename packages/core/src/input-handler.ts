@@ -4,7 +4,7 @@
 // handling in-place.
 
 import type { GridCore } from "./grid-core";
-import type { CellPosition, CellRange, SortDirection } from "./types";
+import type { CellPosition, CellRange, RowGroupResult, SortDirection } from "./types";
 import type {
   PointerEventData,
   KeyEventData,
@@ -12,11 +12,12 @@ import type {
   InputResult,
   KeyboardResult,
   DragMoveResult,
-  InputHandlerDeps,
   DragState,
+  ResizeTarget,
 } from "./types/input";
 import {
   ColumnResizeDrag,
+  RowResizeDrag,
   ColumnMoveDrag,
   RowDrag,
   SelectionDrag,
@@ -25,6 +26,13 @@ import {
   PendingCellTapState,
   KeyboardHandler,
   computeCellTarget,
+  applyGridResizeAction,
+  resolveHandleFit,
+  isGroupRow,
+  wheelDeltaToPx,
+  DOM_DELTA_PIXEL,
+  MotionGate,
+  type InputCommands,
 } from "./input";
 
 // =============================================================================
@@ -45,9 +53,10 @@ const cycleSortDirection = (
 
 export class InputHandler<TData = unknown> {
   private readonly core: GridCore<TData>;
-  private deps: InputHandlerDeps;
+  private readonly motion: MotionGate;
 
   readonly columnResize: ColumnResizeDrag<TData>;
+  readonly rowResize: RowResizeDrag<TData>;
   readonly columnMove: ColumnMoveDrag<TData>;
   readonly rowDrag: RowDrag<TData>;
   readonly selectionDrag: SelectionDrag<TData>;
@@ -55,23 +64,19 @@ export class InputHandler<TData = unknown> {
   private readonly pendingRowDrag = new PendingRowDragState();
   private readonly pendingCellTap = new PendingCellTapState();
   private readonly keyboard: KeyboardHandler<TData>;
+  private readonly commands: InputCommands;
 
-  constructor(core: GridCore<TData>, deps: InputHandlerDeps) {
+  constructor(core: GridCore<TData>, commands: InputCommands) {
     this.core = core;
-    this.deps = deps;
+    this.commands = commands;
+    this.motion = new MotionGate(core.viewport);
     this.columnResize = new ColumnResizeDrag(core);
-    this.columnMove = new ColumnMoveDrag(core, deps);
-    this.rowDrag = new RowDrag(core, deps);
+    this.rowResize = new RowResizeDrag(core, commands);
+    this.columnMove = new ColumnMoveDrag(core);
+    this.rowDrag = new RowDrag(core);
     this.selectionDrag = new SelectionDrag(core);
     this.fillDrag = new FillDrag(core);
-    this.keyboard = new KeyboardHandler(core);
-  }
-
-  /** Update dependencies (called when options change) */
-  updateDeps(deps: Partial<InputHandlerDeps>): void {
-    this.deps = { ...this.deps, ...deps };
-    this.columnMove.updateDeps(this.deps);
-    this.rowDrag.updateDeps(this.deps);
+    this.keyboard = new KeyboardHandler(core, commands);
   }
 
   // ---------------------------------------------------------------------------
@@ -87,6 +92,7 @@ export class InputHandler<TData = unknown> {
       fillSourceRange: fillSnapshot.sourceRange,
       fillTarget: fillSnapshot.target,
       columnResize: this.columnResize.getState(),
+      rowResize: this.rowResize.getState(),
       columnMove: this.columnMove.getState(),
       rowDrag: this.rowDrag.getState(),
     };
@@ -95,6 +101,7 @@ export class InputHandler<TData = unknown> {
   private getDragType(): DragState["dragType"] {
     if (this.fillDrag.isActive) return "fill";
     if (this.columnResize.isActive) return "column-resize";
+    if (this.rowResize.isActive) return "row-resize";
     if (this.columnMove.isDraggingForDisplay) return "column-move";
     if (this.rowDrag.isDraggingForDisplay) return "row-drag";
     if (this.selectionDrag.isActive) return "selection";
@@ -111,6 +118,7 @@ export class InputHandler<TData = unknown> {
     colHeight: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnMove.start(colIndex, colWidth, colHeight, event);
   }
 
@@ -119,7 +127,25 @@ export class InputHandler<TData = unknown> {
     colWidth: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.columnResize.start(colIndex, colWidth, event);
+  }
+
+  handleRowResizeMouseDown(
+    rowIndex: number,
+    rowHeight: number,
+    event: PointerEventData,
+  ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
+    if (this.core.rowHeights.isResizable() === false) return noopResult;
+    return this.rowResize.start(rowIndex, rowHeight, event);
+  }
+
+  /** A double-click on a column or row edge handle fits that target once. */
+  handleResizeDoubleClick(target: ResizeTarget): void {
+    if (this.motion.absorbClick()) return;
+    const action = resolveHandleFit(this.core, target);
+    if (action !== null) applyGridResizeAction(this.core, this.commands, action);
   }
 
   handleCellMouseDown(
@@ -127,16 +153,19 @@ export class InputHandler<TData = unknown> {
     colIndex: number,
     event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     if (event.button !== 0) return noopResult;
-    if (this.core.getEditState() !== null) return noopResult;
+    if (this.core.edit.getState() !== null) return noopResult;
 
     // Any new cell interaction closes an open peek overlay.
-    this.core.stopPeek();
+    this.core.edit.stopPeek();
 
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
+    // A hierarchy's order is derived, so no row drag starts.
     const wantsRowDrag =
-      (column?.rowDrag === true || this.core.isRowDragEntireRow()) &&
-      !event.shiftKey;
+      (column?.rowDrag === true || this.core.rowDrag.isEntireRow()) &&
+      !event.shiftKey &&
+      this.core.rowGroups.isActive() === false;
 
     if (wantsRowDrag && event.pointerType === "touch") {
       return this.startPendingRowDrag(rowIndex, colIndex, event);
@@ -219,12 +248,23 @@ export class InputHandler<TData = unknown> {
   }
 
   handleCellDoubleClick(rowIndex: number, colIndex: number): void {
-    const column = this.core.getColumns()[colIndex];
-    if (column?.editable) {
-      this.core.startEdit(rowIndex, colIndex);
+    if (this.motion.absorbClick()) return;
+    if (isGroupRow(this.core, rowIndex)) {
+      this.commands.toggleGroupAt(rowIndex);
       return;
     }
-    this.core.startPeek(rowIndex, colIndex);
+    const column = this.core.columns.get()[colIndex];
+    if (column?.editable) {
+      this.core.edit.start(rowIndex, colIndex);
+      return;
+    }
+    this.core.edit.startPeek(rowIndex, colIndex);
+  }
+
+  /** A pointer down on a group row's expander. */
+  handleGroupToggle(rowIndex: number, pointerType?: string): RowGroupResult {
+    if (this.motion.absorbPress(pointerType)) return { status: "unchanged" };
+    return this.commands.toggleGroupAt(rowIndex);
   }
 
   handleCellMouseEnter(rowIndex: number, colIndex: number): void {
@@ -238,16 +278,18 @@ export class InputHandler<TData = unknown> {
   handleFillHandleMouseDown(
     activeCell: CellPosition | null,
     selectionRange: CellRange | null,
-    _event: PointerEventData,
+    event: PointerEventData,
   ): InputResult {
+    if (this.motion.absorbPress(event.pointerType)) return swallowedResult;
     return this.fillDrag.start(activeCell, selectionRange);
   }
 
   handleHeaderClick(colId: string, addToExisting: boolean): void {
+    if (this.motion.absorbClick()) return;
     const currentDirection = this.core
-      .getSortModel()
+      .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
-    this.core.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
+    void this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
   }
 
   // ---------------------------------------------------------------------------
@@ -293,6 +335,7 @@ export class InputHandler<TData = unknown> {
     bounds: ContainerBounds,
   ): DragMoveResult | null {
     if (this.columnResize.isActive) return this.columnResize.move(event, bounds);
+    if (this.rowResize.isActive) return this.rowResize.move(event);
     if (this.columnMove.isActive) return this.columnMove.move(event, bounds);
     if (this.rowDrag.isActive) return this.rowDrag.move(event, bounds);
     return this.selectionFillMove(event, bounds);
@@ -305,7 +348,7 @@ export class InputHandler<TData = unknown> {
     const isActive = this.selectionDrag.isActive || this.fillDrag.isActive;
     if (isActive === false) return null;
 
-    const target = computeCellTarget(this.core, this.deps, event, bounds);
+    const target = computeCellTarget(this.core, event, bounds);
     this.selectionDrag.moveToTarget(target.row, target.col);
     this.fillDrag.moveToTarget(target.row, target.col);
     return {
@@ -317,6 +360,7 @@ export class InputHandler<TData = unknown> {
 
   handleDragEnd(): void {
     if (this.columnResize.isActive) return this.columnResize.end();
+    if (this.rowResize.isActive) return this.rowResize.end();
     if (this.columnMove.isActive) return this.columnMove.end(cycleSortDirection);
     if (this.rowDrag.isActive) return this.rowDrag.end();
     this.selectionDrag.end();
@@ -327,13 +371,18 @@ export class InputHandler<TData = unknown> {
   // Wheel
   // ---------------------------------------------------------------------------
 
+  /** Only the vertical axis is scaled, so only `dy` is dampened. */
   handleWheel(
     deltaY: number,
     deltaX: number,
     dampening: number,
+    deltaMode = DOM_DELTA_PIXEL,
   ): { dy: number; dx: number } | null {
-    if (!this.core.isScalingActive()) return null;
-    return { dy: deltaY * dampening, dx: deltaX * dampening };
+    if (this.core.viewport.isScaling() === false) return null;
+    return {
+      dy: wheelDeltaToPx(deltaY, deltaMode) * dampening,
+      dx: wheelDeltaToPx(deltaX, deltaMode),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -351,3 +400,4 @@ export class InputHandler<TData = unknown> {
 }
 
 const noopResult: InputResult = { preventDefault: false, stopPropagation: false };
+const swallowedResult: InputResult = { preventDefault: true, stopPropagation: true };

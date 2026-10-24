@@ -1,9 +1,19 @@
 // packages/react/src/renderers/editRenderer.tsx
 
 import React from "react";
-import type { GridCore, ColumnDefinition, CellValue, EditRendererParams } from "@gp-grid/core";
+import { focusGridContainer } from "@gp-grid/core";
+import type {
+  GridCore,
+  ColumnDefinition,
+  CellValue,
+  RowId,
+  EditRendererParams,
+} from "@gp-grid/core";
 import type { ReactEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
+
+/** Stable, so React calls it once when the editor mounts, not on every render. */
+const focusOnMount = (input: HTMLInputElement | null): void => input?.focus();
 
 export interface RenderEditCellOptions<TData> {
   column: ColumnDefinition;
@@ -11,9 +21,17 @@ export interface RenderEditCellOptions<TData> {
   rowIndex: number;
   colIndex: number;
   initialValue: CellValue;
+  /** Session token of the open edit; tags every editor callback. */
+  editId: number;
   coreRef: React.RefObject<GridCore<TData> | null>;
   editRenderers: Record<string, ReactEditRenderer>;
   globalEditRenderer?: ReactEditRenderer;
+  /** Pre-resolved raw value read through the core (record-less rows). */
+  rawValue?: CellValue;
+  /** Stable identity for the row, when the source exposes one. */
+  rowId?: RowId;
+  /** Read another field's raw value at this row without a record. */
+  getValue?: (field: string) => CellValue;
 }
 
 /**
@@ -28,21 +46,28 @@ export function renderEditCell<TData>(
     rowIndex,
     colIndex,
     initialValue,
+    editId,
     coreRef,
     editRenderers,
     globalEditRenderer,
+    rawValue: providedRawValue,
+    rowId,
+    getValue,
   } = options;
 
   const core = coreRef.current;
   if (!core) return null;
 
-  const rawValue = getCellValue(rowData, column.field);
+  const rawValue = providedRawValue ?? getCellValue(rowData, column.field);
   const displayValue = column.valueFormatter
     ? column.valueFormatter(rawValue)
     : rawValue;
   const params: EditRendererParams = {
     value: displayValue,
     rowData,
+    rowId,
+    columnId: column.colId ?? column.field,
+    getValue,
     column,
     rowIndex,
     colIndex,
@@ -50,9 +75,9 @@ export function renderEditCell<TData>(
     isSelected: true,
     isEditing: true,
     initialValue,
-    onValueChange: (newValue) => core.updateEditValue(newValue),
-    onCommit: () => core.commitEdit(),
-    onCancel: () => core.cancelEdit(),
+    onValueChange: (newValue) => core.edit.updateValue(newValue, editId),
+    onCommit: () => core.edit.commit(editId),
+    onCancel: () => core.edit.cancel(editId),
   };
 
   // Check for column-specific renderer
@@ -77,22 +102,25 @@ export function renderEditCell<TData>(
       className="gp-grid-edit-input"
       type="text"
       defaultValue={initialValue == null ? "" : String(initialValue)}
-      autoFocus
+      ref={focusOnMount}
       onFocus={(e) => e.target.select()}
-      onChange={(e) => core.updateEditValue(e.target.value)}
+      onChange={(e) => core.edit.updateValue(e.target.value, editId)}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") {
-          core.commitEdit();
+          core.edit.commit(editId);
         } else if (e.key === "Escape") {
-          core.cancelEdit();
+          core.edit.cancel(editId);
         } else if (e.key === "Tab") {
           e.preventDefault();
-          core.commitEdit();
+          core.edit.commit(editId);
           core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
+        } else {
+          return;
         }
+        focusGridContainer(e.currentTarget);
       }}
-      onBlur={() => core.commitEdit()}
+      onBlur={() => core.edit.commit(editId)}
     />
   );
 }

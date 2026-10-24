@@ -6,12 +6,6 @@
 // down to their filter popup / body components, so a user only has to
 // override the labels they care about via the `labels` prop/input.
 
-import type {
-  DateFilterOperator,
-  NumberFilterOperator,
-  TextFilterOperator,
-} from "./types";
-
 /** Labels for the filter operator dropdowns, keyed by semantic meaning. */
 export interface GridFilterOperatorLabels {
   /** Text operator: contains */
@@ -43,9 +37,45 @@ export interface GridFilterOperatorLabels {
 }
 
 /**
+ * Rejection messages of a column-group change, keyed by error code.
+ * Token `{id}` names the group or column, `{limit}` the exceeded budget.
+ */
+export interface GridColumnSchemaErrorLabels {
+  /** A group contains itself. Token: `{id}`. */
+  cycle: string;
+  /** Two groups share an id. Token: `{id}`. */
+  duplicateGroup: string;
+  /** A column is referenced twice. Token: `{id}`. */
+  repeatedLeaf: string;
+  /** A reference names no column. Token: `{id}`. */
+  unknownLeaf: string;
+  /** A column is not referenced. Token: `{id}`. */
+  missingLeaf: string;
+  /** A group sits under two parents. Token: `{id}`. */
+  multipleParents: string;
+  /** A group id equals a column id. Token: `{id}`. */
+  idCollision: string;
+  /** A child is neither a column id nor a group. */
+  malformed: string;
+  /** A budget is exceeded. Token: `{limit}`. */
+  limit: string;
+}
+
+/** Group and total row labels (PRD 008). */
+export interface GridRowGroupLabels {
+  /** Group row label. Tokens: `{value}`, the formatted key, and `{count}`, its records. */
+  label: string;
+  /** Grand total row label. Token: `{count}`. */
+  grandTotal: string;
+  /** Title of a group's label cell after its children failed to load (PRD 009). */
+  loadFailed: string;
+}
+
+/**
  * All user-visible grid labels. Strings containing `{token}` placeholders are
  * templates interpolated by {@link formatLabel}; the documented tokens are
- * `{column}`, `{count}`, and `{message}`.
+ * `{column}`, `{count}`, `{message}`, `{effective}`, `{requested}`, `{id}`
+ * and `{limit}`.
  */
 export interface GridLabels {
   /** Filter popup title template. Token: `{column}`. */
@@ -86,18 +116,38 @@ export interface GridLabels {
   tooManyValues: string;
   /** Empty grid message */
   emptyState: string;
+  /** Pin-left action accessible name */
+  pinLeftColumn: string;
+  /** Pin-right action accessible name */
+  pinRightColumn: string;
+  /** Unpin action accessible name */
+  unpinColumn: string;
+  /**
+   * Frozen-prefix limit announcement. Tokens: `{effective}`, `{requested}`.
+   * Announced when the effective count or its limit reason changes.
+   */
+  frozenRowsLimited: string;
   /** Error message prefix template. Token: `{message}`. */
   errorPrefix: string;
   /** Filter operator labels */
   operators: GridFilterOperatorLabels;
+  /** Column-group rejection messages, also announced. */
+  columnSchemaErrors: GridColumnSchemaErrorLabels;
+  /** Group and total row labels. */
+  rowGroups: GridRowGroupLabels;
 }
 
 /**
  * Consumer overrides for grid labels. Every top-level label and every nested
- * operator label can be changed independently.
+ * operator, schema-error and row-group label can be changed independently.
  */
-export type GridLabelOverrides = Omit<Partial<GridLabels>, "operators"> & {
+export type GridLabelOverrides = Omit<
+  Partial<GridLabels>,
+  "operators" | "columnSchemaErrors" | "rowGroups"
+> & {
   operators?: Partial<GridFilterOperatorLabels>;
+  columnSchemaErrors?: Partial<GridColumnSchemaErrorLabels>;
+  rowGroups?: Partial<GridRowGroupLabels>;
 };
 
 /** English defaults for every grid label. */
@@ -122,6 +172,10 @@ export const defaultGridLabels: GridLabels = {
   tooManyValues:
     "Too many unique values ({count}). Use conditions to filter.",
   emptyState: "No data to display",
+  pinLeftColumn: "Pin left",
+  pinRightColumn: "Pin right",
+  unpinColumn: "Unpin",
+  frozenRowsLimited: "{effective} of {requested} rows frozen",
   errorPrefix: "Error: {message}",
   operators: {
     contains: "Contains",
@@ -138,12 +192,29 @@ export const defaultGridLabels: GridLabels = {
     blank: "Is blank",
     notBlank: "Is not blank",
   },
+  columnSchemaErrors: {
+    cycle: 'Column group "{id}" contains itself',
+    duplicateGroup: 'Column group id "{id}" is used more than once',
+    repeatedLeaf: 'Column "{id}" is referenced more than once',
+    unknownLeaf: 'Column groups reference unknown column "{id}"',
+    missingLeaf: 'Column "{id}" is missing from the column groups',
+    multipleParents: 'Column group "{id}" has more than one parent',
+    idCollision: 'Column group id "{id}" is also a column id',
+    malformed: "Column groups contain an invalid entry",
+    limit: "Column groups exceed the {limit} budget",
+  },
+  rowGroups: {
+    label: "{value} ({count})",
+    grandTotal: "Grand total",
+    loadFailed: "Loading failed. Expand again to retry.",
+  },
 };
 
 /**
  * Merge a partial label set over the English defaults, producing a complete
- * `GridLabels`. Top-level keys are shallow-merged and `operators` is merged
- * one level deep; the defaults are never mutated.
+ * `GridLabels`. Top-level keys are shallow-merged, and `operators`,
+ * `columnSchemaErrors` and `rowGroups` one level deep; the defaults are
+ * never mutated.
  */
 export const resolveGridLabels = (
   overrides?: GridLabelOverrides,
@@ -153,6 +224,14 @@ export const resolveGridLabels = (
   operators: {
     ...defaultGridLabels.operators,
     ...overrides?.operators,
+  },
+  columnSchemaErrors: {
+    ...defaultGridLabels.columnSchemaErrors,
+    ...overrides?.columnSchemaErrors,
+  },
+  rowGroups: {
+    ...defaultGridLabels.rowGroups,
+    ...overrides?.rowGroups,
   },
 });
 
@@ -169,59 +248,9 @@ export const formatLabel = (
     return value !== undefined ? String(value) : match;
   });
 
-/** A single operator option rendered in a filter dropdown. */
-export interface FilterOperatorOption<TOperator extends string = string> {
-  value: TOperator;
-  label: string;
-}
-
-/** Text filter operators in display order. */
-export const getTextOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<TextFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "contains", label: op.contains },
-    { value: "notContains", label: op.notContains },
-    { value: "equals", label: op.equals },
-    { value: "notEquals", label: op.notEquals },
-    { value: "startsWith", label: op.startsWith },
-    { value: "endsWith", label: op.endsWith },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
-
-/** Number filter operators in display order. */
-export const getNumberOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<NumberFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "=", label: op.equals },
-    { value: "!=", label: op.notEquals },
-    { value: ">", label: op.greaterThan },
-    { value: "<", label: op.lessThan },
-    { value: ">=", label: op.greaterThanOrEqual },
-    { value: "<=", label: op.lessThanOrEqual },
-    { value: "between", label: op.between },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
-
-/** Date filter operators in display order. */
-export const getDateOperatorOptions = (
-  labels: GridLabels,
-): FilterOperatorOption<DateFilterOperator>[] => {
-  const op = labels.operators;
-  return [
-    { value: "=", label: op.equals },
-    { value: "!=", label: op.notEquals },
-    { value: ">", label: op.greaterThan },
-    { value: "<", label: op.lessThan },
-    { value: "between", label: op.between },
-    { value: "blank", label: op.blank },
-    { value: "notBlank", label: op.notBlank },
-  ];
-};
+export {
+  getTextOperatorOptions,
+  getNumberOperatorOptions,
+  getDateOperatorOptions,
+} from "./i18n-operator-options";
+export type { FilterOperatorOption } from "./i18n-operator-options";

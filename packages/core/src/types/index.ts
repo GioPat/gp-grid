@@ -6,6 +6,7 @@ export type {
   CellDataType,
   CellValue,
   RowId,
+  ViewRow,
   SortDirection,
   SortModel,
   CellPosition,
@@ -14,8 +15,39 @@ export type {
   EditState,
   FillHandleState,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
+  WriteRejectionReason,
+  WriteOperation,
+  WriteChange,
+  WriteCommittedEvent,
   SlotState,
+  RowHeightUpdate,
 } from "./basic";
+
+/** Object-shaped interaction events */
+export type {
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  ColumnPinnedEvent,
+  RowDragEndEvent,
+  RowResizedEvent,
+} from "./events";
+
+// One-shot measurement and fit results
+export type {
+  MeasurementHost,
+  RowMeasurement,
+  ColumnMeasurement,
+  FitStatus,
+  FitClamp,
+  RowFitEntry,
+  RowFitSkip,
+  RowFitResult,
+  ColumnFitEntry,
+  ColumnFitSkip,
+  ColumnFitResult,
+} from "./measurement";
 
 // Highlighting types (must come before columns, which depends on these)
 export type {
@@ -25,7 +57,27 @@ export type {
 } from "./highlighting";
 
 // Column types
-export type { ColumnDefinition } from "./columns";
+export type {
+  ColumnDefinition,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
+  ColumnModelState,
+} from "./columns";
+
+// Nested column-group descriptors and schema results
+export type {
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaError,
+  ColumnSchemaResult,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+} from "./column-groups";
 
 // Filter types
 export type {
@@ -52,7 +104,62 @@ export type {
   DataSourceRange,
   DataSourceLoadMode,
   DataSource,
+  RowAccess,
 } from "./data-source";
+
+// Hierarchical rows
+export type {
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchyChange,
+  HierarchicalRowAccess,
+  RowGroupDimension,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupMeasure,
+  RowGroupingConfig,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+} from "./row-groups";
+export { isHierarchicalRowAccess } from "./row-groups";
+
+// Server grouping service
+export type {
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+} from "./server-grouping";
+
+// Pivot schema and configuration
+export type {
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
+} from "./pivot";
+
+// Columnar source types
+export type {
+  ColumnarField,
+  ColumnarDataSourceOptions,
+  ColumnarAccess,
+  ColumnarDataSource,
+} from "./columnar";
+export { isColumnarDataSource } from "./columnar";
 
 // Instruction types
 export type {
@@ -72,6 +179,7 @@ export type {
   StopPeekInstruction,
   SetContentSizeInstruction,
   UpdateHeaderInstruction,
+  RemoveHeadersInstruction,
   OpenFilterPopupInstruction,
   CloseFilterPopupInstruction,
   StartFillInstruction,
@@ -82,6 +190,10 @@ export type {
   DataLoadedInstruction,
   DataErrorInstruction,
   ColumnsChangedInstruction,
+  SetColumnWindowInstruction,
+  SetRowRegionsInstruction,
+  SetHeaderBandsInstruction,
+  SetAnnouncementInstruction,
   GridInstruction,
   InstructionListener,
   BatchInstructionListener,
@@ -90,13 +202,43 @@ export type {
 // Renderer types
 export type {
   CellRendererParams,
+  GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  ColumnGroupHeaderParams,
 } from "./renderers";
+
+// Geometry types
+export type {
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  ColumnPin,
+  ColumnRegion,
+  ColumnRegionLayout,
+  ColumnWindowSnapshot,
+  DisplayedColumn,
+  ResolvedColumn,
+  HeaderBandLayout,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  RowScrollEdges,
+  ContentSize,
+  GridGeometry,
+  RowRegion,
+  FrozenRowsState,
+  RowRegionLayout,
+} from "./geometry";
 
 // Options types
 export type {
   GridCoreOptions,
+  HistoryOptions,
+  AutoFitOptions,
+  FreezeRowsOptions,
   RowLoadingOptions,
   RowLoadingMode,
   RowCacheOptions,
@@ -111,9 +253,10 @@ export type {
   InputResult,
   KeyboardResult,
   DragMoveResult,
-  InputHandlerDeps,
   DragState,
   ColumnResizeDragState,
   ColumnMoveDragState,
   RowDragState,
+  RowResizeDragState,
+  ResizeTarget,
 } from "./input";

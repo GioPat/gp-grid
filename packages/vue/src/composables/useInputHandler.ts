@@ -4,9 +4,9 @@ import {
   ref,
   watch,
   onUnmounted,
-  type Ref,
   type ShallowRef,
   type ComputedRef,
+  type Ref,
 } from "vue";
 import type {
   GridCore,
@@ -16,33 +16,29 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
-  SlotData,
-  VisibleColumnInfo,
+  InputResult,
+  ResizeTarget,
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
+  readContainerBounds,
+  readIsRtl,
+  normalizeHorizontalKey,
   PendingCellTapController,
   TAP_SLOP_PX,
   ROW_DRAG_HOLD_MS,
 } from "@gp-grid/core";
 import { useAutoScroll } from "./useAutoScroll";
 
-// Re-export for backwards compatibility
-export type { VisibleColumnInfo } from "@gp-grid/core";
-
 export interface UseInputHandlerOptions {
   activeCell: ComputedRef<CellPosition | null>;
   selectionRange: ComputedRef<CellRange | null>;
   editingCell: ComputedRef<{ row: number; col: number } | null>;
   filterPopupOpen: ComputedRef<boolean>;
-  rowHeight: number;
-  headerHeight: number;
-  columnPositions: ComputedRef<number[]>;
-  columnWidths: ComputedRef<number[]>;
-  /** Visible columns with their original indices (for hidden column support) */
-  visibleColumnsWithIndices: ComputedRef<VisibleColumnInfo[]>;
-  slots: ComputedRef<Map<string, SlotData>>;
-  rowsWrapperOffset: ComputedRef<number>;
+  /** Cancel an active synthetic fling before a programmatic scroll target. */
+  onBeforeProgrammaticScroll?: () => void;
+  /** Apply a dampened wheel delta keeping its fraction; false writes it directly. */
+  scrollByWheel?: (domDy: number) => boolean;
 }
 
 export interface UseInputHandlerResult {
@@ -56,6 +52,8 @@ export interface UseInputHandlerResult {
   handleHeaderClick: (colIndex: number, e: MouseEvent) => void;
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: PointerEvent) => void;
+  handleRowResizeMouseDown: (rowIndex: number, rowHeight: number, e: PointerEvent) => void;
+  handleResizeDoubleClick: (target: ResizeTarget) => void;
   handleKeyDown: (e: KeyboardEvent) => void;
   handlePaste: (e: ClipboardEvent) => void;
   handleWheel: (e: WheelEvent, wheelDampening: number) => void;
@@ -80,13 +78,6 @@ export function useInputHandler<TData = unknown>(
     selectionRange,
     editingCell,
     filterPopupOpen,
-    rowHeight,
-    headerHeight,
-    columnPositions,
-    columnWidths,
-    visibleColumnsWithIndices,
-    slots,
-    rowsWrapperOffset,
   } = options;
 
   // Drag state for UI (mirrors core's InputHandler state)
@@ -96,6 +87,7 @@ export function useInputHandler<TData = unknown>(
     fillSourceRange: null,
     fillTarget: null,
     columnResize: null,
+    rowResize: null,
     columnMove: null,
     rowDrag: null,
   });
@@ -134,46 +126,11 @@ export function useInputHandler<TData = unknown>(
     }
   });
 
-  // Update InputHandler deps when options change
-  watch(
-    [
-      () => headerHeight,
-      () => rowHeight,
-      columnPositions,
-      visibleColumnsWithIndices,
-    ],
-    () => {
-      const core = coreRef.value;
-      if (core?.input) {
-        const visible = visibleColumnsWithIndices.value;
-        core.input.updateDeps({
-          getHeaderHeight: () => headerHeight,
-          getRowHeight: () => rowHeight,
-          getColumnPositions: () => columnPositions.value,
-          getColumnCount: () => visible.length,
-          getOriginalColumnIndex: (visibleIndex: number) => {
-            const info = visible[visibleIndex];
-            return info ? info.originalIndex : visibleIndex;
-          },
-        });
-      }
-    },
-    { immediate: true },
-  );
-
-  // Get container bounds
+  // Get container bounds (client box, inline-relative scroll)
   function getContainerBounds(): ContainerBounds | null {
     const container = containerRef.value;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: container.scrollTop,
-      scrollLeft: container.scrollLeft,
-    };
+    if (container === null) return null;
+    return readContainerBounds(container);
   }
 
   // Convert pointer event to PointerEventData
@@ -233,7 +190,7 @@ export function useInputHandler<TData = unknown>(
         const core = coreRef.value;
         const newState = core?.input
           ? core.input.getDragState()
-          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, columnMove: null, rowDrag: null };
+          : { isDragging: false, dragType: null, fillSourceRange: null, fillTarget: null, columnResize: null, rowResize: null, columnMove: null, rowDrag: null };
         dragState.value = newState;
         lastMouseEvent = null;
         stopAutoScroll();
@@ -434,6 +391,15 @@ export function useInputHandler<TData = unknown>(
     }
   }
 
+  function startResizeDrag(core: GridCore<TData>, result: InputResult, e: PointerEvent): void {
+    if (result.preventDefault) e.preventDefault();
+    if (result.stopPropagation) e.stopPropagation();
+    if (result.startDrag === "column-resize" || result.startDrag === "row-resize") {
+      dragState.value = core.input.getDragState();
+      startGlobalDragListeners();
+    }
+  }
+
   function handleHeaderResizeMouseDown(
     colIndex: number,
     colWidth: number,
@@ -441,19 +407,19 @@ export function useInputHandler<TData = unknown>(
   ): void {
     const core = coreRef.value;
     if (!core?.input) return;
+    const result = core.input.handleHeaderResizeMouseDown(colIndex, colWidth, toPointerEventData(e));
+    startResizeDrag(core, result, e);
+  }
 
-    const result = core.input.handleHeaderResizeMouseDown(
-      colIndex,
-      colWidth,
-      toPointerEventData(e),
-    );
+  function handleRowResizeMouseDown(rowIndex: number, rowHeight: number, e: PointerEvent): void {
+    const core = coreRef.value;
+    if (!core?.input) return;
+    const result = core.input.handleRowResizeMouseDown(rowIndex, rowHeight, toPointerEventData(e));
+    startResizeDrag(core, result, e);
+  }
 
-    if (result.preventDefault) e.preventDefault();
-    if (result.stopPropagation) e.stopPropagation();
-    if (result.startDrag === "column-resize") {
-      dragState.value = core.input.getDragState();
-      startGlobalDragListeners();
-    }
+  function handleResizeDoubleClick(target: ResizeTarget): void {
+    coreRef.value?.input?.handleResizeDoubleClick(target);
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
@@ -463,10 +429,13 @@ export function useInputHandler<TData = unknown>(
 
     const result = core.input.handleKeyDown(
       {
-        key: e.key,
+        // Arrows are normalized here, not in core: selection is
+        // direction-agnostic and the editor sees the physical key.
+        key: normalizeHorizontalKey(e.key, readIsRtl(container)),
         shiftKey: e.shiftKey,
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
+        altKey: e.altKey,
       },
       activeCell.value,
       editingCell.value,
@@ -476,21 +445,13 @@ export function useInputHandler<TData = unknown>(
     if (result.preventDefault) {
       e.preventDefault();
     }
+    if (result.focusContainer) {
+      container?.focus({ preventScroll: true });
+    }
     if (result.scrollToCell && container) {
-      scrollCellIntoView(
-        core,
-        container,
-        result.scrollToCell.row,
-        rowHeight,
-        slots.value,
-        rowsWrapperOffset.value,
-        {
-          colIndex: result.scrollToCell.col,
-          visibleColumns: visibleColumnsWithIndices.value,
-          columnPositions: columnPositions.value,
-          columnWidths: columnWidths.value,
-        },
-      );
+      // Cancel any active touch fling before a programmatic scroll target.
+      options.onBeforeProgrammaticScroll?.();
+      scrollCellIntoView(core, container, result.scrollToCell.row, result.scrollToCell.col);
     }
   }
 
@@ -501,7 +462,7 @@ export function useInputHandler<TData = unknown>(
     if (filterPopupOpen.value) return;
 
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    if (core.pasteClipboardText(text)) {
+    if (core.edit.paste(text)) {
       e.preventDefault();
     }
   }
@@ -511,11 +472,11 @@ export function useInputHandler<TData = unknown>(
     const container = containerRef.value;
     if (!core?.input || !container) return;
 
-    const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening);
+    const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening, e.deltaMode);
     if (dampened) {
       e.preventDefault();
-      container.scrollTop += dampened.dy;
-      container.scrollLeft += dampened.dx;
+      if (options.scrollByWheel?.(dampened.dy) !== true) container.scrollTop += dampened.dy;
+      if (dampened.dx !== 0) container.scrollLeft += dampened.dx;
     }
   }
 
@@ -541,6 +502,8 @@ export function useInputHandler<TData = unknown>(
     handleHeaderClick,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
+    handleRowResizeMouseDown,
+    handleResizeDoubleClick,
     handleKeyDown,
     handlePaste,
     handleWheel,

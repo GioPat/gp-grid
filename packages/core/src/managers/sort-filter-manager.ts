@@ -1,14 +1,20 @@
 import type {
   ColumnDefinition,
   CellValue,
+  RowAccess,
   SortModel,
   SortDirection,
   FilterModel,
   ColumnFilterInput,
   ColumnFilterModel,
 } from "./../types";
-import { createInstructionEmitter, getFieldValue, formatCellValue } from "./../utils";
-import { rawValueKey } from "../filtering/distinct-entries";
+import { createInstructionEmitter } from "./../utils";
+import {
+  accessReader,
+  cachedRowReader,
+  collectDistinctValues,
+  sortDistinctValues,
+} from "../filtering/distinct-values";
 import { normalizeColumnFilterModel } from "../filtering/normalize";
 
 const DISTINCT_SCAN_WARN_THRESHOLD = 10_000;
@@ -24,10 +30,17 @@ export interface SortFilterManagerOptions<TData> {
   isSortingEnabled: () => boolean;
   /** Get cached rows for distinct value computation */
   getCachedRows: () => Map<number, TData>;
+  /**
+   * Scalar access for a record-less (columnar) source. When present it is the
+   * distinct-value scan source, so the popup does not rely on a row cache.
+   */
+  getRowAccess?: () => RowAccess | null;
   /** Called when sort/filter changes to trigger data refresh */
   onSortFilterChange: () => Promise<void>;
   /** Called after data refresh to update UI */
   onDataRefreshed: () => void;
+  /** Sort, filter and the filter popup are ignored while a load is in flight. */
+  isLoading?: () => boolean;
 }
 
 // =============================================================================
@@ -44,7 +57,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   // Sort & Filter state
   private sortModel: SortModel[] = [];
   private filterModel: FilterModel = {};
-  private openFilterColIndex: number | null = null;
+  private openFilterColId: string | null = null;
   private readonly scanWarnedCols = new Set<string>();
   private readonly truncationWarnedCols = new Set<string>();
   private readonly typeMismatchWarnedCols = new Set<string>();
@@ -66,6 +79,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     direction: SortDirection | null,
     addToExisting: boolean = false,
   ): Promise<void> {
+    if (this.isLoading()) return;
     // Check if sorting is enabled globally
     if (!this.options.isSortingEnabled()) return;
 
@@ -92,6 +106,10 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     this.options.onDataRefreshed();
   }
 
+  private isLoading(): boolean {
+    return this.options.isLoading?.() === true;
+  }
+
   getSortModel(): SortModel[] {
     return [...this.sortModel];
   }
@@ -104,6 +122,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     colId: string,
     filter: ColumnFilterInput | string | null,
   ): Promise<void> {
+    if (this.isLoading()) return;
     const columns = this.options.getColumns();
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (column?.filterable === false) return;
@@ -241,7 +260,7 @@ export class SortFilterManager<TData = Record<string, unknown>> {
    * console warning advises the consumer to pre-supply `distinctValues`
    * on the column to skip the full scan.
    *
-   * Values are deduplicated by RAW identity ({@link rawValueKey}), not by
+   * Values are deduplicated by RAW identity (see `normalizeDistinctValue`), not by
    * display label: when a `valueFormatter` collapses several raw values into
    * one label, every raw value survives so the popup can select them all.
    * Consequently `maxValues` caps raw values, not labels. If the cap
@@ -256,88 +275,38 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     const column = columns.find((c) => (c.colId ?? c.field) === colId);
     if (!column) return [];
 
-    const formatter = column.valueFormatter;
-
-    const sourceValues = column.distinctValues
-      ?? this.scanDistinctValues(column, maxValues);
-
-    const valuesMap = new Map<string, CellValue>();
-    for (const value of sourceValues) {
-      if (valuesMap.size >= maxValues) {
-        this.warnTruncatedFormattedDomain(colId, formatter);
-        break;
-      }
-      const [key, normalized] = this.normalizeDistinctValue(value);
-      if (!valuesMap.has(key)) {
-        valuesMap.set(key, normalized);
-      }
-    }
-
-    const results = Array.from(valuesMap.values());
-    results.sort((a, b) => {
-      const strA = formatCellValue(a, formatter);
-      const strB = formatCellValue(b, formatter);
-      return strA.localeCompare(strB, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    });
-
-    return results;
+    const source = column.distinctValues ?? this.scanDistinctValues(column, maxValues);
+    const scan = collectDistinctValues(source.length, (index) => source[index], maxValues);
+    if (scan.truncated) this.warnTruncatedFormattedDomain(colId, column.valueFormatter);
+    return sortDistinctValues(scan.values, column.valueFormatter);
   }
 
+  /** Scan the bound source: scalar access for a record-less source, else the row cache. */
   private scanDistinctValues(
     column: ColumnDefinition,
     maxValues: number,
   ): CellValue[] {
-    const cachedRows = this.options.getCachedRows();
-    const total = cachedRows.size;
     const colId = column.colId ?? column.field;
+    const rowAccess = this.options.getRowAccess?.() ?? null;
+    const cachedRows = this.options.getCachedRows();
+    const total = rowAccess === null ? cachedRows.size : rowAccess.rowCount;
+    this.warnLargeDistinctScan(colId, total);
 
-    if (total > DISTINCT_SCAN_WARN_THRESHOLD && !this.scanWarnedCols.has(colId)) {
-      this.scanWarnedCols.add(colId);
-      console.warn(
-        `[gp-grid] Scanning ${total} rows to compute distinct values for column "${colId}". `
-        + `Pre-supply ColumnDefinition.distinctValues to skip this scan.`,
-      );
-    }
-
-    const valuesMap = new Map<string, CellValue>();
-    for (let i = 0; i < total; i++) {
-      const row = cachedRows.get(i);
-      if (row === undefined) continue;
-      if (valuesMap.size >= maxValues) {
-        this.warnTruncatedFormattedDomain(colId, column.valueFormatter);
-        break;
-      }
-      const value = getFieldValue(row, column.field);
-      const [key, normalized] = this.normalizeDistinctValue(value);
-      if (!valuesMap.has(key)) {
-        valuesMap.set(key, normalized);
-      }
-    }
-    return Array.from(valuesMap.values());
+    const readAt = rowAccess === null
+      ? cachedRowReader(cachedRows, column.field)
+      : accessReader(rowAccess, column.field);
+    const scan = collectDistinctValues(total, readAt, maxValues);
+    if (scan.truncated) this.warnTruncatedFormattedDomain(colId, column.valueFormatter);
+    return scan.values;
   }
 
-  /**
-   * Normalize a cell value into a dedup key and the value to store.
-   * Arrays are sorted lexicographically so different orderings produce the
-   * same key. The key is the RAW identity ({@link rawValueKey}) — display
-   * formatting is intentionally not part of it, so raw values that share a
-   * label all survive deduplication and the values-mode filter can select
-   * every one of them.
-   */
-  private normalizeDistinctValue(value: CellValue): [string, CellValue] {
-    if (Array.isArray(value)) {
-      const sorted = [...value].sort((a, b) => {
-        const sa = String(a);
-        const sb = String(b);
-        if (sa === sb) return 0;
-        return sa < sb ? -1 : 1;
-      });
-      return [rawValueKey(sorted), sorted];
-    }
-    return [rawValueKey(value), value];
+  private warnLargeDistinctScan(colId: string, total: number): void {
+    if (total <= DISTINCT_SCAN_WARN_THRESHOLD || this.scanWarnedCols.has(colId)) return;
+    this.scanWarnedCols.add(colId);
+    console.warn(
+      `[gp-grid] Scanning ${total} rows to compute distinct values for column "${colId}". `
+      + `Pre-supply ColumnDefinition.distinctValues to skip this scan.`,
+    );
   }
 
   /**
@@ -376,23 +345,25 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     anchorRect: { top: number; left: number; width: number; height: number },
     computeDistinctValues: boolean = true,
   ): void {
-    // If clicking on the same column's filter icon, close the popup
-    if (this.openFilterColIndex === colIndex) {
-      this.closeFilterPopup();
-      return;
-    }
-
+    if (this.isLoading()) return;
     const columns = this.options.getColumns();
     const column = columns[colIndex];
     if (!column || !this.isColumnFilterable(colIndex)) return;
 
     const colId = column.colId ?? column.field;
+
+    // If clicking on the same column's filter icon, close the popup
+    if (this.openFilterColId === colId) {
+      this.closeFilterPopup();
+      return;
+    }
+
     let distinctValues: CellValue[] = [];
     if (computeDistinctValues) {
       distinctValues = this.getDistinctValuesForColumn(colId);
     }
 
-    this.openFilterColIndex = colIndex;
+    this.openFilterColId = colId;
     this.emit({
       type: "OPEN_FILTER_POPUP",
       colIndex,
@@ -404,11 +375,33 @@ export class SortFilterManager<TData = Record<string, unknown>> {
   }
 
   /**
-   * Close filter popup
+   * Close the filter popup. Emits CLOSE_FILTER_POPUP through the batcher, so a
+   * call during schema reconciliation lands in that batch.
    */
   closeFilterPopup(): void {
-    this.openFilterColIndex = null;
+    this.openFilterColId = null;
     this.emit({ type: "CLOSE_FILTER_POPUP" });
+  }
+
+  /**
+   * Drop sort/filter entries whose column left the layout. Returns true when
+   * the data must be re-queried (a removed filter or sort changed the query).
+   */
+  reconcileColumns(validIds: ReadonlySet<string>): boolean {
+    const previousSortCount = this.sortModel.length;
+    this.sortModel = this.sortModel.filter((sort) => validIds.has(sort.colId));
+    let changed = this.sortModel.length !== previousSortCount;
+
+    for (const colId of Object.keys(this.filterModel)) {
+      if (validIds.has(colId)) continue;
+      delete this.filterModel[colId];
+      changed = true;
+    }
+
+    if (this.openFilterColId !== null && !validIds.has(this.openFilterColId)) {
+      this.closeFilterPopup();
+    }
+    return changed;
   }
 
   // ===========================================================================
@@ -440,6 +433,6 @@ export class SortFilterManager<TData = Record<string, unknown>> {
     this.emitter.clearListeners();
     this.sortModel = [];
     this.filterModel = {};
-    this.openFilterColIndex = null;
+    this.openFilterColId = null;
   }
 }

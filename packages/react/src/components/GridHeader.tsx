@@ -1,109 +1,218 @@
 // packages/react/src/components/GridHeader.tsx
 
-import React from "react";
-import type { GridCore, ColumnDefinition, SortDirection, HeaderData, VisibleColumnInfo } from "@gp-grid/core";
-import { renderHeader } from "../renderers/headerRenderer";
-import type { ReactHeaderRenderer } from "../types";
+import React, { useId, useMemo } from "react";
+import {
+  createColumnGroupLookup,
+  fragmentHeaderBox,
+  fragmentHeaderId,
+  leafHeaderBox,
+  leafHeaderId,
+  resolveHeaderAssociations,
+} from "@gp-grid/core";
+import type {
+  ColumnGroupChild,
+  ColumnWindowSnapshot,
+  GridCore,
+  GridIcon,
+  GridLabels,
+  HeaderBandLayout,
+  HeaderData,
+  HeaderFragment,
+  ResolvedColumn,
+} from "@gp-grid/core";
+import { GridHeaderCell } from "./GridHeaderCell";
+import type { LeafHeaderBands } from "./GridHeaderCell";
+import { GridHeaderGroupCell } from "./GridHeaderGroupCell";
+import type { ResizeHandleActions } from "./ResizeHandle";
+import type { ReactHeaderRenderer, ReactHeaderRendererRegistry } from "../types";
 
 export interface GridHeaderProps<TData = unknown> {
-  headerHeight: number;
+  headerBands: HeaderBandLayout;
+  /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
   scrollLeft: number;
   contentWidth: number;
   totalWidth: number;
+  viewportWidth: number;
   isLoading: boolean;
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  columnPositions: number[];
-  columnWidths: number[];
-  headers: Map<number, HeaderData>;
+  columnWindow: ColumnWindowSnapshot | null;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
+  headers: Map<string, HeaderData>;
   sortingEnabled: boolean;
+  rtl: boolean;
+  labels: GridLabels;
   onHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
-  onHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  resizeActions: ResizeHandleActions;
   coreRef: React.RefObject<GridCore<TData> | null>;
+  /** The `columnGroups` prop: fragments resolve their group here while the core is null. */
+  columnGroups?: readonly ColumnGroupChild[];
   outerContainerRef: React.RefObject<HTMLDivElement | null>;
-  headerRenderers: Record<string, ReactHeaderRenderer>;
+  headerRenderers: ReactHeaderRendererRegistry;
   globalHeaderRenderer?: ReactHeaderRenderer;
+  pinIcon: GridIcon;
 }
 
+/**
+ * Header: the center strip translates with the body scroll, while the two pin
+ * containers stay absolute at their viewport edges above it. With more than
+ * one band the root is a row group whose band rows own the mounted headers.
+ */
 export const GridHeader = <TData = unknown>(
   props: GridHeaderProps<TData>,
 ): React.ReactNode => {
   const {
-    headerHeight,
+    headerBands,
     scrollLeft,
     contentWidth,
     totalWidth,
+    viewportWidth,
     isLoading,
-    visibleColumnsWithIndices,
-    columnPositions,
-    columnWidths,
+    columnWindow,
+    displayedIndexOf,
     headers,
     sortingEnabled,
+    rtl,
+    labels,
     onHeaderMouseDown,
-    onHeaderResizeMouseDown,
+    resizeActions,
     coreRef,
+    columnGroups,
     outerContainerRef,
     headerRenderers,
     globalHeaderRenderer,
+    pinIcon,
   } = props;
+
+  const instance = useId();
+  const lookupGroup = useMemo(() => createColumnGroupLookup(columnGroups), [columnGroups]);
+  const { count: bandCount, totalHeight } = headerBands;
+  const associations = useMemo(
+    () =>
+      bandCount > 1 && columnWindow !== null
+        ? resolveHeaderAssociations({ instance, columnWindow, bandCount, displayedIndexOf })
+        : null,
+    [instance, columnWindow, bandCount, displayedIndexOf],
+  );
+
+  const leafBands = (column: ResolvedColumn): LeafHeaderBands | undefined => {
+    if (associations === null) return undefined;
+    return {
+      rowIndex: column.headerBand + 1,
+      rowSpan: bandCount - column.headerBand,
+      describedBy: associations.describedBy.get(column.columnId),
+    };
+  };
+
+  const renderColumn = (column: ResolvedColumn): React.ReactNode => (
+    <GridHeaderCell
+      key={column.columnId}
+      column={column}
+      displayedIndex={displayedIndexOf(column.columnId)}
+      id={leafHeaderId(instance, column.columnId)}
+      box={leafHeaderBox(headerBands, column.headerBand)}
+      bands={leafBands(column)}
+      headers={headers}
+      sortingEnabled={sortingEnabled}
+      rtl={rtl}
+      labels={labels}
+      onHeaderMouseDown={onHeaderMouseDown}
+      resizeActions={resizeActions}
+      coreRef={coreRef}
+      outerContainerRef={outerContainerRef}
+      headerRenderers={headerRenderers}
+      globalHeaderRenderer={globalHeaderRenderer}
+      pinIcon={pinIcon}
+    />
+  );
+
+  const layoutColumns = columnWindow?.layout.columns ?? [];
+  const renderFragment = (fragment: HeaderFragment): React.ReactNode => (
+    <GridHeaderGroupCell
+      key={fragment.fragmentId}
+      fragment={fragment}
+      id={fragmentHeaderId(instance, fragment.fragmentId)}
+      box={fragmentHeaderBox(headerBands, fragment.band)}
+      layoutColumns={layoutColumns}
+      coreRef={coreRef}
+      lookupGroup={lookupGroup}
+      headerRenderers={headerRenderers}
+    />
+  );
+
+  const { start, center, end } = columnWindow ?? { start: [], center: [], end: [] };
+  const groups = columnWindow?.groups;
+  const { regions } = columnWindow?.layout ?? {};
 
   return (
     <div
       className={`gp-grid-header${isLoading ? " gp-grid-header--loading" : ""}`}
-      style={{ height: headerHeight }}
+      role={associations === null ? "row" : "rowgroup"}
+      aria-rowindex={associations === null ? 1 : undefined}
+      style={{ height: totalHeight }}
     >
+      {associations?.owns.map((owns, band) => (
+        <div
+          key={band}
+          role="row"
+          aria-rowindex={band + 1}
+          aria-owns={owns === "" ? undefined : owns}
+        />
+      ))}
+
       <div
+        role="presentation"
         style={{
           position: "absolute",
           top: 0,
-          left: 0,
+          insetInlineStart: 0,
           transform: `translateX(${-scrollLeft}px)`,
           width: Math.max(contentWidth, totalWidth),
-          height: headerHeight,
+          height: totalHeight,
         }}
       >
-        {visibleColumnsWithIndices.map(({ column, originalIndex }, visibleIndex) => {
-          const headerInfo = headers.get(originalIndex);
-          const colW = columnWidths[visibleIndex] ?? 0;
-          return (
-            <div
-              key={column.colId ?? column.field}
-              className="gp-grid-header-cell"
-              data-col-index={originalIndex}
-              style={{
-                left: `${columnPositions[visibleIndex]}px`,
-                width: `${colW}px`,
-                height: `${headerHeight}px`,
-              }}
-              onPointerDown={(e) =>
-                onHeaderMouseDown(originalIndex, colW, headerHeight, e)
-              }
-            >
-              {renderHeader({
-                column,
-                colIndex: originalIndex,
-                sortDirection: headerInfo?.sortDirection,
-                sortIndex: headerInfo?.sortIndex,
-                sortable: (column.sortable !== false) && sortingEnabled,
-                filterable: column.filterable !== false,
-                hasFilter: headerInfo?.hasFilter ?? false,
-                coreRef,
-                containerRef: outerContainerRef,
-                headerRenderers,
-                globalHeaderRenderer,
-              })}
-              {column.resizable !== false && (
-                <div
-                  className="gp-grid-header-resize-handle"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    onHeaderResizeMouseDown(originalIndex, colW, e);
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
+        {groups?.center.map(renderFragment)}
+        {center.map(renderColumn)}
       </div>
+
+      {regions !== undefined && start.length > 0 && (
+        <div
+          className="gp-grid-pin-header"
+          role="presentation"
+          data-pin-region="start"
+          style={{
+            insetInlineStart: 0,
+            width: `${regions.startWidth}px`,
+            height: totalHeight,
+          }}
+        >
+          {groups?.start.map(renderFragment)}
+          {start.map(renderColumn)}
+        </div>
+      )}
+
+      {regions !== undefined && end.length > 0 && (
+        <div
+          className="gp-grid-pin-header"
+          role="presentation"
+          data-pin-region="end"
+          style={{
+            insetInlineStart: `${regions.endOffset}px`,
+            width: `${regions.endWidth}px`,
+            height: totalHeight,
+          }}
+        >
+          {groups?.end.map(renderFragment)}
+          {end.map(renderColumn)}
+        </div>
+      )}
+
+      {viewportWidth > 0 && (
+        <div
+          className="gp-grid-header-gutter"
+          role="presentation"
+          style={{ insetInlineStart: viewportWidth, height: totalHeight }}
+        />
+      )}
     </div>
   );
 };

@@ -2,7 +2,8 @@
 // mutable GestureState so the controller only wires events to them.
 
 import { TAP_SLOP_PX } from "../input/interaction-constants";
-import type { VelocitySample } from "../utils/touch-scroll-physics";
+import { computeReleaseVelocity, pruneSamples, type VelocitySample } from "../utils/touch-scroll-physics";
+import { readIsRtl } from "./inline-axis";
 import { clamp } from "./touch-scroll-helpers";
 
 /** Structural touch shapes so tests can dispatch plain Events. */
@@ -28,12 +29,17 @@ export interface GestureState {
   startClientY: number;
   baseScrollTop: number;
   baseScrollLeft: number;
+  /** Inline direction sampled once per gesture (a `dir` flip needs a remount). */
+  rtl: boolean;
   engaged: boolean;
   slopOffsetX: number;
   slopOffsetY: number;
   samples: VelocitySample[];
+  /** The inline displacement over time, DOM px, for the inline release. */
+  samplesX: VelocitySample[];
   /** Fling velocity still alive when this gesture caught the content */
   carriedVelocity: number;
+  carriedVelocityX: number;
   /**
    * The scroll position the controller last wrote (or found at gesture
    * start). If the element drifts away from it, a native scroller is also
@@ -56,17 +62,21 @@ export const createGestureState = (
   el: HTMLElement,
   timeStamp: number,
   carriedVelocity: number,
+  carriedVelocityX = 0,
 ): GestureState => ({
   touchId: touch.identifier,
   startClientX: touch.clientX,
   startClientY: touch.clientY,
   baseScrollTop: el.scrollTop,
   baseScrollLeft: el.scrollLeft,
+  rtl: readIsRtl(el),
   engaged: false,
   slopOffsetX: 0,
   slopOffsetY: 0,
   samples: [{ time: timeStamp, position: 0 }],
+  samplesX: [{ time: timeStamp, position: 0 }],
   carriedVelocity,
+  carriedVelocityX,
   expectedScrollTop: el.scrollTop,
   expectedScrollLeft: el.scrollLeft,
 });
@@ -122,15 +132,36 @@ export const computeDragTarget = (
   scrollRatio: number,
   logicalDx: number,
   logicalDy: number,
-): DragTarget => ({
-  top: clamp(
-    gesture.baseScrollTop + (logicalDy - gesture.slopOffsetY) * scrollRatio,
-    0,
-    el.scrollHeight - el.clientHeight,
-  ),
-  left: clamp(
-    gesture.baseScrollLeft + (logicalDx - gesture.slopOffsetX),
-    0,
-    el.scrollWidth - el.clientWidth,
-  ),
+): DragTarget => {
+  const maxLeft = el.scrollWidth - el.clientWidth;
+  const left = gesture.baseScrollLeft + (logicalDx - gesture.slopOffsetX);
+  return {
+    top: clamp(
+      gesture.baseScrollTop + (logicalDy - gesture.slopOffsetY) * scrollRatio,
+      0,
+      el.scrollHeight - el.clientHeight,
+    ),
+    // A leftward finger displacement maps to the same DOM delta in both
+    // directions; only the range flips (RTL DOM scroll positions run from
+    // 0 at the inline start down to -maxLeft).
+    left: gesture.rtl ? clamp(left, -maxLeft, 0) : clamp(left, 0, maxLeft),
+  };
+};
+
+/** Record the finger's displacement on both axes and keep the velocity window. */
+export const recordSample = (gesture: GestureState, time: number, logicalDx: number, logicalDy: number): void => {
+  gesture.samples.push({ time, position: logicalDy });
+  gesture.samples = pruneSamples(gesture.samples, time);
+  gesture.samplesX.push({ time, position: logicalDx });
+  gesture.samplesX = pruneSamples(gesture.samplesX, time);
+};
+
+/** The release velocities: vertical in logical px/ms, inline in DOM px/ms. */
+export const releaseVelocities = (
+  gesture: GestureState,
+  time: number,
+  maxFlingVelocity: number,
+): { vertical: number; inline: number } => ({
+  vertical: computeReleaseVelocity(pruneSamples(gesture.samples, time), maxFlingVelocity),
+  inline: computeReleaseVelocity(pruneSamples(gesture.samplesX, time), maxFlingVelocity),
 });

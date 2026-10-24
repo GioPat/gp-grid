@@ -1,27 +1,33 @@
 // packages/core/src/managers/viewport-state.ts
-// Owns the grid's viewport measurements and the scroll-ratio mapping
-// between visual (DOM) scrollTop and logical (content) scrollTop.
+// Owns the grid's viewport measurements and the raw DOM scroll samples the
+// core reported. Converting a sample to logical (content) coordinates is
+// geometry's job now, so this class never needs the scroll ratio.
 
 export interface ViewportUpdateResult {
   changed: boolean;
+  /** Width/height differ from the previous sample. */
   viewportSizeChanged: boolean;
 }
+
+/**
+ * Height estimate until the adapter reports a measurement (SSR, first paint).
+ * A measured zero is a collapsed host and stays zero.
+ */
+const UNMEASURED_VIEWPORT_HEIGHT = 600;
 
 export class ViewportState {
   private scrollTop = 0;
   private scrollLeft = 0;
-  private viewportWidth = 800;
-  private viewportHeight = 600;
-  private readonly getScrollRatio: () => number;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
+  private measured = false;
 
-  constructor(getScrollRatio: () => number) {
-    this.getScrollRatio = getScrollRatio;
-  }
-
+  /** Raw DOM vertical scroll sample; geometry maps it to logical space. */
   getScrollTop(): number {
     return this.scrollTop;
   }
 
+  /** Raw DOM horizontal scroll sample. */
   getScrollLeft(): number {
     return this.scrollLeft;
   }
@@ -31,7 +37,15 @@ export class ViewportState {
   }
 
   getViewportHeight(): number {
-    return this.viewportHeight;
+    return this.measured ? this.viewportHeight : UNMEASURED_VIEWPORT_HEIGHT;
+  }
+
+  /**
+   * Whether a real measurement replaced the pre-mount estimate. Geometry
+   * needs the distinction: the estimate is a constant, a measured 600 is not.
+   */
+  isMeasured(): boolean {
+    return this.measured;
   }
 
   /**
@@ -43,11 +57,26 @@ export class ViewportState {
   }
 
   /**
+   * Commit a corrected DOM scroll sample without a full measurement update,
+   * so geometry and the next sample agree on the anchor.
+   */
+  setScrollTop(domScrollTop: number): void {
+    this.scrollTop = domScrollTop;
+  }
+
+  /**
+   * Commit a body height the core derived from a header band change (D8);
+   * the next measurement confirms or corrects it. The estimate is kept while
+   * unmeasured, so a pre-mount change cannot pass for a measurement.
+   */
+  setViewportHeight(height: number): void {
+    if (this.measured === false) return;
+    this.viewportHeight = height;
+  }
+
+  /**
    * Apply a new viewport state. Returns what actually changed so the
    * caller can decide which side effects to run.
-   *
-   * When `scrollRatio < 1` (virtual-scroll active), the DOM-reported
-   * scrollTop is mapped to a logical scrollTop in content coordinates.
    */
   update(
     scrollTop: number,
@@ -55,18 +84,18 @@ export class ViewportState {
     width: number,
     height: number,
   ): ViewportUpdateResult {
-    const scrollRatio = this.getScrollRatio();
-    const effectiveScrollTop = scrollRatio < 1 ? scrollTop / scrollRatio : scrollTop;
-
+    // The first measurement replaces the estimate even when it reads 0 × 0.
+    const isFirstMeasurement = this.measured === false;
+    this.measured = true;
     const viewportSizeChanged =
-      this.viewportWidth !== width || this.viewportHeight !== height;
+      isFirstMeasurement || this.viewportWidth !== width || this.viewportHeight !== height;
     const changed =
-      this.scrollTop !== effectiveScrollTop ||
+      this.scrollTop !== scrollTop ||
       this.scrollLeft !== scrollLeft ||
       viewportSizeChanged;
 
     if (changed) {
-      this.scrollTop = effectiveScrollTop;
+      this.scrollTop = scrollTop;
       this.scrollLeft = scrollLeft;
       this.viewportWidth = width;
       this.viewportHeight = height;

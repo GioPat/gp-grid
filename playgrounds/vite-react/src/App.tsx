@@ -1,20 +1,28 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
 import {
   Grid,
   useGridData,
+  createRowGrouping,
+  PIVOT_LABEL_COLUMN_ID,
   type ColumnDefinition,
+  type ColumnGroupChild,
   type CellRendererParams,
   type EditRendererParams,
   type RowId,
   type CellValueChangedEvent,
   type GridLabels,
+  type GridRef,
 } from "@gp-grid/react";
 import Select from "react-select";
 import { LiveInsertDemo } from "./LiveInsertDemo";
 import { DebugOverlay } from "./DebugOverlay";
+import { createDemoServerSource } from "./demo-server-groups";
+import { createDemoPivotSource } from "./demo-pivot";
+import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from "./demo-columnar";
+import { usePivotSchema } from "./use-pivot-schema";
 
 type DemoPage = "main" | "live-insert";
 
@@ -96,15 +104,14 @@ const cellRenderers = {
   statusBadge: (params: CellRendererParams) => {
     // Raw value drives the color variant; params.value may be the formatted
     // display string when the column declares a valueFormatter.
-    const rawStatus = (params.rowData as Person)[
-      params.column.field as keyof Person
-    ] as Person["status"];
+    const rawStatus = params.getValue?.("status");
     const colors = {
       active: { bg: "#dcfce7", text: "#166534" },
       inactive: { bg: "#fee2e2", text: "#991b1b" },
       pending: { bg: "#fef3c7", text: "#92400e" },
     };
-    const color = colors[rawStatus];
+    const color = typeof rawStatus === "string" ? colors[rawStatus as Person["status"]] : undefined;
+    if (color === undefined) return null;
 
     return (
       <span
@@ -360,6 +367,59 @@ const columns: ColumnDefinition[] = [
   },
 ];
 
+// Three group levels over the demo columns: `id` stays ungrouped, `bio` sits
+// one level shallower than `name` and `age`, and `Record` is two levels deep.
+const demoColumnGroups: ColumnGroupChild[] = [
+  "id",
+  {
+    groupId: "person",
+    headerName: "Person",
+    children: [
+      {
+        groupId: "profile",
+        headerName: "Profile",
+        children: [
+          { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+          "bio",
+        ],
+      },
+    ],
+  },
+  {
+    groupId: "record",
+    headerName: "Record",
+    children: [
+      "createdAt",
+      "status",
+      { groupId: "compensation", headerName: "Compensation", children: ["salary", "tags"] },
+    ],
+  },
+];
+
+// Row grouping (PRD 008): two dimensions, one `sum` and one `avg`.
+const createDemoRowGrouping = () =>
+  createRowGrouping({
+    dimensions: [{ field: "status" }, { field: "name" }],
+    measures: [
+      { field: "salary", aggregate: "sum" },
+      { field: "age", aggregate: "avg" },
+    ],
+    grandTotal: "top",
+  });
+
+// Server grouping (PRD 009): the same groups and measures, asked of the mock service.
+const DEMO_SERVER_ROWS = 100_000;
+const demoServerGrouping = {
+  dimensions: [{ field: "status" }, { field: "name" }],
+  measures: [
+    { field: "salary", aggregate: "sum" },
+    { field: "age", aggregate: "avg" },
+  ],
+};
+
+const DEMO_HEADER_HEIGHT = 40;
+const tallBandHeights = [DEMO_HEADER_HEIGHT * 2];
+
 // Helper to get random tags
 const getRandomTags = (): string[] => {
   const numTags = getRandomInt(0, 3);
@@ -381,18 +441,52 @@ const generateRowData = (): Person[] =>
   }));
 
 type HighlightMode = "row" | "column" | "cell";
+type FreezeCount = 0 | 1 | 3 | 5;
+
+const freezeCounts: FreezeCount[] = [0, 1, 3, 5];
 
 const initialRowData = generateRowData();
 
 function MainDemo() {
   const [count, setCount] = useState(0);
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("row");
+  const [freezeCount, setFreezeCount] = useState<FreezeCount>(0);
+  const [frozenStatus, setFrozenStatus] = useState("0 of 0 rows frozen");
   const [rowIdToUpdate, setRowIdToUpdate] = useState(1);
+  const [grouped, setGrouped] = useState(false);
+  const [tallBand, setTallBand] = useState(false);
+  const [groupRows, setGroupRows] = useState(false);
+  const rowGrouping = useMemo(
+    () => (groupRows ? createDemoRowGrouping() : null),
+    [groupRows],
+  );
+  const [serverGroups, setServerGroups] = useState(false);
+  const serverSource = useMemo(
+    () => (serverGroups ? createDemoServerSource(initialRowData.slice(0, DEMO_SERVER_ROWS), demoServerGrouping) : null),
+    [serverGroups],
+  );
+  useEffect(() => () => serverSource?.destroy(), [serverSource]);
+  const gridRef = useRef<GridRef<Person> | null>(null);
   const showTouchDebug = shouldShowTouchDebug();
 
   const { dataSource, updateRow } = useGridData<Person>(initialRowData, {
     getRowId: (row) => row.id,
   });
+  const [pivot, setPivot] = useState(false);
+  const pivotSource = useMemo(() => (pivot ? createDemoPivotSource(dataSource) : null), [pivot, dataSource]);
+  useEffect(() => () => pivotSource?.destroy(), [pivotSource]);
+  const pivotSchema = usePivotSchema(pivotSource);
+  const pivotActive = pivotSource !== null;
+  const [columnar, setColumnar] = useState(false);
+  const [wide, setWide] = useState(false);
+  const columnarSource = useMemo(
+    () => (columnar || wide ? createDemoColumnarSource(initialRowData, wide ? WIDE_COLUMN_COUNT : 0) : null),
+    [columnar, wide],
+  );
+  const plainColumns = useMemo(() => (wide ? [...columns, ...createWideColumns(WIDE_COLUMN_COUNT)] : columns), [wide]);
+  const plainColumnGroups = grouped ? demoColumnGroups : undefined;
+  const plainBandHeights = tallBand ? tallBandHeights : undefined;
+  const flatSource = serverSource ?? columnarSource ?? dataSource;
 
   const highlighting = useMemo(
     () => ({
@@ -420,6 +514,8 @@ function MainDemo() {
     }),
     [highlightMode],
   );
+
+  const freezeRows = useMemo(() => ({ count: freezeCount }), [freezeCount]);
 
   const handleUpdateRow = () => {
     updateRow(rowIdToUpdate, {
@@ -464,23 +560,257 @@ function MainDemo() {
         ))}
       </div>
 
+      {/* Frozen Rows Switcher */}
+      <div
+        style={{
+          marginBottom: "12px",
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>
+          Frozen Rows:
+        </span>
+        {freezeCounts.map((value) => (
+          <button
+            key={value}
+            onClick={() => setFreezeCount(value)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "4px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: freezeCount === value ? "600" : "400",
+              backgroundColor: freezeCount === value ? "#3b82f6" : "#374151",
+              color: freezeCount === value ? "white" : "#9ca3af",
+            }}
+          >
+            {value}
+          </button>
+        ))}
+        <span style={{ color: "#9ca3af", marginLeft: "8px" }}>
+          {frozenStatus}
+        </span>
+      </div>
+
+      {/* Row Heights (PRD 006): heights by identity, no remount */}
+      <div
+        style={{
+          marginBottom: "12px",
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: "#9ca3af", marginRight: "8px" }}>
+          Row heights:
+        </span>
+        <button
+          onClick={() =>
+            gridRef.current?.core?.rowHeights.set([
+              { rowId: 1, height: 48 },
+              { rowId: 2, height: 64 },
+              { rowId: 3, height: 96 },
+            ])
+          }
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Tall rows
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowHeights.reset()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Reset heights
+        </button>
+        {/* Auto-fit (PRD 007): one-shot fits of the mounted cells, no remount */}
+        <button
+          onClick={() => gridRef.current?.core?.columns.fit()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Fit columns
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowHeights.fit()}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Fit rows
+        </button>
+        {/* Column groups (PRD 007): hierarchy and band heights, no remount */}
+        <button
+          onClick={() => setGrouped((value) => !value)}
+          aria-pressed={grouped}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: grouped ? "#3b82f6" : "#374151",
+            color: grouped ? "white" : "#9ca3af",
+          }}
+        >
+          Grouped headers
+        </button>
+        <button
+          onClick={() => setTallBand((value) => !value)}
+          aria-pressed={tallBand}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: tallBand ? "#3b82f6" : "#374151",
+            color: tallBand ? "white" : "#9ca3af",
+          }}
+        >
+          Tall band
+        </button>
+        <button
+          onClick={() => setGroupRows((value) => !value)}
+          aria-pressed={groupRows}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: groupRows ? "#3b82f6" : "#374151",
+            color: groupRows ? "white" : "#9ca3af",
+          }}
+        >
+          Group rows
+        </button>
+        <button
+          onClick={() => setServerGroups((value) => !value)}
+          aria-pressed={serverGroups}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: serverGroups ? "#3b82f6" : "#374151",
+            color: serverGroups ? "white" : "#9ca3af",
+          }}
+        >
+          Server groups
+        </button>
+        <button
+          onClick={() => setPivot((value) => !value)}
+          aria-pressed={pivot}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: pivot ? "#3b82f6" : "#374151",
+            color: pivot ? "white" : "#9ca3af",
+          }}
+        >
+          Pivot
+        </button>
+        <button
+          onClick={() => setColumnar((value) => !value)}
+          aria-pressed={columnar}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: columnar ? "#3b82f6" : "#374151",
+            color: columnar ? "white" : "#9ca3af",
+          }}
+        >
+          Columnar
+        </button>
+        <button
+          onClick={() => setWide((value) => !value)}
+          aria-pressed={wide}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: wide ? "#3b82f6" : "#374151",
+            color: wide ? "white" : "#9ca3af",
+          }}
+        >
+          Wide
+        </button>
+        <button
+          onClick={() => gridRef.current?.core?.rowGroups.setExpanded(null, true)}
+          disabled={groupRows === false && serverGroups === false && pivot === false}
+          style={{
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: groupRows || serverGroups || pivot ? "pointer" : "not-allowed",
+            backgroundColor: "#374151",
+            color: "#9ca3af",
+          }}
+        >
+          Expand all
+        </button>
+      </div>
+
       {showTouchDebug && <DebugOverlay totalRows={1500000} />}
       <div className="demo-grid-shell">
         <Grid
+          gridRef={gridRef}
           highlighting={highlighting}
+          freezeRows={freezeRows}
+          onFrozenRowsChanged={(state) =>
+            setFrozenStatus(
+              `${state.effectiveCount} of ${state.requestedCount} rows frozen`,
+            )
+          }
           getRowId={getRowId}
           onCellValueChanged={onCellUpdate}
-          columns={columns}
+          history={{ maxEntries: 100 }}
+          onWriteCommitted={(event) => console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`)}
+          columns={pivotActive ? pivotSchema.columns : plainColumns}
+          columnGroups={pivotActive ? pivotSchema.columnGroups : plainColumnGroups}
+          headerBandHeights={pivotActive ? undefined : plainBandHeights}
+          rowGrouping={serverSource === null && pivotActive === false ? rowGrouping : null}
+          groupLabelColumn={pivotActive ? PIVOT_LABEL_COLUMN_ID : undefined}
           labels={gridLabels}
           overscan={12}
-          dataSource={dataSource}
+          dataSource={pivotSource ?? flatSource}
           rowHeight={36}
+          rowResize
           darkMode={true}
-          headerHeight={40}
+          headerHeight={DEMO_HEADER_HEIGHT}
           cellRenderers={cellRenderers}
           editRenderers={editRenderers}
           rowDragEntireRow
-          onRowDragEnd={(src, tgt) => console.log(`Row drag: ${src} → ${tgt}`)}
+          onRowDragEnd={({ fromViewIndex, toViewIndex }) => console.log(`Row drag: ${fromViewIndex} → ${toViewIndex}`)}
         />
       </div>
       <div

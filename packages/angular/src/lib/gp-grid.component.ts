@@ -13,20 +13,54 @@ import {
   effect,
   computed,
 } from '@angular/core';
-import type { CellRendererTemplate, EditRendererTemplate, HeaderRendererTemplate, HeaderSortEvent } from './components';
-import type { AngularColumnDefinition } from './types';
+import type {
+  CellRendererTemplate,
+  EditRendererTemplate,
+  HeaderRendererRegistry,
+  HeaderRendererTemplate,
+  HeaderSortEvent,
+} from './components';
+import type {
+  AngularColumnDefinition,
+  AngularColumnGroupChild,
+  GroupLabelRendererTemplate,
+} from './types';
 import { isPlatformBrowser } from '@angular/common';
 import type {
+  AutoFitOptions,
+  HistoryOptions,
+  CellValue,
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteCommittedEvent,
   ColumnDefinition,
   ColumnFilterModel,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnMovedEvent,
+  ColumnLayoutMode,
+  ColumnPin,
+  ColumnPinnedEvent,
+  ColumnResizedEvent,
+  ColumnSchemaError,
+  ColumnStateUpdate,
   DataSource,
+  FreezeRowsOptions,
+  FrozenRowsState,
+  GridCore,
+  GridIcon,
   GridLabelOverrides,
   HighlightingOptions,
+  RowDragEndEvent,
+  RowGrouping,
+  RowGroupingRejection,
+  RowGroupToggledEvent,
   RowLoadingOptions,
   RowId,
+  RowResizedEvent,
+  ResizeTarget,
 } from '@gp-grid/core';
-import { resolveGridLabels } from '@gp-grid/core';
+import { defaultPinIcon, resolveGridLabels, toInlineX } from '@gp-grid/core';
 import {
   GridHeaderComponent,
   GridBodyComponent,
@@ -41,11 +75,13 @@ import type {
   CellPointerEnterEvent,
   CellDoubleClickEvent,
   FillHandlePointerDownEvent,
+  RowResizePointerDownEvent,
 } from './components';
 import { GP_GRID_TEMPLATE } from './gp-grid.template';
 import { GpGridViewModel } from './gp-grid-view-model';
 import { GpGridBindings } from './gp-grid-bindings';
 import { buildGridCore } from './gp-grid.factory';
+import { createRowGroupCells } from './gp-grid-row-groups';
 
 @Component({
   selector: 'gp-grid',
@@ -62,38 +98,91 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   columns = input.required<AngularColumnDefinition[]>();
+  /** Controlled per-column state; applied through the core whenever it changes. */
+  columnState = input<ColumnStateUpdate[] | null | undefined>(null);
   rows = input<unknown[]>([]);
   dataSource = input<DataSource<unknown> | null>(null);
   getRowId = input<((row: unknown) => RowId) | null>(null);
   rowHeight = input<number>(32);
   headerHeight = input<number>(32);
+  /** Height of each header band, indexed by band; a band without one is `headerHeight`. Changeable at runtime. */
+  headerBandHeights = input<readonly number[] | undefined>(undefined);
+  /**
+   * Nested header groups over the column ids; every column is referenced
+   * once, ungrouped ones at the root. Applied together with `columns`.
+   */
+  columnGroups = input<readonly AngularColumnGroupChild[] | undefined>(undefined);
+  /** Budgets of `columnGroups`. Creation-only. */
+  columnGroupLimits = input<ColumnGroupLimits | undefined>(undefined);
   darkMode = input<boolean>(false);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
-  headerRenderers = input<Record<string, HeaderRendererTemplate>>({});
+  /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
+  headerRenderers = input<HeaderRendererRegistry>({});
   editRenderers = input<Record<string, EditRendererTemplate>>({});
   cellRenderer = input<CellRendererTemplate | null>(null);
   headerRenderer = input<HeaderRendererTemplate | null>(null);
+  /** SVG used by the default header's pin toggle. */
+  pinIcon = input<GridIcon>(defaultPinIcon);
   editRenderer = input<EditRendererTemplate | null>(null);
   highlighting = input<HighlightingOptions | null>(null);
   rowDragEntireRow = input<boolean>(false);
   overscan = input<number>(3);
+  /** Column overscan in CSS px per side for the mounted center window. */
+  columnOverscan = input<number | undefined>(undefined);
+  /** Frozen prefix configuration; applied at runtime without recreating the core. */
+  freezeRows = input<FreezeRowsOptions | undefined>(undefined);
+  /** Displayed-width policy: "fit" (default) expands columns to the viewport. */
+  columnLayout = input<ColumnLayoutMode>('fit');
   /** Max accumulated touch-fling velocity (logical px/ms) when scroll virtualization is active. Pair higher values with overscan 10-12. */
   maxFlingVelocity = input<number | undefined>(undefined);
   rowLoading = input<RowLoadingOptions | null>(null);
   sortingEnabled = input<boolean>(true);
   wheelDampening = input<number>(0.1);
-  onRowDragEnd = output<{ source: number; target: number }>();
+  /**
+   * Whether the user can resize rows: every cell renders the row edge handle,
+   * and Alt+ArrowUp/Down and Alt+Shift+Enter act. Changeable at runtime.
+   */
+  rowResize = input<boolean>(false);
+  /** Bounds of the fit commands and the row resize gestures; read at creation. */
+  autoFit = input<AutoFitOptions | undefined>(undefined);
+  /** Undo and redo of the write commands; read at creation, requires getRowId. */
+  history = input<HistoryOptions | undefined>(undefined);
+  onRowDragEnd = output<RowDragEndEvent>();
   onCellValueChanged = output<CellValueChangedEvent<unknown>>();
-  onColumnResized = output<{ colIndex: number; newWidth: number }>();
-  onColumnMoved = output<{ fromIndex: number; toIndex: number }>();
+  onWriteRejected = output<CellWriteRejectedEvent>();
+  onWriteCommitted = output<WriteCommittedEvent>();
+  onColumnResized = output<ColumnResizedEvent>();
+  onRowResized = output<RowResizedEvent>();
+  onColumnMoved = output<ColumnMovedEvent>();
+  onColumnPinned = output<ColumnPinnedEvent>();
+  /** C9: fires on a published change of the effective frozen count or its limit. */
+  onFrozenRowsChanged = output<FrozenRowsState>();
+  /** Fires when a column change is rejected; the previous schema stays. */
+  onColumnSchemaRejected = output<ColumnSchemaError>();
+  /** Groups the resident rows; a new value regroups without recreating the core. */
+  rowGrouping = input<RowGrouping | null | undefined>(undefined);
+  /** Column showing a group's expander and label; the first displayed column when absent or hidden. */
+  groupLabelColumn = input<string | undefined>(undefined);
+  /** Renders the label of a group or total row. */
+  groupLabelRenderer = input<GroupLabelRendererTemplate | null>(null);
+  /** Fires per group a pointer or key gesture toggled; commands stay silent. */
+  onRowGroupToggled = output<RowGroupToggledEvent>();
+  /** Fires when `rowGrouping` cannot apply to the bound source; the grid keeps the source's rows. */
+  onRowGroupingRejected = output<RowGroupingRejection>();
   labels = input<GridLabelOverrides>({});
 
   protected readonly resolvedLabels = computed(() => resolveGridLabels(this.labels()));
 
+  /** Rendered on the root; a fit measured under another revision is stale. */
+  protected readonly layoutRevision = computed(() => this.vm.columnWindow()?.layout.revision ?? null);
+
+  // Assigned once `bindings` exists; the view model must not reference it
+  // directly or the two initializers would form a type cycle.
+  private readonly boundCore: { current: GridCore<unknown> | null } = { current: null };
+
   protected readonly vm = new GpGridViewModel({
-    getColumns: () => this.columns(),
     getRows: () => this.rows(),
-    getRowHeight: () => this.rowHeight(),
+    getCore: () => this.boundCore.current,
   });
 
   private readonly bindings = new GpGridBindings<unknown>({
@@ -101,53 +190,107 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     isBrowser: this.isBrowser,
     getContainer: () => this.container?.nativeElement ?? null,
     getBody: () => this.body?.scrollContainer?.nativeElement ?? null,
-    getRowHeight: () => this.rowHeight(),
-    getHeaderHeight: () => this.headerHeight(),
   });
+
+  protected readonly rowGroupCells = createRowGroupCells({
+    hierarchical: this.vm.hierarchical,
+    layout: this.vm.layout,
+    columns: this.vm.effectiveColumns,
+    labels: this.resolvedLabels,
+    groupLabelColumn: this.groupLabelColumn,
+    groupLabelRenderer: this.groupLabelRenderer,
+    onTogglePointerDown: (rowIndex, event) => this.bindings.input.groupTogglePointerDown(rowIndex, event),
+    onToggle: (rowIndex) => this.bindings.coreRef?.input.handleGroupToggle(rowIndex),
+  });
+
+  // The Angular group type differs from core's only by its template renderer.
+  private readonly coreColumnGroups = computed(
+    () => this.columnGroups() as readonly ColumnGroupChild[] | undefined,
+  );
 
   constructor() {
     effect(() => this.bindings.applyPendingScroll(), { allowSignalWrites: true });
     effect(() => this.bindings.syncHighlighting(this.highlighting()));
-    effect(() => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[]), { allowSignalWrites: true });
-    effect(() => this.bindings.syncRows(this.rows(), this.dataSource()), { allowSignalWrites: true });
+    effect(
+      () => this.bindings.syncColumns(this.columns() as unknown as ColumnDefinition[], this.coreColumnGroups()),
+      { allowSignalWrites: true },
+    );
+    effect(() => this.bindings.syncHeaderBandHeights(this.headerBandHeights()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncColumnState(this.columnState() ?? []), { allowSignalWrites: true });
+    effect(() => this.bindings.syncRows(this.rows(), this.dataSource() ?? null), { allowSignalWrites: true });
+    effect(() => this.bindings.syncColumnLayout(this.columnLayout()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncFreezeRows(this.freezeRows()), { allowSignalWrites: true });
+    effect(() => this.bindings.syncRowResize(this.rowResize()));
+    effect(() => this.bindings.syncRowGrouping(this.rowGrouping()), { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
+    const columns = this.columns() as unknown as ColumnDefinition[];
+    const dataSource = this.bindings.dataSourceOwner.initialize(this.dataSource() ?? null, this.rows());
+    this.bindings.syncRowGrouping(this.rowGrouping());
     const core = buildGridCore<unknown>(
       {
-        columns: this.columns() as unknown as ColumnDefinition[],
-        dataSource: this.bindings.dataSourceOwner.initialize(this.dataSource(), this.rows()),
+        columns,
+        columnGroups: this.coreColumnGroups(),
+        columnGroupLimits: this.columnGroupLimits(),
+        dataSource,
         rowHeight: this.rowHeight(),
         headerHeight: this.headerHeight(),
+        headerBandHeights: this.headerBandHeights(),
         overscan: this.overscan(),
+        columnOverscan: this.columnOverscan(),
+        freezeRows: this.freezeRows(),
+        columnLayout: this.columnLayout(),
         maxFlingVelocity: this.maxFlingVelocity(),
         rowLoading: this.rowLoading() ?? undefined,
         sortingEnabled: this.sortingEnabled(),
         highlighting: (this.highlighting() ?? undefined) as HighlightingOptions<unknown> | undefined,
         getRowId: this.getRowId() ?? undefined,
         rowDragEntireRow: this.rowDragEntireRow(),
+        labels: this.labels(),
+        rowResize: this.rowResize(),
+        autoFit: this.autoFit(),
+        history: this.history(),
+        rowGrouping: this.rowGrouping(),
+        measureRoot: this.isBrowser ? () => this.container?.nativeElement ?? null : null,
       },
       {
-        onRowDragEnd: (source, target) => this.onRowDragEnd.emit({ source, target }),
+        onRowDragEnd: (event) => this.onRowDragEnd.emit(event),
         onCellValueChanged: (event) => this.onCellValueChanged.emit(event),
-        onColumnResized: (colIndex, newWidth) => this.onColumnResized.emit({ colIndex, newWidth }),
-        onColumnMoved: (fromIndex, toIndex) => this.onColumnMoved.emit({ fromIndex, toIndex }),
+        onWriteRejected: (event) => this.onWriteRejected.emit(event),
+        onWriteCommitted: (event) => this.onWriteCommitted.emit(event),
+        onColumnResized: (event) => this.onColumnResized.emit(event),
+        onRowResized: (event) => this.onRowResized.emit(event),
+        onColumnMoved: (event) => this.onColumnMoved.emit(event),
+        onColumnPinned: (event) => this.onColumnPinned.emit(event),
+        onFrozenRowsChanged: (state) => this.onFrozenRowsChanged.emit(state),
+        onColumnSchemaRejected: (error) => this.onColumnSchemaRejected.emit(error),
+        onRowGroupToggled: (event) => this.onRowGroupToggled.emit(event),
+        onRowGroupingRejected: (rejection) => this.onRowGroupingRejected.emit(rejection),
       },
     );
-    this.bindings.attach(core);
+    this.vm.seedHeaderBands({
+      initialColumns: columns,
+      initialColumnLayout: this.columnLayout(),
+      initialHeaderHeight: this.headerHeight(),
+      initialHeaderBandHeights: this.headerBandHeights(),
+      initialColumnGroups: this.coreColumnGroups(),
+    });
+    this.boundCore.current = core;
+    this.bindings.attach(core, dataSource);
+    // The columnState effect ran before the core existed; apply it now.
+    this.bindings.syncColumnState(this.columnState() ?? []);
   }
 
   ngAfterViewInit(): void {
     if (this.isBrowser === false) return;
-    this.bindings.observeViewport(
-      this.container.nativeElement,
-      this.body.scrollContainer.nativeElement,
-    );
+    this.bindings.observeViewport(this.body.scrollContainer.nativeElement);
     document.addEventListener('pointermove', this.onDocumentPointerMove, { passive: false });
     document.addEventListener('pointerup', this.onDocumentPointerUp);
   }
 
   ngOnDestroy(): void {
+    this.boundCore.current = null;
     this.bindings.destroy();
     if (this.isBrowser) {
       document.removeEventListener('pointermove', this.onDocumentPointerMove);
@@ -155,10 +298,31 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  /**
+   * The underlying core instance, mirroring the `core` exposed by the React
+   * and Vue wrappers. Use it to read values or refresh after a columnar source
+   * adopts a new revision.
+   */
+  get core(): GridCore<unknown> | null {
+    return this.bindings.coreRef;
+  }
+
+  /** Body scroll element, provided to overlays that need its screen origin. */
+  protected get bodyScrollContainer(): HTMLElement | null {
+    return this.body?.scrollContainer?.nativeElement ?? null;
+  }
+
   protected onBodyScroll(scrollLeft: number): void {
-    this.vm.scrollLeft.set(scrollLeft);
     const el = this.body.scrollContainer.nativeElement;
-    this.bindings.coreRef?.setViewport(el.scrollTop, scrollLeft, el.clientWidth, el.clientHeight);
+    const logicalScrollLeft = toInlineX(scrollLeft, this.bindings.isRtl);
+    // The header strip undoes the native scroll, so it takes the DOM value.
+    this.vm.scrollLeft.set(scrollLeft);
+    this.bindings.coreRef?.setViewport(
+      el.scrollTop,
+      logicalScrollLeft,
+      el.clientWidth,
+      el.clientHeight,
+    );
   }
 
   protected onHeaderPointerDown(evt: HeaderPointerDownEvent): void {
@@ -170,7 +334,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   protected onFilterPointerDown(evt: FilterPointerDownEvent): void {
     this.vm.setFilterAnchor(evt.anchorEl);
     const rect = evt.anchorEl.getBoundingClientRect();
-    this.bindings.coreRef?.openFilterPopup(evt.colIndex, {
+    this.bindings.coreRef?.sortFilter.openFilterPopup(evt.colIndex, {
       top: rect.top,
       left: rect.left,
       width: rect.width,
@@ -208,6 +372,16 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.bindings.coreRef?.highlight?.computeRowClasses(rowIndex, rowData) ?? [];
   };
 
+  /** Raw value reader shared with the body and peek: record-less rows work. */
+  protected readCellValueFn = (rowIndex: number, colIndex: number): CellValue =>
+    this.bindings.coreRef?.cells.getValue(rowIndex, colIndex) ?? null;
+
+  protected readFieldValueFn = (rowIndex: number, field: string): CellValue =>
+    this.bindings.coreRef?.cells.getFieldValue(rowIndex, field) ?? null;
+
+  protected readRowIdFn = (rowIndex: number): RowId | undefined =>
+    this.bindings.coreRef?.rows.getId(rowIndex);
+
   protected computeCellClassesFn = (
     rowIndex: number,
     colIndex: number,
@@ -227,7 +401,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected onPeekClose(): void {
-    this.bindings.coreRef?.stopPeek();
+    this.bindings.coreRef?.edit.stopPeek();
   }
 
   protected peekContext = computed(() => {
@@ -241,29 +415,34 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   protected onEditValueChange(value: string): void {
-    this.bindings.coreRef?.updateEditValue(value);
+    this.bindings.coreRef?.edit.updateValue(value, this.vm.editingCell()?.editId);
   }
 
   protected onEditCommit(): void {
-    this.bindings.coreRef?.commitEdit();
+    this.bindings.coreRef?.edit.commit(this.vm.editingCell()?.editId);
   }
 
   protected onEditCancel(): void {
-    this.bindings.coreRef?.cancelEdit();
+    this.bindings.coreRef?.edit.cancel(this.vm.editingCell()?.editId);
   }
 
   protected onHeaderSort(evt: HeaderSortEvent): void {
-    this.bindings.coreRef?.setSort(evt.colId, evt.direction, evt.addToExisting);
+    this.bindings.coreRef?.sortFilter.setSort(evt.colId, evt.direction, evt.addToExisting);
+  }
+
+  protected onHeaderPin(evt: { columnId: string; pinned: ColumnPin | null }): void {
+    this.bindings.coreRef?.columns.setPinned(evt.columnId, evt.pinned);
   }
 
   protected onWheel(event: WheelEvent): void {
     const bodyEl = this.body?.scrollContainer?.nativeElement;
     if (!bodyEl) return;
-    const dampened = this.bindings.input.wheel(event.deltaY, event.deltaX, this.wheelDampening());
+    const dampened = this.bindings.input.wheel(event, this.wheelDampening());
     if (dampened) {
       event.preventDefault();
-      bodyEl.scrollTop += dampened.dy;
-      bodyEl.scrollLeft += dampened.dx;
+      if (this.bindings.touchScroll.scrollByWheel(dampened.dy) === false) bodyEl.scrollTop += dampened.dy;
+      // Wheel deltaX is physical, unlike the inline-relative deltas core emits.
+      if (dampened.dx !== 0) bodyEl.scrollLeft += dampened.dx;
     }
   }
 
@@ -276,6 +455,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
       this.vm.filterPopup() !== null,
     );
     if (result.preventDefault) event.preventDefault();
+    if (result.focusContainer) this.container.nativeElement.focus({ preventScroll: true });
     if (result.scrollToCell) this.bindings.scrollToCell(result.scrollToCell);
   }
 
@@ -295,13 +475,23 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  protected onRowResizePointerDown(evt: RowResizePointerDownEvent): void {
+    if (this.bindings.input.rowResizePointerDown(evt.rowIndex, evt.rowHeight, evt.event)) {
+      evt.event.preventDefault();
+    }
+  }
+
+  protected onResizeDoubleClick(target: ResizeTarget): void {
+    this.bindings.input.resizeDoubleClick(target);
+  }
+
   protected onFilterApply(event: { colId: string; filter: ColumnFilterModel | null }): void {
-    this.bindings.coreRef?.setFilter(event.colId, event.filter);
+    this.bindings.coreRef?.sortFilter.setFilter(event.colId, event.filter);
     this.vm.filterPopup.set(null);
   }
 
   protected onFilterClose(): void {
-    this.bindings.coreRef?.closeFilterPopup();
+    this.bindings.coreRef?.sortFilter.closeFilterPopup();
     this.vm.filterPopup.set(null);
   }
 

@@ -1,0 +1,121 @@
+/* =============================================================================
+   Row Groups: group and total rows, the label cell and its expander. The row
+   sets --gp-grid-group-depth; the label column's cell indents by it on every
+   row of a hierarchy. Only the expander's geometry is unconditional; every
+   other rule is :where so a theme can override it at zero specificity.
+   ============================================================================= */
+
+:where(.gp-grid-row--group) {
+  background-color: var(--gp-grid-bg-alt);
+  font-weight: 600;
+}
+
+:where(.gp-grid-row--total) {
+  background-color: var(--gp-grid-bg-alt);
+  font-weight: 700;
+}
+
+/* A group whose children failed to load; the label cell's title says so too. The
+   attribute, not the class, reaches the frozen pin layer's row as well. */
+:where([data-row-error] .gp-grid-cell--group-label) {
+  color: var(--gp-grid-error-text);
+}
+
+:where(.gp-grid-cell--group-indent) {
+  padding-inline-start: calc(
+    var(--gp-grid-cell-padding-inline) + var(--gp-grid-group-depth, 0) * var(--gp-grid-group-indent)
+  );
+}
+
+:where(.gp-grid-cell--group-label) {
+  gap: 4px;
+}
+
+:where(.gp-grid-group-label) {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gp-grid-group-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* The chevron points to the inline end; the mirror keeps it so in RTL. */
+.gp-grid-group-toggle:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+:where(.gp-grid-group-toggle) {
+  cursor: pointer;
+  color: var(--gp-grid-text-secondary);
+  border-radius: 2px;
+}
+
+:where(.gp-grid-group-toggle:not(.gp-grid-group-toggle--none):hover) {
+  background-color: var(--gp-grid-hover);
+}
+
+:where(.gp-grid-group-toggle)::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: translateX(-1px) rotate(45deg);
+  transition: transform 120ms ease;
+}
+
+:where(.gp-grid-group-toggle--expanded)::before {
+  transform: translateY(-1px) rotate(135deg);
+}
+
+/* The total row toggles nothing; its empty expander keeps the label aligned. */
+:where(.gp-grid-group-toggle--none) {
+  cursor: default;
+}
+
+:where(.gp-grid-group-toggle--none)::before {
+  content: none;
+}
+
+/* A placeholder of a hierarchy shows a skeleton bar; the flat frozen placeholder stays static. */
+:where([role="treegrid"] .gp-grid-row--loading)::before {
+  content: "";
+  position: absolute;
+  top: 35%;
+  bottom: 35%;
+  inset-inline-start: var(--gp-grid-cell-padding-inline);
+  width: min(40%, 240px);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gp-grid-border-light), var(--gp-grid-border), var(--gp-grid-border-light));
+  background-size: 200% 100%;
+  animation: gp-grid-skeleton 1.2s linear infinite;
+}
+
+@keyframes gp-grid-skeleton {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.gp-grid-group-toggle)::before {
+    transition: none;
+  }
+
+  :where([role="treegrid"] .gp-grid-row--loading)::before {
+    animation: none;
+  }
+}

@@ -16,11 +16,15 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import {
   bindPeekSelectAll,
+  fixedLeftForInline,
   formatCellValue,
   getFieldValue,
   type CellPosition,
   type CellRendererParams,
+  type CellValue,
   type ColumnDefinition,
+  type GridCore,
+  type RowId,
 } from '@gp-grid/core';
 import type { CellRendererTemplate } from './grid-body.component';
 
@@ -32,6 +36,7 @@ const TEMPLATE = `
     [style.top.px]="top()"
     [style.left.px]="left()"
     [style.width.px]="width()"
+    [style.clip-path]="clipPath()"
     [style.visibility]="positioned() ? 'visible' : 'hidden'">
     @if (template(); as tpl) {
       <ng-container
@@ -57,7 +62,12 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   peekCell = input.required<CellPosition>();
   column = input.required<ColumnDefinition>();
   rowData = input.required<unknown>();
+  readCellValue = input<((rowIndex: number, colIndex: number) => CellValue) | null>(null);
+  readFieldValue = input<((rowIndex: number, field: string) => CellValue) | null>(null);
+  readRowId = input<((rowIndex: number) => RowId | undefined) | null>(null);
   containerEl = input.required<HTMLElement | null>();
+  /** Bound core; peek anchoring is a geometry query, not a DOM measurement. */
+  core = input<GridCore<unknown> | null>(null);
   cellRenderers = input<Record<string, CellRendererTemplate>>({});
   globalCellRenderer = input<CellRendererTemplate | null>(null);
 
@@ -66,6 +76,7 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   protected top = signal(0);
   protected left = signal(0);
   protected width = signal(0);
+  protected clipPath = signal('inset(0)');
   protected positioned = signal(false);
 
   protected template = computed<CellRendererTemplate | null>(() => {
@@ -78,14 +89,25 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
     return this.globalCellRenderer();
   });
 
+  private rawValueFor(col: ColumnDefinition): CellValue {
+    const read = this.readCellValue();
+    if (read) return read(this.peekCell().row, this.peekCell().col);
+    return getFieldValue(this.rowData(), col.field);
+  }
+
   protected rendererParams = computed<CellRendererParams>(() => {
     const col = this.column();
     const data = this.rowData();
-    const rawValue = getFieldValue(data, col.field);
+    const rawValue = this.rawValueFor(col);
     const displayValue = col.valueFormatter ? col.valueFormatter(rawValue) : rawValue;
+    const readField = this.readFieldValue();
+    const rowIndex = this.peekCell().row;
     return {
       value: displayValue,
       rowData: data,
+      rowId: this.readRowId()?.(rowIndex),
+      columnId: col.colId ?? col.field,
+      getValue: (field: string) => (readField ? readField(rowIndex, field) : null),
       column: col,
       rowIndex: this.peekCell().row,
       colIndex: this.peekCell().col,
@@ -98,7 +120,7 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   protected fallbackText = computed<string>(() => {
     const col = this.column();
     const renderer = col.cellRenderer;
-    const value = getFieldValue(this.rowData(), col.field);
+    const value = this.rawValueFor(col);
     if (typeof renderer === 'function') {
       const result = renderer(this.rendererParams());
       return result === null || result === undefined ? '' : String(result);
@@ -113,6 +135,8 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       this.peekCell();
+      // Read the revision so a geometry change repositions the overlay.
+      this.core()?.geometry.revision;
       this.updatePosition();
     });
   }
@@ -149,18 +173,36 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
     if (!container || !overlay) return;
 
     const peek = this.peekCell();
-    const cellEl = container.querySelector(
-      `[data-cell-row="${peek.row}"][data-cell-col="${peek.col}"]`,
-    ) as HTMLElement | null;
-    if (!cellEl) {
+    const bounds = this.core()?.geometry.getCellBounds(peek.row, peek.col, "viewport");
+    if (bounds === undefined) {
       this.close.emit();
       return;
     }
 
-    const rect = cellEl.getBoundingClientRect();
-    this.top.set(rect.top);
-    this.left.set(rect.left);
-    this.width.set(rect.width);
+    // Keep the cell's layout width so its content does not reflow, then clip
+    // the portion covered by either pin region.
+    const clip = this.core()?.geometry.getColumnClip(peek.col);
+    if (clip !== undefined && (bounds.left >= clip.end || bounds.left + bounds.width <= clip.start)) {
+      this.close.emit();
+      return;
+    }
+    const inlineStart = clip === undefined ? bounds.left : Math.max(bounds.left, clip.start);
+    const inlineEnd = clip === undefined
+      ? bounds.left + bounds.width
+      : Math.min(bounds.left + bounds.width, clip.end);
+    const clippedWidth = inlineEnd - inlineStart;
+    const left = fixedLeftForInline(container, bounds.left, bounds.width);
+    const clippedLeft = fixedLeftForInline(container, inlineStart, clippedWidth);
+    const leftInset = Math.max(0, clippedLeft - left);
+    const rightInset = Math.max(0, left + bounds.width - clippedLeft - clippedWidth);
+
+    // The overlay is position:fixed, so the cell's viewport-space bounds are
+    // offset by the body client area's screen origin.
+    const origin = container.getBoundingClientRect();
+    this.top.set(origin.top + bounds.top);
+    this.left.set(left);
+    this.width.set(bounds.width);
+    this.clipPath.set(`inset(0 ${rightInset}px 0 ${leftInset}px)`);
     this.positioned.set(true);
   }
 

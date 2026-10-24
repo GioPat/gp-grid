@@ -2,12 +2,62 @@
 // Column definition types
 
 import type { CellDataType, CellValue } from "./basic";
+import type { ColumnPin, ColumnRegion } from "./geometry";
 import type { HighlightContext } from "./highlighting";
 import type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
 } from "./renderers";
+
+/** Live per-column state, keyed by column id. */
+export interface ColumnState {
+  /** Pixel width override; `null` drops it. */
+  width?: number | null;
+  hidden?: boolean;
+  order?: number;
+  /** `null` is an explicit unpin that beats a definition default. */
+  pinned?: ColumnPin | null;
+}
+
+/** A single explicit column-state command. Unset properties are untouched. */
+export interface ColumnStateUpdate {
+  columnId: string;
+  /** Pixel width override; `null` drops it and restores the declared width. */
+  width?: number | null;
+  hidden?: boolean;
+  /** Target index in the resolved layout (0-based). */
+  order?: number;
+  /** Pin command; `null` unpins even when the definition declares a pin. */
+  pinned?: ColumnPin | null;
+}
+
+/**
+ * Effective column state, as reported by `GridCore.getColumnState()`.
+ * `width` is present only while an explicit pixel override exists; the
+ * displayed width is always available as `resolvedWidth`.
+ */
+export interface ColumnStateSnapshot {
+  columnId: string;
+  width?: number;
+  /** Displayed width in CSS px, `0` while the column is hidden. Output-only. */
+  resolvedWidth: number;
+  hidden: boolean;
+  order: number;
+  /** Requested pin, or `null` while the column is unpinned. */
+  pinned: ColumnPin | null;
+  /** Effective region, or `null` while the column is hidden. Output-only. */
+  region: ColumnRegion | null;
+}
+
+/** Column state as stored by `ColumnModel`, before geometry resolves widths. */
+export interface ColumnModelState {
+  columnId: string;
+  width?: number;
+  hidden: boolean;
+  order: number;
+  pinned: ColumnPin | null;
+}
 
 /** Column definition */
 export interface ColumnDefinition {
@@ -23,6 +73,12 @@ export interface ColumnDefinition {
   filterable?: boolean;
   /** Whether column is hidden. Hidden columns are not rendered but still exist in the definition. Default: false */
   hidden?: boolean;
+  /**
+   * Definition-level pin. `"start"`/`"end"` abut that viewport edge;
+   * `undefined` leaves the column in the scrolling center. An explicit
+   * `ColumnStateUpdate.pinned: null` overrides this default.
+   */
+  pinned?: ColumnPin;
   /** Whether column is resizable by dragging the header edge. Default: true */
   resizable?: boolean;
   /** Minimum width in pixels when resizing. Default: 50 */
@@ -54,6 +110,11 @@ export interface ColumnDefinition {
    * renderer, not custom `cellRenderer` output. Default: false.
    */
   wrapText?: boolean;
+  /**
+   * Whether the header text wraps onto additional lines. A header taller
+   * than its band is clipped. Default: false.
+   */
+  wrapHeaderText?: boolean;
   /** Renderer key for adapter lookup, or inline renderer function */
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);

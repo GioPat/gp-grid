@@ -8,37 +8,33 @@ import type {
   PointerEventData,
   ContainerBounds,
   DragState,
+  InputResult,
+  ResizeTarget,
 } from "@gp-grid/core";
 import {
   scrollCellIntoView,
+  readContainerBounds,
+  readIsRtl,
+  normalizeHorizontalKey,
+  toPhysicalX,
   PendingCellTapController,
   TAP_SLOP_PX,
   ROW_DRAG_HOLD_MS,
 } from "@gp-grid/core";
-import type { SlotData } from "../gridState/types";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface VisibleColumnInfo {
-  column: { colId?: string; field: string };
-  originalIndex: number;
-}
 
 export interface UseInputHandlerOptions {
   activeCell: CellPosition | null;
   selectionRange: CellRange | null;
   editingCell: { row: number; col: number } | null;
   filterPopupOpen: boolean;
-  rowHeight: number;
-  headerHeight: number;
-  columnPositions: number[];
-  columnWidths: number[];
-  /** Visible columns with their original indices (for hidden column support) */
-  visibleColumnsWithIndices: VisibleColumnInfo[];
-  slots: Map<string, SlotData>;
-  rowsWrapperOffset: number;
+  /** Cancel an active synthetic fling before a programmatic scroll target. */
+  onBeforeProgrammaticScroll?: () => void;
+  /** Apply a dampened wheel delta keeping its fraction; false writes it directly. */
+  scrollByWheel?: (domDy: number) => boolean;
 }
 
 export interface UseInputHandlerResult {
@@ -49,6 +45,8 @@ export interface UseInputHandlerResult {
   handleHeaderClick: (colIndex: number, e: React.MouseEvent) => void;
   handleHeaderMouseDown: (colIndex: number, colWidth: number, colHeight: number, e: React.PointerEvent) => void;
   handleHeaderResizeMouseDown: (colIndex: number, colWidth: number, e: React.PointerEvent) => void;
+  handleRowResizeMouseDown: (rowIndex: number, rowHeight: number, e: React.PointerEvent) => void;
+  handleResizeDoubleClick: (target: ResizeTarget) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handlePaste: (e: React.ClipboardEvent) => void;
   handleWheel: (e: React.WheelEvent, wheelDampening: number) => void;
@@ -80,13 +78,8 @@ export function useInputHandler<TData>(
     selectionRange,
     editingCell,
     filterPopupOpen,
-    rowHeight,
-    headerHeight,
-    columnPositions,
-    columnWidths,
-    visibleColumnsWithIndices,
-    slots,
-    rowsWrapperOffset,
+    onBeforeProgrammaticScroll,
+    scrollByWheel,
   } = options;
 
   // Auto-scroll interval ref
@@ -120,53 +113,31 @@ export function useInputHandler<TData>(
     fillSourceRange: null,
     fillTarget: null,
     columnResize: null,
+    rowResize: null,
     columnMove: null,
     rowDrag: null,
   });
 
-  // Update InputHandler deps when options change
-  useEffect(() => {
-    const core = coreRef.current;
-    if (core?.input) {
-      core.input.updateDeps({
-        getHeaderHeight: () => headerHeight,
-        getRowHeight: () => rowHeight,
-        getColumnPositions: () => columnPositions,
-        getColumnCount: () => visibleColumnsWithIndices.length,
-        getOriginalColumnIndex: (visibleIndex: number) => {
-          const info = visibleColumnsWithIndices[visibleIndex];
-          return info ? info.originalIndex : visibleIndex;
-        },
-      });
-    }
-  }, [coreRef, headerHeight, rowHeight, columnPositions, visibleColumnsWithIndices]);
-
-  // Get container bounds
+  // Get container bounds (client box, inline-relative scroll)
   const getContainerBounds = useCallback((): ContainerBounds | null => {
     const container = containerRef.current;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      scrollTop: container.scrollTop,
-      scrollLeft: container.scrollLeft,
-    };
+    if (container === null) return null;
+    return readContainerBounds(container);
   }, [containerRef]);
 
-  // Auto-scroll helpers
+  // Auto-scroll helpers. Horizontal deltas are inline-relative, so the
+  // direction is sampled once when the loop starts.
   const startAutoScroll = useCallback((dx: number, dy: number) => {
     if (autoScrollRef.current) {
       clearInterval(autoScrollRef.current);
     }
+    const rtl = readIsRtl(containerRef.current);
     autoScrollRef.current = setInterval(() => {
       const container = containerRef.current;
       const core = coreRef.current;
       if (container) {
         container.scrollTop += dy;
-        container.scrollLeft += dx;
+        container.scrollLeft += toPhysicalX(dx, rtl);
 
         // Re-process drag move with last known mouse position so the
         // drop target stays in sync as the grid scrolls
@@ -434,25 +405,48 @@ export function useInputHandler<TData>(
     [coreRef, startGlobalDragListeners]
   );
 
-  const handleHeaderResizeMouseDown = useCallback(
-    (colIndex: number, colWidth: number, e: React.PointerEvent) => {
-      const core = coreRef.current;
-      if (!core?.input) return;
-
-      const result = core.input.handleHeaderResizeMouseDown(
-        colIndex,
-        colWidth,
-        toPointerEventData(e)
-      );
-
+  const applyResizeResult = useCallback(
+    (
+      core: GridCore<TData>,
+      result: InputResult,
+      dragType: "column-resize" | "row-resize",
+      e: React.PointerEvent,
+    ) => {
       if (result.preventDefault) e.preventDefault();
       if (result.stopPropagation) e.stopPropagation();
-      if (result.startDrag === "column-resize") {
+      if (result.startDrag === dragType) {
         setDragState(core.input.getDragState());
         startGlobalDragListeners();
       }
     },
-    [coreRef, startGlobalDragListeners]
+    [startGlobalDragListeners]
+  );
+
+  const handleHeaderResizeMouseDown = useCallback(
+    (colIndex: number, colWidth: number, e: React.PointerEvent) => {
+      const core = coreRef.current;
+      if (!core?.input) return;
+      const result = core.input.handleHeaderResizeMouseDown(colIndex, colWidth, toPointerEventData(e));
+      applyResizeResult(core, result, "column-resize", e);
+    },
+    [coreRef, applyResizeResult]
+  );
+
+  const handleRowResizeMouseDown = useCallback(
+    (rowIndex: number, rowHeight: number, e: React.PointerEvent) => {
+      const core = coreRef.current;
+      if (!core?.input) return;
+      const result = core.input.handleRowResizeMouseDown(rowIndex, rowHeight, toPointerEventData(e));
+      applyResizeResult(core, result, "row-resize", e);
+    },
+    [coreRef, applyResizeResult]
+  );
+
+  const handleResizeDoubleClick = useCallback(
+    (target: ResizeTarget) => {
+      coreRef.current?.input.handleResizeDoubleClick(target);
+    },
+    [coreRef]
   );
 
   const handleKeyDown = useCallback(
@@ -461,12 +455,15 @@ export function useInputHandler<TData>(
       const container = containerRef.current;
       if (!core?.input) return;
 
+      // Arrows are normalized here, not in core: selection is direction-agnostic
+      // and the editor must still see the physical key.
       const result = core.input.handleKeyDown(
         {
-          key: e.key,
+          key: normalizeHorizontalKey(e.key, readIsRtl(container)),
           shiftKey: e.shiftKey,
           ctrlKey: e.ctrlKey,
           metaKey: e.metaKey,
+          altKey: e.altKey,
         },
         activeCell,
         editingCell,
@@ -476,24 +473,23 @@ export function useInputHandler<TData>(
       if (result.preventDefault) {
         e.preventDefault();
       }
+      if (result.focusContainer) {
+        container?.focus({ preventScroll: true });
+      }
       if (result.scrollToCell && container) {
-        scrollCellIntoView(
-          core,
-          container,
-          result.scrollToCell.row,
-          rowHeight,
-          slots,
-          rowsWrapperOffset,
-          {
-            colIndex: result.scrollToCell.col,
-            visibleColumns: visibleColumnsWithIndices,
-            columnPositions,
-            columnWidths,
-          }
-        );
+        // Cancel any active touch fling before a programmatic scroll target.
+        onBeforeProgrammaticScroll?.();
+        scrollCellIntoView(core, container, result.scrollToCell.row, result.scrollToCell.col);
       }
     },
-    [coreRef, containerRef, activeCell, editingCell, filterPopupOpen, rowHeight, slots, rowsWrapperOffset, visibleColumnsWithIndices, columnPositions, columnWidths]
+    [
+      coreRef,
+      containerRef,
+      activeCell,
+      editingCell,
+      filterPopupOpen,
+      onBeforeProgrammaticScroll,
+    ]
   );
 
   const handlePaste = useCallback(
@@ -504,7 +500,7 @@ export function useInputHandler<TData>(
       if (filterPopupOpen) return;
 
       const text = e.clipboardData.getData("text/plain");
-      if (core.pasteClipboardText(text)) {
+      if (core.edit.paste(text)) {
         e.preventDefault();
       }
     },
@@ -517,14 +513,14 @@ export function useInputHandler<TData>(
       const container = containerRef.current;
       if (!core?.input || !container) return;
 
-      const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening);
+      const dampened = core.input.handleWheel(e.deltaY, e.deltaX, wheelDampening, e.deltaMode);
       if (dampened) {
         e.preventDefault();
-        container.scrollTop += dampened.dy;
-        container.scrollLeft += dampened.dx;
+        if (scrollByWheel?.(dampened.dy) !== true) container.scrollTop += dampened.dy;
+        if (dampened.dx !== 0) container.scrollLeft += dampened.dx;
       }
     },
-    [coreRef, containerRef]
+    [coreRef, containerRef, scrollByWheel]
   );
 
   // Cleanup on unmount
@@ -549,6 +545,8 @@ export function useInputHandler<TData>(
     handleHeaderClick,
     handleHeaderMouseDown,
     handleHeaderResizeMouseDown,
+    handleRowResizeMouseDown,
+    handleResizeDoubleClick,
     handleKeyDown,
     handlePaste,
     handleWheel,

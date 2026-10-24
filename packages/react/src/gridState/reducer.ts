@@ -11,9 +11,7 @@ export { createInitialState } from "@gp-grid/core";
 // =============================================================================
 
 export function gridReducer<TData = unknown>(state: GridState<TData>, action: GridAction): GridState<TData> {
-  if (action.type === "RESET") {
-    return createInitialState<TData>();
-  }
+  if (action.type === "RESET") return createInitialState<TData>(action.seed);
 
   // Process batch of instructions in one state update
   const { instructions } = action;
@@ -21,14 +19,32 @@ export function gridReducer<TData = unknown>(state: GridState<TData>, action: Gr
     return state;
   }
 
-  // Create mutable copies of Maps to batch updates
-  const newSlots = new Map(state.slots);
-  const newHeaders = new Map(state.headers);
-  // Reset pendingScrollTop each batch — only set when SCROLL_TO is in this batch
-  let stateChanges: Partial<GridState<TData>> = { pendingScrollTop: null };
+  // Copy-on-write: only a batch that touches a map pays for its clone, so a
+  // window-only batch keeps both references and mounted cells skip re-render.
+  let newSlots = state.slots;
+  let newHeaders = state.headers;
+  // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
+  let stateChanges: Partial<GridState<TData>> = {
+    pendingScrollTop: null,
+    pendingScrollLeft: null,
+  };
 
   // Apply all instructions
   for (const instruction of instructions) {
+    switch (instruction.type) {
+      case "CREATE_SLOT":
+      case "DESTROY_SLOT":
+      case "ASSIGN_SLOT":
+      case "MOVE_SLOT":
+        if (newSlots === state.slots) newSlots = new Map(state.slots);
+        break;
+      case "UPDATE_HEADER":
+      case "REMOVE_HEADERS":
+        if (newHeaders === state.headers) newHeaders = new Map(state.headers);
+        break;
+      default:
+        break;
+    }
     const changes = applyInstruction<TData>(instruction, newSlots, newHeaders);
     if (changes) {
       stateChanges = { ...stateChanges, ...changes };

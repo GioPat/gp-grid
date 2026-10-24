@@ -9,6 +9,15 @@ import type {
 } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnFilterModel } from "./filters";
+import type { HierarchyRow } from "./row-groups";
+import type {
+  ColumnLayoutSnapshot,
+  ColumnWindowSnapshot,
+  HeaderBandLayout,
+  RowRegion,
+  RowRegionLayout,
+} from "./geometry";
+import type { GridAnnouncement } from "./ui-state";
 
 // Re-use ColumnDefinition for column change instructions
 
@@ -16,10 +25,22 @@ import type { ColumnFilterModel } from "./filters";
 // Slot Lifecycle Instructions
 // =============================================================================
 
+/**
+ * Row region and placeholder flag carried by slot instructions. Both are
+ * optional: the flat path omits them and the reducer defaults `region` to
+ * `"suffix"` and `loading` to `false`.
+ */
+export interface SlotRegionFields {
+  region?: RowRegion;
+  loading?: boolean;
+}
+
 /** Create slot instruction */
-export interface CreateSlotInstruction {
+export interface CreateSlotInstruction extends SlotRegionFields {
   type: "CREATE_SLOT";
   slotId: string;
+  /** Initial assignment generation; always 0 for a fresh slot. */
+  generation: number;
 }
 
 /** Destroy slot instruction */
@@ -29,11 +50,15 @@ export interface DestroySlotInstruction {
 }
 
 /** Assign slot instruction */
-export interface AssignSlotInstruction {
+export interface AssignSlotInstruction extends SlotRegionFields {
   type: "ASSIGN_SLOT";
   slotId: string;
   rowIndex: number;
   rowData: unknown;
+  /** Assignment generation, matching the slot's current generation. */
+  generation: number;
+  /** Kind and depth of a hierarchy row; absent while flat. */
+  row?: HierarchyRow;
 }
 
 /** Move slot instruction */
@@ -41,6 +66,8 @@ export interface MoveSlotInstruction {
   type: "MOVE_SLOT";
   slotId: string;
   translateY: number;
+  /** Row height from the row axis. */
+  height: number;
 }
 
 // =============================================================================
@@ -87,7 +114,9 @@ export interface StartEditInstruction {
   type: "START_EDIT";
   row: number;
   col: number;
+  /** Value the editor opens with: the draft when an open edit is re-anchored. */
   initialValue: CellValue;
+  editId: number;
 }
 
 /** Stop edit instruction */
@@ -123,10 +152,14 @@ export interface StopPeekInstruction {
 // Scroll Instructions
 // =============================================================================
 
-/** Programmatic scroll instruction — tells the framework to set container.scrollTop */
+/**
+ * Programmatic scroll instruction. At least one axis is present; an adapter
+ * applies the axes it receives and leaves the others where they are.
+ */
 export interface ScrollToInstruction {
   type: "SCROLL_TO";
-  scrollTop: number;
+  scrollTop?: number;
+  scrollLeft?: number;
 }
 
 // =============================================================================
@@ -136,6 +169,7 @@ export interface ScrollToInstruction {
 /** Set content size instruction */
 export interface SetContentSizeInstruction {
   type: "SET_CONTENT_SIZE";
+  /** Resolved total width of the displayed columns (content px). */
   width: number;
   height: number;
   viewportWidth: number;
@@ -146,17 +180,25 @@ export interface SetContentSizeInstruction {
    * instead of absolute positions (millions of pixels).
    */
   rowsWrapperOffset: number;
+  /** Committed geometry revision this measurement belongs to. */
+  revision: number;
 }
 
 /** Update header instruction */
 export interface UpdateHeaderInstruction {
   type: "UPDATE_HEADER";
-  colIndex: number;
+  columnId: string;
   column: ColumnDefinition;
   sortDirection?: SortDirection;
   sortIndex?: number;
   /** Whether column has an active filter */
   hasFilter: boolean;
+}
+
+/** Drop header state for columns that left the resolved layout. */
+export interface RemoveHeadersInstruction {
+  type: "REMOVE_HEADERS";
+  columnIds: string[];
 }
 
 // =============================================================================
@@ -219,6 +261,8 @@ export interface DataLoadingInstruction {
 export interface DataLoadedInstruction {
   type: "DATA_LOADED";
   totalRows: number;
+  /** Present and `true` while a hierarchy is bound; a flat load omits it. */
+  hierarchical?: boolean;
 }
 
 /** Data error instruction */
@@ -235,6 +279,48 @@ export interface DataErrorInstruction {
 export interface ColumnsChangedInstruction {
   type: "COLUMNS_CHANGED";
   columns: ColumnDefinition[];
+  /** Resolved displayed-column layout at the committed revision. */
+  layout: ColumnLayoutSnapshot;
+  /** Committed geometry revision for this batch. */
+  revision: number;
+}
+
+/**
+ * The mounted column window moved or its retained set changed. Emitted with
+ * every layout change, on a center-range move and on a retained-set change.
+ */
+export interface SetColumnWindowInstruction {
+  type: "SET_COLUMN_WINDOW";
+  window: ColumnWindowSnapshot;
+  /** Committed geometry revision the window was resolved at. */
+  revision: number;
+}
+
+/**
+ * The frozen/suffix row layout changed (C9). Emitted in the same batch as
+ * `SET_CONTENT_SIZE` and the slot instructions, so the update is atomic.
+ */
+export interface SetRowRegionsInstruction {
+  type: "SET_ROW_REGIONS";
+  regions: RowRegionLayout;
+  /** Committed geometry revision the regions were resolved at. */
+  revision: number;
+}
+
+/** The header bands changed (D8), in the batch that carries their extent. */
+export interface SetHeaderBandsInstruction {
+  type: "SET_HEADER_BANDS";
+  bands: HeaderBandLayout;
+  /** Committed geometry revision the bands were published at. */
+  revision: number;
+}
+
+/** Live-region announcement (C13). Inert until the label ships in 2c. */
+export interface SetAnnouncementInstruction {
+  type: "SET_ANNOUNCEMENT";
+  announcement: GridAnnouncement | null;
+  /** Committed geometry revision the announcement belongs to. */
+  revision: number;
 }
 
 // =============================================================================
@@ -266,6 +352,7 @@ export type GridInstruction =
   /** Layout */
   | SetContentSizeInstruction
   | UpdateHeaderInstruction
+  | RemoveHeadersInstruction
   /** Filter popup */
   | OpenFilterPopupInstruction
   | CloseFilterPopupInstruction
@@ -279,7 +366,12 @@ export type GridInstruction =
   | DataLoadedInstruction
   | DataErrorInstruction
   /** Column changes */
-  | ColumnsChangedInstruction;
+  | ColumnsChangedInstruction
+  | SetColumnWindowInstruction
+  /** Row regions */
+  | SetRowRegionsInstruction
+  | SetHeaderBandsInstruction
+  | SetAnnouncementInstruction;
 
 // =============================================================================
 // Instruction Listeners

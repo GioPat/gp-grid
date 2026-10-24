@@ -7,12 +7,21 @@ import {
   PendingRowDragController,
   TouchScrollController,
   applyBatchInstructions,
+  isMutableDataSource,
+  readIsRtl,
   scrollCellIntoView,
+  toInlineX,
+  toPhysicalX,
 } from '@gp-grid/core';
 import type {
   ColumnDefinition,
+  ColumnGroupChild,
+  ColumnLayoutMode,
+  ColumnStateUpdate,
   DataSource,
+  FreezeRowsOptions,
   HighlightingOptions,
+  RowGrouping,
 } from '@gp-grid/core';
 import type { GpGridViewModel } from './gp-grid-view-model';
 
@@ -21,8 +30,6 @@ export interface GpGridBindingsDeps {
   isBrowser: boolean;
   getContainer: () => HTMLElement | null;
   getBody: () => HTMLElement | null;
-  getRowHeight: () => number;
-  getHeaderHeight: () => number;
 }
 
 /**
@@ -34,32 +41,41 @@ export interface GpGridBindingsDeps {
 export class GpGridBindings<TData = unknown> {
   readonly dataSourceOwner = new DataSourceOwner<TData>();
   readonly autoScroll: AutoScrollDriver;
-  readonly pendingRowDrag: PendingRowDragController;
-  readonly pendingCellTap: PendingCellTapController;
-  readonly touchScroll: TouchScrollController;
+  readonly pendingRowDrag: PendingRowDragController<TData>;
+  readonly pendingCellTap: PendingCellTapController<TData>;
+  readonly touchScroll: TouchScrollController<TData>;
   readonly input: InputEventAdapter<TData>;
 
   coreRef: GridCore<TData> | null = null;
   private unsubscribe: (() => void) | null = null;
+  private unsubscribeSource: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private rtl = false;
+  private appliedGroups: readonly ColumnGroupChild[] | undefined = undefined;
+  private appliedGrouping: RowGrouping | null | undefined = undefined;
+
+  /** Inline direction sampled from the body element; a `dir` flip needs a remount. */
+  get isRtl(): boolean {
+    return this.rtl;
+  }
 
   constructor(private readonly deps: GpGridBindingsDeps) {
     this.autoScroll = new AutoScrollDriver(
       () => this.deps.getBody(),
       (event) => this.input.dragMove(event),
     );
-    this.pendingRowDrag = new PendingRowDragController({
+    this.pendingRowDrag = new PendingRowDragController<TData>({
       getCore: () => this.coreRef,
       getContainer: this.deps.getContainer,
       isBrowser: this.deps.isBrowser,
       onDragConfirmed: (state) => this.deps.vm.dragState.set(state),
     });
-    this.pendingCellTap = new PendingCellTapController({
+    this.pendingCellTap = new PendingCellTapController<TData>({
       getCore: () => this.coreRef,
       isBrowser: this.deps.isBrowser,
       onTapConfirmed: () => this.deps.getContainer()?.focus(),
     });
-    this.touchScroll = new TouchScrollController({
+    this.touchScroll = new TouchScrollController<TData>({
       getCore: () => this.coreRef,
       getScrollEl: this.deps.getBody,
       isBrowser: this.deps.isBrowser,
@@ -74,40 +90,49 @@ export class GpGridBindings<TData = unknown> {
     });
   }
 
-  attach(core: GridCore<TData>): void {
+  attach(core: GridCore<TData>, dataSource: DataSource<TData>): void {
     this.coreRef = core;
+    this.watchSource(dataSource);
     this.touchScroll.syncCore();
+    this.deps.vm.columns.set(core.columns.get());
     this.unsubscribe = core.onBatchInstruction((instructions) => {
       const vm = this.deps.vm;
+      // The applier is copy-on-write: a map the batch did not touch comes back
+      // by reference, so the signal's own equality check suppresses the
+      // notification without the binding comparing anything.
       const maps = applyBatchInstructions(
         instructions,
         vm.slots(),
         vm.headerState(),
         vm.batchSetters,
       );
-      vm.slots.set(new Map(maps.slots));
-      vm.headerState.set(new Map(maps.headers));
+      vm.slots.set(maps.slots);
+      vm.headerState.set(maps.headers);
     });
 
     core.initialize();
-    core.input.updateDeps({
-      getHeaderHeight: this.deps.getHeaderHeight,
-      getRowHeight: this.deps.getRowHeight,
-      getColumnPositions: () => this.deps.vm.columnPositions(),
-      getColumnCount: () => this.deps.vm.visibleColumnWithIndices().length,
-      getOriginalColumnIndex: (visibleIndex) =>
-        this.deps.vm.visibleColumnWithIndices()[visibleIndex]?.originalIndex ?? visibleIndex,
-    });
   }
 
-  observeViewport(container: HTMLElement, bodyEl: HTMLElement): void {
-    this.deps.vm.viewportWidth.set(container.clientWidth);
-    this.resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) this.deps.vm.viewportWidth.set(entry.contentRect.width);
-    });
-    this.resizeObserver.observe(container);
-    this.coreRef?.setViewport(0, 0, container.clientWidth, bodyEl.clientHeight);
+  /**
+   * Report the body scroll container's measurements. The body element — not
+   * the outer container — owns the client area and the scrollbars, so its
+   * `clientWidth` is the viewport width the layout resolves against.
+   */
+  observeViewport(bodyEl: HTMLElement): void {
+    const report = (): void => {
+      this.rtl = readIsRtl(bodyEl);
+      this.deps.vm.rtl.set(this.rtl);
+      this.touchScroll.resetDirection();
+      this.coreRef?.setViewport(
+        bodyEl.scrollTop,
+        toInlineX(bodyEl.scrollLeft, this.rtl),
+        bodyEl.clientWidth,
+        bodyEl.clientHeight,
+      );
+    };
+    report();
+    this.resizeObserver = new ResizeObserver(() => report());
+    this.resizeObserver.observe(bodyEl);
     // Synthetic touch scrolling: takes over touch gestures only when scroll
     // virtualization compresses the DOM scroll space; inert otherwise.
     this.touchScroll.attach();
@@ -120,6 +145,8 @@ export class GpGridBindings<TData = unknown> {
     this.pendingCellTap.cancel();
     this.touchScroll.detach();
     this.unsubscribe?.();
+    this.unsubscribeSource?.();
+    this.unsubscribeSource = null;
     this.resizeObserver?.disconnect();
     this.coreRef?.destroy();
     this.dataSourceOwner.destroy();
@@ -133,46 +160,88 @@ export class GpGridBindings<TData = unknown> {
     }
   }
 
-  syncColumns(cols: ColumnDefinition[]): void {
+  /** Columns and groups go in one call, so the hierarchy is validated against the new ids. */
+  syncColumns(cols: ColumnDefinition[], groups: readonly ColumnGroupChild[] | undefined): void {
     const core = this.coreRef;
     if (core === null) return;
-    if (this.dataSourceOwner.syncColumns(cols)) core.setColumns(cols);
+    const columnsChanged = this.dataSourceOwner.syncColumns(cols);
+    const groupsChanged = this.appliedGroups !== groups;
+    this.appliedGroups = groups;
+    if (columnsChanged || groupsChanged) core.columns.set(cols, groups ?? null);
+  }
+
+  syncHeaderBandHeights(heights: readonly number[] | undefined): void {
+    this.coreRef?.header.setBandHeights(heights ?? []);
+  }
+
+  /** Apply a controlled column-state input; explicit commands win. */
+  syncColumnState(updates: ColumnStateUpdate[]): void {
+    this.coreRef?.columns.setState(updates);
   }
 
   syncRows(rows: TData[], dataSource: DataSource<TData> | null): void {
     const core = this.coreRef;
     if (core === null) return;
     const newDs = this.dataSourceOwner.syncRows(rows, dataSource);
-    if (newDs !== null) core.setDataSource(newDs);
+    if (newDs === null) return;
+    this.watchSource(newDs);
+    core.setDataSource(newDs);
+  }
+
+  /** A `MutableDataSource` announces its transactions; refresh the visible window on each. */
+  private watchSource(dataSource: DataSource<TData>): void {
+    this.unsubscribeSource?.();
+    this.unsubscribeSource = isMutableDataSource(dataSource)
+      ? dataSource.subscribe((result) => void this.coreRef?.refreshFromTransaction(result))
+      : null;
   }
 
   applyPendingScroll(): void {
     const top = this.deps.vm.pendingScrollTop();
+    const left = this.deps.vm.pendingScrollLeft();
     const body = this.deps.getBody();
-    if (top !== null && body) {
-      this.touchScroll.stop();
+    if (body === null) return;
+    if (top === null && left === null) return;
+    this.touchScroll.stop();
+    if (top !== null) {
       body.scrollTop = top;
       this.deps.vm.pendingScrollTop.set(null);
     }
+    if (left !== null) {
+      body.scrollLeft = toPhysicalX(left, this.rtl);
+      this.deps.vm.pendingScrollLeft.set(null);
+    }
+  }
+
+  /** Switch the displayed-width policy without recreating the core. */
+  syncColumnLayout(mode: ColumnLayoutMode): void {
+    this.coreRef?.columns.setLayout(mode);
+  }
+
+  /** Apply a runtime freeze configuration without recreating the core. */
+  syncFreezeRows(config: FreezeRowsOptions | undefined): void {
+    this.coreRef?.frozenRows.set(config);
+  }
+
+  /**
+   * Before the core exists this records the grouping it is created with; a
+   * later value reaches that core through `setGrouping`, never a new core.
+   */
+  syncRowGrouping(grouping: RowGrouping | null | undefined): void {
+    if (this.appliedGrouping === grouping) return;
+    this.appliedGrouping = grouping;
+    this.coreRef?.rowGroups.setGrouping(grouping ?? null);
+  }
+
+  syncRowResize(enabled: boolean): void {
+    this.coreRef?.rowHeights.setResizable(enabled);
   }
 
   scrollToCell(cell: { row: number; col: number }): void {
     const core = this.coreRef;
     const body = this.deps.getBody();
     if (core === null || body === null) return;
-    scrollCellIntoView(
-      core,
-      body,
-      cell.row,
-      this.deps.getRowHeight(),
-      this.deps.vm.slots(),
-      this.deps.vm.rowsWrapperOffset(),
-      {
-        colIndex: cell.col,
-        visibleColumns: this.deps.vm.visibleColumnWithIndices(),
-        columnPositions: this.deps.vm.columnPositions(),
-        columnWidths: this.deps.vm.columnWidths(),
-      },
-    );
+    this.touchScroll.stop();
+    scrollCellIntoView(core, body, cell.row, cell.col);
   }
 }

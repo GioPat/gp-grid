@@ -36,10 +36,18 @@ export type Transaction<TData> =
   | UpdateCellTransaction
   | UpdateRowTransaction<TData>;
 
+/** One row a processed batch touched; an update names the fields written. */
+export type TransactionChange =
+  | { kind: "update"; rowId: RowId; fields: readonly string[] }
+  | { kind: "add"; rowId: RowId }
+  | { kind: "remove"; rowId: RowId };
+
 export interface TransactionResult {
   added: number;
   removed: number;
   updated: number;
+  /** The rows the batch touched, in processing order; absent when the source cannot say. */
+  changes?: readonly TransactionChange[];
 }
 
 export interface TransactionManagerOptions<TData> {
@@ -215,71 +223,56 @@ export class TransactionManager<TData = unknown> {
     }, this.options.debounceMs);
   }
 
-  /**
-   * Process all queued transactions.
-   */
+  /** Process all queued transactions. */
   private processQueue(): void {
     if (this.queue.length === 0) {
-      if (this.pendingPromise) {
-        this.pendingPromise.resolve();
-        this.pendingPromise = null;
-      }
+      this.settle(null);
       return;
     }
-
-    // Take snapshot of current queue
     const transactions = this.queue;
     this.queue = [];
-
-    // Process transactions
-    const result: TransactionResult = {
-      added: 0,
-      removed: 0,
-      updated: 0,
-    };
-
+    const changes: TransactionChange[] = [];
+    const result: TransactionResult = { added: 0, removed: 0, updated: 0, changes };
     try {
-      for (const tx of transactions) {
-        switch (tx.type) {
-          case "ADD":
-            this.options.store.addRows(tx.rows);
-            result.added += tx.rows.length;
-            break;
-
-          case "REMOVE":
-            result.removed += this.options.store.removeRows(tx.rowIds);
-            break;
-
-          case "UPDATE_CELL":
-            this.options.store.updateCell(tx.rowId, tx.field, tx.value);
-            result.updated++;
-            break;
-
-          case "UPDATE_ROW":
-            this.options.store.updateRow(tx.rowId, tx.data);
-            result.updated++;
-            break;
-        }
-      }
-
-      // Notify callback
-      if (this.options.onProcessed) {
-        this.options.onProcessed(result);
-      }
-
-      // Resolve pending promise
-      if (this.pendingPromise) {
-        this.pendingPromise.resolve();
-        this.pendingPromise = null;
-      }
+      for (const tx of transactions) this.apply(tx, result, changes);
+      this.options.onProcessed?.(result);
+      this.settle(null);
     } catch (error) {
-      // Reject pending promise
-      if (this.pendingPromise) {
-        this.pendingPromise.reject(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-        this.pendingPromise = null;
-      }
+      this.settle(error instanceof Error ? error : new Error(String(error)));
     }
+  }
+
+  /** One transaction against the store, counted and described in the result. */
+  private apply(tx: Transaction<TData>, result: TransactionResult, changes: TransactionChange[]): void {
+    const { store } = this.options;
+    switch (tx.type) {
+      case "ADD":
+        for (const row of tx.rows) changes.push({ kind: "add", rowId: store.rowIdOf(row) });
+        store.addRows(tx.rows);
+        result.added += tx.rows.length;
+        return;
+      case "REMOVE":
+        for (const rowId of tx.rowIds) changes.push({ kind: "remove", rowId });
+        result.removed += store.removeRows(tx.rowIds);
+        return;
+      case "UPDATE_CELL":
+        changes.push({ kind: "update", rowId: tx.rowId, fields: [tx.field] });
+        store.updateCell(tx.rowId, tx.field, tx.value);
+        result.updated++;
+        return;
+      case "UPDATE_ROW":
+        changes.push({ kind: "update", rowId: tx.rowId, fields: Object.keys(tx.data) });
+        store.updateRow(tx.rowId, tx.data);
+        result.updated++;
+    }
+  }
+
+  /** Resolves or rejects the pending flush, if any. */
+  private settle(error: Error | null): void {
+    const pending = this.pendingPromise;
+    if (pending === null) return;
+    this.pendingPromise = null;
+    if (error === null) pending.resolve();
+    else pending.reject(error);
   }
 }

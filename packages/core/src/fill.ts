@@ -1,19 +1,33 @@
 // @gp-grid/core/src/fill.ts
 
 import type {
+  WriteRejectionOperation,
   CellRange,
   CellValue,
+  CellWriteRejectedEvent,
+  WriteOperation,
   FillHandleState,
   ColumnDefinition,
 } from "./types";
-import { createInstructionEmitter, normalizeRange } from "./utils";
+import {
+  createInstructionEmitter,
+  createWriteRejection,
+  normalizeRange,
+} from "./utils";
 
 export interface FillManagerOptions {
   getRowCount: () => number;
   getColumnCount: () => number;
   getCellValue: (row: number, col: number) => CellValue;
   getColumn: (col: number) => ColumnDefinition | undefined;
-  setCellValue: (row: number, col: number, value: CellValue) => void;
+  /** False when the cell refused the write, which it reports itself. */
+  setCellValue: (row: number, col: number, value: CellValue, operation: WriteRejectionOperation) => boolean | void;
+  /** False when the bound source refuses writes. */
+  isWritable?: () => boolean;
+  /** Runs one write command, so its writes are reported together. */
+  runWrites?: <T>(operation: WriteOperation, command: () => T) => T;
+  /** Called when a fill drag is refused before any cell is written. */
+  onWriteRejected?: (event: CellWriteRejectedEvent) => void;
 }
 
 /**
@@ -52,6 +66,16 @@ export class FillManager {
    * Start a fill drag operation from a source range.
    */
   startFillDrag(sourceRange: CellRange): void {
+    if (this.options.isWritable?.() === false) {
+      const { minRow, minCol } = normalizeRange(sourceRange);
+      const column = this.options.getColumn(minCol);
+      this.runWrites("fill", () => {
+        this.options.onWriteRejected?.(
+          createWriteRejection(minRow, minCol, column?.field ?? "", "fill", "read-only-source"),
+        );
+      });
+      return;
+    }
     this.state = {
       sourceRange,
       targetRow: sourceRange.endRow,
@@ -87,16 +111,17 @@ export class FillManager {
     if (!this.state) return;
 
     const { sourceRange, targetRow } = this.state;
-    const filledCells = this.calculateFilledCells(sourceRange, targetRow);
-
-    // Apply values
-    for (const { row, col, value } of filledCells) {
-      this.options.setCellValue(row, col, value);
-    }
-
+    const targets = this.calculateFilledCells(sourceRange, targetRow);
+    // A refused target (a group or total row) is left out of the commit.
+    const filledCells = this.runWrites("fill", () =>
+      targets.filter(({ row, col, value }) => this.options.setCellValue(row, col, value, "fill") !== false),
+    );
     this.emit({ type: "COMMIT_FILL", filledCells });
-
     this.state = null;
+  }
+
+  private runWrites<T>(operation: WriteOperation, command: () => T): T {
+    return this.options.runWrites === undefined ? command() : this.options.runWrites(operation, command);
   }
 
   /**

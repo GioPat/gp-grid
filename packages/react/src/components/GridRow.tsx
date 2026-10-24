@@ -1,0 +1,181 @@
+// packages/react/src/components/GridRow.tsx
+
+import React from "react";
+import type {
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  HierarchyRow,
+  ResolvedColumn,
+  SlotData,
+} from "@gp-grid/core";
+import { GROUP_DEPTH_PROPERTY, hierarchyRowAttributes } from "@gp-grid/core";
+import { GridCell } from "./GridCell";
+import type { GridCellProps } from "./GridCell";
+
+/** Everything a cell needs except the position it renders at. */
+export type GridRowCellContext<TData = unknown> = Omit<
+  GridCellProps<TData>,
+  "rowIndex" | "rowData" | "row" | "rowHeight" | "column" | "displayedIndex"
+>;
+
+const ALL_REGIONS: readonly ColumnRegion[] = ["start", "center", "end"];
+const PIN_REGIONS: readonly ColumnRegion[] = ["start", "end"];
+
+export interface GridRowProps<TData = unknown> {
+  slot: SlotData<TData>;
+  /** ARIA rows the header takes ahead of the body: its band count. */
+  headerRowCount: number;
+  columnWindow: ColumnWindowSnapshot;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
+  width: number;
+  cellContext: GridRowCellContext<TData>;
+  /** Column regions this row renders: the frozen block renders `center` only. */
+  regions?: readonly ColumnRegion[];
+}
+
+export interface GridRowPinsProps<TData = unknown> {
+  slot: SlotData<TData>;
+  columnWindow: ColumnWindowSnapshot;
+  /** 0-based displayed index of a column id, for `aria-colindex`. */
+  displayedIndexOf: (columnId: string) => number;
+  cellContext: GridRowCellContext<TData>;
+  regions?: readonly ColumnRegion[];
+}
+
+/**
+ * Absolute box shared by a row and a frozen pin row; `translateY` is local to
+ * the container the row is mounted in.
+ */
+export const rowBoxStyle = (
+  translateY: number,
+  width: number,
+  height: number,
+): React.CSSProperties => ({
+  position: "absolute",
+  top: 0,
+  insetInlineStart: 0,
+  transform: `translateY(${translateY}px)`,
+  width: `${width}px`,
+  height: `${height}px`,
+  display: "flex",
+});
+
+/** The custom property the label column's indent reads. */
+export const groupDepthStyle = (row: HierarchyRow | undefined): React.CSSProperties =>
+  row === undefined ? {} : ({ [GROUP_DEPTH_PROPERTY]: row.depth } as React.CSSProperties);
+
+const renderColumn = <TData = unknown>(
+  slot: SlotData<TData>,
+  displayedIndexOf: (columnId: string) => number,
+  cellContext: GridRowCellContext<TData>,
+  column: ResolvedColumn,
+): React.ReactNode => (
+  <GridCell
+    key={column.columnId}
+    {...cellContext}
+    rowIndex={slot.rowIndex}
+    rowData={slot.rowData}
+    row={slot.row}
+    rowHeight={slot.height}
+    column={column}
+    displayedIndex={displayedIndexOf(column.columnId)}
+  />
+);
+
+/**
+ * Start/end pin containers for one row, shared by the suffix rows and the
+ * frozen pin layer so the pinned-cell markup exists once for both.
+ */
+export const GridRowPins = <TData = unknown>(
+  props: GridRowPinsProps<TData>,
+): React.ReactNode => {
+  const { slot, columnWindow, displayedIndexOf, cellContext, regions = PIN_REGIONS } = props;
+  const { start, end } = columnWindow;
+  const layout = columnWindow.layout.regions;
+
+  const pin = (region: "start" | "end"): React.ReactNode => {
+    const columns = region === "start" ? start : end;
+    if (regions.includes(region) === false || columns.length === 0) return null;
+    const width = region === "start" ? layout.startWidth : layout.endWidth;
+    return (
+      <div
+        className={`gp-grid-pin gp-grid-pin--${region}`}
+        role="presentation"
+        data-pin-region={region}
+        style={{ width: `${width}px` }}
+      >
+        {columns.map((column) => renderColumn(slot, displayedIndexOf, cellContext, column))}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {pin("start")}
+      {pin("end")}
+    </>
+  );
+};
+
+/**
+ * One mounted row: absolute at its `translateY` inside the rows wrapper, a flex
+ * line whose sticky pin containers hold the admitted start/end cells while the
+ * center cells stay absolute and scroll beneath them.
+ */
+export const GridRow = <TData = unknown>(
+  props: GridRowProps<TData>,
+): React.ReactNode => {
+  const {
+    slot,
+    headerRowCount,
+    columnWindow,
+    displayedIndexOf,
+    width,
+    cellContext,
+    regions = ALL_REGIONS,
+  } = props;
+  const ariaRowIndex = slot.rowIndex + headerRowCount + 1;
+
+  // C7 and PRD 009: an unavailable frozen row or a hierarchy placeholder renders no cells.
+  if (slot.loading) {
+    return (
+      <div
+        className="gp-grid-row gp-grid-row--loading"
+        role="row"
+        aria-rowindex={ariaRowIndex}
+        style={rowBoxStyle(slot.translateY, width, slot.height)}
+      />
+    );
+  }
+
+  const { center } = columnWindow;
+
+  const highlightRowClasses =
+    cellContext.coreRef.current?.highlight?.computeRowClasses(slot.rowIndex, slot.rowData) ?? [];
+  const { className: kindClassName, ...groupAttributes } = hierarchyRowAttributes(slot.row);
+  const rowClassName = ["gp-grid-row", kindClassName, ...highlightRowClasses]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      className={rowClassName}
+      role="row"
+      aria-rowindex={ariaRowIndex}
+      {...groupAttributes}
+      style={{ ...rowBoxStyle(slot.translateY, width, slot.height), ...groupDepthStyle(slot.row) }}
+    >
+      {regions.includes("center") &&
+        center.map((column) => renderColumn(slot, displayedIndexOf, cellContext, column))}
+
+      <GridRowPins
+        slot={slot}
+        columnWindow={columnWindow}
+        displayedIndexOf={displayedIndexOf}
+        cellContext={cellContext}
+        regions={regions}
+      />
+    </div>
+  );
+};

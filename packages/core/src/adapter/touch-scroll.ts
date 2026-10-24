@@ -1,24 +1,24 @@
 import type { GridCore } from "../grid-core";
-import {
-  combineFlingVelocities,
-  computeReleaseVelocity,
-  pruneSamples,
-  MIN_FLING_VELOCITY,
-} from "../utils/touch-scroll-physics";
+import type { ScrollMotionHandle } from "../grid-core-viewport";
+import { combineFlingVelocities, MIN_FLING_VELOCITY } from "../utils/touch-scroll-physics";
 import { SyntheticScroll } from "./synthetic-scroll";
 import { FlingAnimator } from "./touch-fling";
+import { InlineFlingAnimator } from "./touch-fling-inline";
 import {
   computeDragTarget,
   createGestureState,
   engageGesture,
   findTrackedTouch,
   hasNativeScrollTakenOver,
+  recordSample,
+  releaseVelocities,
   type DragTarget,
   type GestureState,
   type TouchEventLike,
 } from "./touch-gesture";
 import { TouchPolicy } from "./touch-policy";
 import { cancelFrame } from "./touch-scroll-helpers";
+import { WheelScroll } from "./wheel-scroll";
 
 export interface TouchScrollDeps<TData = unknown> {
   getCore: () => GridCore<TData> | null;
@@ -58,17 +58,24 @@ export class TouchScrollController<TData = unknown> {
   private readonly deps: TouchScrollDeps<TData>;
   private readonly scroll: SyntheticScroll<TData>;
   private readonly fling: FlingAnimator<TData>;
+  private readonly inlineFling = new InlineFlingAnimator();
+  private readonly wheel: WheelScroll<TData>;
   private attachedEl: HTMLElement | null = null;
   private policy: TouchPolicy<TData> | null = null;
   private gesture: GestureState | null = null;
   private gestureCleanup: (() => void) | null = null;
   private dragFrame: number | null = null;
   private pendingDragTarget: DragTarget | null = null;
+  private readonly motion: ScrollMotionHandle = {
+    isActive: () => this.fling.active || this.inlineFling.active || this.wheel.gliding,
+    interrupt: () => this.interrupt(),
+  };
 
   constructor(deps: TouchScrollDeps<TData>) {
     this.deps = deps;
     this.scroll = new SyntheticScroll(deps.getCore, () => this.attachedEl);
     this.fling = new FlingAnimator(this.scroll);
+    this.wheel = new WheelScroll(this.scroll);
   }
 
   attach(): void {
@@ -76,8 +83,9 @@ export class TouchScrollController<TData = unknown> {
     const el = this.deps.getScrollEl();
     if (el === null) return;
     this.attachedEl = el;
+    this.scroll.resetDirection();
     this.policy = new TouchPolicy(el, this.deps.getCore);
-    this.policy.sync();
+    this.syncCore();
     el.addEventListener("touchstart", this.onTouchStart, { passive: true });
     el.addEventListener("wheel", this.onWheel, { passive: true });
   }
@@ -87,6 +95,7 @@ export class TouchScrollController<TData = unknown> {
     this.clearGesture();
     const el = this.attachedEl;
     if (el === null) return;
+    this.deps.getCore()?.viewport.clearScrollMotionHandle(this.motion);
     this.attachedEl = null;
     el.removeEventListener("touchstart", this.onTouchStart);
     el.removeEventListener("wheel", this.onWheel);
@@ -97,12 +106,43 @@ export class TouchScrollController<TData = unknown> {
   /** Rebind policy updates after the host replaces its GridCore instance. */
   syncCore(): void {
     this.policy?.sync();
+    if (this.attachedEl !== null) this.deps.getCore()?.viewport.setScrollMotionHandle(this.motion);
+  }
+
+  /**
+   * Drop the bridge's cached inline direction; call after a resize or remount
+   * so it reads `scrollLeft` the way the wrapper and the gesture do.
+   */
+  resetDirection(): void {
+    this.scroll.resetDirection();
   }
 
   /** Cancel an in-flight fling (call before programmatic scrollTop writes). */
   stop(): void {
     this.fling.stop();
+    this.inlineFling.stop();
+    this.wheel.stop();
     this.scroll.release();
+  }
+
+  /** Stop a fling or wheel glide where it is; the rest of that wheel sequence is dropped. */
+  interrupt(): void {
+    this.fling.stop();
+    this.inlineFling.stop();
+    this.wheel.interrupt();
+    this.scroll.release();
+  }
+
+  /**
+   * Scroll a scaled grid by a dampened wheel delta in DOM px, keeping its
+   * fraction. False when no grid is attached, so the caller writes it itself.
+   */
+  scrollByWheel(domDy: number): boolean {
+    const ctx = this.resolveContext();
+    if (ctx === null) return false;
+    this.fling.stop();
+    this.wheel.scrollBy(ctx.core, ctx.el, domDy);
+    return true;
   }
 
   private resolveContext(): ScrollContext<TData> | null {
@@ -113,8 +153,16 @@ export class TouchScrollController<TData = unknown> {
   }
 
   private readonly onWheel = (): void => {
-    this.stop();
     this.syncCore();
+    if (this.deps.getCore()?.viewport.isScaling() !== true) {
+      this.stop();
+      return;
+    }
+    // The wrapper's dampened handler continues from the fling's position, so
+    // the override is kept; the idle release covers a handler that is not wired.
+    this.fling.stop();
+    this.inlineFling.stop();
+    this.wheel.noteWheel();
   };
 
   private readonly onTouchStart = (event: Event): void => {
@@ -129,17 +177,21 @@ export class TouchScrollController<TData = unknown> {
   };
 
   private startTouchGesture(event: Event): void {
+    // Resample before `stop()`: its release reports the live position through
+    // the bridge, which must not keep a direction older than this gesture's.
+    this.scroll.resetDirection();
     // Catching the content mid-fling carries its velocity into the next
     // flick, so repeated same-direction flicks stack speed up to the cap.
     const carriedVelocity = this.fling.currentVelocity;
+    const carriedVelocityX = this.inlineFling.currentVelocity;
     this.stop();
     const ctx = this.resolveContext();
-    if (ctx === null || ctx.core.isScalingActive() === false) return;
+    if (ctx === null || ctx.core.viewport.isScaling() === false) return;
     const target = event.target as Element | null;
     if (target?.closest(OWN_GESTURE_SELECTOR)) return;
     const touch = (event as TouchEventLike).changedTouches[0];
     if (touch === undefined) return;
-    this.gesture = createGestureState(touch, ctx.el, event.timeStamp, carriedVelocity);
+    this.gesture = createGestureState(touch, ctx.el, event.timeStamp, carriedVelocity, carriedVelocityX);
     this.attachGestureListeners(ctx.el);
   }
 
@@ -207,8 +259,7 @@ export class TouchScrollController<TData = unknown> {
 
     const logicalDx = gesture.startClientX - touch.clientX;
     const logicalDy = gesture.startClientY - touch.clientY;
-    gesture.samples.push({ time: event.timeStamp, position: logicalDy });
-    gesture.samples = pruneSamples(gesture.samples, event.timeStamp);
+    recordSample(gesture, event.timeStamp, logicalDx, logicalDy);
     if (engageGesture(gesture, logicalDx, logicalDy) === false) return;
 
     // Coalesce to one pipeline run per animation frame: touchmove can fire
@@ -217,7 +268,7 @@ export class TouchScrollController<TData = unknown> {
     this.pendingDragTarget = computeDragTarget(
       gesture,
       ctx.el,
-      ctx.core.getScrollRatio(),
+      ctx.core.viewport.getScrollRatio(),
       logicalDx,
       logicalDy,
     );
@@ -279,18 +330,25 @@ export class TouchScrollController<TData = unknown> {
     }
     if (gesture.engaged === false) return;
 
-    const maxFlingVelocity = ctx.core.getMaxFlingVelocity();
-    const samples = pruneSamples(gesture.samples, event.timeStamp);
-    const release = computeReleaseVelocity(samples, maxFlingVelocity);
-    if (Math.abs(release) < MIN_FLING_VELOCITY) {
+    const maxFlingVelocity = ctx.core.viewport.getMaxFlingVelocity();
+    const release = releaseVelocities(gesture, event.timeStamp, maxFlingVelocity);
+    this.startInlineFling(ctx.el, gesture, release.inline, maxFlingVelocity);
+    if (Math.abs(release.vertical) < MIN_FLING_VELOCITY) {
       // The finger stopped before lifting: the content was caught, so any
       // carried velocity dies with it.
       this.scroll.release();
       return;
     }
-    const velocity = combineFlingVelocities(release, gesture.carriedVelocity, maxFlingVelocity);
+    const velocity = combineFlingVelocities(release.vertical, gesture.carriedVelocity, maxFlingVelocity);
     this.fling.start(ctx.core, ctx.el, velocity);
   };
+
+  /** The inline axis flings on its own release, whatever the vertical one did. */
+  private startInlineFling(el: HTMLElement, gesture: GestureState, release: number, maxFlingVelocity: number): void {
+    if (Math.abs(release) < MIN_FLING_VELOCITY) return;
+    const velocity = combineFlingVelocities(release, gesture.carriedVelocityX, maxFlingVelocity);
+    this.inlineFling.start(el, velocity, gesture.rtl, maxFlingVelocity);
+  }
 
   private readonly onTouchCancel = (event: Event): void => {
     if (this.trackedTouch(event) === null) return;

@@ -27,7 +27,7 @@
 }
 
 /* Highlight mode classes for testing */
-.row-highlight {
+.gp-grid-row.row-highlight .gp-grid-cell {
   background-color: rgba(59, 130, 246, 0.3) !important;
 }
 

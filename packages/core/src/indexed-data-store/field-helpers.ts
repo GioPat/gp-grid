@@ -24,6 +24,19 @@ export function getFieldValue<TData>(
   return value as CellValue;
 }
 
+/** `getFieldValue` with the path split once, for reading one field across many rows. */
+export const createFieldReader = (field: string): ((row: unknown) => CellValue) => {
+  const parts = field.split(".");
+  return (row) => {
+    let value: unknown = row;
+    for (const part of parts) {
+      if (value == null || typeof value !== "object") return null;
+      value = (value as Record<string, unknown>)[part];
+    }
+    return value as CellValue;
+  };
+};
+
 /**
  * Set field value supporting dot notation.
  * Creates nested objects if they don't exist.

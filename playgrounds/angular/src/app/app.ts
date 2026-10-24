@@ -1,16 +1,27 @@
-import { Component, signal, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, signal, computed, effect, PLATFORM_ID, ViewChild, AfterViewInit, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { isPlatformBrowser } from '@angular/common';
-import { GpGridComponent, provideGridData, injectGridData } from '@gp-grid/angular';
+import { GpGridComponent, provideGridData, injectGridData, createRowGrouping, PIVOT_LABEL_COLUMN_ID } from '@gp-grid/angular';
 import type {
   AngularColumnDefinition,
+  AngularColumnGroupChild,
   CellRendererTemplate,
+  CellValue,
   EditRendererParams,
   EditRendererTemplate,
+  FreezeRowsOptions,
+  FrozenRowsState,
   GridLabels,
   HeaderRendererTemplate,
   HighlightingOptions,
+  RowGrouping,
+  RowId,
+  WriteCommittedEvent,
 } from '@gp-grid/angular';
+import { createDemoServerSource } from './demo-server-groups';
+import { createDemoPivotSource } from './demo-pivot';
+import { createPivotSchemaBinding } from './pivot-schema-binding';
+import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from './demo-columnar';
 
 interface Person {
   id: number;
@@ -19,10 +30,13 @@ interface Person {
   city: string;
   bio: string;
   createdAt: Date;
+  status: 'active' | 'inactive' | 'pending';
+  salary: number;
 }
 
 const NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'];
 const CITIES = ['New York', 'London', 'Paris', 'Tokyo', 'Berlin', 'Rome', 'Sydney', 'Toronto'];
+const STATUSES: Person['status'][] = ['active', 'inactive', 'pending'];
 
 // Long bio strings pooled so the 1.5M-row dataset doesn't allocate millions of
 // distinct strings. Each row references one of these by index modulo.
@@ -41,6 +55,62 @@ const DATES: Date[] = Array.from(
   (_, i) => new Date(Date.now() - i * 86400000 * 5),
 );
 
+// Three group levels over the demo columns: `id` stays ungrouped and `bio`
+// sits one level shallower than `name` and `age`.
+const demoColumnGroups: AngularColumnGroupChild[] = [
+  'id',
+  {
+    groupId: 'person',
+    headerName: 'Person',
+    children: [
+      {
+        groupId: 'profile',
+        headerName: 'Profile',
+        children: [
+          { groupId: 'basics', headerName: 'Basics', children: ['name', 'age'] },
+          'bio',
+        ],
+      },
+    ],
+  },
+  { groupId: 'record', headerName: 'Record', children: ['city', 'createdAt', 'status', 'salary'] },
+];
+
+// Row grouping (PRD 008): two dimensions, one `sum` and one `avg`.
+const createDemoRowGrouping = (): RowGrouping =>
+  createRowGrouping({
+    dimensions: [{ field: 'city' }, { field: 'name' }],
+    measures: [
+      { field: 'id', aggregate: 'sum' },
+      { field: 'age', aggregate: 'avg' },
+    ],
+    grandTotal: 'top',
+  });
+
+// Server grouping (PRD 009): the same groups and measures, asked of the mock service.
+const DEMO_SERVER_ROWS = 100_000;
+const createDemoServerGrouping = () =>
+  createDemoServerSource(generateRows(DEMO_SERVER_ROWS), {
+    dimensions: [{ field: 'city' }, { field: 'name' }],
+    measures: [
+      { field: 'id', aggregate: 'sum' },
+      { field: 'age', aggregate: 'avg' },
+    ],
+  });
+
+// A group's `avg` is fractional; leaf ages stay integers.
+const formatAge = (value: CellValue): string =>
+  typeof value === 'number' ? String(Math.round(value * 10) / 10) : String(value ?? '');
+
+const formatSalary = (value: CellValue): string =>
+  typeof value === 'number'
+    ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+    : String(value ?? '');
+
+const DEMO_HEADER_HEIGHT = 40;
+const tallBandHeights: readonly number[] = [DEMO_HEADER_HEIGHT * 2];
+const NO_BAND_HEIGHTS: readonly number[] = [];
+
 const generateRows = (count: number): Person[] =>
   Array.from({ length: count }, (_, i) => ({
     id: i + 1,
@@ -49,7 +119,12 @@ const generateRows = (count: number): Person[] =>
     city: CITIES[i % CITIES.length],
     bio: BIOS[i % BIOS.length],
     createdAt: DATES[i % DATES.length],
+    status: STATUSES[i % STATUSES.length],
+    salary: 30000 + (i % 121) * 1000,
   }));
+
+/** The main page's rows, shared by the mutable source and the columnar one. */
+const ROWS = generateRows(1_500_000);
 
 @Component({
   selector: 'app-root',
@@ -59,11 +134,18 @@ const generateRows = (count: number): Person[] =>
   providers: [
     provideGridData<Person>({
       getRowId: (row) => row.id,
-      initialData: generateRows(1_500_000),
+      initialData: ROWS,
     }),
   ],
 })
-export class App implements AfterViewInit {
+export class App implements AfterViewInit, OnDestroy {
+  protected readonly getRowId = (row: unknown): RowId => (row as Person).id;
+  protected readonly history = { maxEntries: 100 };
+
+  protected onWriteCommitted(event: WriteCommittedEvent): void {
+    console.log(`Write ${event.operation}: ${event.changes.length} changed, ${event.skipped.length} skipped`);
+  }
+
   protected darkMode = signal(false);
 
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -72,12 +154,145 @@ export class App implements AfterViewInit {
   @ViewChild('ageBadge', { static: true }) ageBadge!: CellRendererTemplate;
   @ViewChild('cityHeader', { static: true }) cityHeader!: HeaderRendererTemplate;
   @ViewChild('cityEditor', { static: true }) cityEditor!: EditRendererTemplate;
+  @ViewChild(GpGridComponent) gridComponent?: GpGridComponent;
 
   protected readonly cityOptions = CITIES;
 
   protected readonly grid = injectGridData<Person>();
 
   protected rowIdToUpdate = signal(1);
+
+  /** Row heights (PRD 006): identity commands through the exposed core. */
+  protected tallRows(): void {
+    this.gridComponent?.core?.rowHeights.set([
+      { rowId: 1, height: 48 },
+      { rowId: 2, height: 64 },
+      { rowId: 3, height: 96 },
+    ]);
+  }
+
+  protected resetRowHeights(): void {
+    this.gridComponent?.core?.rowHeights.reset();
+  }
+
+  /** Auto-fit (PRD 007): one-shot fits of the mounted cells. */
+  protected fitColumns(): void {
+    this.gridComponent?.core?.columns.fit();
+  }
+
+  protected fitRows(): void {
+    this.gridComponent?.core?.rowHeights.fit();
+  }
+
+  /** Column groups (PRD 007): hierarchy and band heights, no remount. */
+  protected readonly headerHeight = DEMO_HEADER_HEIGHT;
+
+  protected readonly grouped = signal(false);
+
+  protected readonly tallBand = signal(false);
+
+  // The published input typings drop `| undefined` (ng-packagr declares them
+  // without strictNullChecks), while the input takes it at runtime.
+  protected readonly columnGroups = computed(() => {
+    if (this.pivotActive()) return this.pivotSchema.schema().columnGroups as readonly AngularColumnGroupChild[];
+    return (this.grouped() ? demoColumnGroups : undefined) as readonly AngularColumnGroupChild[];
+  });
+
+  protected readonly headerBandHeights = computed(() =>
+    this.tallBand() && this.pivotActive() === false ? tallBandHeights : NO_BAND_HEIGHTS);
+
+  protected toggleGrouped(): void {
+    this.grouped.update((value) => !value);
+  }
+
+  protected toggleTallBand(): void {
+    this.tallBand.update((value) => !value);
+  }
+
+  /** Row grouping (PRD 008): regroups and expands without a remount. */
+  protected readonly groupRows = signal(false);
+
+  /** Server grouping (PRD 009): swaps the data source, no remount. */
+  protected readonly serverGroups = signal(false);
+
+  protected readonly serverSource = computed(() => (this.serverGroups() ? createDemoServerGrouping() : null));
+
+  /** Pivot (PRD 012): the demo rows by status and name, a column group per creation date. */
+  protected readonly pivot = signal(false);
+
+  protected readonly pivotSource = computed(() => (this.pivot() ? createDemoPivotSource(this.grid.dataSource) : null));
+
+  protected readonly pivotActive = computed(() => this.pivotSource() !== null);
+
+  private readonly pivotSchema = createPivotSchemaBinding();
+
+  protected readonly pivotLabelColumn = PIVOT_LABEL_COLUMN_ID;
+
+  /** Columnar source and the wide grid: typed arrays for the same people, 200 accessor metric columns. */
+  protected readonly columnar = signal(false);
+  protected readonly wide = signal(false);
+  protected readonly columnarSource = computed(() =>
+    this.columnar() || this.wide() ? createDemoColumnarSource(ROWS, this.wide() ? WIDE_COLUMN_COUNT : 0) : null,
+  );
+  private readonly wideColumns = createWideColumns(WIDE_COLUMN_COUNT);
+
+  protected readonly dataSource = computed(
+    () => this.pivotSource() ?? this.serverSource() ?? this.columnarSource() ?? this.grid.dataSource,
+  );
+
+  // The published input typing drops `| null` like `columnGroups` above.
+  protected readonly rowGrouping = computed(
+    () => (this.groupRows() && this.serverGroups() === false && this.pivot() === false
+      ? createDemoRowGrouping()
+      : null) as RowGrouping,
+  );
+
+  protected readonly grouping = computed(() => this.groupRows() || this.serverGroups() || this.pivot());
+
+  protected shownColumns(): AngularColumnDefinition[] {
+    if (this.pivotActive()) return this.pivotSchema.schema().columns;
+    return this.wide() ? [...this.columns, ...this.wideColumns] : this.columns;
+  }
+
+  protected togglePivot(): void {
+    this.pivot.update((value) => !value);
+  }
+
+  protected toggleColumnar(): void {
+    this.columnar.update((value) => !value);
+  }
+
+  protected toggleWide(): void {
+    this.wide.update((value) => !value);
+  }
+
+  protected toggleGroupRows(): void {
+    this.groupRows.update((value) => !value);
+  }
+
+  protected toggleServerGroups(): void {
+    this.serverGroups.update((value) => !value);
+  }
+
+  protected expandAllGroups(): void {
+    this.gridComponent?.core?.rowGroups.setExpanded(null, true);
+  }
+
+  protected readonly freezeCounts = [0, 1, 3, 5] as const;
+
+  protected readonly freezeCount = signal<0 | 1 | 3 | 5>(0);
+
+  protected readonly frozenStatus = signal('0 of 0 rows frozen');
+
+  protected readonly freezeRows = computed<FreezeRowsOptions>(() => ({
+    count: this.freezeCount(),
+  }));
+
+  protected onFrozenRowsChanged(state: FrozenRowsState): void {
+    this.frozenStatus.set(
+      `${state.effectiveCount} of ${state.requestedCount} rows frozen`,
+    );
+  }
 
   columns: AngularColumnDefinition[] = [];
 
@@ -99,13 +314,26 @@ export class App implements AfterViewInit {
       if (!this.isBrowser) return;
       document.documentElement.classList.toggle('dark', this.darkMode());
     });
+    effect((onCleanup) => {
+      const source = this.serverSource();
+      onCleanup(() => source?.destroy());
+    });
+    effect((onCleanup) => {
+      const source = this.pivotSource();
+      this.pivotSchema.bind(source);
+      onCleanup(() => source?.destroy());
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.pivotSchema.clear();
   }
 
   ngAfterViewInit(): void {
     this.columns = [
       { field: 'id', cellDataType: 'number', headerName: 'ID', width: 80, sortable: true },
       { field: 'name', cellDataType: 'text', headerName: 'Name', width: 200, sortable: true, filterable: true, editable: true },
-      { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge },
+      { field: 'age', cellDataType: 'number', headerName: 'Age', width: 100, sortable: true, filterable: true, cellRenderer: this.ageBadge, valueFormatter: formatAge },
       { field: 'city', cellDataType: 'text', headerName: 'City', width: 150, sortable: true, filterable: true, editable: true, headerRenderer: this.cityHeader, editRenderer: this.cityEditor, valueFormatter: (v) => `🏙 ${String(v ?? "")}` },
       // Long text column — wrapText lets it flow onto new lines (clipped to the
       // fixed row height) instead of truncating with an ellipsis. Not editable so
@@ -113,6 +341,8 @@ export class App implements AfterViewInit {
       // renders one — currently behaviour-only).
       { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS, wrapText: true },
       { field: 'createdAt', cellDataType: 'dateTime', headerName: 'Created', width: 200, sortable: true, filterable: true, valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : '') },
+      { field: 'status', cellDataType: 'text', headerName: 'Status', width: 110, sortable: true, filterable: true },
+      { field: 'salary', cellDataType: 'number', headerName: 'Salary', width: 130, sortable: true, filterable: true, valueFormatter: formatSalary },
     ];
     this.cdr.detectChanges();
   }
@@ -138,8 +368,8 @@ export class App implements AfterViewInit {
     }
   }
 
-  protected onRowDragEnd(event: { source: number; target: number }): void {
-    console.log(`Row drag: ${event.source} → ${event.target}`);
+  protected onRowDragEnd(event: { rowId: string | number; fromViewIndex: number; toViewIndex: number }): void {
+    console.log(`Row drag: ${event.fromViewIndex} → ${event.toViewIndex}`);
   }
 
   protected updateRowRandom(): void {

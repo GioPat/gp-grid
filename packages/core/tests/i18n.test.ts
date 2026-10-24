@@ -12,10 +12,13 @@ import {
   getDateOperatorOptions,
 } from "../src/i18n";
 import type {
+  GridColumnSchemaErrorLabels,
   GridFilterOperatorLabels,
   GridLabelOverrides,
   GridLabels,
+  GridRowGroupLabels,
 } from "../src/i18n";
+import type { ColumnSchemaErrorCode } from "../src/types";
 
 describe("resolveGridLabels", () => {
   it("returns the full English default when no overrides are given", () => {
@@ -47,9 +50,10 @@ describe("resolveGridLabels", () => {
   });
 
   it("allows every visible label to be overridden independently", () => {
+    const nested = new Set(["operators", "columnSchemaErrors", "rowGroups"]);
     const topLevelKeys = Object.keys(defaultGridLabels).filter(
-      (key) => key !== "operators",
-    ) as Array<Exclude<keyof GridLabels, "operators">>;
+      (key) => nested.has(key) === false,
+    ) as Array<Exclude<keyof GridLabels, "operators" | "columnSchemaErrors" | "rowGroups">>;
     for (const key of topLevelKeys) {
       const customValue = `custom-${key}`;
       const overrides = { [key]: customValue } as GridLabelOverrides;
@@ -64,6 +68,80 @@ describe("resolveGridLabels", () => {
       const labels = resolveGridLabels({ operators: { [key]: customValue } });
       expect(labels.operators[key]).toBe(customValue);
     }
+
+    const schemaErrorKeys = Object.keys(
+      defaultGridLabels.columnSchemaErrors,
+    ) as Array<keyof GridColumnSchemaErrorLabels>;
+    for (const key of schemaErrorKeys) {
+      const customValue = `custom-${key}`;
+      const labels = resolveGridLabels({ columnSchemaErrors: { [key]: customValue } });
+      expect(labels.columnSchemaErrors[key]).toBe(customValue);
+    }
+
+    const rowGroupKeys = Object.keys(defaultGridLabels.rowGroups) as Array<keyof GridRowGroupLabels>;
+    for (const key of rowGroupKeys) {
+      const customValue = `custom-${key}`;
+      const labels = resolveGridLabels({ rowGroups: { [key]: customValue } });
+      expect(labels.rowGroups[key]).toBe(customValue);
+    }
+  });
+});
+
+describe("rowGroups", () => {
+  const loadFailed = "Loading failed. Expand again to retry.";
+
+  it("defaults the group, grand total and load failure labels", () => {
+    expect(defaultGridLabels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Grand total", loadFailed });
+  });
+
+  it("merges one level deep without mutating the defaults", () => {
+    const labels = resolveGridLabels({ rowGroups: { grandTotal: "Totale" } });
+    expect(labels.rowGroups).toEqual({ label: "{value} ({count})", grandTotal: "Totale", loadFailed });
+    expect(defaultGridLabels.rowGroups.grandTotal).toBe("Grand total");
+  });
+
+  it("overrides the load failure title alone", () => {
+    const labels = resolveGridLabels({ rowGroups: { loadFailed: "Caricamento fallito" } });
+    expect(labels.rowGroups.loadFailed).toBe("Caricamento fallito");
+    expect(labels.rowGroups.label).toBe("{value} ({count})");
+    expect(defaultGridLabels.rowGroups.loadFailed).toBe(loadFailed);
+  });
+});
+
+describe("columnSchemaErrors", () => {
+  const codes: ColumnSchemaErrorCode[] = [
+    "cycle",
+    "duplicateGroup",
+    "repeatedLeaf",
+    "unknownLeaf",
+    "missingLeaf",
+    "multipleParents",
+    "idCollision",
+    "malformed",
+    "limit",
+  ];
+
+  it("has one template per error code", () => {
+    expect(Object.keys(defaultGridLabels.columnSchemaErrors).sort()).toEqual([...codes].sort());
+  });
+
+  it("interpolates the id and the limit", () => {
+    const templates = defaultGridLabels.columnSchemaErrors;
+    expect(formatLabel(templates.cycle, { id: "Region" })).toBe('Column group "Region" contains itself');
+    expect(formatLabel(templates.unknownLeaf, { id: "zz" })).toBe('Column groups reference unknown column "zz"');
+    expect(formatLabel(templates.limit, { limit: "maxDepth" })).toBe("Column groups exceed the maxDepth budget");
+    for (const code of codes.filter((code) => code !== "malformed" && code !== "limit")) {
+      expect(templates[code]).toContain("{id}");
+    }
+  });
+
+  it("merges one level deep without mutating the defaults", () => {
+    const before = defaultGridLabels.columnSchemaErrors.cycle;
+    const labels = resolveGridLabels({ columnSchemaErrors: { cycle: "Ciclo in {id}" } });
+    expect(labels.columnSchemaErrors.cycle).toBe("Ciclo in {id}");
+    expect(labels.columnSchemaErrors.limit).toBe(defaultGridLabels.columnSchemaErrors.limit);
+    expect(labels.operators).toEqual(defaultGridLabels.operators);
+    expect(defaultGridLabels.columnSchemaErrors.cycle).toBe(before);
   });
 });
 
@@ -87,6 +165,27 @@ describe("formatLabel", () => {
 
   it("does not throw on missing params", () => {
     expect(formatLabel("Filter: {column}", {})).toBe("Filter: {column}");
+  });
+});
+
+describe("frozenRowsLimited", () => {
+  it("defaults to wording neutral enough for both directions", () => {
+    expect(defaultGridLabels.frozenRowsLimited).toBe("{effective} of {requested} rows frozen");
+  });
+
+  it("interpolates both tokens", () => {
+    expect(
+      formatLabel(defaultGridLabels.frozenRowsLimited, { effective: 0, requested: 3 }),
+    ).toBe("0 of 3 rows frozen");
+    expect(
+      formatLabel(defaultGridLabels.frozenRowsLimited, { effective: 2, requested: 8 }),
+    ).toBe("2 of 8 rows frozen");
+  });
+
+  it("lets an override replace the template", () => {
+    const labels = resolveGridLabels({ frozenRowsLimited: "{effective}/{requested} righe" });
+    expect(labels.frozenRowsLimited).toBe("{effective}/{requested} righe");
+    expect(formatLabel(labels.frozenRowsLimited, { effective: 1, requested: 4 })).toBe("1/4 righe");
   });
 });
 

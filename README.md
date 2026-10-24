@@ -129,7 +129,17 @@ pnpm install            # also generates packages/core/src/sorting/sort-worker-c
 pnpm build:packages     # builds core + wrappers (dev build: readable, with sourcemaps)
 pnpm test               # vitest across the workspace
 pnpm dev                # build core + react, then start the React playground
+pnpm bench:candidate    # production candidate: render, scroll, sort/filter, memory
+pnpm bench:candidate:wide # production candidate: 1k/10k-column workloads
+pnpm test:conformance   # shared React/Vue/Angular browser scenarios
+pnpm test:ssr           # core import and native wrapper SSR smoke tests
 ```
+
+Candidate benchmarks record the local production artifact paths and hashes. Set
+`BENCH_ROW_COUNTS`, `BENCH_COLUMN_COUNTS`, `BENCH_ITERATIONS`, and
+`BENCH_RUN_ID` to bound or label a run. Quote comma-separated values in
+PowerShell, for example `"BENCH_ROW_COUNTS=100000,1000000"` when invoking
+`cross-env` from the benchmark workspace.
 
 Two files in `packages/core` are build artifacts and must not be edited by hand:
 

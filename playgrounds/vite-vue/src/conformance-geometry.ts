@@ -1,0 +1,259 @@
+// playgrounds/vite-vue/src/conformance-geometry.ts
+// Geometry hooks and column sets for the geometry conformance suite. Kept out
+// of the fixture component so the fixture file does not grow past its budget.
+
+import { createColumnarDataSource } from "@gp-grid/vue";
+import type {
+  CellPosition,
+  CellRange,
+  ColumnDefinition,
+  ColumnFitResult,
+  FrozenRowsState,
+  GridAnnouncement,
+  GridCore,
+  RowHeightUpdate,
+  RowFitResult,
+  RowId,
+  RowRegionLayout,
+} from "@gp-grid/vue";
+
+/** Absolute row range a paginated fixture was asked for; `endRow` exclusive. */
+export interface RequestedRange {
+  startRow: number;
+  endRow: number;
+}
+
+/** Frozen-row hooks the fixture owns; the readers stay framework-agnostic. */
+export interface FrozenReaders {
+  requestedRanges: () => RequestedRange[];
+  announcement: () => GridAnnouncement | null;
+  /** Fixture control: withhold rows `[0, count)` from the next prefix page. */
+  holdFrozenRows: () => void;
+  freezeEvents: () => FrozenRowsState[];
+}
+
+
+/** Narrow columns whose declared total is far below the host width. */
+export const createNarrowColumns = (): ColumnDefinition[] => [
+  { colId: "id", field: "id", headerName: "ID", width: 100, cellDataType: "number", sortable: true },
+  { colId: "name", field: "name", headerName: "Name", width: 120, cellDataType: "text", sortable: true, editable: true },
+  { colId: "city", field: "city", headerName: "City", width: 140, cellDataType: "text" },
+];
+
+export const LARGE_COLUMNAR_ROW_COUNT = 1_000_000;
+
+/**
+ * Deterministic unequal widths (80/100/120/140/160 cycling) so a wide fixture
+ * exercises the prefix-axis window instead of a uniform grid.
+ */
+export const createWideColumns = (count: number): ColumnDefinition[] =>
+  Array.from({ length: count }, (_, index) => ({
+    colId: `w${index}`,
+    field: `w${index}`,
+    headerName: `W${index}`,
+    width: 80 + (index % 5) * 20,
+    cellDataType: "number" as const,
+    sortable: true,
+  }));
+
+/** Accessor-backed wide source: no per-row storage, so 10,000 columns bind fast. */
+export const createWideSource = (count: number) =>
+  createColumnarDataSource({
+    rowCount: 200,
+    getRowId: (row) => row,
+    fields: Array.from({ length: count }, (_, index) => ({
+      field: `w${index}`,
+      getValue: (row: number) => row * count + index,
+    })),
+  });
+
+/**
+ * Eight 100 px columns overflow the 600 px fixture host, so keyboard
+ * navigation must move the horizontal axis as well as the vertical one.
+ */
+export const createLargeColumnarColumns = (): ColumnDefinition[] =>
+  Array.from({ length: 8 }, (_, index) => ({
+    colId: `c${index}`,
+    field: `c${index}`,
+    headerName: `C${index}`,
+    width: 100,
+    cellDataType: "number" as const,
+    sortable: true,
+  }));
+
+/**
+ * Accessor-backed source: no per-row storage is allocated, so a million rows
+ * bind in O(columns).
+ */
+export const createLargeColumnarSource = () =>
+  createColumnarDataSource({
+    rowCount: LARGE_COLUMNAR_ROW_COUNT,
+    getRowId: (row) => row,
+    fields: Array.from({ length: 8 }, (_, index) => ({
+      field: `c${index}`,
+      getValue: (row: number) => row * 8 + index,
+    })),
+  });
+
+export interface LayoutColumnSnapshot {
+  columnId: string;
+  layoutIndex: number;
+  offset: number;
+  width: number;
+}
+
+export interface CellBoundsSnapshot {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/** Compact projection of the published column window, for the pinning suite. */
+export interface ColumnWindowView {
+  range: { start: number; end: number };
+  start: string[];
+  center: string[];
+  end: string[];
+  regions: {
+    centerStart: number;
+    centerEnd: number;
+    startWidth: number;
+    endWidth: number;
+    endOffset: number;
+    centerViewportWidth: number;
+  };
+  displayedCount: number;
+}
+
+export interface GeometryHooks {
+  layoutColumns: () => LayoutColumnSnapshot[];
+  cellBounds: (row: number, layoutIndex: number) => CellBoundsSnapshot | null;
+  identityBounds: (rowId: RowId, columnId: string) => CellBoundsSnapshot | null;
+  activeCell: () => CellPosition | null;
+  selectionRange: () => CellRange | null;
+  columnWindow: () => ColumnWindowView | null;
+  /** Activate a cell and scroll it into view; LTR-only, like the pinning suite. */
+  activateCell: (row: number, layoutIndex: number) => void;
+  /** Manual heights by row id, as an application sets them (PRD 011 D5). */
+  setRowHeights: (updates: RowHeightUpdate[]) => void;
+  rowRegions: () => RowRegionLayout | null;
+  frozenRows: () => FrozenRowsState | null;
+  /** Stored row heights, including the ones waiting for their row (PRD 006). */
+  rowHeightOverrides: () => readonly RowHeightUpdate[];
+  rowBounds: (
+    viewIndex: number,
+    space?: "content" | "viewport" | "rows",
+  ) => { start: number; end: number } | null;
+  contentSize: () => { width: number; height: number } | null;
+  /** First row that is visible, not the first one mounted by the overscan. */
+  firstVisibleRow: () => number;
+  announcement: () => GridAnnouncement | null;
+  requestedRanges: () => RequestedRange[];
+  holdFrozenRows: () => void;
+  freezeEvents: () => FrozenRowsState[];
+}
+
+const boundsOf = (
+  bounds: { top: number; left: number; width: number; height: number } | undefined,
+): CellBoundsSnapshot | null =>
+  bounds === undefined
+    ? null
+    : { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height };
+
+/**
+ * Geometry hooks address a cell by layout index, the index space of
+ * `CellPosition.col`; identity lookups go through `getCellBounds` instead.
+ */
+export const createGeometryHooks = (
+  getCore: () => GridCore<unknown> | null | undefined,
+  frozen?: FrozenReaders,
+): GeometryHooks => ({
+  layoutColumns: () =>
+    (getCore()?.geometry.getColumnLayout().columns ?? []).map((column) => ({
+      columnId: column.columnId,
+      layoutIndex: column.layoutIndex,
+      offset: column.offset,
+      width: column.width,
+    })),
+  cellBounds: (row, layoutIndex) =>
+    boundsOf(getCore()?.geometry.getCellBounds(row, layoutIndex, "viewport")),
+  identityBounds: (rowId, columnId) =>
+    boundsOf(getCore()?.cells.getBounds(rowId, columnId, "viewport")),
+  activeCell: () => getCore()?.selection.getActiveCell() ?? null,
+  selectionRange: () => getCore()?.selection.getSelectionRange() ?? null,
+  activateCell: (row, layoutIndex) => {
+    const core = getCore();
+    const body = document.querySelector<HTMLElement>(".gp-grid-rows-wrapper")
+      ?.parentElement?.parentElement ?? null;
+    if (!core || body === null) return;
+    core.selection.setActiveCell(row, layoutIndex);
+    // LTR-only: physical and logical scrollLeft agree, so the sample passes through.
+    const target = core.geometry.getScrollTarget(row, layoutIndex, {
+      scrollTop: body.scrollTop,
+      scrollLeft: body.scrollLeft,
+    });
+    if (target.scrollTop !== undefined) body.scrollTop = target.scrollTop;
+    if (target.scrollLeft !== undefined) body.scrollLeft = target.scrollLeft;
+  },
+  setRowHeights: (updates) => {
+    getCore()?.rowHeights.set(updates);
+  },
+  columnWindow: () => {
+    const snapshot = getCore()?.geometry.getColumnWindow() ?? null;
+    if (snapshot === null) return null;
+    const ids = (columns: readonly { columnId: string }[]): string[] =>
+      columns.map((column) => column.columnId);
+    return {
+      range: { start: snapshot.range.start, end: snapshot.range.end },
+      start: ids(snapshot.start),
+      center: ids(snapshot.center),
+      end: ids(snapshot.end),
+      regions: { ...snapshot.layout.regions },
+      displayedCount: snapshot.layout.columns.length,
+    };
+  },
+  rowRegions: () => getCore()?.geometry.getRowRegions() ?? null,
+  frozenRows: () => getCore()?.frozenRows.get() ?? null,
+  rowHeightOverrides: () => getCore()?.rowHeights.getOverrides() ?? [],
+  rowBounds: (viewIndex, space = "viewport") => {
+    const bounds = getCore()?.geometry.getRowBounds(viewIndex, space);
+    return bounds === undefined ? null : { start: bounds.start, end: bounds.end };
+  },
+  contentSize: () => {
+    const size = getCore()?.geometry.getContentSize();
+    return size === undefined ? null : { width: size.width, height: size.height };
+  },
+  firstVisibleRow: () => getCore()?.geometry.getVisibleRowWindow().start ?? -1,
+  announcement: () => frozen?.announcement() ?? null,
+  requestedRanges: () => frozen?.requestedRanges() ?? [],
+  holdFrozenRows: () => frozen?.holdFrozenRows(),
+  freezeEvents: () => frozen?.freezeEvents() ?? [],
+});
+
+/** One-shot fits through the core (PRD 007); the last result stays readable. */
+export interface FitHooks {
+  fitColumns: (columnIds?: readonly string[]) => ColumnFitResult | null;
+  fitRows: (rowIds?: readonly RowId[]) => RowFitResult | null;
+  lastFitResult: () => ColumnFitResult | RowFitResult | null;
+  /** `null` drops the column's pixel override. */
+  setColumnWidth: (columnId: string, width: number | null) => void;
+}
+
+export const createFitHooks = (getCore: () => GridCore<unknown> | null | undefined): FitHooks => {
+  let last: ColumnFitResult | RowFitResult | null = null;
+  return {
+    fitColumns: (columnIds) => {
+      const result = getCore()?.columns.fit(columnIds) ?? null;
+      last = result;
+      return result;
+    },
+    fitRows: (rowIds) => {
+      const result = getCore()?.rowHeights.fit(rowIds) ?? null;
+      last = result;
+      return result;
+    },
+    lastFitResult: () => last,
+    setColumnWidth: (columnId, width) => getCore()?.columns.setState([{ columnId, width }]),
+  };
+};

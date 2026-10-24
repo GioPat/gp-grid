@@ -1,0 +1,15 @@
+/* packages/core/src/styles/a11y.css
+   Screen-reader-only content. The live region is the only current consumer
+   (C13); the rule stays `:where`-wrapped so users can restyle or unhide it. */
+
+:where(.gp-grid-visually-hidden) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

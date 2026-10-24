@@ -7,7 +7,10 @@
 .gp-grid-rows-wrapper {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
+  /* Flex anchors the zero-height pin overlays; rows themselves are absolute. */
+  display: flex;
+  align-items: flex-start;
   /* Keep wrapper below the sticky header (z-index: 10) */
   z-index: 1;
   will-change: transform; 
@@ -16,7 +19,7 @@
 .gp-grid-row {
   position: absolute;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
 }
 
 /* Row background - :where() for zero specificity, so user highlight classes always win */
@@ -24,10 +27,72 @@
   background-color: var(--gp-grid-bg);
 }
 
+/* =============================================================================
+   Pinned Column Containers
+   ============================================================================= */
+
+/* Sticky inside the transformed rows wrapper: the center cells scroll beneath
+   the container while it stays on the viewport's inline edge. */
+.gp-grid-pin {
+  position: sticky;
+  /* Stay above active/editing center cells and their fill handle. */
+  z-index: 12;
+  display: flex;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.gp-grid-pin--start {
+  inset-inline-start: 0;
+}
+
+/* `margin-inline-start: auto` parks the end container on the row's inline end,
+   which is what makes `inset-inline-end: 0` stick it to the viewport edge. */
+.gp-grid-pin--end {
+  inset-inline-end: 0;
+  margin-inline-start: auto;
+}
+
+.gp-grid-pin--end::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  z-index: 1;
+  pointer-events: none;
+  background-color: var(--gp-grid-border);
+}
+
+/* Opaque, so center cells scrolling underneath stay hidden. `inherit` carries
+   a row highlight background onto the pin. */
+:where(.gp-grid-pin) {
+  background: inherit;
+}
+
+/* Zero-height sticky overlay hosting a pin region's fill handle. */
+.gp-grid-pin-overlay {
+  position: sticky;
+  z-index: 13;
+  height: 0;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.gp-grid-pin-overlay--start {
+  inset-inline-start: 0;
+}
+
+.gp-grid-pin-overlay--end {
+  inset-inline-end: 0;
+  margin-inline-start: auto;
+}
+
 /* Structural properties - required for grid layout */
 .gp-grid-cell {
   position: absolute;
   top: 0;
+  height: 100%;
   box-sizing: border-box;
   display: flex;
   overflow: hidden;
@@ -48,7 +113,7 @@
 }
 
 /* Wrapped cell content - ColumnDefinition.wrapText: true.
-   Text flows onto additional lines and is clipped to the fixed row height. */
+   Text flows onto additional lines and is clipped to the row height. */
 .gp-grid-cell--wrap {
   align-items: flex-start;
 }
@@ -62,10 +127,10 @@
 /* Visual properties - :where() for zero specificity, so user highlight classes always win */
 :where(.gp-grid-cell) {
   align-items: center;
-  padding: 0 12px;
+  padding: 0 var(--gp-grid-cell-padding-inline);
   cursor: cell;
   color: var(--gp-grid-text);
-  border-right: 1px solid var(--gp-grid-border-light);
+  border-inline-end: 1px solid var(--gp-grid-border-light);
   border-bottom: 1px solid var(--gp-grid-border-light);
   background-color: transparent;
 }
@@ -139,6 +204,41 @@
 }
 
 /* =============================================================================
+   Row Resize (rowResize option)
+   ============================================================================= */
+
+/* The handle sits inside the cell because the cell clips its overflow. */
+.gp-grid-row-resize-handle {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 5px;
+  z-index: 1;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+@media (pointer: coarse) and (hover: none) and (max-width: 768px) {
+  .gp-grid-row-resize-handle {
+    height: 24px;
+  }
+}
+
+/* Drag preview; wrappers set `top` to the header height plus `lineY`. */
+.gp-grid-row-resize-line {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 100%;
+  height: 2px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+:where(.gp-grid-row-resize-line) {
+  background-color: var(--gp-grid-primary);
+}
+
+/* =============================================================================
    Edit Input
    ============================================================================= */
 
@@ -158,6 +258,58 @@
 
 .gp-grid-edit-input:focus {
   outline: none;
+}
+
+/* =============================================================================
+   Frozen Rows (C10)
+   ============================================================================= */
+
+/* Sticky block at the sizer level. The rows wrapper is absolute with z-index
+   1, so the block paints above it and covers its overlays. */
+.gp-grid-frozen-rows {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+:where(.gp-grid-frozen-rows) {
+  background-color: var(--gp-grid-bg);
+  border-bottom: 1px solid var(--gp-grid-border);
+}
+
+/* Frozen pinned cells stick on the inline axis, so they live in this sibling
+   layer at the sizer level. Wrappers pull it up by the block height so it
+   starts at the block's top instead of below it. */
+.gp-grid-frozen-pins {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.gp-grid-frozen-pins .gp-grid-pin {
+  pointer-events: auto;
+}
+
+/* No background: the block's center cells stay visible beneath the pins. */
+.gp-grid-frozen-pin-row {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+/* The transparent pin row gives `background: inherit` nothing to inherit. */
+:where(.gp-grid-frozen-pin-row > .gp-grid-pin) {
+  background-color: var(--gp-grid-bg);
+}
+
+/* C7 placeholder for an unavailable frozen row: static, never animated. */
+:where(.gp-grid-row--loading) {
+  background-color: var(--gp-grid-bg-alt);
 }
 
 /* =============================================================================

@@ -253,6 +253,8 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
 
 `VueHeaderRenderer = (params: HeaderRendererParams) => VNode | string | null` or a Vue component. `HeaderRendererParams` exposes `column`, `colIndex`, `sortDirection`, `sortIndex`, `onSort(direction, addToExisting)`.
 
+A column group's `headerRenderer` is a `VueGroupHeaderRenderer` (render function or component, inline or a key of the same `header-renderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `header-renderer` does not apply to groups.
+
 ## Listening to changes
 
 ```vue
@@ -262,15 +264,15 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
     :data-source="dataSource"
     :row-height="36"
     :get-row-id="(row) => row.id"
-    :on-cell-value-changed="(e) => console.log(e.field, e.oldValue, '→', e.newValue)"
-    :on-row-drag-end="(from, to) => console.log('row', from, '→', to)"
-    :on-column-resized="(colIndex, newWidth) => persist(colIndex, newWidth)"
-    :on-column-moved="(fromIndex, toIndex) => persistOrder(fromIndex, toIndex)"
+    :on-cell-value-changed="(e) => console.log(e.columnId, e.oldValue, '→', e.newValue)"
+    :on-row-drag-end="(e) => console.log('row', e.rowId, e.fromViewIndex, '→', e.toViewIndex)"
+    :on-column-resized="(e) => persist(e.columnId, e.width)"
+    :on-column-moved="(e) => persistOrder(e.columnId, e.fromViewIndex, e.toViewIndex)"
   />
 </template>
 ```
 
-`getRowId` is required when `onCellValueChanged` is set.
+`getRowId` is required when `onCellValueChanged` is set. `onRowDragEnd` / `onColumnResized` / `onColumnMoved` deliver object payloads (`{ rowId, fromViewIndex, toViewIndex }`, `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }`), not positional arguments.
 
 ## Localization and text wrapping
 
@@ -315,7 +317,7 @@ import { GpGrid, GridCore } from "@gp-grid/vue";
 const gridRef = ref<{ core: ShallowRef<GridCore | null> } | null>(null);
 
 const sortByName = () => {
-  gridRef.value?.core.value?.setSort("name", "asc", false);
+  gridRef.value?.core.value?.sortFilter.setSort("name", "asc", false);
 };
 </script>
 
@@ -350,8 +352,8 @@ const highlighting = computed<HighlightingOptions>(() => ({
 </template>
 
 <style>
-/* MUST be unscoped — gp-grid renders outside Vue's scoped style boundary */
-.row-highlight { background-color: rgba(59, 130, 246, 0.2) !important; }
+/* MUST be unscoped. Tint cells so pinned containers remain opaque. */
+.gp-grid-row.row-highlight .gp-grid-cell { background-color: rgba(59, 130, 246, 0.2) !important; }
 .col-highlight { background-color: rgba(16, 185, 129, 0.2) !important; }
 </style>
 ```
@@ -362,15 +364,317 @@ Both callbacks together = Excel-style crosshair. The `<style>` tag with the high
 
 The wrapper watches both props. If either changes, it calls `core.setDataSource(newDs)` internally — sort, filter, scroll, and selection are preserved. Just keep references stable (or change them intentionally).
 
+Replacing `columns` never recreates the core either: it reconciles by column id (`colId ?? field`), so sort, filter, scroll and each surviving column's user state (width, order, visibility) survive. A new array reference is not a reset. To drive that state yourself, pass `:column-state` (`ColumnStateUpdate[]`); the wrapper calls `core.columns.setState` whenever it changes:
+
+```vue
+<GpGrid
+  :columns="columns"
+  :data-source="dataSource"
+  :column-state="[{ columnId: 'age', hidden: true }, { columnId: 'name', order: 0 }]"
+  :row-height="36"
+/>
+```
+
+## Pinning columns
+
+`pinned: "start"` / `"end"` on a definition pins it against that edge; the
+controlled `:column-state` form is `{ columnId, pinned: 'start' | 'end' | null }`.
+At runtime use the exposed core: `gridRef.value?.core?.columns.setPinned(id, pin)`
+(the exposed `core` is a `ShallowRef`). `:on-column-pinned="({ columnId, pinned }) => ..."`
+fires for that call, the header toggle and a cross-region header drag.
+
+A pin that does not fit the viewport renders in the scrolling center until it
+is admitted, so persist the request but read the effective `region` from
+`core.columns.getState()`. `:column-overscan` (default `240` px) is how far past
+each clip edge center columns stay mounted; an open editor keeps its column
+mounted regardless. The default header action uses `:pin-icon` and cycles through
+physical left, physical right and unpinned; override `pinLeftColumn`,
+`pinRightColumn` and `unpinColumn` in `:labels` for its accessible names. See
+[docs/features/column-pinning.md](../../../../docs/features/column-pinning.md).
+
+## Frozen rows
+
+`:freeze-rows="{ count: 3 }"` keeps the first displayed rows below the header
+while the rest scroll (defaults `maxCount 100`, `minSuffixHeight 64`).
+`:on-frozen-rows-changed="(state) => ..."` receives
+`{ requestedCount, effectiveCount, limit }` whenever either reported field
+changes — the effective count can be reduced by `maxCount`, the viewport or, for
+a paginated source, the page budget, and `state.limit` names the constraint
+(`"maxCount" | "viewport" | "cache" | null`). The core announces a reduced
+prefix as `labels.frozenRowsLimited` in a hidden live region.
+
+A changed prop is applied at runtime through `core.frozenRows.set`: the core is
+not recreated, the scroll position is corrected so the visible suffix stays
+anchored, and an equal-valued object is silent. See
+[docs/features/frozen-rows.md](../../../../docs/features/frozen-rows.md).
+
+## Row heights
+
+Rows are `row-height` px tall unless you set a height by row identity through the
+exposed core (no remount), or the user resizes or fits a row (next section):
+
+```ts
+const coreOf = () => (gridRef.value as unknown as { core?: GridCore<unknown> } | null)?.core;
+coreOf()?.rowHeights.set([{ rowId: 2, height: 96 }]);
+coreOf()?.rowHeights.reset([2]);          // or reset() for all of them
+coreOf()?.rowHeights.getOverrides();
+```
+
+`height` must be finite and `> 0`; `set` is all or nothing (a bad entry throws a
+`RangeError` naming the row and applies nothing). With `getRowId` a height
+follows its row through sort, filter, refresh and paging, and an ID whose page
+has not loaded waits for its row; without it, an integer `rowId` addresses a view
+index and is dropped at the next data revision. Applying a height anchors the row
+at the clip top and corrects the scroll in the same batch. Rows render from
+`slot.height`, so `useGpGrid` consumers that build their own row markup must size
+the box from it rather than from the configured `row-height`. See
+[docs/features/row-heights.md](../../../../docs/features/row-heights.md).
+
+## Row resize and auto-fit
+
+```vue
+<GpGrid
+  ref="gridRef"
+  :columns="columns"
+  :row-data="rows"
+  :row-height="32"
+  :get-row-id="(row) => row.id"
+  :row-resize="true"
+  :auto-fit="{ maxColumnWidth: 400 }"
+  :on-row-resized="({ rowId, height }) => saveHeight(rowId, height)"
+/>
+```
+
+```ts
+// Fit the mounted cells once. Call it after the render that follows a column
+// change — in the same task it returns "stale" and applies nothing.
+requestAnimationFrame(() => coreOf()?.columns.fit());
+coreOf()?.rowHeights.fit([2, 3]);
+coreOf()?.columns.setState([{ columnId: "name", width: null }]); // drop a width
+```
+
+A double-click on a row or column edge fits it; Alt+Enter / Alt+Shift+Enter do
+the same for the active cell. The handles are pointer-only. `useGpGrid` takes
+`rowResize`, `autoFit` and `onRowResized` as well. See
+[docs/features/auto-fit.md](../../../../docs/features/auto-fit.md).
+
+## Column groups
+
+```vue
+<script setup lang="ts">
+import type { ColumnGroupChild } from "@gp-grid/vue";
+
+const columnGroups: ColumnGroupChild[] = [
+  "id",
+  { groupId: "person", headerName: "Person", children: [
+    { groupId: "basics", headerName: "Basics", children: ["name", "age"] },
+    "city",
+  ] },
+];
+</script>
+
+<template>
+  <GpGrid
+    :columns="columns"
+    :column-groups="columnGroups"
+    :header-band-heights="[40]"
+    :on-column-schema-rejected="(error) => (schemaError = error.message)"
+  />
+</template>
+```
+
+Every column is referenced once, ungrouped ones at the root. `column-groups` and
+`header-band-heights` apply at runtime. A rejected hierarchy leaves the previous
+one on screen; the prop is re-applied with every later `columns` change, so put
+a valid one back. See
+[docs/features/column-groups.md](../../../../docs/features/column-groups.md).
+
+## Row grouping
+
+```vue
+<script setup lang="ts">
+import { h, ref } from "vue";
+import {
+  GpGrid,
+  createRowGrouping,
+  type GridCore,
+  type VueCellRenderer,
+  type VueGroupLabelRenderer,
+} from "@gp-grid/vue";
+
+// Created once, outside reactive state: a new object regroups.
+const grouping = createRowGrouping({
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  grandTotal: "top",
+});
+
+const groupLabel: VueGroupLabelRenderer = ({ row, label }) =>
+  row.kind === "total" ? h("strong", label) : label;
+
+// `rowData` is undefined on a group or total row: branch on `rowKind`.
+const amountCell: VueCellRenderer = ({ value, rowKind }) =>
+  rowKind === "group" || rowKind === "total" ? h("strong", String(value)) : String(value ?? "");
+
+const grid = ref<{ core: GridCore | null } | null>(null);
+const expandAll = () => grid.value?.core?.rowGroups.setExpanded(null, true);
+</script>
+
+<template>
+  <button @click="expandAll">Expand all</button>
+  <GpGrid
+    ref="grid"
+    :columns="columns"
+    :row-data="sales"
+    :row-height="32"
+    :get-row-id="(row) => row.id"
+    :row-grouping="grouping"
+    group-label-column="country"
+    :group-label-renderer="groupLabel"
+    :cell-renderers="{ amount: amountCell }"
+    :on-row-group-toggled="({ rowId, expanded }) => console.log(rowId, expanded)"
+    :on-row-grouping-rejected="({ reason, field }) => console.warn(reason, field)"
+  />
+</template>
+```
+
+Group rows are rows of cells: the label column shows the expander and the label,
+and each aggregate renders under the column named by its measure's `field`. A
+group cell with no aggregate renders empty and calls no renderer.
+`:row-grouping` is reactive (`null` = flat). The grouping needs every row
+resident (`row-data`, a client source or `useGridData`); a server source is
+rejected with `partial-source`.
+
+`useGpGrid` takes `rowGrouping`, `onRowGroupToggled` and `onRowGroupingRejected`
+and returns `handleGroupTogglePointerDown(rowIndex, event)`, which a custom grid
+binds to its expander's `pointerdown`; `renderGroupLabel(params, renderer?)`
+renders the label. See
+[docs/features/row-grouping.md](../../../../docs/features/row-grouping.md).
+
+## Server grouping
+
+```vue
+<script setup lang="ts">
+import { onUnmounted } from "vue";
+import { GpGrid, createServerGroupingSource } from "@gp-grid/vue";
+import { salesService } from "./sales-service"; // a ServerGroupingService<Sale>
+
+// Created once in setup, outside reactive state: one source per grid.
+const source = createServerGroupingSource(salesService, {
+  dimensions: [{ field: "country" }, { field: "city" }],
+  measures: [
+    { field: "amount", aggregate: "sum" },
+    { field: "score", aggregate: "avg" },
+  ],
+  getRowId: (row) => row.id,
+  grandTotal: "top",
+});
+// GpGrid never destroys a source passed as `data-source`.
+onUnmounted(() => source.destroy());
+</script>
+
+<template>
+  <!-- No :row-grouping: it would be rejected as hierarchical-source. -->
+  <GpGrid
+    :columns="columns"
+    :data-source="source"
+    :row-height="32"
+    group-label-column="country"
+  />
+</template>
+```
+
+The service implements `fetchChildren` and `fetchLeaves` (see the SKILL.md
+"Server grouping" section for the contract and what a transport must encode).
+Rows not loaded yet render as `.gp-grid-row--loading`; a group whose page
+failed collapses with `row.error` and retries when expanded again. The source is
+read-only unless created with `writable: true`. `grid.value?.core?.rowGroups`
+and `:on-row-group-toggled` work as for local grouping. See
+[docs/features/server-grouping.md](../../../../docs/features/server-grouping.md).
+
+## Pivot
+
+```vue
+<script setup lang="ts">
+import { onUnmounted, shallowRef } from "vue";
+import { GpGrid, PIVOT_LABEL_COLUMN_ID, buildPivotSchema, createPivotSource, type PivotConfig } from "@gp-grid/vue";
+
+const config: PivotConfig = {
+  rows: [{ field: "region" }, { field: "city" }],
+  pivots: [{ field: "year" }, { field: "quarter" }],
+  measures: [{ field: "amount", aggregate: "sum" }],
+  rowTotals: true,
+  grandTotal: "top",
+};
+// Created once in setup: one source per grid.
+const source = createPivotSource(inner, config);
+// shallowRef: a schema can hold thousands of columns.
+const schema = shallowRef(source.getSchema() ?? buildPivotSchema([], config));
+const stop = source.subscribeSchema((next) => (schema.value = next));
+onUnmounted(() => {
+  stop();
+  source.destroy();
+});
+</script>
+
+<template>
+  <GpGrid
+    :columns="schema.columns"
+    :column-groups="schema.columnGroups"
+    :data-source="source"
+    :row-height="32"
+    :group-label-column="PIVOT_LABEL_COLUMN_ID"
+  />
+</template>
+```
+
+The source is read-only, keeps expansion by id across queries and does not
+watch its inner source: call `grid.value?.core?.refresh()` after changing the records. A
+childless terminal row shows no expander and ignores toggles. Rejections, the
+precomputed path (`buildPivotSchema` plus your own `HierarchicalRowAccess`)
+and the ids are in the SKILL.md "Pivot" section. See
+[docs/features/pivot.md](../../../../docs/features/pivot.md).
+
+## Writes, undo and redo
+
+```vue
+<GpGrid
+  :columns="columns"
+  :data-source="source"
+  :row-height="32"
+  :get-row-id="(row) => row.id"
+  :history="{ maxEntries: 100 }"
+  :on-write-committed="onWriteCommitted"
+/>
+<!-- the exposed core.history.undo() / redo(); Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z -->
+```
+
+`onWriteCommitted` fires once per editor commit, paste, fill or
+`cells.setValue` with `changes` (`rowId`, `columnId`, `field`, `oldValue`,
+`newValue`) and `skipped` (`row`, `col`, `field`, `reason`); `history` is
+creation-only; both need `getRowId`. The `useGpGrid` composable takes the same
+two options. See the SKILL.md "Writes, undo and redo" section and [docs/features/writes-and-history.md](../../../../docs/features/writes-and-history.md).
+
 ## All `<GpGrid>` props (cheatsheet)
 
 | Prop (kebab in template) | Type | Default |
 |---|---|---|
 | `:columns` | `ColumnDefinition[]` | required |
+| `:column-state` | `ColumnStateUpdate[]` | — |
+| `:column-overscan` | `number` | `240` |
+| `:freeze-rows` | `FreezeRowsOptions` | `{ count: 0 }` |
 | `:data-source` | `DataSource<TData>` | — |
 | `:row-data` | `TData[]` | — |
 | `:row-height` | `number` | required |
 | `:header-height` | `number` | `rowHeight` |
+| `:header-band-heights` | `readonly number[]` | — |
+| `:column-groups` | `ColumnGroupChild[]` | — |
+| `:column-group-limits` | `ColumnGroupLimits` | `64` / `100,000` / `100,000` (creation-only) |
+| `:row-resize` | `boolean` | `false` |
+| `:auto-fit` | `AutoFitOptions` | `600` / `rowHeight` / `10 × rowHeight` (creation-only) |
 | `:overscan` | `number` | `3` |
 | `:row-loading` | `RowLoadingOptions` | — |
 | `:sorting-enabled` | `boolean` | `true` |
@@ -382,24 +686,38 @@ The wrapper watches both props. If either changes, it calls `core.setDataSource(
 | `:cell-renderer` | `VueCellRenderer` | — |
 | `:edit-renderer` | `VueEditRenderer` | — |
 | `:header-renderer` | `VueHeaderRenderer` | — |
+| `:pin-icon` | `GridIcon` | push-pin SVG |
 | `:initial-width` / `:initial-height` | `number` | — |
 | `:highlighting` | `HighlightingOptions<TData>` | — |
 | `:labels` | `GridLabelOverrides` | English defaults |
 | `:get-row-id` | `(row: TData) => RowId` | — |
 | `:on-cell-value-changed` | `(e: CellValueChangedEvent<TData>) => void` | — |
+| `:on-write-rejected` | `(e: CellWriteRejectedEvent) => void` | — |
 | `:loading-component` | `Component<{ isLoading: boolean }>` | spinner |
 | `:row-drag-entire-row` | `boolean` | `false` |
-| `:on-row-drag-end` | `(src, tgt) => void` | — |
-| `:on-column-resized` | `(colIndex, newWidth) => void` | — |
-| `:on-column-moved` | `(from, to) => void` | — |
+| `:on-row-drag-end` | `(e: RowDragEndEvent) => void` | — |
+| `:on-column-resized` | `(e: ColumnResizedEvent) => void` | — |
+| `:on-column-moved` | `(e: ColumnMovedEvent) => void` | — |
+| `:on-column-pinned` | `(e: ColumnPinnedEvent) => void` | — |
+| `:on-frozen-rows-changed` | `(s: FrozenRowsState) => void` | — |
+| `:on-row-resized` | `(e: RowResizedEvent) => void` | — |
+| `:on-column-schema-rejected` | `(e: ColumnSchemaError) => void` | — |
+| `:row-grouping` | `RowGrouping \| null` | — |
+| `group-label-column` | `string` | first displayed column |
+| `:group-label-renderer` | `VueGroupLabelRenderer` | — |
+| `:on-row-group-toggled` | `(e: RowGroupToggledEvent) => void` | — |
+| `:on-row-grouping-rejected` | `(r: RowGroupingRejection) => void` | — |
 
 ## Vue-specific gotchas
+
+- **Vue 3.5+ required**: the header ids use `useId`, so `@gp-grid/vue` peers on `vue@^3.5.0`.
 
 - **Highlight CSS in `<style scoped>`**: won't apply. Move it to an unscoped block or a global stylesheet.
 - **Server-data ds without `computed` / stable ref**: every render recreates the data source and resets the grid. Wrap in `computed` or initialize once with `shallowRef`.
 - **`ref="gridRef"` typing**: the exposed `core` is a `ShallowRef<GridCore | null>` — unwrap with `.value`. Use `ShallowRef` to avoid deep reactivity over the core (which would be expensive).
 - **SSR / Nuxt**: pass `:initial-width` / `:initial-height` so the server render isn't 0×0. `ResizeObserver` is gated by a `typeof` check.
 - **Renderer-as-component prop typing**: `ColumnDefinition` from `@gp-grid/vue` widens the renderer fields to accept Components directly. If you import `ColumnDefinition` from `@gp-grid/core`, you'll lose this — use the one from `@gp-grid/vue`.
+- **`renderToken` from `useGpGrid`**: a number that increments once per applied core batch. Cells are child components, so a non-reactive core read (or a columnar row's `rowData`) would otherwise never re-render; the cell reads `renderToken` to stay in sync. It is library-internal — do not use it as a change signal in application code.
 
 ## Working playground
 

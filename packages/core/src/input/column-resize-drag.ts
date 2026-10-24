@@ -1,4 +1,5 @@
 import type { GridCore } from "../grid-core";
+import type { ColumnDefinition } from "../types/columns";
 import type {
   ColumnResizeDragState,
   ContainerBounds,
@@ -6,11 +7,16 @@ import type {
   InputResult,
   PointerEventData,
 } from "../types/input";
-import {
-  AUTO_SCROLL_SPEED,
-  AUTO_SCROLL_THRESHOLD,
-  DEFAULT_MIN_COLUMN_WIDTH,
-} from "./auto-scroll-util";
+import { AUTO_SCROLL_SPEED, AUTO_SCROLL_THRESHOLD } from "./auto-scroll-util";
+import { inlineOffset, toInlineX } from "../adapter/inline-axis";
+import { DEFAULT_MIN_COLUMN_WIDTH } from "../geometry/column-widths";
+
+/** A column's own resize bounds; the maximum wins over the minimum. */
+export const clampColumnWidth = (column: ColumnDefinition | undefined, width: number): number => {
+  const atLeastMin = Math.max(column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH, width);
+  const maxWidth = column?.maxWidth;
+  return maxWidth === undefined ? atLeastMin : Math.min(maxWidth, atLeastMin);
+};
 
 export class ColumnResizeDrag<TData = unknown> {
   private active = false;
@@ -32,7 +38,7 @@ export class ColumnResizeDrag<TData = unknown> {
     if (event.button !== 0) {
       return { preventDefault: false, stopPropagation: false };
     }
-    const column = this.core.getColumns()[colIndex];
+    const column = this.core.columns.get()[colIndex];
     if (column?.resizable === false) {
       return { preventDefault: false, stopPropagation: false };
     }
@@ -51,28 +57,43 @@ export class ColumnResizeDrag<TData = unknown> {
   }
 
   move(event: PointerEventData, bounds: ContainerBounds): DragMoveResult {
-    const column = this.core.getColumns()[this.colIndex];
-    const minWidth = column?.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
-    const maxWidth = column?.maxWidth;
-    let newWidth = this.initialWidth + (event.clientX - this.startX);
-    newWidth = Math.max(minWidth, newWidth);
-    if (maxWidth !== undefined) {
-      newWidth = Math.min(maxWidth, newWidth);
-    }
-    this.currentWidth = newWidth;
+    const column = this.core.columns.get()[this.colIndex];
+    // In RTL the inline-end edge the handle sits on is the left one, so a
+    // leftward drag grows the column.
+    const dragged = toInlineX(event.clientX - this.startX, bounds.rtl === true);
+    this.currentWidth = clampColumnWidth(column, this.initialWidth + dragged);
 
-    const mouseXInContainer = event.clientX - bounds.left;
-    const scrollDx = mouseXInContainer > bounds.width - AUTO_SCROLL_THRESHOLD
-      ? AUTO_SCROLL_SPEED
-      : 0;
-    const autoScroll = scrollDx === 0 ? null : { dx: scrollDx, dy: 0 };
+    const mouseXInContainer = inlineOffset(bounds, event.clientX);
+    const autoScroll = this.resizeAutoScroll(mouseXInContainer, bounds.width);
 
     return { targetRow: 0, targetCol: this.colIndex, autoScroll };
   }
 
+  /**
+   * Only center columns can scroll horizontally, and only while the center
+   * clip holds more than it shows.
+   */
+  private resizeAutoScroll(
+    mouseXInContainer: number,
+    containerWidth: number,
+  ): { dx: number; dy: number } | null {
+    if (this.isCenterColumn() === false) return null;
+    const atEnd = mouseXInContainer > containerWidth - AUTO_SCROLL_THRESHOLD;
+    const atStart = mouseXInContainer < AUTO_SCROLL_THRESHOLD;
+    if (atEnd === false && atStart === false) return null;
+    return { dx: atEnd ? AUTO_SCROLL_SPEED : -AUTO_SCROLL_SPEED, dy: 0 };
+  }
+
+  private isCenterColumn(): boolean {
+    const layout = this.core.geometry.getColumnLayout();
+    const column = layout.columns.find((candidate) => candidate.layoutIndex === this.colIndex);
+    return column?.region === "center" && layout.regions.centerViewportWidth > 0;
+  }
+
+  /** A press that never changed the width commits nothing and fires no event. */
   end(): void {
-    if (this.active) {
-      this.core.setColumnWidth(this.colIndex, this.currentWidth);
+    if (this.active && this.currentWidth !== this.initialWidth) {
+      this.core.columns.setWidth(this.colIndex, this.currentWidth);
     }
     this.active = false;
     this.colIndex = -1;
@@ -84,6 +105,13 @@ export class ColumnResizeDrag<TData = unknown> {
       colIndex: this.colIndex,
       initialWidth: this.initialWidth,
       currentWidth: this.currentWidth,
+      lineX: this.lineX(),
     };
+  }
+
+  /** Viewport-space x of the preview edge: current left plus the ghost width. */
+  private lineX(): number {
+    const bounds = this.core.geometry.getColumnBounds(this.colIndex, "viewport");
+    return (bounds?.start ?? 0) + this.currentWidth;
   }
 }

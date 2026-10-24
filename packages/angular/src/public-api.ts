@@ -1,5 +1,9 @@
 export * from './lib/gp-grid.component';
-export * from './lib/components';
+export { GroupLabelComponent, GroupToggleComponent } from './lib/components/group-label-cell.component';
+export type { RowGroupCellContext } from './lib/components/row-group-cells';
+export type { GroupHeaderRendererTemplate, HeaderRendererRegistry } from './lib/components/grid-header-groups';
+export type { HeaderRendererTemplate } from './lib/components/grid-header.component';
+export type { CellRendererTemplate, EditRendererTemplate } from './lib/components/grid-body.component';
 export * from './lib/types';
 export * from './lib/createGridData';
 export * from './lib/grid-data.service';
@@ -14,6 +18,7 @@ export type {
   SortModel,
   FilterModel,
   FilterCondition,
+  TextFilterCondition,
   FilterConditionGroup,
   FilterCombination,
   ColumnFilterModel,
@@ -23,9 +28,110 @@ export type {
 
   // Column definition
   ColumnDefinition,
+  ColumnState,
+  ColumnStateUpdate,
+  ColumnStateSnapshot,
+  GridIcon,
+
+  // Column groups and header bands
+  ColumnGroupDefinition,
+  ColumnGroupChild,
+  ColumnGroupLimits,
+  ColumnGroupHeaderParams,
+  ColumnSchemaError,
+  ColumnSchemaErrorCode,
+  ColumnSchemaErrorSource,
+  ColumnSchemaResult,
+  HeaderBandLayout,
+  HeaderRun,
+  HeaderFragment,
+  HeaderFragments,
+
+  // Geometry
+  ColumnLayoutMode,
+  ColumnLayoutSnapshot,
+  DisplayedColumn,
+  // Column virtualization and pinning
+  ColumnPin,
+  ColumnRegion,
+  ColumnWindowSnapshot,
+  ResolvedColumn,
+  FillHandlePosition,
+  // GridCore namespaces
+  GridRowsApi,
+  GridCellsApi,
+  GridEditApi,
+  GridColumnsApi,
+  GridFrozenRowsApi,
+  GridHeaderApi,
+  GridRowDragApi,
+  GridRowHeightsApi,
+  GridViewportApi,
+  // Row resize and one-shot fit
+  AutoFitOptions,
+  MeasurementHost,
+  FitStatus,
+  RowFitResult,
+  ColumnFitResult,
+  ResizeTarget,
+  RowResizeDragState,
+  // Row virtualization and freezing
+  RowRegion,
+  RowHeightUpdate,
+  FrozenRowsState,
+  RowRegionLayout,
+  GeometrySpace,
+  AxisBounds,
+  CellBounds,
+  ViewportPoint,
+  GridHit,
+  ScrollTarget,
+  ContentSize,
+  GridGeometry,
 
   // Row ID
   RowId,
+  ViewRow,
+
+  // Hierarchical rows and row grouping
+  HierarchyRecordRow,
+  HierarchyGroupRow,
+  HierarchyTotalRow,
+  HierarchyRow,
+  HierarchyRowKind,
+  HierarchyRecordChange,
+  HierarchicalRowAccess,
+  RowGroupResult,
+  RowGrouping,
+  RowGroupingConfig,
+  RowGroupDimension,
+  RowGroupMeasure,
+  RowGroupAggregator,
+  RowGroupBuiltInAggregate,
+  RowGroupingState,
+  RowGroupingRejection,
+  RowGroupingResult,
+  RowGroupToggledEvent,
+  HierarchyChange,
+  // Server grouping (PRD 009)
+  GroupPathStep,
+  ServerGroupingSpec,
+  ServerGroupChildrenRequest,
+  ServerGroupNode,
+  ServerGroupChildrenResponse,
+  ServerLeavesRequest,
+  ServerLeavesResponse,
+  ServerGroupingService,
+  ServerGroupingConfig,
+  ServerGroupingSource,
+  // Pivot (PRD 012)
+  PivotMeasure,
+  PivotSchema,
+  PivotSchemaOptions,
+  PivotConfig,
+  PivotSource,
+  GridRowGroupsApi,
+  GroupLabelRendererParams,
 
   // Cell position & range
   CellPosition,
@@ -33,6 +139,17 @@ export type {
 
   // Events
   CellValueChangedEvent,
+  CellWriteRejectedEvent,
+  WriteRejectionOperation,
+  WriteCommittedEvent,
+  WriteChange,
+  WriteOperation,
+  HistoryOptions,
+  ColumnResizedEvent,
+  ColumnMovedEvent,
+  ColumnPinnedEvent,
+  RowDragEndEvent,
+  RowResizedEvent,
 
   // DataSource
   DataSource,
@@ -44,6 +161,13 @@ export type {
   RowLoadingMode,
   RowCacheOptions,
   RowCacheEviction,
+
+  // Columnar read-only source
+  ColumnarAccess,
+  ColumnarDataSource,
+  ColumnarDataSourceOptions,
+  ColumnarField,
+  RowAccess,
 
   // Renderer params
   CellRendererParams,
@@ -59,6 +183,12 @@ export type {
   GridLabelOverrides,
   GridFilterOperatorLabels,
 
+  // Live region
+  GridAnnouncement,
+
+  // Configuration
+  FreezeRowsOptions,
+
   // Instructions (for advanced use cases)
   GridInstruction,
 } from '@gp-grid/core';
@@ -69,8 +199,21 @@ export {
   createServerDataSource,
   createDataSourceFromArray,
   createMutableClientDataSource,
+  createColumnarDataSource,
+  isColumnarDataSource,
   isLegacyColumnFilterModel,
   normalizeColumnFilterModel,
+  createRowGrouping,
+  createServerGroupingSource,
+  createPivotSource,
+  encodeGroupId,
+  decodeGroupId,
+  buildPivotSchema,
+  encodePivotColumnId,
+  decodePivotColumnId,
+  encodePivotGroupId,
+  PIVOT_LABEL_COLUMN_ID,
+  isHierarchicalRowAccess,
 } from '@gp-grid/core';
 
 export type { MutableDataSource } from '@gp-grid/core';

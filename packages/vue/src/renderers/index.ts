@@ -6,5 +6,7 @@ export type { RenderCellOptions } from "./cellRenderer";
 export { renderEditCell } from "./editRenderer";
 export type { RenderEditCellOptions } from "./editRenderer";
 
-export { renderHeader } from "./headerRenderer";
-export type { RenderHeaderOptions } from "./headerRenderer";
+export { renderHeader, renderGroupHeader } from "./headerRenderer";
+export type { RenderHeaderOptions, RenderGroupHeaderOptions } from "./headerRenderer";
+
+export { renderGroupLabel } from "./groupLabelRenderer";

@@ -1,8 +1,11 @@
 import type { TemplateRef } from '@angular/core';
 import type {
   ColumnDefinition,
+  ColumnGroupDefinition,
+  ColumnGroupHeaderParams,
   CellRendererParams,
   EditRendererParams,
+  GroupLabelRendererParams,
   HeaderRendererParams,
 } from '@gp-grid/core';
 
@@ -26,3 +29,21 @@ export interface AngularColumnDefinition extends Omit<ColumnDefinition, 'cellRen
     | TemplateRef<{ $implicit: HeaderRendererParams }>
     | ((params: HeaderRendererParams) => unknown);
 }
+
+/**
+ * Column group extended for Angular: `headerRenderer` also takes a
+ * `TemplateRef`, which receives the fragment's `ColumnGroupHeaderParams`.
+ */
+export interface AngularColumnGroupDefinition extends Omit<ColumnGroupDefinition, 'headerRenderer' | 'children'> {
+  headerRenderer?:
+    | string
+    | TemplateRef<{ $implicit: ColumnGroupHeaderParams }>
+    | ((params: ColumnGroupHeaderParams) => unknown);
+  children: readonly AngularColumnGroupChild[];
+}
+
+/** A nested Angular group, or a leaf `ColumnId`. */
+export type AngularColumnGroupChild = AngularColumnGroupDefinition | string;
+
+/** Template for the label of a group or total row, beside its expander. */
+export type GroupLabelRendererTemplate = TemplateRef<{ $implicit: GroupLabelRendererParams }>;

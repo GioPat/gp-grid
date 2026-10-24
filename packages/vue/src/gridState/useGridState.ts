@@ -1,11 +1,36 @@
 // packages/vue/src/gridState/useGridState.ts
 
 import { shallowRef, type ShallowRef } from "vue";
-import type { GridInstruction, GridState } from "@gp-grid/core";
+import type { GridInstruction, GridState, InitialStateArgs } from "@gp-grid/core";
 import { createInitialState, applyInstruction } from "@gp-grid/core";
 
 export type { InitialStateArgs } from "@gp-grid/core";
 export { createInitialState } from "@gp-grid/core";
+
+/**
+ * Instructions that cannot change what a mounted cell shows on their own. A
+ * row's content change arrives as `ASSIGN_SLOT` with a new slot `generation`,
+ * a column window change as new column props, and a hover change through the
+ * injected hover position its classes read. Scroll batches re-emit the
+ * unchanged column window, and a pointer over a scrolling grid hovers a new
+ * row every frame.
+ */
+const LAYOUT_INSTRUCTIONS: ReadonlySet<GridInstruction["type"]> = new Set([
+  "SET_HOVER_POSITION",
+  "CREATE_SLOT",
+  "DESTROY_SLOT",
+  "ASSIGN_SLOT",
+  "MOVE_SLOT",
+  "UPDATE_VISIBLE_RANGE",
+  "SET_CONTENT_SIZE",
+  "SET_COLUMN_WINDOW",
+  "SET_ROW_REGIONS",
+  "SET_HEADER_BANDS",
+  "SCROLL_TO",
+]);
+
+const changesCellContent = (instructions: readonly GridInstruction[]): boolean =>
+  instructions.some((instruction) => LAYOUT_INSTRUCTIONS.has(instruction.type) === false);
 
 // =============================================================================
 // Composable
@@ -19,12 +44,18 @@ export { createInitialState } from "@gp-grid/core";
  * scheduler batches multiple synchronous state.value replacements into a
  * single re-render, so no microtask buffering is needed.
  */
-export function useGridState(args?: { initialWidth?: number; initialHeight?: number }): {
+export function useGridState(args?: InitialStateArgs): {
   state: ShallowRef<GridState>;
+  /** Bumped once per batch. */
+  renderToken: ShallowRef<number>;
+  /** Bumped by batches that can change core-backed cell content; cells read it. */
+  contentToken: ShallowRef<number>;
   applyInstructions: (instructions: GridInstruction[]) => void;
   reset: () => void;
 } {
   const state = shallowRef<GridState>(createInitialState(args));
+  const renderToken = shallowRef(0);
+  const contentToken = shallowRef(0);
 
   /**
    * Apply a batch of instructions atomically to the state.
@@ -37,13 +68,32 @@ export function useGridState(args?: { initialWidth?: number; initialHeight?: num
    */
   const applyInstructions = (instructions: GridInstruction[]): void => {
     const current = state.value;
-    const workingSlots = new Map(current.slots);
-    const workingHeaders = new Map(current.headers);
+    // Copy-on-write: a window-only batch mutates no map, so both keep their
+    // identity and dependent computeds skip re-evaluating.
+    let workingSlots = current.slots;
+    let workingHeaders = current.headers;
 
-    // Reset pendingScrollTop each batch — only set when SCROLL_TO is in this batch
-    let mergedChanges: Partial<GridState> = { pendingScrollTop: null };
+    // Reset the pending scroll each batch — only set when SCROLL_TO is in this batch
+    let mergedChanges: Partial<GridState> = {
+      pendingScrollTop: null,
+      pendingScrollLeft: null,
+    };
 
     for (const instruction of instructions) {
+      switch (instruction.type) {
+        case "CREATE_SLOT":
+        case "DESTROY_SLOT":
+        case "ASSIGN_SLOT":
+        case "MOVE_SLOT":
+          if (workingSlots === current.slots) workingSlots = new Map(current.slots);
+          break;
+        case "UPDATE_HEADER":
+        case "REMOVE_HEADERS":
+          if (workingHeaders === current.headers) workingHeaders = new Map(current.headers);
+          break;
+        default:
+          break;
+      }
       const changes = applyInstruction(instruction, workingSlots, workingHeaders);
       if (changes) {
         Object.assign(mergedChanges, changes);
@@ -55,17 +105,23 @@ export function useGridState(args?: { initialWidth?: number; initialHeight?: num
 
     // Atomic replacement — exactly one reactive notification
     state.value = { ...current, ...mergedChanges };
+    renderToken.value += 1;
+    if (changesCellContent(instructions)) contentToken.value += 1;
   };
 
   /**
-   * Reset state to initial values
+   * Reset state to the seed it was created with
    */
   const reset = (): void => {
-    state.value = createInitialState();
+    state.value = createInitialState(args);
+    renderToken.value += 1;
+    contentToken.value += 1;
   };
 
   return {
     state,
+    renderToken,
+    contentToken,
     applyInstructions,
     reset,
   };

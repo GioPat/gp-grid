@@ -60,7 +60,7 @@ export class TouchPolicy<TData = unknown> {
   }
 
   private apply(): void {
-    const scaling = this.getCore()?.isScalingActive() === true;
+    const scaling = this.getCore()?.viewport.isScaling() === true;
     const touchAction = scaling ? "none" : this.savedTouchAction;
     const overscroll = scaling ? "contain" : this.savedOverscrollBehavior;
     const style = this.el.style;
