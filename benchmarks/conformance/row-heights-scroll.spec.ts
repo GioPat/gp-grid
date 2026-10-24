@@ -109,7 +109,7 @@ test("AC-006-05 places a pending height when its page arrives", async ({ page },
 
   await expectRowsOnCoreBounds(page, SCROLL_TARGET_TOLERANCE);
   const anchored = await boxAt(page, PAGED_ANCHOR);
-  expect(Math.abs(anchored!.top - reference!.top)).toBeLessThanOrEqual(TOLERANCE + 1);
+  expect(Math.abs(anchored!.top - reference!.top)).toBeLessThanOrEqual(SCROLL_TARGET_TOLERANCE);
   // The axis extent takes the 64 px the placed row adds.
   await expect.poll(async () => Math.round((await contentSize(page))!.height - sizer!.height)).toBe(64);
   expect(pageErrors).toEqual([]);
