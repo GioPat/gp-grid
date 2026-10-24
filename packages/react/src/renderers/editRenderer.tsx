@@ -12,6 +12,9 @@ import type {
 import type { ReactEditRenderer } from "../types";
 import { getCellValue } from "./cellRenderer";
 
+/** Stable, so React calls it once when the editor mounts, not on every render. */
+const focusOnMount = (input: HTMLInputElement | null): void => input?.focus();
+
 export interface RenderEditCellOptions<TData> {
   column: ColumnDefinition;
   rowData: unknown;
@@ -99,7 +102,7 @@ export function renderEditCell<TData>(
       className="gp-grid-edit-input"
       type="text"
       defaultValue={initialValue == null ? "" : String(initialValue)}
-      autoFocus
+      ref={focusOnMount}
       onFocus={(e) => e.target.select()}
       onChange={(e) => core.edit.updateValue(e.target.value, editId)}
       onKeyDown={(e) => {

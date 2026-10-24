@@ -133,7 +133,7 @@ export class ColumnMoveDrag<TData = unknown> {
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
-    this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), this.shiftKey);
+    void this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), this.shiftKey);
   }
 
   private reset(): void {
