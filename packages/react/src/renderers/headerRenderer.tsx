@@ -107,7 +107,7 @@ export function renderHeader<TData>(
     pinned: pinOf(column),
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
-        core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
+        void core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
       }
     },
     onPinChange: (pinned) => {
@@ -182,7 +182,7 @@ export function renderHeader<TData>(
         {sortable && (
           <span className="gp-grid-sort-arrows">
             <span className="gp-grid-sort-arrows-stack">
-              <svg
+              <svg aria-hidden="true"
                 className={`gp-grid-sort-arrow-up${sortDirection === "asc" ? " active" : ""}`}
                 width="8"
                 height="6"
@@ -190,7 +190,7 @@ export function renderHeader<TData>(
               >
                 <path d="M4 0L8 6H0L4 0Z" fill="currentColor" />
               </svg>
-              <svg
+              <svg aria-hidden="true"
                 className={`gp-grid-sort-arrow-down${sortDirection === "desc" ? " active" : ""}`}
                 width="8"
                 height="6"
@@ -218,7 +218,7 @@ export function renderHeader<TData>(
               e.stopPropagation();
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4 4h16l-6 8v5l-4 2v-7L4 4z" />
             </svg>
           </span>

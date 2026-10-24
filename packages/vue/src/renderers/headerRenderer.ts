@@ -96,7 +96,7 @@ export function renderHeader(
     pinned: column.pinned ?? null,
     onSort: (direction, addToExisting) => {
       if (core && sortable) {
-        core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
+        void core.sortFilter.setSort(column.colId ?? column.field, direction, addToExisting);
       }
     },
     onPinChange: (pinned) => {

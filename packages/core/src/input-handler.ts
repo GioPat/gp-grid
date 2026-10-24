@@ -289,7 +289,7 @@ export class InputHandler<TData = unknown> {
     const currentDirection = this.core
       .sortFilter.getSortModel()
       .find((s) => s.colId === colId)?.direction;
-    this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
+    void this.core.sortFilter.setSort(colId, cycleSortDirection(currentDirection), addToExisting);
   }
 
   // ---------------------------------------------------------------------------

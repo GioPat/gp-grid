@@ -375,7 +375,7 @@ export function useGpGrid<TData = unknown>(
     });
 
     // Initialize
-    core.initialize();
+    void core.initialize();
 
     // Synthetic touch scrolling: when scroll virtualization compresses the
     // DOM scroll space, the controller takes over touch gestures so content

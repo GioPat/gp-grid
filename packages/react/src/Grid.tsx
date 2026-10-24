@@ -395,7 +395,7 @@ export function Grid<TData = unknown>(
     });
 
     // Initialize
-    core.initialize();
+    void core.initialize();
 
     // Immediately set viewport if container is available
     // This ensures column scaling happens before first paint
@@ -480,7 +480,7 @@ export function Grid<TData = unknown>(
       return;
     }
     prevDataSourceRef.current = dataSource;
-    core.setDataSource(dataSource);
+    void core.setDataSource(dataSource);
   }, [dataSource]);
 
   // Subscribe to data source changes (for MutableDataSource)
@@ -584,7 +584,7 @@ export function Grid<TData = unknown>(
     (colId: string, filter: ColumnFilterModel | null) => {
       const core = coreRef.current;
       if (core) {
-        core.sortFilter.setFilter(colId, filter);
+        void core.sortFilter.setFilter(colId, filter);
       }
     },
     [],
