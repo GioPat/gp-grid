@@ -1,5 +1,193 @@
 # Changelog
 
+## [1.0.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.2...gp-grid-v1.0.0) (2026-10-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **angular:** keep the entry to the component, the data helpers and the renderer types
+* **vue:** keep the entry to the component, the composables and the core factories
+* **core:** drop isSameDay and rawValueKey from the entry, document the filter helpers
+* **vue:** render grouped header bands, number ARIA rows after the header, require Vue 3.5
+* **core:** add nested column groups and core-owned header bands
+* size row boxes from slot heights and smooth scaled scrolling in the wrappers
+* **core:** set row heights by row identity with anchored scrolling
+* render the Angular column window, pins and header toggle
+* render the Vue column window, pins and header toggle
+* render the React column window, pins and header toggle
+* route wrapper input, scroll and peek x through the inline axis
+* render pin headers and viewport-space drag overlays in the wrappers
+* publish and seed the mounted column window
+* consume core layout snapshots in wrappers
+* route core rendering, input and paging through geometry
+
+### ✨ Features
+
+* 1.0 release qualification (PRD 011) ([d224a65](https://github.com/GioPat/gp-grid/commit/d224a652237f9832870f02fb19058b787960b5e3))
+* add a pin icon and accessible pin toggle labels to the core ([6d23aef](https://github.com/GioPat/gp-grid/commit/6d23aefaf3064567b4b357f695d2aa90e54e82b8))
+* add column model with id-keyed state and resolved layout ([9209b1a](https://github.com/GioPat/gp-grid/commit/9209b1a2bd03765fa3e06c3b7f63c0f56c5b0bfd))
+* add live pin state, retention and region-aware input to the core ([b2fcf12](https://github.com/GioPat/gp-grid/commit/b2fcf1240d7bcbd279077a25cdfcc5c952aed5c1))
+* add pin regions, the center window and region-aware geometry ([23d6595](https://github.com/GioPat/gp-grid/commit/23d65955aa49b9724a374696a1936e0f6d631f19))
+* add read-only columnar data access ([1416da3](https://github.com/GioPat/gp-grid/commit/1416da36c68083105f5a3cf4a616817421d565d7))
+* add read-only zero-copy columnar data sources ([6fce166](https://github.com/GioPat/gp-grid/commit/6fce1664df535977546839166eaa1d2f3e35652c))
+* add virtual axis, column layout resolver and geometry service ([64d96d9](https://github.com/GioPat/gp-grid/commit/64d96d94510b87cc028243d7f3e5066e9afd67a9))
+* **angular:** render frozen rows and adopt the namespaced core API ([77eb001](https://github.com/GioPat/gp-grid/commit/77eb0015e62b3521c3b4cfd954a992f5e0480307))
+* **angular:** render grouped header bands and number ARIA rows after the header ([70335b5](https://github.com/GioPat/gp-grid/commit/70335b50062687cae23014901a43dc2114aeaef4))
+* **angular:** render row and column edge handles with fit and row resize ([4f83800](https://github.com/GioPat/gp-grid/commit/4f8380081ac97f65aebfd57b56f80c01ce765470))
+* bounded server grouping (PRD 009) ([efd5dbf](https://github.com/GioPat/gp-grid/commit/efd5dbf78511ec0e6c345f43a54dc71cded45c9b))
+* change-proportional transaction refresh (PRD 015) ([87a3545](https://github.com/GioPat/gp-grid/commit/87a3545ea147a61a0457debf23bf07359eaf443b))
+* consume core layout snapshots in wrappers ([b8e1896](https://github.com/GioPat/gp-grid/commit/b8e1896ccbb306104013a66da4937dbcc1be6819))
+* **core,react,vue,angular:** render group rows in the wrappers ([1e268de](https://github.com/GioPat/gp-grid/commit/1e268de704aea1903ea44db967a4a65cdb5d771e))
+* **core:** add createColumnGroupLookup to resolve group definitions before the core exists ([f35cca3](https://github.com/GioPat/gp-grid/commit/f35cca34b6504fc0733a55b8748b87bf3e86a056))
+* **core:** add frozen rows and group the GridCore API into namespaces ([b46b610](https://github.com/GioPat/gp-grid/commit/b46b61027842fc3b5b7295f705d6022cd924f33c))
+* **core:** add group header helpers, columns.getGroup and one size/window instruction per band batch ([6628131](https://github.com/GioPat/gp-grid/commit/66281314613d68e913af8feea04e156540a12aa3))
+* **core:** add nested column groups and core-owned header bands ([9998a8b](https://github.com/GioPat/gp-grid/commit/9998a8b27903d317a1259333d20891026af0c49f))
+* **core:** add row resize, one-shot fit and grid resize keys ([c04d8b4](https://github.com/GioPat/gp-grid/commit/c04d8b4ab5f349c845cd8bf0caa3e98ac231d606))
+* **core:** bounded undo and redo over the write commands, by record id ([b78afbd](https://github.com/GioPat/gp-grid/commit/b78afbd6c0dfef1961b02b8ed3096f84abdec1f3))
+* **core:** createPivotSource, the local pivot engine ([d9e083b](https://github.com/GioPat/gp-grid/commit/d9e083bb428fc2407054b22faeb5d2b925cc781d))
+* **core:** export FlatRowSource and reword the grouping rejection warning ([06102df](https://github.com/GioPat/gp-grid/commit/06102df9adea52b56d8ddb7ae0dfbb5d32cdeb1b))
+* **core:** hierarchical rows, expansion commands and group write guards ([6ae7df4](https://github.com/GioPat/gp-grid/commit/6ae7df4a271fb2d64f85af82405b064f851d305e))
+* **core:** let a touch fling adopt scroll corrections made mid-flight ([eeb6e2f](https://github.com/GioPat/gp-grid/commit/eeb6e2fddebf311d1d91075133c445e600b7dc03))
+* **core:** local row grouping engine ([2e9e67e](https://github.com/GioPat/gp-grid/commit/2e9e67ea5cdcff25f85d53d8406914472b4fc6a0))
+* **core:** one onWriteCommitted per write command, paste skips reported ([e557e79](https://github.com/GioPat/gp-grid/commit/e557e79fd53eae84984fb5517326f74e62ea5d9e))
+* **core:** pivot schema helper, generated ids and childless group rows ([910139a](https://github.com/GioPat/gp-grid/commit/910139aebb748e28552670ed9a9308c2683c54de))
+* **core:** server grouping source, lazy hierarchy hooks and mock service ([6530e24](https://github.com/GioPat/gp-grid/commit/6530e24de7202ef61b6e36e1a8f660670f0560bb))
+* **core:** set row heights by row identity with anchored scrolling ([986305b](https://github.com/GioPat/gp-grid/commit/986305b5e86a01f7f35eb97c1092d5511fbaad9f))
+* **core:** share the row-group markup helpers, isMutableDataSource and setHierarchical ([60bf085](https://github.com/GioPat/gp-grid/commit/60bf08578c84b1abd7cebbac4044b6571f6a4e59))
+* **core:** transaction change details and an update refresh without a query ([1107639](https://github.com/GioPat/gp-grid/commit/110763906f45d5e60be4d71206ce4d4a0fe2b1d2))
+* enable pinning icon (round robin pinnin) ([68f643e](https://github.com/GioPat/gp-grid/commit/68f643e7b462ca5b9bce897d19039a8fbcad2ccb))
+* export the pin and window types from the core entry ([5d709a1](https://github.com/GioPat/gp-grid/commit/5d709a19a2898b649ebf3575478fd52f337b0572))
+* expose onWriteRejected and columnar exports in wrappers ([289917e](https://github.com/GioPat/gp-grid/commit/289917edd9f865587e7db0b923fbb1d8cd6d5f80))
+* normalize the inline axis in core adapters and input ([66071dd](https://github.com/GioPat/gp-grid/commit/66071ddae381bad77d482db7e5a6f5d644176db6))
+* **playgrounds:** format the pivot demo's salary and average age ([afe7095](https://github.com/GioPat/gp-grid/commit/afe7095482760d2f551192a98a5c4c8e51807362))
+* **playgrounds:** give the Angular demo status and salary fields ([88ab641](https://github.com/GioPat/gp-grid/commit/88ab641dab33291f9eafca325c27a7a89bcdf839))
+* **playgrounds:** history and the write event in the three demos; widen the writes arm's core getter ([ee32866](https://github.com/GioPat/gp-grid/commit/ee32866c7743004a7dcebc8fd30da88abd6b0d5f))
+* **playgrounds:** pivot the demo by creation month ([1993169](https://github.com/GioPat/gp-grid/commit/1993169619948e20cbac8b7aed14c05503c30ed2))
+* **playgrounds:** show the id column in the Vue demo ([cf01e9c](https://github.com/GioPat/gp-grid/commit/cf01e9ce30dac07a124ba438dc05055548450b8e))
+* publish and seed the mounted column window ([74b5dd5](https://github.com/GioPat/gp-grid/commit/74b5dd52a153a44de58b99f432c10ac918043011))
+* **react,vue,angular:** history option; undo browser cases and the SSR write check ([14387f1](https://github.com/GioPat/gp-grid/commit/14387f11fea8b978e581daa3ba615e8c53042249))
+* **react,vue,angular:** onWriteCommitted; conformance writes arm and spec ([317dc55](https://github.com/GioPat/gp-grid/commit/317dc5538552ebf947c69f622dea9b94c3c9f80d))
+* **react,vue,angular:** pass the transaction result to refreshFromTransaction ([0d83c65](https://github.com/GioPat/gp-grid/commit/0d83c656fd2a9997874bd5d24e6621c6bcc3396d))
+* **react,vue,angular:** re-export createPivotSource ([9916d85](https://github.com/GioPat/gp-grid/commit/9916d853b83a9de4f5ff6cb5c8f137584c1f24c8))
+* **react,vue,angular:** re-export the pivot schema helper and types ([00830d3](https://github.com/GioPat/gp-grid/commit/00830d31f8ed2cc99547d5f82a1fa5eadf71aefa))
+* **react,vue,angular:** render placeholders and failed groups, re-export server grouping ([5183cbb](https://github.com/GioPat/gp-grid/commit/5183cbb1a9bbac5525460f871ff749fcad11453f))
+* **react:** render frozen rows and adopt the namespaced core API ([8a02f01](https://github.com/GioPat/gp-grid/commit/8a02f0173196e08b0a0069a773fc5ff9edb802b3))
+* **react:** render grouped header bands and number ARIA rows after the header ([f886eb3](https://github.com/GioPat/gp-grid/commit/f886eb3d53512d3e9b271bf89a5bb352b84283d9))
+* **react:** render row and column edge handles with fit and row resize ([83f1c37](https://github.com/GioPat/gp-grid/commit/83f1c377a54672e8c27a6969d11a9911db9b7b49))
+* read-only pivot (PRD 012) ([54b7846](https://github.com/GioPat/gp-grid/commit/54b784661faca60231ecf2dabedcf4471ee2e3ae))
+* reconcile schema, rows and edits by identity in core ([1f8adbe](https://github.com/GioPat/gp-grid/commit/1f8adbe0b9b16e7ab646184221ca203ffa0d0b90))
+* render pin headers and viewport-space drag overlays in the wrappers ([021983b](https://github.com/GioPat/gp-grid/commit/021983b6c4e681e0c818f00140be58e1ba295189))
+* render the Angular column window, pins and header toggle ([8a421ac](https://github.com/GioPat/gp-grid/commit/8a421ac1caed618934cbd192d5c6572d2b75a869))
+* render the React column window, pins and header toggle ([a74868a](https://github.com/GioPat/gp-grid/commit/a74868a55e154e324a6d99db613fdcbc53099689))
+* render the Vue column window, pins and header toggle ([954ea63](https://github.com/GioPat/gp-grid/commit/954ea63357906951d555181c5ddacbc9ff204dd5))
+* report write rejections per operation ([e2aab65](https://github.com/GioPat/gp-grid/commit/e2aab65d85a08df6e5531293104a703cfb446119))
+* route core rendering, input and paging through geometry ([ba24604](https://github.com/GioPat/gp-grid/commit/ba24604d0d2c45af0c21f50cfcf46ef2231bac88))
+* route wrapper input, scroll and peek x through the inline axis ([ec219aa](https://github.com/GioPat/gp-grid/commit/ec219aa0c0aac77a59f34c30f7173718f08fca9d))
+* size row boxes from slot heights and smooth scaled scrolling in the wrappers ([c49035d](https://github.com/GioPat/gp-grid/commit/c49035d7af802e078b717c4901e0df456bd4ccd1))
+* sync columns and column state through wrappers with object events ([d382cce](https://github.com/GioPat/gp-grid/commit/d382cce8e31fa83b79ce0f709f6bb19eb284c9c9))
+* **vue:** render frozen rows and adopt the namespaced core API ([fa1d940](https://github.com/GioPat/gp-grid/commit/fa1d94083d86f35eea0230dd3f75cd765a2a9d81))
+* **vue:** render grouped header bands, number ARIA rows after the header, require Vue 3.5 ([0bef9c2](https://github.com/GioPat/gp-grid/commit/0bef9c20704b584fc5a9460448b88890e4091e7f))
+* **vue:** render row and column edge handles with fit and row resize ([49792a1](https://github.com/GioPat/gp-grid/commit/49792a1f9b2dc83d550ff6005f39507a120c3715))
+* write commands and bounded history (PRD 013) ([99d333b](https://github.com/GioPat/gp-grid/commit/99d333b28f2ce320b3584533b10c0e24a8165bfe))
+
+
+### 🐛 Bug Fixes
+
+* **angular:** normalise an undefined dataSource input ([eb6e20c](https://github.com/GioPat/gp-grid/commit/eb6e20cc4426ddbe5bf12d1718d79963f1b9238e))
+* **angular:** tolerate an undefined dataSource input ([03bd24b](https://github.com/GioPat/gp-grid/commit/03bd24bfac8d161e99014e71a02394c3990e51bc))
+* clamp column moving ghost to viewport ([6486d1d](https://github.com/GioPat/gp-grid/commit/6486d1d4880f4a22a7efb5329c25a2579232aeef))
+* column fit measures values only ([16d25db](https://github.com/GioPat/gp-grid/commit/16d25dbd9110bce0e2154676e4318528d167e827))
+* core quality gate on the 1.0 line ([a2cfc93](https://github.com/GioPat/gp-grid/commit/a2cfc9368cea3da95f19187b03c1bc39b8473339))
+* **core,react,vue,angular:** stop scroll motion on press and smooth scaled wheel scrolling ([21f9a07](https://github.com/GioPat/gp-grid/commit/21f9a0765b3ee7c71e28d4a9bb3d822a10dc56a9))
+* **core:** a column fit measures the body cells only, never the header ([836628d](https://github.com/GioPat/gp-grid/commit/836628d3ac77af5ef797eb3d56d4f38373da512c))
+* **core:** address the SonarCloud findings in the pivot engine ([aaf994d](https://github.com/GioPat/gp-grid/commit/aaf994d019676fd69d467c5c0870fa40f7ccbace))
+* **core:** address the SonarQube findings in the server grouping engine ([d36d7b1](https://github.com/GioPat/gp-grid/commit/d36d7b1a45860cbe606a1e470d110cd96631da08))
+* **core:** coerce edit commits by column cellDataType ([bbbcaaa](https://github.com/GioPat/gp-grid/commit/bbbcaaa77cacd2c6efd50a4190490c4457c93e22))
+* **core:** fling the inline axis on a touch release ([37609cb](https://github.com/GioPat/gp-grid/commit/37609cba6541991ea0724f753a9a5203d6d1405b))
+* **core:** follow the active cell's column by id through a hierarchy reload ([d08bc55](https://github.com/GioPat/gp-grid/commit/d08bc55792b37c02d1425dd92bdd59eec243c89b))
+* **core:** ignore the click and double-click of a press that stopped scroll motion ([f151e61](https://github.com/GioPat/gp-grid/commit/f151e61102866a65308e07d6e1327cae86a441cc))
+* **core:** mark the clipboard copy's promise as ignored in the keyboard handler ([fc2ab1b](https://github.com/GioPat/gp-grid/commit/fc2ab1bfeada32c1f8d2f7c93bf88afdeb4c1139))
+* **core:** paint the loader before a large columnar sort ([1322a98](https://github.com/GioPat/gp-grid/commit/1322a983394d51d69d06c555d17045ce88581463))
+* **core:** paint the loader before a large columnar sort ([0d856c5](https://github.com/GioPat/gp-grid/commit/0d856c5342beac0792cd10508ddededef9ab55f7))
+* **core:** pivot label column unfilterable, rowTotalsHeader, source reusable after destroy ([69a6f71](https://github.com/GioPat/gp-grid/commit/69a6f7186c5152f0f0a15bc352934b0f8173fb41))
+* **core:** report a terminal group's leaf count as its childCount ([8e6d7fc](https://github.com/GioPat/gp-grid/commit/8e6d7fc2de54d156af9905a5cac580bda883bb65))
+* mark floating promises, hide decorative header icons, focus the editor through a ref ([41399c2](https://github.com/GioPat/gp-grid/commit/41399c254e50bee3dcd0b65a2af4aa82e39ed5a7))
+* name the project in angular playground scripts ([9e7015c](https://github.com/GioPat/gp-grid/commit/9e7015c4d1622a4f8d7c618eb91b29843e659f5b))
+* **playground:** keep the Vite button reset off the grid's own controls ([08eadee](https://github.com/GioPat/gp-grid/commit/08eadee13cfd5b6840f94ffe4622fa3fc7ceeb02))
+* **react,vue:** keep a SCROLL_TO correction until the adapter writes it ([b2eed2a](https://github.com/GioPat/gp-grid/commit/b2eed2a08b4ddd2a692d00e707399fe5671e10ef))
+* **react:** render group header names, wrap and renderers before the core mounts ([cd7fbe0](https://github.com/GioPat/gp-grid/commit/cd7fbe03440ac72b668e8b0d0c1aa5eb2026f4e0))
+* rebind a data source swapped at runtime ([587bc2e](https://github.com/GioPat/gp-grid/commit/587bc2ef10488d726372404abfae83fa3f195061))
+* reject invalid columnar source guards ([fbc6b87](https://github.com/GioPat/gp-grid/commit/fbc6b87917b0373d1ec502e068cf7778c4aea017))
+* resolve angular type-check failures ([3f3de53](https://github.com/GioPat/gp-grid/commit/3f3de53fe90ea4dba6bf1c99e99464f29535e6cb))
+* return the keyboard focus to the grid when an editor closes ([c48be10](https://github.com/GioPat/gp-grid/commit/c48be109a50dd4349b0063f3a6282aefa3ee9c22))
+* **vue,angular:** wrapper data source lifecycle ([913e4a5](https://github.com/GioPat/gp-grid/commit/913e4a566056c48b3fbb3885f74f3c53d255370f))
+* **vue:** bind the grouped row attributes one by one beside the string style ([1704592](https://github.com/GioPat/gp-grid/commit/17045923e9802cea477e578a1ff792807872a41e))
+* **vue:** render group header names, wrap and renderers before the core mounts ([0f7b1a6](https://github.com/GioPat/gp-grid/commit/0f7b1a66e1ec42fb16e2ec01a33ebe745917dfb8))
+
+
+### ⚡Performance
+
+* clone batch maps copy-on-write so a window-only batch skips re-render ([4702fc0](https://github.com/GioPat/gp-grid/commit/4702fc0a49f4c1fd6802222c79b2411949f35dda))
+* **core:** iterative group id helpers so the flat bundle drops the engine ([9cd3d9d](https://github.com/GioPat/gp-grid/commit/9cd3d9d83885262c2aa084187d7fd7487c06c6d9))
+
+
+### ♻️ Refactoring
+
+* **angular:** adopt the core row-group helpers ([8f57d80](https://github.com/GioPat/gp-grid/commit/8f57d80536c8fb2a0f72f6040ec94cf7b739b2d5))
+* **angular:** keep the entry to the component, the data helpers and the renderer types ([059a28d](https://github.com/GioPat/gp-grid/commit/059a28d0498aaa89d129932f514b7fe91c4b65e4))
+* **core:** back row geometry with an override-capable virtual axis ([0de9fd7](https://github.com/GioPat/gp-grid/commit/0de9fd74493d5a033d8b361b01a44dfb88f77dc0))
+* **core:** drop isSameDay and rawValueKey from the entry, document the filter helpers ([ad92109](https://github.com/GioPat/gp-grid/commit/ad9210986420c3a0f4bb6769cb8b251c17efea9d))
+* **core:** extract the motion gate and gate presses on the wheel glide only ([738b580](https://github.com/GioPat/gp-grid/commit/738b5801097912af4066b95d3b3e4cf66581223e))
+* **core:** make RowGrouping opaque and move the expansion depth on expand-all ([340e0e4](https://github.com/GioPat/gp-grid/commit/340e0e4e55d5342c77ae70ec20e7fe0c0439a939))
+* **core:** move flat row cache and access into FlatRowStore ([b0143dc](https://github.com/GioPat/gp-grid/commit/b0143dc23d0c94163bf669399f531f86cd76a211))
+* **core:** move the row locator out of the row store, trim three docblocks ([db3de82](https://github.com/GioPat/gp-grid/commit/db3de8279155c720960c88d2d8e029f54d2582bb))
+* **core:** route every write through one gate and report unconvertible edits ([dcdf395](https://github.com/GioPat/gp-grid/commit/dcdf39510377747157ffa3db52f1f469832293ca))
+* **core:** share the grouping tree, aggregators and expansion under hierarchy/ ([b1cb95b](https://github.com/GioPat/gp-grid/commit/b1cb95b0ea255555abe402a46f80b8853533b3af))
+* **core:** sort owned headers in a separate statement ([b203cdf](https://github.com/GioPat/gp-grid/commit/b203cdf56b921c470c730e298d9f8a8b1b23a6ae))
+* **core:** split page reservation and share numeric guards ([0d64ed2](https://github.com/GioPat/gp-grid/commit/0d64ed2ed01306cbf7a6ed2db2876df75c3ae57c))
+* **core:** split RowStore.locateIds by storage kind ([aff3931](https://github.com/GioPat/gp-grid/commit/aff3931913a075c6b946836e0619e4199942c2c5))
+* **core:** split the Ctrl shortcuts out of the keyboard handler's typing branch ([dbf8f4e](https://github.com/GioPat/gp-grid/commit/dbf8f4e4c67694aea64efcf3c2aa3fec563e913b))
+* **core:** split the transaction queue's apply and settle steps, merge an import ([e9c0250](https://github.com/GioPat/gp-grid/commit/e9c0250d790cfde0a54a1b13b192ebbbaea3ea3e))
+* **core:** trim the flat bundle ([ac095fb](https://github.com/GioPat/gp-grid/commit/ac095fb88cf501aa645bcc6d3687b2dbf7479cde))
+* drop ColumnId alias and address code quality findings ([1a39b58](https://github.com/GioPat/gp-grid/commit/1a39b5823837dd726661dfbdc7b0e259b91c71bb))
+* extract distinct-value collection from sort-filter manager ([6539048](https://github.com/GioPat/gp-grid/commit/653904869684a7c45302b8a4e8ab23cd67d9ab45))
+* **playgrounds:** group the conformance controls into sections ([415fbcb](https://github.com/GioPat/gp-grid/commit/415fbcb90c162fdc59bbb0c050d5dd171d5491e3))
+* **react:** adopt the core row-group helpers ([ba8039b](https://github.com/GioPat/gp-grid/commit/ba8039b66f5db7e95acf7782d3be8fb16f46b442))
+* share size-change resync and validation helpers ([1069750](https://github.com/GioPat/gp-grid/commit/1069750c94a1a9d6ab43e5b964c4652b287608fb))
+* simplify geometry clamps and drop unused row mapper accessors ([f63bc98](https://github.com/GioPat/gp-grid/commit/f63bc98591bb42a8b246b436b2af6322f2dce24f))
+* split the React cell, row and header markup into components ([77c8ca1](https://github.com/GioPat/gp-grid/commit/77c8ca1f1e99124c934180dff5f50c75a4d0bc1f))
+* **vue:** adopt the core row-group helpers and expose the cell context headless ([8a26a11](https://github.com/GioPat/gp-grid/commit/8a26a114914f96abcf632a1abf8f93e35afaa605))
+* **vue:** keep the entry to the component, the composables and the core factories ([9d3a48b](https://github.com/GioPat/gp-grid/commit/9d3a48b4f072e8c402be3eadee13464eac69fecc))
+
+
+### 📝 Documentation
+
+* a server-computed pivot is supplied precomputed, no pivot over the grouping service ([86847cc](https://github.com/GioPat/gp-grid/commit/86847cc62a54364615edfa4bdb95c29565306791))
+* add accessibility and file size rules to AGENTS.md ([3dc5a7e](https://github.com/GioPat/gp-grid/commit/3dc5a7ea637555a729163fcbc6d304cb394082bb))
+* browsers and keyboard in the migration guide ([4584583](https://github.com/GioPat/gp-grid/commit/45845839c2a73cefd03128ad2d235b455ca23466))
+* document column layout modes and the geometry API ([1beb044](https://github.com/GioPat/gp-grid/commit/1beb044fd7366426b891a3fc7917ff106fa482ef))
+* document column pinning, the mounted window and the migration ([5f9d033](https://github.com/GioPat/gp-grid/commit/5f9d0332fbb9c4b8bcc260d60f1612fcecda8fbe))
+* document column state, identity events and edit sessions ([809eabd](https://github.com/GioPat/gp-grid/commit/809eabdeb34ef84d7f94bcc95e7ff6ee25755e33))
+* document columnar source and revision contracts ([478cd0e](https://github.com/GioPat/gp-grid/commit/478cd0ef00aa005b928dc051dd37e9957eefaead))
+* document frozen rows and the GridCore namespaces ([b327f22](https://github.com/GioPat/gp-grid/commit/b327f22a75c541fa08ab2278acefbff7c70ea6e5))
+* document row heights ([48246c6](https://github.com/GioPat/gp-grid/commit/48246c61c03b894ac2bac3d292f48f2b75b5289b))
+* document row resize, auto-fit and column groups ([690e557](https://github.com/GioPat/gp-grid/commit/690e557f9f62924555b656604dd212689bd5a24f))
+* document write rejection operations ([d63f567](https://github.com/GioPat/gp-grid/commit/d63f567ae592887ee16dc37dc6042f00747f32cc))
+* known limitations and a framework-neutral index ([4c01784](https://github.com/GioPat/gp-grid/commit/4c017848339b44293f1a5d5a2ad7125a74ec0d08))
+* migration guide from 0.23.x ([b03b405](https://github.com/GioPat/gp-grid/commit/b03b405678dddf12f5ffb021a37974333c8705f2))
+* opaque RowGrouping, expandedDepth, type-mismatch and the shared row-group helpers ([116c059](https://github.com/GioPat/gp-grid/commit/116c05906cab01cc0017970deabf644a98946f8c))
+* pivot feature page, READMEs, skill and changelog ([87b091d](https://github.com/GioPat/gp-grid/commit/87b091d7d83aa93753045d1e56cfbedb5069face))
+* row grouping feature page, READMEs, skill and changelog ([4ac3b23](https://github.com/GioPat/gp-grid/commit/4ac3b236ca9e5452bc06c517b34af90ff4da01a0))
+* server grouping feature page, READMEs, skill and changelog ([bd88519](https://github.com/GioPat/gp-grid/commit/bd88519af2cad451a948a3e256ddbe53a6ecd424))
+* **skill:** editor focus and the keyboard limits of 1.0 ([6a1b188](https://github.com/GioPat/gp-grid/commit/6a1b188d15dd2952678f3cc2731f2843f9f52249))
+* **skill:** round computed numbers in valueFormatter ([c2d375d](https://github.com/GioPat/gp-grid/commit/c2d375d4717bddbf640c8c24c534edc9e17c2fbc))
+* **skills:** specify details to avoid pinning overlay ([39c503a](https://github.com/GioPat/gp-grid/commit/39c503a91df29a9233b0daafd4c2dedc94926a61))
+* state the pivot id format as a compatibility promise ([71a07b6](https://github.com/GioPat/gp-grid/commit/71a07b6a6676dff1679be92f8217d46a67ada7c3))
+* the 1.0.0 changelog block ([e0a695e](https://github.com/GioPat/gp-grid/commit/e0a695ee7a86b8009f965646e887cda18c5f4592))
+* the one-off browser results in the migration guide ([2f224e1](https://github.com/GioPat/gp-grid/commit/2f224e17c6eacf00184ad4c2442842f00b5c1cc7))
+* update docs with pinning support ([70c7e1c](https://github.com/GioPat/gp-grid/commit/70c7e1c9b2d7e3383f26b6109c783cd9c721390a))
+* write commands and history, the paste skips and the flat consumer with history ([20552d5](https://github.com/GioPat/gp-grid/commit/20552d5d406ed265130489232a4a09452bd9d293))
+
 ## [0.23.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.1...gp-grid-v0.23.2) (2026-09-07)
 
 
