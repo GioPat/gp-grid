@@ -140,7 +140,7 @@ bounds with `readContainerBounds` and convert physical x with `toInlineX` /
 RTL. `scrollLeft` in `ContainerBounds` is the inline-relative value (the DOM
 value negated in RTL), while `grid.setViewport` takes the physical DOM value.
 
-The core exposes a unified `InputHandler` (`grid.input`) that returns small actions (`{ preventDefault, focusContainer, ... }`) you apply to the original event. There's also an **adapter kit** with shared primitives:
+The core exposes a unified `InputHandler` (`grid.input`) that returns small actions (`{ preventDefault, focusContainer, ... }`) you apply to the original event. A keyboard result with `focusContainer` means the key closed the editor: focus the container before the input unmounts, or call `focusGridContainer(inputElement)` from your own editor's key handler. There's also an **adapter kit** with shared primitives:
 
 ```ts
 import {

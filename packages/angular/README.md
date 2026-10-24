@@ -126,7 +126,7 @@ export class App {
 }
 ```
 
-`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source.
+`provideGridData` returns a standard Angular `Provider[]`, so it composes with other `provide*` functions in the component's `providers` array. Register it on the consuming component (not on a parent injector) so each component instance gets its own data source. `injectGridData` returns the `GridDataService` behind it, and `GRID_DATA_OPTIONS` is the injection token `provideGridData` registers its `GridDataOptions` under, for a test that wants to provide them by hand.
 
 ## Column state and events
 
@@ -325,6 +325,8 @@ writes nothing.
 ```
 
 ### Migration from 0.x
+
+The full list of changes from 0.23.x, with before/after code, is in the [migration guide](../../docs/migration-1.0.md).
 
 The old payloads `{ colIndex, newWidth }`, `{ fromIndex, toIndex }` and `{ source, target }` became `{ columnId, width, viewIndex }`, `{ columnId, fromViewIndex, toViewIndex }` and `{ rowId, fromViewIndex, toViewIndex }`. There is no compatibility adapter.
 

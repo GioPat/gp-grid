@@ -24,7 +24,6 @@ const expectedExports = [
   "evaluateDateCondition",
   "evaluateColumnFilter",
   "rowPassesFilter",
-  "isSameDay",
   // Field helpers
   "getFieldValue",
   "setFieldValue",

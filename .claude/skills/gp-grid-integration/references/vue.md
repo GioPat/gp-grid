@@ -717,7 +717,7 @@ two options. See the SKILL.md "Writes, undo and redo" section and [docs/features
 - **`ref="gridRef"` typing**: the exposed `core` is a `ShallowRef<GridCore | null>` — unwrap with `.value`. Use `ShallowRef` to avoid deep reactivity over the core (which would be expensive).
 - **SSR / Nuxt**: pass `:initial-width` / `:initial-height` so the server render isn't 0×0. `ResizeObserver` is gated by a `typeof` check.
 - **Renderer-as-component prop typing**: `ColumnDefinition` from `@gp-grid/vue` widens the renderer fields to accept Components directly. If you import `ColumnDefinition` from `@gp-grid/core`, you'll lose this — use the one from `@gp-grid/vue`.
-- **`renderToken` from `useGpGrid` / `useGridState`**: a number that increments once per applied core batch. Cells are child components, so a non-reactive core read (or a columnar row's `rowData`) would otherwise never re-render; the cell reads `renderToken` to stay in sync. It is library-internal — do not use it as a change signal in application code.
+- **`renderToken` from `useGpGrid`**: a number that increments once per applied core batch. Cells are child components, so a non-reactive core read (or a columnar row's `rowData`) would otherwise never re-render; the cell reads `renderToken` to stay in sync. It is library-internal — do not use it as a change signal in application code.
 
 ## Working playground
 

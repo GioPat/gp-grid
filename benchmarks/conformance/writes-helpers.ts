@@ -89,3 +89,12 @@ export const appTransaction = (page: Page, name: "appUpdate" | "appUpdateLast" |
     }).__gpConformance;
     await hooks?.[hookName]?.();
   }, name);
+
+/** Manual heights by record id through the shell's geometry hook (PRD 011 D5). */
+export const setRowHeights = (page: Page, updates: { rowId: number; height: number }[]): Promise<void> =>
+  page.evaluate((heights) => {
+    const hooks = (globalThis as unknown as {
+      __gpConformance?: { setRowHeights?: (updates: { rowId: number; height: number }[]) => void };
+    }).__gpConformance;
+    hooks?.setRowHeights?.(heights);
+  }, updates);

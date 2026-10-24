@@ -82,6 +82,37 @@ test("AC-008-04 a leaf edit refolds its group and the total", async ({ page }, t
   expect(pageErrors).toEqual([]);
 });
 
+test("AC-011-08 a grouped leaf edit undoes and redoes by record id and refolds the sums", async ({ page }, testInfo) => {
+  const pageErrors = await armRowGroups(page, testInfo.project.name, "object");
+  const rows = await expandPath(page, "IT", ["City 0"]);
+  const it = groupIndex(rows, "IT");
+  const leaf = indexOfId(rows, IT_CITY0_SECOND);
+  const amountOf = async () => (await records(page)).find((record) => record.id === IT_CITY0_SECOND)!.amount;
+  const before = await amountOf();
+  const itBefore = rows[it]!.values.amount as number;
+  const totalBefore = rows[0]!.values.amount as number;
+
+  await cell(page, leaf, AMOUNT).dblclick();
+  await editor(page).fill("100");
+  await editor(page).press("Enter");
+  await expect(editor(page)).toHaveCount(0);
+  await expect.poll(amountOf).toBe(100);
+
+  await page.keyboard.press("Control+z");
+
+  await expect.poll(amountOf).toBe(before);
+  await expect.poll(async () => (await viewRows(page))[it]!.values.amount).toBe(itBefore);
+  expect((await viewRows(page))[0]!.values.amount).toBe(totalBefore);
+  expect(await activeCell(page)).toEqual({ row: leaf, col: AMOUNT });
+
+  await page.keyboard.press("Control+y");
+
+  await expect.poll(amountOf).toBe(100);
+  await expect.poll(async () => (await viewRows(page))[it]!.values.amount).toBe(itBefore + 100 - before);
+  await expectSumsMatchRecords(page);
+  expect(pageErrors).toEqual([]);
+});
+
 test("AC-008-04 a country edit moves the row and the active cell follows it", async ({ page }, testInfo) => {
   const pageErrors = await armRowGroups(page, testInfo.project.name, "object");
   const rows = await expandPath(page, "IT", ["City 0"]);

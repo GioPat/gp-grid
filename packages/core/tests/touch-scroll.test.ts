@@ -426,6 +426,104 @@ describe("TouchScrollController", () => {
     expect(frames).toBeLessThan(2000);
   });
 
+  /** Fast engaged sideways swipe: 100 DOM px in 100 ms toward the inline end. */
+  const fastSideSwipe = (el: HTMLElement, dy = 0): void => {
+    el.dispatchEvent(touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 0));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 250, clientY: 300 - dy / 2 }], 50));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 200, clientY: 300 - dy }], 100));
+    el.dispatchEvent(touchEvent("touchend", [{ clientX: 200, clientY: 300 - dy }], 100));
+  };
+
+  const runFlings = (): number => {
+    let now = 100;
+    let frames = 0;
+    while (raf.pending() > 0 && frames < 2000) {
+      now += 16;
+      raf.pump(now);
+      frames++;
+    }
+    return frames;
+  };
+
+  it("flings the inline axis after a fast sideways release", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el);
+
+    const afterRelease = el.scrollLeft;
+    expect(afterRelease).toBeGreaterThan(0);
+    const frames = runFlings();
+    expect(frames).toBeGreaterThan(1);
+    expect(frames).toBeLessThan(2000);
+    expect(el.scrollLeft).toBeGreaterThan(afterRelease);
+    expect(el.scrollTop).toBe(0);
+  });
+
+  it("a diagonal release flings both axes", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el, 100);
+
+    const left = el.scrollLeft;
+    const top = el.scrollTop;
+    runFlings();
+    expect(el.scrollLeft).toBeGreaterThan(left);
+    expect(el.scrollTop).toBeGreaterThan(top);
+  });
+
+  it("stops the inline fling at the inline bound", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    el.scrollLeft = 1150;
+    fastSideSwipe(el);
+
+    const frames = runFlings();
+    expect(el.scrollLeft).toBe(2000 - 800);
+    expect(frames).toBeLessThan(2000);
+  });
+
+  it("flings toward the negative range in RTL", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    // jsdom computes no `direction`; the gesture reads it from the computed style.
+    const computed = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((target) => {
+      const style = computed(target);
+      return new Proxy(style, {
+        get: (real, key) => {
+          if (key === "direction") return "rtl";
+          const value = Reflect.get(real, key, real) as unknown;
+          return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(real) : value;
+        },
+      });
+    });
+    try {
+      el.scrollLeft = -600;
+      fastSideSwipe(el);
+
+      const afterRelease = el.scrollLeft;
+      runFlings();
+      expect(el.scrollLeft).toBeGreaterThan(afterRelease);
+      expect(el.scrollLeft).toBeLessThanOrEqual(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a new touch stops the inline fling and a same-direction flick carries its speed", () => {
+    const { el } = setup({ scrollRatio: 0.5 });
+    fastSideSwipe(el);
+    raf.pump(116);
+    const caught = el.scrollLeft;
+
+    el.dispatchEvent(touchEvent("touchstart", [{ clientX: 300, clientY: 300 }], 120));
+    expect(el.scrollLeft).toBe(caught);
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 250, clientY: 300 }], 170));
+    el.dispatchEvent(touchEvent("touchmove", [{ clientX: 200, clientY: 300 }], 220));
+    el.dispatchEvent(touchEvent("touchend", [{ clientX: 200, clientY: 300 }], 220));
+
+    const before = el.scrollLeft;
+    raf.pump(236);
+    raf.pump(252);
+    expect(el.scrollLeft - before).toBeGreaterThan(70);
+  });
+
   it("ignores touches that start on the fill handle", () => {
     const { el } = setup();
     const handle = document.createElement("div");

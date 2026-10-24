@@ -77,7 +77,11 @@ export const expectAligned = async (page: Page, expectedCount: number): Promise<
 
 export const openFixture = async (page: Page, framework: string): Promise<Error[]> => {
   const pageErrors: Error[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error));
+  // WebKit raises the benign ResizeObserver loop notice as a page error; Chrome and Firefox only log it.
+  page.on("pageerror", (error) => {
+    if (error.message.includes("ResizeObserver loop")) return;
+    pageErrors.push(error);
+  });
   await page.goto("/?conformance=1");
   await expect(page.locator("[data-conformance-framework]")).toHaveAttribute("data-conformance-framework", framework);
   await expect(page.locator('[data-cell-row="0"][data-cell-col="1"]')).toContainText("Row 000");

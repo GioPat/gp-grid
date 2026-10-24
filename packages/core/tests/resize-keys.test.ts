@@ -181,7 +181,7 @@ describe("Alt+Enter and Alt+Shift+Enter on the grid (AC-007-07)", () => {
     const commit = vi.spyOn(grid.edit, "commit");
     grid.selection.setActiveCell(1, 1);
 
-    expect(press(grid, alt("Enter"), { row: 1, col: 1 })).toEqual({ preventDefault: true });
+    expect(press(grid, alt("Enter"), { row: 1, col: 1 })).toEqual({ preventDefault: true, focusContainer: true });
     expect(commit).toHaveBeenCalledTimes(1);
     expect(fitColumns).not.toHaveBeenCalled();
   });

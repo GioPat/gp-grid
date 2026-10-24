@@ -1,6 +1,6 @@
 # GP-Grid Documentation
 
-A high-performance virtualized data grid for React applications.
+A high-performance virtualized data grid for React, Vue and Angular, on a framework-agnostic core.
 
 ## Features
 
@@ -17,6 +17,20 @@ A high-performance virtualized data grid for React applications.
 - [Pivot](./features/pivot.md) - Read-only pivot: generated columns per key tuple and measure, the schema helper and ids, the precomputed and local (`createPivotSource`) compositions, domain, budget, sort and filter, the schema hook per wrapper
 - [Write commands and history](./features/writes-and-history.md) - One event per edit, paste, fill or `cells.setValue` with its changes by record id and the targets it skipped, and opt-in undo and redo of those commands
 - [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only) - Borrowed columns, read-only access, and revision refresh with inferred or explicit row counts
+
+## Upgrading from 0.23.x
+
+The [migration guide](./migration-1.0.md) lists every change with before/after code per framework.
+
+## Known limitations
+
+- **Keyboard:** sort, the filter popup and pin are pointer targets in the header with no keyboard equivalent. Every other action has a key; see the [migration guide](./migration-1.0.md#15-browsers-and-keyboard).
+- **Server grouping:** counts are exact, paging is by position range (no cursor paging), nothing is cached across queries, and the grid shows the aggregates the server sends; see [Limits](./features/server-grouping.md#limits).
+- **Pivot:** read-only, with a `maxColumns` budget on the generated schema; see [Limits](./features/pivot.md#limits).
+- **Aggregates and columnar sources are read-only:** a write on a group or total row, or on a columnar source, is refused and reported through `onWriteRejected`; see [Row grouping](./features/row-grouping.md) and [Columnar data sources](../packages/core/README.md#columnar-data-source-read-only).
+- **Transactions:** an update keeps its row in place until the next query, even when a sorted or filtered field changed; an add or a remove reloads fully; see [Write commands and history](./features/writes-and-history.md).
+- **Filters:** the 0.x flat `conditions` shape is accepted on input only; every output is the grouped model; see [Filtering](./features/filtering.md#migrating-flat-condition-models).
+- **Server rendering:** the server render uses the configured sizes and no hydration-specific test exists; the client measures after mount.
 
 ## Changelog
 

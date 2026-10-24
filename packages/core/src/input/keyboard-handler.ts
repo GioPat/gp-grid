@@ -123,15 +123,20 @@ export class KeyboardHandler<TData = unknown> {
   }
 
   private handleEnter(activeCell: CellPosition | null, editingCell: EditingCell): KeyboardResult {
-    if (editingCell) this.core.edit.commit();
-    else if (activeCell) this.core.edit.start(activeCell.row, activeCell.col);
+    if (editingCell) {
+      this.core.edit.commit();
+      return { preventDefault: true, focusContainer: true };
+    }
+    if (activeCell) this.core.edit.start(activeCell.row, activeCell.col);
     return { preventDefault: true };
   }
 
   private handleEscape(editingCell: EditingCell): KeyboardResult {
     if (editingCell) {
       this.core.edit.cancel();
-    } else if (this.core.edit.getPeekState()) {
+      return { preventDefault: true, focusContainer: true };
+    }
+    if (this.core.edit.getPeekState()) {
       this.core.edit.stopPeek();
     } else {
       this.core.selection.clearSelection();
@@ -142,7 +147,7 @@ export class KeyboardHandler<TData = unknown> {
   private handleTab(editingCell: EditingCell, isShift: boolean): KeyboardResult {
     if (editingCell) this.core.edit.commit();
     this.core.selection.moveFocus(isShift ? "left" : "right", false);
-    return { preventDefault: true };
+    return editingCell ? { preventDefault: true, focusContainer: true } : { preventDefault: true };
   }
 
   private handleNonSpecialKey(

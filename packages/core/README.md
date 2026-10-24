@@ -396,6 +396,20 @@ const grid = new GridCore({
 });
 ```
 
+### Filter evaluation helpers
+
+The evaluation the client source runs is exported for a data source that filters its own rows, a server mock or a test:
+
+```typescript
+import { rowPassesFilter, evaluateColumnFilter, getFieldValue, setFieldValue } from "@gp-grid/core";
+
+const visible = rows.filter((row) => rowPassesFilter(row, request.filterModel ?? {}, getFieldValue));
+const matches = evaluateColumnFilter(cellValue, columnFilter, formatter);
+setFieldValue(record, "address.city", "Rome");
+```
+
+`rowPassesFilter(row, filterModel, getFieldValue, getValueFormatter?)` evaluates every column of a model against one record through the field reader you pass. `evaluateColumnFilter(value, filter, formatter?)` evaluates one column's model, canonical or legacy (`normalizeColumnFilterModel` converts the 0.x `conditions` shape, which stays accepted as input). `evaluateCondition`, `evaluateTextCondition`, `evaluateNumberCondition` and `evaluateDateCondition` evaluate one condition against one value. `getFieldValue` and `setFieldValue` read and write a dotted path on a record, as the grid does.
+
 ## Types Reference
 
 ### ColumnDefinition
@@ -516,6 +530,8 @@ Definitions with the same column id warn once with `[gp-grid] Duplicate column i
 Definitions are caller-owned and the grid treats them as read-only. Resizing, moving and hiding record state in the core; they never mutate the definitions array or the objects inside it.
 
 ### Migrating from 0.x
+
+The full list of changes from 0.23.x is in the [migration guide](../../docs/migration-1.0.md).
 
 ```ts
 // 0.x: mutated the caller's definition
@@ -911,6 +927,11 @@ An editor commit is coerced by the column's `cellDataType`, like paste:
 `"60000"` on a `number` column stores `60000`, and a draft the type cannot hold
 writes nothing. A value a custom editor already typed is stored unchanged.
 
+On a scaled grid the synthetic touch scroller owns the gesture on both axes:
+the content follows the finger 1:1, and a release flings the vertical axis in
+logical px and the inline axis in DOM px, each with the same decay and clamped
+to its own range, so a diagonal flick keeps gliding on both.
+
 While a touch fling or a wheel glide moves the content
 (`viewport.isScrollMotionActive()`), a press only stops it: the `InputHandler`
 pointer entry points return `{ preventDefault: true, stopPropagation: true }`
@@ -936,6 +957,9 @@ To integrate @gp-grid/core with any UI framework:
 5. **Render `COLUMNS_CHANGED.layout` / `SET_COLUMN_WINDOW`** and report viewport
    measurements through `setViewport`; never recompute widths, positions or the
    mounted window
+6. **Return the focus** to the container when your editor closes on Enter, Escape or
+   Tab: `focusGridContainer(inputElement)`, or honor `KeyboardResult.focusContainer`
+   when the core keyboard handler closed it
 
 ### Example: Minimal Adapter Pattern
 

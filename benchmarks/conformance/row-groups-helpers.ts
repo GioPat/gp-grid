@@ -171,7 +171,15 @@ export const pasteText = (page: Page, text: string): Promise<void> =>
     const data = new DataTransfer();
     data.setData("text/plain", value);
     const target = document.activeElement ?? document.body;
-    target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+    // Firefox keeps a constructed DataTransfer unreadable from the event, so the
+    // wrappers would paste ""; give the event a readable one there.
+    if (event.clipboardData?.getData("text/plain") !== value) {
+      Object.defineProperty(event, "clipboardData", {
+        value: { types: ["text/plain"], getData: (type: string) => (type === "text/plain" ? value : "") },
+      });
+    }
+    target.dispatchEvent(event);
   }, text);
 
 /** D9 oracle: `sum` folds finite numbers only. */

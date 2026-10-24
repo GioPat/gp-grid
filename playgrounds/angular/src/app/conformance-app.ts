@@ -500,7 +500,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   protected readonly writesActive = computed(() => this.arm().fixture === 'writes');
   // The rolled-up declarations drop `| undefined` from the inputs; the component takes it at runtime.
   protected readonly writesHistory = computed(
-    (): HistoryOptions => (this.writesActive() ? WRITES_HISTORY : undefined) as unknown as HistoryOptions,
+    (): HistoryOptions => (this.writesActive() || this.rowGroupsActive() ? WRITES_HISTORY : undefined) as unknown as HistoryOptions,
   );
   protected readonly conflictFirst = (core: GridCore<unknown>): void => {
     void this.writes.conflictFirst(core);

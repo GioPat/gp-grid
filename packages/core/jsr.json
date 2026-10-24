@@ -6,6 +6,12 @@
   "exports": "./src/index.ts",
   "publish": {
     "exclude": [
+      "tests",
+      "scripts",
+      "vitest.config.ts",
+      "tsdown.config.ts",
+      "tsconfig.json",
+      "tsconfig.build.json",
       "!src/sorting/sort-worker-code.ts"
     ]
   }

@@ -445,6 +445,9 @@ export function useInputHandler<TData = unknown>(
     if (result.preventDefault) {
       e.preventDefault();
     }
+    if (result.focusContainer) {
+      container?.focus({ preventScroll: true });
+    }
     if (result.scrollToCell && container) {
       // Cancel any active touch fling before a programmatic scroll target.
       options.onBeforeProgrammaticScroll?.();

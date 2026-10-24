@@ -1,6 +1,7 @@
 // packages/react/src/renderers/editRenderer.tsx
 
 import React from "react";
+import { focusGridContainer } from "@gp-grid/core";
 import type {
   GridCore,
   ColumnDefinition,
@@ -111,7 +112,10 @@ export function renderEditCell<TData>(
           e.preventDefault();
           core.edit.commit(editId);
           core.selection.moveFocus(e.shiftKey ? "left" : "right", false);
+        } else {
+          return;
         }
+        focusGridContainer(e.currentTarget);
       }}
       onBlur={() => core.edit.commit(editId)}
     />

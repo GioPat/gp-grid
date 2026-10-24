@@ -81,7 +81,6 @@ export {
   evaluateDateCondition,
   evaluateColumnFilter,
   rowPassesFilter,
-  isSameDay,
 } from "./indexed-data-store/index";
 export {
   isLegacyColumnFilterModel,
@@ -90,7 +89,6 @@ export {
 
 /** Values-mode filter popup helpers (raw values grouped under display labels) */
 export {
-  rawValueKey,
   groupDistinctValues,
   labelsForSelectedValues,
   rawValuesForLabels,
@@ -396,6 +394,9 @@ export type { PopupPosition } from "./utils/popup-position";
 
 /** Peek overlay Ctrl/Cmd+A scoping helper. */
 export { bindPeekSelectAll } from "./utils/peek-select-all";
+
+/** Returns the keyboard focus to the grid container after an editor closes. */
+export { focusGridContainer } from "./utils/focus-container";
 
 /** Header band placement, escaped DOM ids and ARIA associations (PRD 007 D9). */
 export {

@@ -108,6 +108,8 @@ export interface KeyboardResult {
   preventDefault: boolean;
   /** Cell to scroll into view (if navigation occurred) */
   scrollToCell?: CellPosition;
+  /** The key closed the editor: the wrapper focuses the grid container before the input unmounts. */
+  focusContainer?: boolean;
 }
 
 /** Result from drag move handler */

@@ -6,7 +6,7 @@
 
 import { expect, test } from "@playwright/test";
 import { cell, columnIds, columnState, scrollBody, sortColumn } from "./helpers";
-import { activateCell } from "./pinning-helpers";
+import { activateCell, selectionRange } from "./pinning-helpers";
 import { activeCell } from "./frozen-rows-helpers";
 import {
   columnGroups,
@@ -147,6 +147,30 @@ test("AC-012-03 the header spans the label column over three bands, pinned and f
   expect(await groupSpans(page, PIVOT_GROUP_IDS.y2024)).toEqual([{ region: "center", colIndex: 2, colSpan: 4 }]);
   await expect(page.locator('.gp-grid-frozen-rows [data-cell-row="1"]').first()).toBeVisible();
   expect(await texts()).toEqual(unfrozen);
+  expect(pageErrors).toEqual([]);
+});
+
+test("AC-011-02 a revision replace keeps the pinned label, the frozen rows and the active cell; the range clears with the ids", async ({ page }, testInfo) => {
+  const pageErrors = await armPivot(page, testInfo.project.name, "external");
+  await page.getByTestId("pivot-pin-label").click();
+  await page.getByTestId("freeze-two").click();
+  await expect.poll(async () => (await columnState(page)).find((entry) => entry.columnId === LABEL_ID)?.region).toBe("start");
+  const frozenRow = page.locator('.gp-grid-frozen-rows [data-cell-row="1"]').first();
+  await expect(frozenRow).toBeVisible();
+  await groupLabel(page, 1, LABEL).click();
+  await expect.poll(() => activeCell(page)).toEqual({ row: 1, col: LABEL });
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect.poll(() => selectionRange(page)).toEqual({ startRow: 1, startCol: LABEL, endRow: 2, endCol: LABEL });
+  await expect.poll(() => activeCell(page)).toEqual({ row: 2, col: LABEL });
+
+  await page.getByTestId("pivot-replace-revision").click();
+
+  await expect.poll(() => columnIds(page)).toEqual(COLUMNS_2);
+  expect((await columnState(page)).find((entry) => entry.columnId === LABEL_ID)?.region).toBe("start");
+  await expect(frozenRow).toBeVisible();
+  await expect.poll(() => activeCell(page)).toEqual({ row: 2, col: LABEL });
+  expect(await selectionRange(page)).toBeNull();
+  await expectLiterals(page, PIVOT_VALUES_2, [total, north, south], PIVOT_COLUMNS_2);
   expect(pageErrors).toEqual([]);
 });
 

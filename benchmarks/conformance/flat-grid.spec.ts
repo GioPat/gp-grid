@@ -229,7 +229,8 @@ test("columnar source sorts and filters through source indices", async ({ page }
 
 test("columnar source scrolls, focuses, aligns and copies", async ({ page, context }, testInfo) => {
   const pageErrors = await useColumnar(page, testInfo.project.name);
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // Firefox grants no clipboard permission; the copy still runs, only the read-back is skipped there.
+  const clipboardReadable = await context.grantPermissions(["clipboard-read", "clipboard-write"]).then(() => true, () => false);
   await resetSourceReads(page);
   await scrollBody(page, 3_200, 0);
 
@@ -246,7 +247,7 @@ test("columnar source scrolls, focuses, aligns and copies", async ({ page, conte
   expect(Math.abs((headerBox?.x ?? 0) - (cellBox?.x ?? 0))).toBeLessThanOrEqual(1);
 
   await page.locator(".gp-grid-container").press("Control+c");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Row 100");
+  if (clipboardReadable) expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Row 100");
   // Scrolling mounts a new window without scanning the source.
   await assertBoundedSourceReads(page);
   expect(pageErrors).toEqual([]);

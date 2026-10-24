@@ -154,6 +154,35 @@ describe("hierarchy change — edits and transactions", () => {
     expect(grid.cells.getFieldValue(4, "amount")).toBe(60);
   });
 
+  it("clears the active cell when its column goes while the rows reload", async () => {
+    let next = () => createHierarchyFixture({ expanded: ALL });
+    const { grid } = await mountExpanded(() => next());
+    grid.selection.setActiveCell(6, 1);
+    const columns = grid.columns.get();
+
+    next = () => createHierarchyFixture({ revision: 2, expanded: ["g:IT", "g:IT:Milan"] });
+    const reload = grid.refreshFromTransaction();
+    grid.columns.set(columns.filter((_, index) => index !== 1));
+    await reload;
+
+    expect(grid.selection.getActiveCell()).toBeNull();
+  });
+
+  it("follows the active column to its new index while the rows reload", async () => {
+    let next = () => createHierarchyFixture({ expanded: ALL });
+    const { grid } = await mountExpanded(() => next());
+    grid.selection.setActiveCell(6, 1);
+    const columns = grid.columns.get();
+    const moved = [columns[0]!, ...columns.slice(2), columns[1]!];
+
+    next = () => createHierarchyFixture({ revision: 2, expanded: ["g:IT", "g:IT:Milan"] });
+    const reload = grid.refreshFromTransaction();
+    grid.columns.set(moved);
+    await reload;
+
+    expect(grid.selection.getActiveCell()).toEqual({ row: 4, col: moved.length - 1 });
+  });
+
   it("clears the selection when the active record is gone after a transaction", async () => {
     let next = () => createHierarchyFixture({ expanded: ALL });
     const { grid } = await mountExpanded(() => next());
