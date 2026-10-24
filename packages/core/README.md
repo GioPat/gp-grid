@@ -927,6 +927,11 @@ An editor commit is coerced by the column's `cellDataType`, like paste:
 `"60000"` on a `number` column stores `60000`, and a draft the type cannot hold
 writes nothing. A value a custom editor already typed is stored unchanged.
 
+On a scaled grid the synthetic touch scroller owns the gesture on both axes:
+the content follows the finger 1:1, and a release flings the vertical axis in
+logical px and the inline axis in DOM px, each with the same decay and clamped
+to its own range, so a diagonal flick keeps gliding on both.
+
 While a touch fling or a wheel glide moves the content
 (`viewport.isScrollMotionActive()`), a press only stops it: the `InputHandler`
 pointer entry points return `{ preventDefault: true, stopPropagation: true }`

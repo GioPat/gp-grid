@@ -2,7 +2,7 @@
 // mutable GestureState so the controller only wires events to them.
 
 import { TAP_SLOP_PX } from "../input/interaction-constants";
-import type { VelocitySample } from "../utils/touch-scroll-physics";
+import { computeReleaseVelocity, pruneSamples, type VelocitySample } from "../utils/touch-scroll-physics";
 import { readIsRtl } from "./inline-axis";
 import { clamp } from "./touch-scroll-helpers";
 
@@ -35,8 +35,11 @@ export interface GestureState {
   slopOffsetX: number;
   slopOffsetY: number;
   samples: VelocitySample[];
+  /** The inline displacement over time, DOM px, for the inline release. */
+  samplesX: VelocitySample[];
   /** Fling velocity still alive when this gesture caught the content */
   carriedVelocity: number;
+  carriedVelocityX: number;
   /**
    * The scroll position the controller last wrote (or found at gesture
    * start). If the element drifts away from it, a native scroller is also
@@ -59,6 +62,7 @@ export const createGestureState = (
   el: HTMLElement,
   timeStamp: number,
   carriedVelocity: number,
+  carriedVelocityX = 0,
 ): GestureState => ({
   touchId: touch.identifier,
   startClientX: touch.clientX,
@@ -70,7 +74,9 @@ export const createGestureState = (
   slopOffsetX: 0,
   slopOffsetY: 0,
   samples: [{ time: timeStamp, position: 0 }],
+  samplesX: [{ time: timeStamp, position: 0 }],
   carriedVelocity,
+  carriedVelocityX,
   expectedScrollTop: el.scrollTop,
   expectedScrollLeft: el.scrollLeft,
 });
@@ -141,3 +147,21 @@ export const computeDragTarget = (
     left: gesture.rtl ? clamp(left, -maxLeft, 0) : clamp(left, 0, maxLeft),
   };
 };
+
+/** Record the finger's displacement on both axes and keep the velocity window. */
+export const recordSample = (gesture: GestureState, time: number, logicalDx: number, logicalDy: number): void => {
+  gesture.samples.push({ time, position: logicalDy });
+  gesture.samples = pruneSamples(gesture.samples, time);
+  gesture.samplesX.push({ time, position: logicalDx });
+  gesture.samplesX = pruneSamples(gesture.samplesX, time);
+};
+
+/** The release velocities: vertical in logical px/ms, inline in DOM px/ms. */
+export const releaseVelocities = (
+  gesture: GestureState,
+  time: number,
+  maxFlingVelocity: number,
+): { vertical: number; inline: number } => ({
+  vertical: computeReleaseVelocity(pruneSamples(gesture.samples, time), maxFlingVelocity),
+  inline: computeReleaseVelocity(pruneSamples(gesture.samplesX, time), maxFlingVelocity),
+});

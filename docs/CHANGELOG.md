@@ -349,6 +349,7 @@ See the [migration guide](./migration-1.0.md) for every change from 0.23.x with 
 - `sortFilter.setFilter()` accepts canonical grouped filters plus legacy flat/string inputs for migration
 
 ### Fixed
+- A touch release on a scaled grid flings the inline axis too: a sideways or diagonal flick keeps gliding horizontally with the same decay as the vertical fling, clamped to the inline range in LTR and RTL, and a flick that catches a horizontal fling carries its speed; the synthetic scroller had driven the columns 1:1 under the finger and stopped them on release
 - Enter, Escape and Tab in an editor return the keyboard focus to the grid in every wrapper, so the arrows and Ctrl+Z keep working after a commit; `focusGridContainer(element)` and `KeyboardResult.focusContainer` do the same for a custom editor or adapter
 - A reload under a hierarchy (a transaction refresh, a schema replace) follows the active cell's column by id: a column removed while the rows reload clears the active cell instead of restoring a stale index, in every wrapper
 - Vue no longer rewrites a grouped row's inline style on every re-render: `GridRow.vue` binds `data-row-kind`, `data-row-error`, `aria-level` and `aria-expanded` one by one again instead of spreading them with `v-bind` beside the string `:style`
