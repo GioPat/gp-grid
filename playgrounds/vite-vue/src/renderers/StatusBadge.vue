@@ -7,7 +7,7 @@ const props = defineProps<CellRendererParams>();
 // string when the column declares a valueFormatter.
 const rawStatus = (): string => {
     const row = props.rowData as Record<string, unknown> | null;
-    return String(row?.[props.column.field] ?? "");
+    return String(props.getValue?.(props.column.field) ?? row?.[props.column.field] ?? "");
 };
 </script>
 

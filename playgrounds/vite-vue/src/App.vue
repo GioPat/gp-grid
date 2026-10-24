@@ -21,6 +21,7 @@ import AgeBucket from "./renderers/AgeBucket.vue";
 import { createDemoServerSource } from "./demo-server-groups";
 import { createDemoPivotSource } from "./demo-pivot";
 import { usePivotSchema } from "./use-pivot-schema";
+import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from "./demo-columnar";
 type HighlightMode = "row" | "column" | "cell";
 type FreezeCount = 0 | 1 | 3 | 5;
 const highlightMode = ref<HighlightMode>("row");
@@ -268,7 +269,16 @@ const pivotSource = computed(() => (pivot.value ? createDemoPivotSource(dataSour
 watch(pivotSource, (_next, previous) => previous?.destroy());
 const pivotSchema = usePivotSchema(pivotSource);
 const pivotActive = computed(() => pivotSource.value !== null);
-const shownColumns = computed(() => (pivotActive.value ? pivotSchema.value.columns : columns));
+
+// Columnar source and the wide grid: typed arrays for the same people, 200 accessor metric columns.
+const columnar = ref(false);
+const wide = ref(false);
+const columnarSource = computed(() =>
+    columnar.value || wide.value ? createDemoColumnarSource(rowData, wide.value ? WIDE_COLUMN_COUNT : 0) : null,
+);
+const wideColumns = createWideColumns(WIDE_COLUMN_COUNT);
+const plainColumns = computed(() => (wide.value ? [...columns, ...wideColumns] : columns));
+const shownColumns = computed(() => (pivotActive.value ? pivotSchema.value.columns : plainColumns.value));
 const shownColumnGroups = computed(() => {
     if (pivotActive.value) return pivotSchema.value.columnGroups;
     return grouped.value ? demoColumnGroups : undefined;
@@ -410,6 +420,20 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             Pivot
         </button>
         <button
+            :class="['mode-btn', { active: columnar }]"
+            :aria-pressed="columnar"
+            @click="columnar = !columnar"
+        >
+            Columnar
+        </button>
+        <button
+            :class="['mode-btn', { active: wide }]"
+            :aria-pressed="wide"
+            @click="wide = !wide"
+        >
+            Wide
+        </button>
+        <button
             class="mode-btn"
             :disabled="groupRows === false && serverGroups === false && pivot === false"
             @click="expandAllGroups"
@@ -432,7 +456,7 @@ const highlightingProps = computed<HighlightingOptions<Person>>(() => ({
             :freeze-rows="freezeRows"
             :on-frozen-rows-changed="handleFrozenRowsChanged"
             :overscan="12"
-            :data-source="pivotSource ?? serverSource ?? dataSource"
+            :data-source="pivotSource ?? serverSource ?? columnarSource ?? dataSource"
             :get-row-id="(row: unknown) => (row as Person).id"
             :history="{ maxEntries: 100 }"
             :on-write-committed="onWriteCommitted"
