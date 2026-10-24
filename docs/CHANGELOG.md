@@ -2,7 +2,7 @@
 
 All notable changes to gp-grid will be documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-10-24
 
 ### Added
 
