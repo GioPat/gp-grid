@@ -149,6 +149,7 @@ const props = withDefaults(
 // Refs
 const outerContainerRef = ref<HTMLDivElement | null>(null);
 const gridBodyComp = ref<InstanceType<typeof GridBody> | null>(null);
+const gridHeaderComp = ref<InstanceType<typeof GridHeader> | null>(null);
 const bodyContainerRef = computed(() => gridBodyComp.value?.bodyRef ?? null);
 const coreRef = shallowRef<GridCore<Row> | null>(null);
 const currentDataSourceRef = shallowRef<DataSource<Row> | null>(null);
@@ -162,9 +163,6 @@ const touchScroll = new TouchScrollController<Row>({
   getScrollEl: () => bodyContainerRef.value,
   isBrowser: typeof window !== "undefined",
 });
-
-// Header scroll sync
-const scrollLeft = ref(0);
 
 // Inline direction, resampled on mount and on every container resize.
 const rtl = ref(false);
@@ -266,7 +264,7 @@ function handleScrollWithHeaderSync(): void {
   const container = bodyContainerRef.value;
   if (container) {
     // The header strip undoes the native scroll, so it takes the DOM value.
-    scrollLeft.value = container.scrollLeft;
+    gridHeaderComp.value?.syncScroll(container.scrollLeft);
   }
   handleScroll();
 }
@@ -592,8 +590,8 @@ defineExpose({
     @paste="handlePaste"
   >
     <GridHeader
+      ref="gridHeaderComp"
       :header-bands="state.headerBands"
-      :scroll-left="scrollLeft"
       :content-width="state.contentWidth"
       :total-width="totalWidth"
       :viewport-width="state.viewportWidth"

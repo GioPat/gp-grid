@@ -5,7 +5,9 @@ import {
   output,
   computed,
   inject,
+  ElementRef,
   TemplateRef,
+  ViewChild,
 } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
 import type {
@@ -87,8 +89,6 @@ export interface ResizePointerDownEvent {
 })
 export class GridHeaderComponent {
   headerBands = input.required<HeaderBandLayout>();
-  /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
-  scrollLeft = input.required<number>();
   contentWidth = input.required<number>();
   totalWidth = input.required<number>();
   viewportWidth = input.required<number>();
@@ -131,9 +131,12 @@ export class GridHeaderComponent {
 
   protected endOffset = computed(() => this.columnWindow()?.layout.regions.endOffset ?? 0);
 
-  protected transformStyle = computed(() =>
-    `translateX(${-this.scrollLeft()}px)`
-  );
+  @ViewChild('centerStrip', { static: true }) private centerStrip!: ElementRef<HTMLDivElement>;
+
+  /** Written outside change detection so the strip moves in the scroll event's frame. */
+  syncScroll(domScrollLeft: number): void {
+    this.centerStrip.nativeElement.style.transform = `translateX(${-domScrollLeft}px)`;
+  }
 
   private readonly instance = inject(GridHeaderInstanceIds).next();
 

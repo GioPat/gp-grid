@@ -28,8 +28,8 @@ import type { ReactHeaderRenderer, ReactHeaderRendererRegistry } from "../types"
 
 export interface GridHeaderProps<TData = unknown> {
   headerBands: HeaderBandLayout;
-  /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
-  scrollLeft: number;
+  /** Center strip; the body's scroll handler writes its transform directly. */
+  stripRef: React.RefObject<HTMLDivElement | null>;
   contentWidth: number;
   totalWidth: number;
   viewportWidth: number;
@@ -62,7 +62,7 @@ export const GridHeader = <TData = unknown>(
 ): React.ReactNode => {
   const {
     headerBands,
-    scrollLeft,
+    stripRef,
     contentWidth,
     totalWidth,
     viewportWidth,
@@ -160,12 +160,12 @@ export const GridHeader = <TData = unknown>(
       ))}
 
       <div
+        ref={stripRef}
         role="presentation"
         style={{
           position: "absolute",
           top: 0,
           insetInlineStart: 0,
-          transform: `translateX(${-scrollLeft}px)`,
           width: Math.max(contentWidth, totalWidth),
           height: totalHeight,
         }}

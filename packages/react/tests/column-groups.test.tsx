@@ -193,7 +193,7 @@ describe("Grid column groups", () => {
     const skeleton = headerSkeleton().map(withoutCellTop);
     expect(skeleton).toEqual([
       '<div class="gp-grid-header" role="row" aria-rowindex="1" style="height: 40px;">',
-      '  <div role="presentation" style="position: absolute; top: 0px; inset-inline-start: 0; transform: translateX(0px); width: 400px; height: 40px;">',
+      '  <div role="presentation" style="position: absolute; top: 0px; inset-inline-start: 0; width: 400px; height: 40px;">',
       cell(1, "center", 100),
       cell(2, "center", 200),
       '  <div class="gp-grid-pin-header" role="presentation" data-pin-region="start" style="inset-inline-start: 0; width: 100px; height: 40px;">',

@@ -94,6 +94,7 @@ import { createRowGroupCells } from './gp-grid-row-groups';
 export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('container', { static: true }) container!: ElementRef<HTMLDivElement>;
   @ViewChild(GridBodyComponent) body!: GridBodyComponent;
+  @ViewChild(GridHeaderComponent) header!: GridHeaderComponent;
 
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
@@ -316,7 +317,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.body.scrollContainer.nativeElement;
     const logicalScrollLeft = toInlineX(scrollLeft, this.bindings.isRtl);
     // The header strip undoes the native scroll, so it takes the DOM value.
-    this.vm.scrollLeft.set(scrollLeft);
+    this.header.syncScroll(scrollLeft);
     this.bindings.coreRef?.setViewport(
       el.scrollTop,
       logicalScrollLeft,
