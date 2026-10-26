@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.0.0...gp-grid-v1.0.1) (2026-10-26)
+
+
+### 🐛 Bug Fixes
+
+* **header:** sync the header strip with the body scroll in the same frame ([c68cb80](https://github.com/GioPat/gp-grid/commit/c68cb806d8892763684168874cb79b24a92dcb10))
+* **header:** sync the header strip with the body scroll in the same frame ([8bbfe60](https://github.com/GioPat/gp-grid/commit/8bbfe600f897c22be70baae28b54ee27c7bdc2e8))
+
 ## [1.0.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v0.23.2...gp-grid-v1.0.0) (2026-10-24)
 
 
