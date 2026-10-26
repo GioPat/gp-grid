@@ -42,6 +42,10 @@ test("my-feature", async ({ page }, testInfo) => {
 });
 ```
 
+Stage: `stage.ts` frames the grid, draws the cursor and the caption pill.
+When gridcast passes `GRIDCAST_FONT` (its `video.fontFile`), the grid and the
+captions use that font, so the recording matches the cards around it.
+
 Pace: every `pause`, `hover`, `click`, `drag` and `wheel` is scaled by
 `GRIDCAST_PACE` (default 1). `GRIDCAST_PACE=1.4` makes every demo 40% slower
 without touching the files; gridcast sets it from `demos.pace` in its config.
