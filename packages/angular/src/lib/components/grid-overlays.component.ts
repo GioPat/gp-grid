@@ -95,7 +95,6 @@ export class GridOverlaysComponent {
   labels = input<GridLabels>(defaultGridLabels);
   totalHeaderHeight = input.required<number>();
   dragState = input.required<DragState>();
-  scrollLeft = input.required<number>();
   effectiveColumns = input.required<ColumnDefinition[]>();
   totalWidth = input.required<number>();
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useId } from "vue";
+import { computed, ref, useId } from "vue";
 import {
   createColumnGroupLookup,
   fragmentHeaderBox,
@@ -32,8 +32,6 @@ import type { Row, VueHeaderRenderer, VueHeaderRendererRegistry } from "../types
  */
 const props = defineProps<{
   headerBands: HeaderBandLayout;
-  /** DOM scroll offset (physical: negative in RTL); the strip negates it. */
-  scrollLeft: number;
   contentWidth: number;
   totalWidth: number;
   viewportWidth: number;
@@ -58,6 +56,15 @@ const props = defineProps<{
 }>();
 
 const instance = useId();
+
+const centerStrip = ref<HTMLDivElement | null>(null);
+
+/** Written outside the render cycle so the strip moves in the scroll event's frame. */
+const syncScroll = (domScrollLeft: number): void => {
+  if (centerStrip.value) centerStrip.value.style.transform = `translateX(${-domScrollLeft}px)`;
+};
+
+defineExpose({ syncScroll });
 const lookupGroup = computed(() => createColumnGroupLookup(props.columnGroups));
 
 const associations = computed<HeaderAssociations | null>(() => {
@@ -143,12 +150,12 @@ const fragmentProps = (fragment: HeaderFragment) => {
     />
 
     <div
+      ref="centerStrip"
       role="presentation"
       :style="{
         position: 'absolute',
         top: 0,
         insetInlineStart: 0,
-        transform: `translateX(${-props.scrollLeft}px)`,
         width: `${Math.max(props.contentWidth, props.totalWidth)}px`,
         height: totalHeight,
       }"

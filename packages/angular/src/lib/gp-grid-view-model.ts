@@ -72,8 +72,6 @@ export class GpGridViewModel {
   readonly viewportWidth = signal<number>(0);
   /** Physical direction used by header actions. */
   readonly rtl = signal<boolean>(false);
-  /** DOM scroll offset (physical: negative in RTL); the header negates it. */
-  readonly scrollLeft = signal<number>(0);
   readonly isLoading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
   readonly filterPopup = signal<ActiveFilterPopup | null>(null);

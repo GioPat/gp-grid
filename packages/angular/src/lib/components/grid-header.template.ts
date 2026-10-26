@@ -126,10 +126,9 @@ export const GRID_HEADER_TEMPLATE = `
         }
       </div>
     </ng-template>
-    <div
+    <div #centerStrip
       style="position: absolute; top: 0; inset-inline-start: 0;"
       role="presentation"
-      [style.transform]="transformStyle()"
       [style.width.px]="innerWidth()"
       [style.height.px]="totalHeight()">
       @for (fragment of groups().center; track fragment.fragmentId) {

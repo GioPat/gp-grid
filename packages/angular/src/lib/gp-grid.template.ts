@@ -13,7 +13,6 @@ export const GP_GRID_TEMPLATE = `
     >
       <gp-grid-header
         [headerBands]="vm.headerBands()"
-        [scrollLeft]="vm.scrollLeft()"
         [contentWidth]="vm.contentWidth()"
         [totalWidth]="vm.totalWidth()"
         [viewportWidth]="vm.viewportWidth()"
@@ -94,7 +93,6 @@ export const GP_GRID_TEMPLATE = `
         [errorMessage]="vm.errorMessage()"
         [totalHeaderHeight]="vm.headerBands().totalHeight"
         [dragState]="vm.dragState()"
-        [scrollLeft]="vm.scrollLeft()"
         [effectiveColumns]="vm.effectiveColumns()"
         [totalWidth]="vm.totalWidth()"
         (filterApply)="onFilterApply($event)"

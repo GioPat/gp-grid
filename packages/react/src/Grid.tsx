@@ -622,9 +622,11 @@ export function Grid<TData = unknown>(
     [state.slots],
   );
 
-  // Native scroll position, tracked for the header strip and the fill handle's
-  // clip test: the handle hides once a pin covers its anchor.
+  // Re-runs the fill handle's clip test (the handle hides once a pin covers its
+  // anchor); only tracked while a handle can exist, so plain scrolling skips a render.
   const [scrollLeft, setScrollLeft] = React.useState(0);
+  const headerStripRef = useRef<HTMLDivElement>(null);
+  const hasFillAnchor = state.activeCell !== null || state.selectionRange !== null;
 
   // Fill handle position, resolved by core geometry in rows space.
   const fillHandlePosition = useMemo(
@@ -649,10 +651,13 @@ export function Grid<TData = unknown>(
   const handleScrollWithHeaderSync = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    // The header strip undoes the native scroll, so it takes the DOM value.
-    setScrollLeft(container.scrollLeft);
+    // Written directly so the header moves in the scroll event's frame; it
+    // undoes the native scroll, so it takes the DOM value.
+    const strip = headerStripRef.current;
+    if (strip) strip.style.transform = `translateX(${-container.scrollLeft}px)`;
+    if (hasFillAnchor) setScrollLeft(container.scrollLeft);
     handleScroll();
-  }, [handleScroll]);
+  }, [handleScroll, hasFillAnchor]);
 
   return (
     <div
@@ -675,7 +680,7 @@ export function Grid<TData = unknown>(
     >
       <GridHeader
         headerBands={state.headerBands}
-        scrollLeft={scrollLeft}
+        stripRef={headerStripRef}
         contentWidth={state.contentWidth}
         totalWidth={totalWidth}
         viewportWidth={state.viewportWidth}
