@@ -1,8 +1,8 @@
 // benchmarks/demo/helpers.ts
 // Shared helpers for the gridcast demo recordings. They reuse the conformance
 // selectors (`cell`, `headerCell`, ...) and add what a *video* needs that a
-// test does not: a visible cursor, human-paced mouse motion, a stage that
-// frames the grid, and captions.
+// test does not: human-paced mouse motion and captions, on the stage from
+// stage.ts.
 //
 // A demo file is `demo/<scope>.demo.ts`, where <scope> is the conventional
 // commit scope it illustrates (`feat(fill-handle): ...` -> `fill-handle.demo.ts`).
@@ -10,6 +10,7 @@
 
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { cell, headerCell } from "../conformance/helpers";
+import { installStage } from "./stage";
 
 export { cell, headerCell };
 
@@ -37,98 +38,18 @@ export const describeDemo = (testInfo: TestInfo, meta: DemoMeta): void => {
 
 const STAGE_PADDING = 28;
 
-/**
- * Open the playground and frame the grid: everything but the grid shell is
- * hidden, the shell fills the viewport, and a fake cursor follows the mouse
- * (headless videos do not render the real one).
- */
+/** Open the playground on the demo stage (see stage.ts). */
 export const openDemo = async (page: Page, testInfo?: TestInfo): Promise<Error[]> => {
   const startedAt = Date.now();
   const pageErrors: Error[] = [];
   page.on("pageerror", (error) => pageErrors.push(error));
 
-  await page.addInitScript(({ padding }) => {
-    const style = document.createElement("style");
-    style.textContent = `
-      html, body, #root { background: #0b1220 !important; overflow: hidden !important; }
-      #root * { visibility: hidden; }
-      #root .demo-grid-shell, #root .demo-grid-shell * { visibility: visible; }
-      .demo-grid-shell {
-        position: fixed !important; inset: ${padding}px !important;
-        width: auto !important; height: auto !important; margin: 0 !important;
-        border-radius: 10px; overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0,0,0,.55);
-        z-index: 1000;
-      }
-      .demo-cursor {
-        position: fixed; left: 0; top: 0; width: 22px; height: 22px;
-        pointer-events: none; z-index: 2147483647;
-        transform: translate(-3px, -2px);
-        transition: transform 60ms linear;
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,.6));
-      }
-      .demo-cursor.down { transform: translate(-3px, -2px) scale(.85); }
-      .demo-ripple {
-        position: fixed; width: 36px; height: 36px; border-radius: 50%;
-        border: 2px solid #60a5fa; pointer-events: none; z-index: 2147483646;
-        transform: translate(-50%, -50%) scale(.4); opacity: .9;
-        animation: demo-ripple 420ms ease-out forwards;
-      }
-      @keyframes demo-ripple { to { transform: translate(-50%, -50%) scale(1.3); opacity: 0; } }
-      .demo-caption {
-        position: fixed; left: 50%; bottom: ${padding + 18}px; transform: translateX(-50%) translateY(12px);
-        padding: 10px 18px; border-radius: 999px;
-        background: rgba(15, 23, 42, .92); color: #e5e7eb;
-        font: 500 17px/1.3 Inter, system-ui, sans-serif; letter-spacing: .01em;
-        border: 1px solid rgba(148, 163, 184, .25);
-        box-shadow: 0 8px 24px rgba(0,0,0,.45);
-        z-index: 2147483645; opacity: 0; transition: opacity 220ms ease, transform 220ms ease;
-        white-space: nowrap;
-      }
-      .demo-caption.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    `;
-    const ready = () => {
-      (document.head ?? document.documentElement).appendChild(style);
-      const cursor = document.createElement("div");
-      cursor.className = "demo-cursor";
-      cursor.innerHTML =
-        '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 3l14 8.5-6.2 1.6L9.5 19 5 3z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-      document.body.appendChild(cursor);
-      const caption = document.createElement("div");
-      caption.className = "demo-caption";
-      document.body.appendChild(caption);
-      // Pointer events, not mouse events: once the grid captures the pointer
-      // (fill drag, column drag) the browser stops emitting mousemove.
-      window.addEventListener("pointermove", (event) => {
-        cursor.style.left = `${event.clientX}px`;
-        cursor.style.top = `${event.clientY}px`;
-      }, true);
-      window.addEventListener("pointerdown", (event) => {
-        cursor.classList.add("down");
-        const ripple = document.createElement("div");
-        ripple.className = "demo-ripple";
-        ripple.style.left = `${event.clientX}px`;
-        ripple.style.top = `${event.clientY}px`;
-        document.body.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 500);
-      }, true);
-      window.addEventListener("pointerup", () => cursor.classList.remove("down"), true);
-      (window as unknown as { __demoCaption: (text: string) => void }).__demoCaption = (text) => {
-        if (text === "") {
-          caption.classList.remove("show");
-          return;
-        }
-        caption.textContent = text;
-        caption.classList.add("show");
-      };
-    };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
-    else ready();
-  }, { padding: STAGE_PADDING });
+  await installStage(page, STAGE_PADDING);
 
   await page.goto("/");
   await expect(page.locator(".gp-grid-container")).toHaveCount(1);
   await expect(cell(page, 0, 1)).toContainText("Person");
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await page.mouse.move(640, 360);
   // Tell gridcast how much page-load to cut from the head of the recording.
   testInfo?.annotations.push({ type: "gridcast-ready-ms", description: String(Date.now() - startedAt) });
