@@ -28,7 +28,7 @@ import { useInputHandler } from "./composables/useInputHandler";
 import { useFillHandle } from "./composables/useFillHandle";
 import { useColumnSchemaSync } from "./composables/useColumnSchemaSync";
 import { useRowGroupCellContext, useRowGroupingSync } from "./composables/useRowGroupingSync";
-import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueGroupLabelRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
+import type { ColumnDefinition, Row, VueCellRenderer, VueEditRenderer, VueGroupLabelRenderer, VueFilterRenderer, VueHeaderRenderer, VueHeaderRendererRegistry } from "./types";
 import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
@@ -77,9 +77,13 @@ const props = withDefaults(
     editRenderers?: Record<string, VueEditRenderer>;
     /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
     headerRenderers?: VueHeaderRendererRegistry;
+    /** Filter renderer registry, keyed by a column's `filterRenderer`. */
+    filterRenderers?: Record<string, VueFilterRenderer>;
     cellRenderer?: VueCellRenderer;
     editRenderer?: VueEditRenderer;
     headerRenderer?: VueHeaderRenderer;
+    /** Replaces the built-in filter popup content for every column. */
+    filterRenderer?: VueFilterRenderer;
     /** SVG used by the default header's pin toggle. */
     pinIcon?: GridIcon;
     /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */
@@ -142,6 +146,7 @@ const props = withDefaults(
     cellRenderers: () => ({}),
     editRenderers: () => ({}),
     headerRenderers: () => ({}),
+    filterRenderers: () => ({}),
     pinIcon: () => defaultPinIcon,
   },
 );
@@ -692,6 +697,8 @@ defineExpose({
       :distinct-values="state.filterPopup.distinctValues"
       :current-filter="state.filterPopup.currentFilter"
       :labels="resolvedLabels"
+      :filter-renderers="filterRenderers ?? {}"
+      :global-filter-renderer="filterRenderer"
       @apply="handleFilterApply"
       @close="handleFilterPopupClose"
     />

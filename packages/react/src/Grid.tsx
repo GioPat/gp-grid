@@ -77,9 +77,11 @@ export function Grid<TData = unknown>(
     cellRenderers = {},
     editRenderers = {},
     headerRenderers = {},
+    filterRenderers = {},
     cellRenderer,
     editRenderer,
     headerRenderer,
+    filterRenderer,
     pinIcon = defaultPinIcon,
     initialWidth,
     initialHeight,
@@ -784,6 +786,8 @@ export function Grid<TData = unknown>(
             distinctValues={state.filterPopup.distinctValues}
             currentFilter={state.filterPopup.currentFilter}
             labels={resolvedLabels}
+            filterRenderers={filterRenderers}
+            globalFilterRenderer={filterRenderer}
             onApply={handleFilterApply}
             onClose={handleFilterPopupClose}
           />

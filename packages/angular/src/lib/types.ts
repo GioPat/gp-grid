@@ -5,6 +5,7 @@ import type {
   ColumnGroupHeaderParams,
   CellRendererParams,
   EditRendererParams,
+  FilterRendererParams,
   GroupLabelRendererParams,
   HeaderRendererParams,
 } from '@gp-grid/core';
@@ -15,7 +16,10 @@ import type {
  * `TemplateRef` references in addition to the core's string-key / function
  * forms.
  */
-export interface AngularColumnDefinition extends Omit<ColumnDefinition, 'cellRenderer' | 'editRenderer' | 'headerRenderer'> {
+export interface AngularColumnDefinition extends Omit<
+  ColumnDefinition,
+  'cellRenderer' | 'editRenderer' | 'headerRenderer' | 'filterRenderer'
+> {
   cellRenderer?:
     | string
     | TemplateRef<{ $implicit: CellRendererParams }>
@@ -28,6 +32,10 @@ export interface AngularColumnDefinition extends Omit<ColumnDefinition, 'cellRen
     | string
     | TemplateRef<{ $implicit: HeaderRendererParams }>
     | ((params: HeaderRendererParams) => unknown);
+  filterRenderer?:
+    | string
+    | TemplateRef<{ $implicit: FilterRendererParams }>
+    | ((params: FilterRendererParams) => unknown);
 }
 
 /**

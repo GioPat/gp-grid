@@ -16,7 +16,9 @@ import type {
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
+  ColumnFilterModel,
   ColumnLayoutMode,
+  FilterRendererTemplate,
   FreezeRowsOptions,
   GridCore,
   GroupLabelRendererTemplate,
@@ -155,7 +157,7 @@ const createColumns = (): AngularColumnDefinition[] => [
   { colId: 'city', field: 'city', headerName: 'City', width: 140, cellDataType: 'text' },
   { colId: 'score', field: 'score', headerName: 'Score', width: 120, cellDataType: 'number' },
   { colId: 'team', field: 'team', headerName: 'Team', width: 150, cellDataType: 'text' },
-  { colId: 'status', field: 'status', headerName: 'Status', width: 130, cellDataType: 'text' },
+  { colId: 'status', field: 'status', headerName: 'Status', width: 130, cellDataType: 'text', filterRenderer: 'searchOnly' },
   { colId: 'note', field: 'note', headerName: 'Note', width: 210, cellDataType: 'text' },
   { colId: 'code', field: 'code', headerName: 'Code', width: 160, cellDataType: 'text' },
 ];
@@ -252,6 +254,13 @@ const createColumnarFixture = () => {
           aria-label="Toggle group"
           style="width: 14px; height: 14px; margin-inline-start: 4px"
           (click)="params.toggle()"></button>}</span>
+    </ng-template>
+    <ng-template #searchFilter let-params>
+      <div class="gp-grid-filter-content">
+        <input #searchInput data-testid="custom-filter-input" />
+        <button type="button" data-testid="custom-filter-cancel" (click)="params.close()">Cancel</button>
+        <button type="button" data-testid="custom-filter-apply" (click)="params.apply(containsFilter(searchInput.value))">Apply</button>
+      </div>
     </ng-template>
     <main data-conformance-framework="angular">
       <div class="cf-controls">
@@ -427,6 +436,7 @@ const createColumnarFixture = () => {
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [getRowId]="getRowId"
+              [filterRenderers]="{ searchOnly: searchFilter }"
               (onCellValueChanged)="onCellValueChanged($event)"
               (onWriteRejected)="onWriteRejected($event)"
               (onWriteCommitted)="writes.recordWrite($event)"
@@ -517,6 +527,12 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.enginePivotActive() ? this.engineSchema.schema() : this.pivotSchema());
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
+  @ViewChild('searchFilter', { static: true }) protected searchFilter!: FilterRendererTemplate;
+
+  protected containsFilter = (value: string): ColumnFilterModel => ({
+    groups: [{ conditions: [{ type: 'text', operator: 'contains', value }], combination: 'and' }],
+    combination: 'and',
+  });
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
   protected readonly bandHeights = signal<readonly number[]>(NO_BAND_HEIGHTS);
   protected readonly groupLimits = signal<ColumnGroupLimits>(NO_GROUP_LIMITS);

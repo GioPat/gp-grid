@@ -283,6 +283,7 @@ export type {
   GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  FilterRendererParams,
   ColumnGroupHeaderParams,
 
   // Listener types

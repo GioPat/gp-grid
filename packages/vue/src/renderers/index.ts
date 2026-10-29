@@ -10,3 +10,5 @@ export { renderHeader, renderGroupHeader } from "./headerRenderer";
 export type { RenderHeaderOptions, RenderGroupHeaderOptions } from "./headerRenderer";
 
 export { renderGroupLabel } from "./groupLabelRenderer";
+
+export { resolveFilterRenderer, CustomFilterContent } from "./filterRenderer";

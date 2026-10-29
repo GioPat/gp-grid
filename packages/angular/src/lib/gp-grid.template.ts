@@ -89,6 +89,8 @@ export const GP_GRID_TEMPLATE = `
       <gp-grid-overlays
         [filterPopup]="vm.filterPopup()"
         [labels]="resolvedLabels()"
+        [filterRenderers]="filterRenderers()"
+        [globalFilterRenderer]="filterRenderer()"
         [isLoading]="vm.isLoading()"
         [errorMessage]="vm.errorMessage()"
         [totalHeaderHeight]="vm.headerBands().totalHeight"

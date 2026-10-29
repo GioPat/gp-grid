@@ -7,6 +7,7 @@ import type { HighlightContext } from "./highlighting";
 import type {
   CellRendererParams,
   EditRendererParams,
+  FilterRendererParams,
   HeaderRendererParams,
 } from "./renderers";
 
@@ -119,6 +120,8 @@ export interface ColumnDefinition {
   cellRenderer?: string | ((params: CellRendererParams) => unknown);
   editRenderer?: string | ((params: EditRendererParams) => unknown);
   headerRenderer?: string | ((params: HeaderRendererParams) => unknown);
+  /** Replaces the content of the filter popup; the grid keeps its position, title and close behaviour. */
+  filterRenderer?: string | ((params: FilterRendererParams) => unknown);
   /**
    * Converts a cell value to its display string. Used by the default cell renderer
    * when no `cellRenderer` is provided. Useful for `object`-type columns where the

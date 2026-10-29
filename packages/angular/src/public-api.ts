@@ -3,6 +3,7 @@ export { GroupLabelComponent, GroupToggleComponent } from './lib/components/grou
 export type { RowGroupCellContext } from './lib/components/row-group-cells';
 export type { GroupHeaderRendererTemplate, HeaderRendererRegistry } from './lib/components/grid-header-groups';
 export type { HeaderRendererTemplate } from './lib/components/grid-header.component';
+export type { FilterRendererTemplate } from './lib/components/filter-popup.component';
 export type { CellRendererTemplate, EditRendererTemplate } from './lib/components/grid-body.component';
 export * from './lib/types';
 export * from './lib/createGridData';
@@ -173,6 +174,7 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  FilterRendererParams,
 
   // Highlighting
   HighlightingOptions,

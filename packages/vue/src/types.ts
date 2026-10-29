@@ -20,6 +20,7 @@ import type {
   ColumnStateUpdate,
   ColumnLayoutMode,
   EditRendererParams,
+  FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
   GridLabelOverrides,
@@ -72,6 +73,14 @@ export type VueHeaderRenderer =
   | Component;
 
 /**
+ * Vue filter renderer: the content of a column's filter popup, as a render
+ * function or a component taking FilterRendererParams as props.
+ */
+export type VueFilterRenderer =
+  | ((params: FilterRendererParams) => VNode | string | null)
+  | Component;
+
+/**
  * Vue group header renderer: renders one fragment of a column group, as a
  * render function or a component taking ColumnGroupHeaderParams as props.
  */
@@ -106,10 +115,14 @@ export type VueHeaderRendererRegistry = Record<
  * in addition to render functions and registry-key strings.
  */
 export interface ColumnDefinition<TData = unknown>
-  extends Omit<CoreColumnDefinition, "cellRenderer" | "editRenderer" | "headerRenderer"> {
+  extends Omit<
+    CoreColumnDefinition,
+    "cellRenderer" | "editRenderer" | "headerRenderer" | "filterRenderer"
+  > {
   cellRenderer?: string | VueCellRenderer<TData>;
   editRenderer?: string | VueEditRenderer<TData>;
   headerRenderer?: string | VueHeaderRenderer;
+  filterRenderer?: string | VueFilterRenderer;
 }
 
 // =============================================================================
@@ -158,9 +171,13 @@ export interface GpGridProps<TData = unknown> {
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
   headerRenderers?: VueHeaderRendererRegistry;
+  /** Filter renderer registry, keyed by a column's `filterRenderer`. */
+  filterRenderers?: Record<string, VueFilterRenderer>;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
+  /** Replaces the built-in filter popup content for every column. */
+  filterRenderer?: VueFilterRenderer;
   /** SVG used by the default header's pin toggle. */
   pinIcon?: GridIcon;
   /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */

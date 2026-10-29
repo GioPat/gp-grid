@@ -205,6 +205,7 @@ export type {
   GroupLabelRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  FilterRendererParams,
   ColumnGroupHeaderParams,
 } from "./renderers";
 

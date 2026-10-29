@@ -65,6 +65,7 @@ import type {
   VueGroupLabelRenderer,
   VueHeaderRenderer,
   VueHeaderRendererRegistry,
+  VueFilterRenderer,
 } from "../types";
 
 // =============================================================================
@@ -141,9 +142,13 @@ export interface UseGpGridOptions<TData = unknown> {
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
   headerRenderers?: VueHeaderRendererRegistry;
+  /** Filter renderer registry, keyed by a column's `filterRenderer`. */
+  filterRenderers?: Record<string, VueFilterRenderer>;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
+  /** Replaces the built-in filter popup content for every column. */
+  filterRenderer?: VueFilterRenderer;
 }
 
 export interface UseGpGridResult<TData = unknown> {

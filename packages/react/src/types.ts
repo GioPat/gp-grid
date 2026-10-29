@@ -20,6 +20,7 @@ import type {
   CellWriteRejectedEvent,
   WriteCommittedEvent,
   EditRendererParams,
+  FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
   GroupLabelRendererParams,
@@ -59,6 +60,11 @@ export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
 /** React header renderer: A function that renders a header cell */
 export type ReactHeaderRenderer = (
   params: HeaderRendererParams,
+) => React.ReactNode;
+
+/** React filter renderer: renders the content of a column's filter popup */
+export type ReactFilterRenderer = (
+  params: FilterRendererParams,
 ) => React.ReactNode;
 
 /** React group label renderer: the label of a group or total row, beside its expander */
@@ -146,6 +152,8 @@ export interface GridProps<TData = unknown> {
   editRenderers?: Record<string, ReactEditRenderer>;
   /** Header renderer registries, keyed by a column's or a group's `headerRenderer` */
   headerRenderers?: ReactHeaderRendererRegistry;
+  /** Filter renderer registry, keyed by a column's `filterRenderer` */
+  filterRenderers?: Record<string, ReactFilterRenderer>;
 
   /** Global cell renderer */
   cellRenderer?: ReactCellRenderer;
@@ -153,6 +161,8 @@ export interface GridProps<TData = unknown> {
   editRenderer?: ReactEditRenderer;
   /** Global header renderer */
   headerRenderer?: ReactHeaderRenderer;
+  /** Global filter renderer, replacing the built-in filter popup content */
+  filterRenderer?: ReactFilterRenderer;
   /** SVG used by the default header's pin toggle. */
   pinIcon?: GridIcon;
 
