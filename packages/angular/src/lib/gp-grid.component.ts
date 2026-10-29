@@ -16,6 +16,7 @@ import {
 import type {
   CellRendererTemplate,
   EditRendererTemplate,
+  AngularFilterRenderer,
   HeaderRendererRegistry,
   HeaderRendererTemplate,
   HeaderSortEvent,
@@ -122,6 +123,10 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
   editRenderers = input<Record<string, EditRendererTemplate>>({});
   cellRenderer = input<CellRendererTemplate | null>(null);
   headerRenderer = input<HeaderRendererTemplate | null>(null);
+  /** Filter renderer registry, keyed by a column's `filterRenderer`. */
+  filterRenderers = input<Record<string, AngularFilterRenderer>>({});
+  /** Replaces the built-in filter popup content for every column. */
+  filterRenderer = input<AngularFilterRenderer | null>(null);
   /** SVG used by the default header's pin toggle. */
   pinIcon = input<GridIcon>(defaultPinIcon);
   editRenderer = input<EditRendererTemplate | null>(null);
@@ -488,7 +493,7 @@ export class GpGridComponent implements OnInit, AfterViewInit, OnDestroy {
 
   protected onFilterApply(event: { colId: string; filter: ColumnFilterModel | null }): void {
     this.bindings.coreRef?.sortFilter.setFilter(event.colId, event.filter);
-    this.vm.filterPopup.set(null);
+    this.onFilterClose();
   }
 
   protected onFilterClose(): void {

@@ -20,6 +20,9 @@ import type {
   CellWriteRejectedEvent,
   WriteCommittedEvent,
   EditRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
+  FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
   GroupLabelRendererParams,
@@ -60,6 +63,22 @@ export type ReactEditRenderer = (params: EditRendererParams) => React.ReactNode;
 export type ReactHeaderRenderer = (
   params: HeaderRendererParams,
 ) => React.ReactNode;
+
+/** Renders the content of a column's filter popup */
+export type ReactFilterContentRenderer = (
+  params: FilterRendererParams,
+) => React.ReactNode;
+
+/** Renders a custom filter popup's clear control */
+export type ReactFilterClearRenderer = (
+  params: FilterClearParams,
+) => React.ReactNode;
+
+/** React filter renderer: the popup content plus its required clear control */
+export type ReactFilterRenderer = FilterRendererDefinition<
+  ReactFilterContentRenderer,
+  ReactFilterClearRenderer
+>;
 
 /** React group label renderer: the label of a group or total row, beside its expander */
 export type ReactGroupLabelRenderer = (
@@ -146,6 +165,8 @@ export interface GridProps<TData = unknown> {
   editRenderers?: Record<string, ReactEditRenderer>;
   /** Header renderer registries, keyed by a column's or a group's `headerRenderer` */
   headerRenderers?: ReactHeaderRendererRegistry;
+  /** Filter renderer registry, keyed by a column's `filterRenderer` */
+  filterRenderers?: Record<string, ReactFilterRenderer>;
 
   /** Global cell renderer */
   cellRenderer?: ReactCellRenderer;
@@ -153,6 +174,8 @@ export interface GridProps<TData = unknown> {
   editRenderer?: ReactEditRenderer;
   /** Global header renderer */
   headerRenderer?: ReactHeaderRenderer;
+  /** Global filter renderer, replacing the built-in filter popup content */
+  filterRenderer?: ReactFilterRenderer;
   /** SVG used by the default header's pin toggle. */
   pinIcon?: GridIcon;
 

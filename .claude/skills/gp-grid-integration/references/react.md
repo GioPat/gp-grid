@@ -310,6 +310,50 @@ const headerRenderers = {
 
 A column group's `headerRenderer` is a `ReactGroupHeaderRenderer` (inline, or a key of the same `headerRenderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `headerRenderer` does not apply to groups.
 
+### Filter renderers
+
+Replace the filter popup content with `{ content, clear }` (`ReactFilterRenderer`). `content` and a custom `clear` are mounted as components, so hooks work in them.
+
+```tsx
+import { useState } from "react";
+import type { ColumnFilterModel, FilterRendererParams, ReactFilterRenderer } from "@gp-grid/react";
+
+const containsFilter = (value: string): ColumnFilterModel | null =>
+  value.trim() === ""
+    ? null
+    : { groups: [{ conditions: [{ type: "text", operator: "contains", value }], combination: "and" }], combination: "and" };
+
+const SearchFilterContent = ({ apply, close, currentFilter, labels }: FilterRendererParams) => {
+  const condition = currentFilter?.groups[0]?.conditions[0];
+  const [text, setText] = useState(condition?.type === "text" ? condition.value ?? "" : "");
+  return (
+    <div className="gp-grid-filter-content">
+      <input
+        className="gp-grid-filter-search"
+        placeholder={labels.searchPlaceholder}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => event.key === "Enter" && apply(containsFilter(text))}
+      />
+      <div className="gp-grid-filter-buttons">
+        <button type="button" onClick={close}>Cancel</button>
+        <button type="button" className="gp-grid-filter-btn-apply" onClick={() => apply(containsFilter(text))}>
+          {labels.apply}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const searchFilter: ReactFilterRenderer = { content: SearchFilterContent, clear: "default" };
+
+// inline on the column…
+const columns = [{ field: "bio", cellDataType: "text", width: 260, filterRenderer: searchFilter }];
+// …or by key: <Grid filterRenderers={{ search: searchFilter }} /> with filterRenderer: "search"
+```
+
+A custom clear control: `clear: ({ clear, hasFilter, labels }) => <button disabled={!hasFilter} onClick={clear}>{labels.clear}</button>`. `clear: null` renders none. Types: `ReactFilterRenderer`, `ReactFilterContentRenderer`, `ReactFilterClearRenderer`.
+
 ## Listening to changes
 
 ```tsx
@@ -747,9 +791,11 @@ through the same command and is refused as a whole when a cell moved on
 | `cellRenderers` | `Record<string, ReactCellRenderer>` | `{}` | registry |
 | `editRenderers` | `Record<string, ReactEditRenderer>` | `{}` | registry |
 | `headerRenderers` | `Record<string, ReactHeaderRenderer>` | `{}` | registry |
+| `filterRenderers` | `Record<string, ReactFilterRenderer>` | `{}` | registry, keyed by a column's `filterRenderer` |
 | `cellRenderer` | `ReactCellRenderer` | — | global fallback |
 | `editRenderer` | `ReactEditRenderer` | — | global fallback |
 | `headerRenderer` | `ReactHeaderRenderer` | — | global fallback |
+| `filterRenderer` | `ReactFilterRenderer` | — | global fallback for every filterable column |
 | `pinIcon` | `GridIcon` | push-pin SVG | custom path and optional viewBox for the default header toggle |
 | `initialWidth` / `initialHeight` | `number` | — | SSR initial paint |
 | `gridRef` | `RefObject<GridRef<TData> \| null>` | — | programmatic API |

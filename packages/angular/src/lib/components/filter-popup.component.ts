@@ -1,57 +1,45 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  computed,
   input,
   output,
   signal,
   effect,
   AfterViewInit,
   OnDestroy,
+  TemplateRef,
   ViewChild,
   ElementRef,
-  HostListener,
 } from '@angular/core';
-import {
-  calculateFilterPopupPosition,
-  groupDistinctValues,
-  isBlankCellValue,
-  defaultGridLabels,
-  formatLabel,
-  getTextOperatorOptions,
-  getNumberOperatorOptions,
-} from '@gp-grid/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { calculateFilterPopupPosition, defaultGridLabels, formatLabel } from '@gp-grid/core';
 import type {
   ColumnDefinition,
   CellValue,
   ColumnFilterModel,
-  DistinctValueEntry,
-  FilterCombination,
+  FilterClearParams,
+  FilterRendererDefinition,
+  FilterRendererParams,
   GridLabels,
 } from '@gp-grid/core';
 import { FILTER_POPUP_TEMPLATE } from './filter-popup.template';
-import {
-  MAX_CHECKBOX_VALUES,
-  type FilterMode,
-  type NumberConditionGroupState,
-  type TextConditionGroupState,
-  buildNumberFilter,
-  buildTextFilter,
-  defaultNumberCondition,
-  defaultNumberGroup,
-  defaultTextCondition,
-  defaultTextGroup,
-  initNumberState,
-  initTextState,
-  isNumberColumn as columnIsNumber,
-  isValueLessNumberOp,
-  isValueLessTextOp,
-  resolveColId,
-} from './filter-popup/filter-logic';
+import { FilterContentComponent } from './filter-content.component';
+import { resolveColId } from './filter-popup/filter-logic';
+
+export type FilterContentTemplate = TemplateRef<{ $implicit: FilterRendererParams }>;
+export type FilterClearTemplate = TemplateRef<{ $implicit: FilterClearParams }>;
+/** Custom filter popup: content template plus its required clear control. */
+export type AngularFilterRenderer = FilterRendererDefinition<FilterContentTemplate, FilterClearTemplate>;
+
+const isAngularFilterRenderer = (renderer: unknown): renderer is AngularFilterRenderer =>
+  typeof renderer === 'object' && renderer !== null &&
+  (renderer as { content?: unknown }).content instanceof TemplateRef;
 
 @Component({
   selector: 'gp-grid-filter-popup',
   standalone: true,
-  imports: [],
+  imports: [NgTemplateOutlet, FilterContentComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: FILTER_POPUP_TEMPLATE,
 })
@@ -64,6 +52,8 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   distinctValues = input.required<CellValue[]>();
   currentFilter = input<ColumnFilterModel | undefined>(undefined);
   labels = input<GridLabels>(defaultGridLabels);
+  filterRenderers = input<Record<string, AngularFilterRenderer>>({});
+  globalFilterRenderer = input<AngularFilterRenderer | null>(null);
 
   apply = output<{ colId: string; filter: ColumnFilterModel | null }>();
   close = output<void>();
@@ -73,22 +63,36 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
   popupMinWidth = signal(200);
   positioned = signal(false);
 
-  filterMode: FilterMode = 'values';
-  searchText = '';
-  // Ticked display labels; raw values are resolved on apply (buildTextFilter).
-  selectedLabels = new Set<string>();
-  includeBlanks = true;
-  textGroups: TextConditionGroupState[] = [defaultTextGroup()];
-  numberGroups: NumberConditionGroupState[] = [defaultNumberGroup()];
-  groupCombination: FilterCombination = 'and';
+  protected customRenderer = computed((): AngularFilterRenderer | null => {
+    const renderer: unknown = this.column().filterRenderer;
+    if (isAngularFilterRenderer(renderer)) return renderer;
+    if (typeof renderer === 'string') {
+      return this.filterRenderers()[renderer] ?? this.globalFilterRenderer();
+    }
+    return this.globalFilterRenderer();
+  });
 
-  protected textOperators(): ReturnType<typeof getTextOperatorOptions> {
-    return getTextOperatorOptions(this.labels());
-  }
+  /** The custom clear template, or `null` for the default button or no control. */
+  protected clearTemplate = computed((): FilterClearTemplate | null => {
+    const clear = this.customRenderer()?.clear;
+    return clear instanceof TemplateRef ? clear : null;
+  });
 
-  protected numberOperators(): ReturnType<typeof getNumberOperatorOptions> {
-    return getNumberOperatorOptions(this.labels());
-  }
+  protected clearParams = computed((): FilterClearParams => ({
+    clear: () => this.applyFilter(null),
+    hasFilter: this.currentFilter() !== undefined,
+    labels: this.labels(),
+  }));
+
+  protected rendererParams = computed((): FilterRendererParams => ({
+    column: this.column(),
+    columnId: resolveColId(this.column()),
+    currentFilter: this.currentFilter(),
+    distinctValues: this.distinctValues(),
+    labels: this.labels(),
+    apply: (filter) => this.applyFilter(filter),
+    close: () => this.close.emit(),
+  }));
 
   protected filterTitle(): string {
     const column = this.column();
@@ -97,14 +101,9 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  protected readonly isValueLessTextOp = isValueLessTextOp;
-  protected readonly isValueLessNumberOp = isValueLessNumberOp;
-
   constructor() {
     effect(() => {
       this.anchorEl();
-      this.currentFilter();
-      this.initFromCurrentFilter();
       // Update synchronously so the new column's anchor lands before paint,
       // not one frame later (which would briefly show the popup at the
       // previously-open column's position).
@@ -118,6 +117,7 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     this.updatePosition();
     requestAnimationFrame(() => {
       document.addEventListener('pointerdown', this.onDocumentPointerDown, true);
+      document.addEventListener('keydown', this.onDocumentKeyDown);
     });
     // Scroll events don't bubble, so listen in the capture phase on window to
     // catch scrolls from the grid body, the page, and any wrapping scroll
@@ -128,153 +128,14 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     document.removeEventListener('pointerdown', this.onDocumentPointerDown, true);
+    document.removeEventListener('keydown', this.onDocumentKeyDown);
     window.removeEventListener('scroll', this.onWindowScrollOrResize, { capture: true });
     window.removeEventListener('resize', this.onWindowScrollOrResize);
     if (this.repositionRafId !== null) cancelAnimationFrame(this.repositionRafId);
   }
 
-  @HostListener('keydown.escape')
-  onEscape(): void {
-    this.close.emit();
-  }
-
-  isNumberColumn(): boolean {
-    return columnIsNumber(this.column());
-  }
-
-  showValuesMode(): boolean {
-    return this.uniqueEntries().length <= MAX_CHECKBOX_VALUES;
-  }
-
-  uniqueEntries(): DistinctValueEntry[] {
-    return groupDistinctValues(this.distinctValues(), this.column().valueFormatter);
-  }
-
-  // Empty arrays count too (tags column with no tags), so the "(Blanks)"
-  // opt-out renders whenever blank rows exist — and only then.
-  hasBlanks(): boolean {
-    return this.distinctValues().some(isBlankCellValue);
-  }
-
-  filteredUniqueEntries(): DistinctValueEntry[] {
-    const search = this.searchText.toLowerCase();
-    if (!search) return this.uniqueEntries();
-    return this.uniqueEntries().filter(e => e.label.toLowerCase().includes(search));
-  }
-
-  toggleValue(label: string, checked: boolean): void {
-    if (checked) {
-      this.selectedLabels.add(label);
-    } else {
-      this.selectedLabels.delete(label);
-    }
-  }
-
-  selectAll(): void {
-    this.includeBlanks = true;
-    for (const entry of this.uniqueEntries()) this.selectedLabels.add(entry.label);
-  }
-
-  deselectAll(): void {
-    this.includeBlanks = false;
-    this.selectedLabels.clear();
-  }
-
-  onTextOperatorChange(groupIndex: number, index: number, value: string): void {
-    const group = this.textGroups[groupIndex];
-    if (group) setField(group.conditions, index, 'operator', value);
-  }
-
-  onNumberOperatorChange(groupIndex: number, index: number, value: string): void {
-    const group = this.numberGroups[groupIndex];
-    if (group) setField(group.conditions, index, 'operator', value);
-  }
-
-  addTextCondition(groupIndex: number): void {
-    this.textGroups[groupIndex]?.conditions.push(defaultTextCondition());
-  }
-
-  addNumberCondition(groupIndex: number): void {
-    this.numberGroups[groupIndex]?.conditions.push(defaultNumberCondition());
-  }
-
-  removeTextCondition(groupIndex: number, index: number): void {
-    this.textGroups[groupIndex]?.conditions.splice(index, 1);
-  }
-
-  removeNumberCondition(groupIndex: number, index: number): void {
-    this.numberGroups[groupIndex]?.conditions.splice(index, 1);
-  }
-
-  addTextGroup(): void {
-    this.textGroups.push(defaultTextGroup());
-  }
-
-  addNumberGroup(): void {
-    this.numberGroups.push(defaultNumberGroup());
-  }
-
-  removeTextGroup(groupIndex: number): void {
-    this.textGroups.splice(groupIndex, 1);
-  }
-
-  removeNumberGroup(groupIndex: number): void {
-    this.numberGroups.splice(groupIndex, 1);
-  }
-
-  setTextGroupCombination(groupIndex: number, value: FilterCombination): void {
-    const group = this.textGroups[groupIndex];
-    if (group) group.combination = value;
-  }
-
-  setNumberGroupCombination(groupIndex: number, value: FilterCombination): void {
-    const group = this.numberGroups[groupIndex];
-    if (group) group.combination = value;
-  }
-
-  setGroupCombination(value: FilterCombination): void {
-    this.groupCombination = value;
-  }
-
-  handleApply(): void {
-    this.apply.emit({
-      colId: resolveColId(this.column()),
-      filter: this.buildFilter(),
-    });
-  }
-
-  handleClear(): void {
-    this.apply.emit({ colId: resolveColId(this.column()), filter: null });
-  }
-
-  private buildFilter(): ColumnFilterModel | null {
-    if (this.isNumberColumn()) {
-      return buildNumberFilter(this.numberGroups, this.groupCombination);
-    }
-    return buildTextFilter({
-      filterMode: this.filterMode,
-      entries: this.uniqueEntries(),
-      selectedLabels: this.selectedLabels,
-      includeBlanks: this.includeBlanks,
-      textGroups: this.textGroups,
-      combination: this.groupCombination,
-    });
-  }
-
-  private initFromCurrentFilter(): void {
-    const filter = this.currentFilter();
-    if (this.isNumberColumn()) {
-      const state = initNumberState(filter);
-      this.numberGroups = state.numberGroups;
-      this.groupCombination = state.combination;
-      return;
-    }
-    const state = initTextState(filter, this.uniqueEntries());
-    this.filterMode = state.filterMode;
-    this.selectedLabels = state.selectedLabels;
-    this.includeBlanks = state.includeBlanks;
-    this.textGroups = state.textGroups;
-    this.groupCombination = state.combination;
+  applyFilter(filter: ColumnFilterModel | null): void {
+    this.apply.emit({ colId: resolveColId(this.column()), filter });
   }
 
   private updatePosition(): void {
@@ -293,6 +154,10 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     this.close.emit();
   };
 
+  private onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') this.close.emit();
+  };
+
   private repositionRafId: number | null = null;
 
   private onWindowScrollOrResize = (): void => {
@@ -303,15 +168,3 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     });
   };
 }
-
-const setField = <T, K extends keyof T>(
-  arr: T[],
-  index: number,
-  key: K,
-  value: T[K],
-): void => {
-  const item = arr[index];
-  // Assign through `T` rather than the truthiness-narrowed `NonNullable<T>`;
-  // the latter rejects the generic indexed value.
-  if (item !== undefined) (item as T)[key] = value;
-};

@@ -99,6 +99,7 @@ import {
 import { createEnginePivotFixture } from "./conformance-pivot";
 import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
+import { searchFilter } from "./search-filter";
 
 interface ConformanceRow {
   id: number;
@@ -130,7 +131,7 @@ const createColumns = (): ColumnDefinition[] => [
   { colId: "city", field: "city", headerName: "City", width: 140, cellDataType: "text" },
   { colId: "score", field: "score", headerName: "Score", width: 120, cellDataType: "number" },
   { colId: "team", field: "team", headerName: "Team", width: 150, cellDataType: "text" },
-  { colId: "status", field: "status", headerName: "Status", width: 130, cellDataType: "text" },
+  { colId: "status", field: "status", headerName: "Status", width: 130, cellDataType: "text", filterRenderer: "searchOnly" },
   { colId: "note", field: "note", headerName: "Note", width: 210, cellDataType: "text" },
   { colId: "code", field: "code", headerName: "Code", width: 160, cellDataType: "text" },
 ];
@@ -987,6 +988,7 @@ const hideColumn = useCallback(() => {
             onColumnSchemaRejected={onColumnSchemaRejected}
             onFrozenRowsChanged={frozen.recordFreezeEvent}
             cellRenderers={ROW_GROUP_RENDERERS}
+            filterRenderers={{ searchOnly: searchFilter }}
             rowGrouping={rowGroupsActive ? rowGroupsArm.grouping : undefined}
             groupLabelColumn={activeLabelColumn()}
             groupLabelRenderer={rowGroupsMode === "external" ? renderExternalLabel : undefined}

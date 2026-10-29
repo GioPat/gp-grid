@@ -12,6 +12,9 @@ export type {
   ReactCellRenderer,
   ReactEditRenderer,
   ReactHeaderRenderer,
+  ReactFilterRenderer,
+  ReactFilterContentRenderer,
+  ReactFilterClearRenderer,
   ReactGroupHeaderRenderer,
   ReactGroupLabelRenderer,
   ReactHeaderRendererRegistry,
@@ -149,6 +152,9 @@ export type {
   CellRendererParams,
   EditRendererParams,
   HeaderRendererParams,
+  FilterRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
 
   // Localization
   GridLabels,

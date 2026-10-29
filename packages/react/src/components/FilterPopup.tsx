@@ -1,11 +1,19 @@
 // packages/react/src/components/FilterPopup.tsx
 
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react";
-import type { ColumnDefinition, CellValue, ColumnFilterModel, GridLabels } from "@gp-grid/core";
+import type {
+  CellValue,
+  ColumnDefinition,
+  ColumnFilterModel,
+  GridLabels,
+} from "@gp-grid/core";
 import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";
+import { CustomFilter } from "./CustomFilter";
+import { resolveFilterRenderer } from "../renderers/filterRenderer";
+import type { ReactFilterRenderer } from "../types";
 
 export interface FilterPopupProps {
   column: ColumnDefinition;
@@ -14,6 +22,8 @@ export interface FilterPopupProps {
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
   labels: GridLabels;
+  filterRenderers?: Record<string, ReactFilterRenderer>;
+  globalFilterRenderer?: ReactFilterRenderer;
   onApply: (colId: string, filter: ColumnFilterModel | null) => void;
   onClose: () => void;
 }
@@ -25,6 +35,8 @@ export function FilterPopup({
   distinctValues,
   currentFilter,
   labels,
+  filterRenderers = {},
+  globalFilterRenderer,
   onApply,
   onClose,
 }: FilterPopupProps): React.ReactNode {
@@ -119,22 +131,14 @@ export function FilterPopup({
 
   const handleApply = useCallback(
     (filter: ColumnFilterModel | null) => {
-      const colId = column.colId ?? column.field;
-      onApply(colId, filter);
+      onApply(column.colId ?? column.field, filter);
       onClose();
     },
     [column, onApply, onClose],
   );
 
-  // Determine filter type based on column data type
-  const dataType = column.cellDataType;
-  const isTextType = dataType === "text" || dataType === "object";
-  const isNumberType = dataType === "number";
-  const isDateType =
-    dataType === "date" ||
-    dataType === "dateString" ||
-    dataType === "dateTime" ||
-    dataType === "dateTimeString";
+  const columnId = column.colId ?? column.field;
+  const customRenderer = resolveFilterRenderer(column, filterRenderers, globalFilterRenderer);
 
   return (
     <div ref={popupRef} className="gp-grid-filter-popup" style={popupStyle}>
@@ -142,45 +146,60 @@ export function FilterPopup({
         {formatLabel(labels.filterTitle, { column: column.headerName ?? column.field })}
       </div>
 
-      {isTextType && (
-        <TextFilterContent
-          distinctValues={distinctValues}
-          valueFormatter={column.valueFormatter}
-          currentFilter={currentFilter}
-          labels={labels}
-          onApply={handleApply}
-          onClose={onClose}
-        />
-      )}
-
-      {isNumberType && (
-        <NumberFilterContent
-          currentFilter={currentFilter}
-          labels={labels}
-          onApply={handleApply}
-          onClose={onClose}
-        />
-      )}
-
-      {isDateType && (
-        <DateFilterContent
-          currentFilter={currentFilter}
-          labels={labels}
-          onApply={handleApply}
-          onClose={onClose}
-        />
-      )}
-
-      {!isTextType && !isNumberType && !isDateType && (
-        <TextFilterContent
-          distinctValues={distinctValues}
-          valueFormatter={column.valueFormatter}
-          currentFilter={currentFilter}
-          labels={labels}
-          onApply={handleApply}
-          onClose={onClose}
-        />
-      )}
+      {customRenderer
+        ? (
+          <CustomFilter
+            key={columnId}
+            renderer={customRenderer}
+            params={{
+              column,
+              columnId,
+              currentFilter,
+              distinctValues,
+              labels,
+              apply: handleApply,
+              close: onClose,
+            }}
+          />
+        )
+        : (
+          <BuiltInFilterContent
+            column={column}
+            distinctValues={distinctValues}
+            currentFilter={currentFilter}
+            labels={labels}
+            onApply={handleApply}
+            onClose={onClose}
+          />
+        )}
     </div>
   );
 }
+
+interface BuiltInFilterContentProps {
+  column: ColumnDefinition;
+  distinctValues: CellValue[];
+  currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
+  onApply: (filter: ColumnFilterModel | null) => void;
+  onClose: () => void;
+}
+
+const DATE_TYPES = new Set(["date", "dateString", "dateTime", "dateTimeString"]);
+
+const BuiltInFilterContent = ({
+  column,
+  distinctValues,
+  ...shared
+}: BuiltInFilterContentProps): React.ReactNode => {
+  const dataType = column.cellDataType;
+  if (dataType === "number") return <NumberFilterContent {...shared} />;
+  if (DATE_TYPES.has(dataType)) return <DateFilterContent {...shared} />;
+  return (
+    <TextFilterContent
+      distinctValues={distinctValues}
+      valueFormatter={column.valueFormatter}
+      {...shared}
+    />
+  );
+};

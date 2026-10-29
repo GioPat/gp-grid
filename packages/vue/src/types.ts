@@ -20,6 +20,9 @@ import type {
   ColumnStateUpdate,
   ColumnLayoutMode,
   EditRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
+  FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
   GridLabelOverrides,
@@ -71,6 +74,22 @@ export type VueHeaderRenderer =
   | ((params: HeaderRendererParams) => VNode | string | null)
   | Component;
 
+/** Content of a column's filter popup: a render function or a component taking FilterRendererParams. */
+export type VueFilterContentRenderer =
+  | ((params: FilterRendererParams) => VNode | string | null)
+  | Component;
+
+/** Clear control of a custom filter popup: a render function or a component taking FilterClearParams. */
+export type VueFilterClearRenderer =
+  | ((params: FilterClearParams) => VNode | string | null)
+  | Component;
+
+/** Vue filter renderer: the popup content plus its required clear control. */
+export type VueFilterRenderer = FilterRendererDefinition<
+  VueFilterContentRenderer,
+  VueFilterClearRenderer
+>;
+
 /**
  * Vue group header renderer: renders one fragment of a column group, as a
  * render function or a component taking ColumnGroupHeaderParams as props.
@@ -106,10 +125,14 @@ export type VueHeaderRendererRegistry = Record<
  * in addition to render functions and registry-key strings.
  */
 export interface ColumnDefinition<TData = unknown>
-  extends Omit<CoreColumnDefinition, "cellRenderer" | "editRenderer" | "headerRenderer"> {
+  extends Omit<
+    CoreColumnDefinition,
+    "cellRenderer" | "editRenderer" | "headerRenderer" | "filterRenderer"
+  > {
   cellRenderer?: string | VueCellRenderer<TData>;
   editRenderer?: string | VueEditRenderer<TData>;
   headerRenderer?: string | VueHeaderRenderer;
+  filterRenderer?: string | VueFilterRenderer;
 }
 
 // =============================================================================
@@ -158,9 +181,13 @@ export interface GpGridProps<TData = unknown> {
   editRenderers?: Record<string, VueEditRenderer<TData>>;
   /** Header renderer registry, keyed by a column's or a group's `headerRenderer`. */
   headerRenderers?: VueHeaderRendererRegistry;
+  /** Filter renderer registry, keyed by a column's `filterRenderer`. */
+  filterRenderers?: Record<string, VueFilterRenderer>;
   cellRenderer?: VueCellRenderer<TData>;
   editRenderer?: VueEditRenderer<TData>;
   headerRenderer?: VueHeaderRenderer;
+  /** Replaces the built-in filter popup content for every column. */
+  filterRenderer?: VueFilterRenderer;
   /** SVG used by the default header's pin toggle. */
   pinIcon?: GridIcon;
   /** Initial viewport width for SSR (pixels). ResizeObserver takes over on client. */

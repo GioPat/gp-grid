@@ -35,6 +35,10 @@
     </span>
   </ng-template>
 
+  <ng-template #searchFilter let-params>
+    <app-search-filter [params]="params" />
+  </ng-template>
+
   <ng-template #cityEditor let-params>
     <select
       class="city-edit-select"

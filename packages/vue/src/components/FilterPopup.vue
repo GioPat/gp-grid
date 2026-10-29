@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watchEffect } from "vue";
-import type { ColumnDefinition, CellValue, ColumnFilterModel, GridLabels } from "@gp-grid/core";
+import type {
+  CellValue,
+  ColumnDefinition,
+  ColumnFilterModel,
+  FilterRendererParams,
+  GridLabels,
+} from "@gp-grid/core";
 import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
 import TextFilterContent from "./TextFilterContent.vue";
 import NumberFilterContent from "./NumberFilterContent.vue";
 import DateFilterContent from "./DateFilterContent.vue";
+import { CustomFilterContent, resolveFilterRenderer } from "../renderers/filterRenderer";
+import type { VueFilterRenderer } from "../types";
 
 const props = defineProps<{
   column: ColumnDefinition;
@@ -14,6 +22,8 @@ const props = defineProps<{
   distinctValues: CellValue[];
   currentFilter?: ColumnFilterModel;
   labels: GridLabels;
+  filterRenderers?: Record<string, VueFilterRenderer>;
+  globalFilterRenderer?: VueFilterRenderer;
 }>();
 
 const emit = defineEmits<{
@@ -45,6 +55,19 @@ function handleApply(filter: ColumnFilterModel | null): void {
 function handleClose(): void {
   emit("close");
 }
+
+const customRenderer = computed(() =>
+  resolveFilterRenderer(props.column, props.filterRenderers ?? {}, props.globalFilterRenderer));
+
+const customParams = computed((): FilterRendererParams => ({
+  column: props.column,
+  columnId: colId.value,
+  currentFilter: props.currentFilter,
+  distinctValues: props.distinctValues,
+  labels: props.labels,
+  apply: handleApply,
+  close: handleClose,
+}));
 
 // Determine filter type based on column data type
 const dataType = computed(() => props.column.cellDataType);
@@ -130,9 +153,16 @@ const popupStyle = computed(() => ({
       {{ formatLabel(labels.filterTitle, { column: column.headerName ?? column.field }) }}
     </div>
 
+    <CustomFilterContent
+      v-if="customRenderer"
+      :key="colId"
+      :renderer="customRenderer"
+      :params="customParams"
+    />
+
     <!-- Number filter -->
     <NumberFilterContent
-      v-if="isNumberType"
+      v-else-if="isNumberType"
       :current-filter="currentFilter"
       :labels="labels"
       @apply="handleApply"

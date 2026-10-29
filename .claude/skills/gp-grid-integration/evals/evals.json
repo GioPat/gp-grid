@@ -73,6 +73,19 @@
         "Solution code would compile against the real @gp-grid/react public API (no invented props/types/exports)"
       ],
       "files": []
+    },
+    {
+      "id": 4,
+      "name": "vue-search-only-filter-renderer",
+      "prompt": "Vue 3 + TypeScript app using gp-grid. On the `description` column the filter popup is too complex for my users: I only want a search box, a cancel button and an apply button that filters rows whose description contains the typed text. Keep a way to clear the filter. Other columns keep the normal filter.",
+      "expected_output": "A Vue SFC used as the content of a filterRenderer definition `{ content: SearchFilter, clear: \"default\" }` set on the description column only (inline or through :filter-renderers by key). The component takes apply/close/labels (and optionally currentFilter) as props, applies a grouped ColumnFilterModel with a text `contains` condition, applies null for empty input, and Cancel calls close(). No bare component is passed as filterRenderer and the clear key is present.",
+      "assertions": [
+        "Sets filterRenderer only on the description column, as an object with `content` and `clear` keys (not a bare component or function)",
+        "Uses clear: \"default\" (or a custom clear control), never omits the clear key",
+        "The content component receives apply/close/labels as props and the Cancel button calls close() without applying",
+        "Apply calls apply() with a grouped ColumnFilterModel: groups[].conditions[] with { type: \"text\", operator: \"contains\", value }",
+        "Uses labels (e.g. labels.apply / labels.searchPlaceholder) for grid-provided strings instead of hard-coding them where a label exists"
+      ]
     }
   ]
 }

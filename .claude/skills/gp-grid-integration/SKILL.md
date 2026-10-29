@@ -1,6 +1,6 @@
 ---
 name: gp-grid-integration
-description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, server-side grouping, read-only pivot, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createServerGroupingSource, createPivotSource, buildPivotSchema, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
+description: Integrate the gp-grid data grid library (https://gp-grid.io) into a React, Vue 3, Angular, or vanilla JS app. Covers installation, columns, client/server data sources, custom cell/edit/header/filter renderers, sorting, filtering, editing with fill handle, row dragging, column resize/move/hide, row resize and auto-fit, nested column groups, row grouping and aggregation, server-side grouping, read-only pivot, highlighting, and the programmatic GridCore API. TRIGGER when the user names gp-grid or any @gp-grid/* package (@gp-grid/core, @gp-grid/react, @gp-grid/vue, @gp-grid/angular), uses a gp-grid-specific identifier (useGridData, createGridData, provideGridData, GpGridComponent, createServerDataSource, createServerGroupingSource, createPivotSource, buildPivotSchema, createClientDataSource, AngularColumnDefinition, GridCore), asks how to write a renderer for gp-grid, asks to wire any gp-grid feature into their app, or asks to migrate FROM AG Grid / TanStack Table / MUI DataGrid TO gp-grid. DO NOT trigger for generic table/virtualization questions where the user hasn't chosen gp-grid, for competing libraries (AG Grid, TanStack, MUI DataGrid, react-window, react-virtualized) without an explicit migration intent, or for CSS Grid layout questions.
 ---
 
 # gp-grid integration
@@ -69,6 +69,7 @@ Each column needs `field`, `cellDataType`, and `width`. Other fields are optiona
 | `minWidth` / `maxWidth` | `50` / unlimited | Resize bounds. |
 | `rowDrag` | `false` | This column acts as the row drag handle. |
 | `cellRenderer` / `editRenderer` / `headerRenderer` | none | Custom rendering — exact type **differs per framework**, see references. This takes the value formatted data from the `valueFormatter` field. |
+| `filterRenderer` | none | Custom filter popup content: a registry key or `{ content, clear }`, see Filtering below. Exact renderer types **differ per framework**. |
 | `valueFormatter` | none | `(value: CellValue) => string`. Used by the default cell renderer. Useful for `object` columns or display formatting (currency, dates) without writing a full renderer. **Numbers are displayed unrounded**: a computed value (a group `avg`, a division, a float sum such as `0.1 + 0.2`) can print many decimals, so give every numeric column that may hold one a formatter that rounds it (`toFixed`, `Intl.NumberFormat`). |
 | `wrapText` | `false` | Wrap long cell text onto new lines instead of truncating with an ellipsis. Wrapped text is clipped to the row height (rows do **not** auto-grow; a row fit grows one once). Only affects the default text renderer, not custom `cellRenderer` output. |
 | `wrapHeaderText` | `false` | Wrap the header text inside its band; a header taller than its band is clipped. |
@@ -743,6 +744,20 @@ The query returns `{ rows: TData[]; totalRows: number }`. Paginated loading is t
 
 - **Sorting:** per-column `sortable: true` (default). Global kill switch: `sortingEnabled={false}`. Click to sort, Shift+click to add to multi-column sort.
 - **Filtering:** per-column `filterable: true` (default). Click the filter icon on the header for the popup. Server data sources receive the filter model in the request.
+- **Custom filter popup (`filterRenderer`):** replaces the popup **content**; the grid keeps the position, the title, Escape and click-outside. A column's `filterRenderer` (registry key or inline definition) wins, then the grid-wide `filterRenderer`, then the built-in content. The definition is an object, never a bare function or component:
+
+  ```ts
+  filterRenderer: {
+    content: SearchFilter,   // gets FilterRendererParams
+    clear: "default",        // REQUIRED: "default" | custom control | null
+  }
+  ```
+
+  - `content` gets `FilterRendererParams = { column, columnId, currentFilter, distinctValues, labels, apply(filter), close() }`. `apply(model)` sets the column's filter and closes the popup; `apply(null)` clears it. `close()` closes without changing anything (a "Cancel"). Build the model in the grouped `ColumnFilterModel` shape (see Server data below), e.g. `{ groups: [{ conditions: [{ type: "text", operator: "contains", value }], combination: "and" }], combination: "and" }`.
+  - `clear` is a required key, so dropping the Clear control is always explicit: `"default"` renders the grid's Clear button (label `labels.clear`), a renderer gets `FilterClearParams = { clear(), hasFilter, labels }`, and `null` renders none. Omitting the key is a type error. The clear control renders under the content inside `.gp-grid-filter-clear`.
+  - `distinctValues` is filled for `text`, `boolean` and `object` columns only; it is empty for number and date columns.
+  - The content remounts per column, so its local state (a search box) resets when the popup moves to another column.
+  - Any label the custom content shows (e.g. "Cancel", which `GridLabels` doesn't have) is the consumer's to localize.
 - **Editing:** per-column `editable: true`. Default editor is plain text/number/boolean; pass an `editRenderer` for selects, datepickers, multi-selects. Listen with `onCellValueChanged` (requires `getRowId`). Double-click, Enter, F2, or any character starts editing. A commit is coerced by the column's `cellDataType`, like paste: `"60000"` typed into a `number` column stores the number `60000`, a draft the type cannot hold writes nothing, and a value a custom `editRenderer` already typed is stored unchanged.
 
   `CellValueChangedEvent` shape (every framework — don't paraphrase, the field names are easy to misremember):
@@ -837,6 +852,7 @@ How to get the ref:
 - **Replacing `rowData` with a new array on every render of large datasets** → full pipeline rebuild. Use the mutable hook/helper.
 - **`dataSource` and `rowData` both passed** → `dataSource` wins, `rowData` is ignored. Use one.
 - **`dataSource` reference unstable across renders** → grid resets on every render. Memoize (`useMemo` in React, `computed` / `shallowRef` in Vue, `inject`/DI in Angular).
+- **Custom `filterRenderer` as a bare function / component / template** → type error. It must be `{ content, clear }`; pass `clear: "default"` to keep the grid's Clear button.
 - **Custom renderer key not in registry** → cell falls back to default. Pass it via `cellRenderers={{ key: fn }}` and reference by string from the column.
 - **Highlighting CSS in scoped Vue styles or component-scoped Angular styles** → won't apply. Define those rules in a global stylesheet.
 - **Column index drift after `hidden: true`** → don't worry: the grid maps visible↔original indices internally, and events carry `columnId` plus named view indices (`viewIndex`, `fromViewIndex`, `toViewIndex`).

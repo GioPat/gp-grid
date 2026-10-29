@@ -4,6 +4,8 @@
 import type { CellValue, RowId, SortDirection } from "./basic";
 import type { ColumnDefinition } from "./columns";
 import type { ColumnGroupDefinition } from "./column-groups";
+import type { ColumnFilterModel } from "./filters";
+import type { GridLabels } from "../i18n";
 import type { ColumnPin, ColumnRegion } from "./geometry";
 import type { HierarchyGroupRow, HierarchyRowKind, HierarchyTotalRow } from "./row-groups";
 
@@ -100,6 +102,34 @@ export interface HeaderRendererParams {
   onFilterClick: () => void;
   /** Request a pin change; `null` unpins. */
   onPinChange: (pinned: ColumnPin | null) => void;
+}
+
+/** Filter renderer params: the content of a column's filter popup. */
+export interface FilterRendererParams {
+  column: ColumnDefinition;
+  /** Normalized column identity: `colId ?? field`. */
+  columnId: string;
+  currentFilter?: ColumnFilterModel;
+  /** Populated for text, boolean and object columns; empty otherwise. */
+  distinctValues: CellValue[];
+  labels: GridLabels;
+  /** Set the column's filter (`null` clears it) and close the popup. */
+  apply: (filter: ColumnFilterModel | null) => void;
+  close: () => void;
+}
+
+/** Params of a custom filter popup's clear control. */
+export interface FilterClearParams {
+  /** Clear the column's filter and close the popup. */
+  clear: () => void;
+  hasFilter: boolean;
+  labels: GridLabels;
+}
+
+/** Custom filter popup. `clear` is required: `"default"` keeps the grid's Clear button, `null` drops it on purpose. */
+export interface FilterRendererDefinition<TContent, TClear> {
+  content: TContent;
+  clear: "default" | TClear | null;
 }
 
 /** Group header renderer params: one fragment of a column group (PRD 007 D9). */

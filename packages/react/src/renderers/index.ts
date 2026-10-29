@@ -4,3 +4,4 @@ export * from "./cellRenderer";
 export * from "./editRenderer";
 export * from "./headerRenderer";
 export * from "./groupLabelRenderer";
+export * from "./filterRenderer";
