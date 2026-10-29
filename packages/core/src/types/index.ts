@@ -206,6 +206,8 @@ export type {
   EditRendererParams,
   HeaderRendererParams,
   FilterRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   ColumnGroupHeaderParams,
 } from "./renderers";
 

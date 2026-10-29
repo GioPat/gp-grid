@@ -118,6 +118,20 @@ export interface FilterRendererParams {
   close: () => void;
 }
 
+/** Params of a custom filter popup's clear control. */
+export interface FilterClearParams {
+  /** Clear the column's filter and close the popup. */
+  clear: () => void;
+  hasFilter: boolean;
+  labels: GridLabels;
+}
+
+/** Custom filter popup. `clear` is required: `"default"` keeps the grid's Clear button, `null` drops it on purpose. */
+export interface FilterRendererDefinition<TContent, TClear> {
+  content: TContent;
+  clear: "default" | TClear | null;
+}
+
 /** Group header renderer params: one fragment of a column group (PRD 007 D9). */
 export interface ColumnGroupHeaderParams {
   /** The group's definition, as the caller passed it. */

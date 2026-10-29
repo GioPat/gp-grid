@@ -20,6 +20,8 @@ import type {
   CellWriteRejectedEvent,
   WriteCommittedEvent,
   EditRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
@@ -62,10 +64,21 @@ export type ReactHeaderRenderer = (
   params: HeaderRendererParams,
 ) => React.ReactNode;
 
-/** React filter renderer: renders the content of a column's filter popup */
-export type ReactFilterRenderer = (
+/** Renders the content of a column's filter popup */
+export type ReactFilterContentRenderer = (
   params: FilterRendererParams,
 ) => React.ReactNode;
+
+/** Renders a custom filter popup's clear control */
+export type ReactFilterClearRenderer = (
+  params: FilterClearParams,
+) => React.ReactNode;
+
+/** React filter renderer: the popup content plus its required clear control */
+export type ReactFilterRenderer = FilterRendererDefinition<
+  ReactFilterContentRenderer,
+  ReactFilterClearRenderer
+>;
 
 /** React group label renderer: the label of a group or total row, beside its expander */
 export type ReactGroupLabelRenderer = (

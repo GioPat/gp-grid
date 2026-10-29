@@ -5,6 +5,8 @@ import type {
   ColumnGroupHeaderParams,
   CellRendererParams,
   EditRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   FilterRendererParams,
   GroupLabelRendererParams,
   HeaderRendererParams,
@@ -34,8 +36,11 @@ export interface AngularColumnDefinition extends Omit<
     | ((params: HeaderRendererParams) => unknown);
   filterRenderer?:
     | string
-    | TemplateRef<{ $implicit: FilterRendererParams }>
-    | ((params: FilterRendererParams) => unknown);
+    | FilterRendererDefinition<
+      TemplateRef<{ $implicit: FilterRendererParams }>,
+      TemplateRef<{ $implicit: FilterClearParams }>
+    >
+    | NonNullable<ColumnDefinition['filterRenderer']>;
 }
 
 /**

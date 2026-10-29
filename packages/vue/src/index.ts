@@ -41,6 +41,8 @@ export type {
   VueEditRenderer,
   VueHeaderRenderer,
   VueFilterRenderer,
+  VueFilterContentRenderer,
+  VueFilterClearRenderer,
   VueGroupHeaderRenderer,
   VueGroupLabelRenderer,
   VueHeaderRendererRegistry,
@@ -197,6 +199,8 @@ export type {
   EditRendererParams,
   HeaderRendererParams,
   FilterRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   // Localization
   GridLabels,
   GridLabelOverrides,

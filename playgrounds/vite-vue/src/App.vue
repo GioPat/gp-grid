@@ -152,7 +152,7 @@ const columns: ColumnDefinition[] = [
         width: 260,
         headerName: "Bio",
         distinctValues: bioPool,
-        filterRenderer: SearchFilter,
+        filterRenderer: { content: SearchFilter, clear: "default" },
         // wrapText: long text flows onto new lines (clipped to the fixed row
         // height) instead of truncating with an ellipsis.
         wrapText: true,

@@ -17,7 +17,7 @@ import type {
   ColumnStateSnapshot,
   ColumnStateUpdate,
   ColumnLayoutMode,
-  FilterRendererTemplate,
+  FilterContentTemplate,
   FreezeRowsOptions,
   GridCore,
   GroupLabelRendererTemplate,
@@ -432,7 +432,7 @@ const createColumnarFixture = () => {
               [freezeRows]="freezeRowsBinding()"
               [rowResize]="autoFitActive()"
               [getRowId]="getRowId"
-              [filterRenderers]="{ searchOnly: searchFilter }"
+              [filterRenderers]="{ searchOnly: { content: searchFilter, clear: 'default' } }"
               (onCellValueChanged)="onCellValueChanged($event)"
               (onWriteRejected)="onWriteRejected($event)"
               (onWriteCommitted)="writes.recordWrite($event)"
@@ -523,7 +523,7 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
     this.enginePivotActive() ? this.engineSchema.schema() : this.pivotSchema());
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
-  @ViewChild('searchFilter', { static: true }) protected searchFilter!: FilterRendererTemplate;
+  @ViewChild('searchFilter', { static: true }) protected searchFilter!: FilterContentTemplate;
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
   protected readonly bandHeights = signal<readonly number[]>(NO_BAND_HEIGHTS);
   protected readonly groupLimits = signal<ColumnGroupLimits>(NO_GROUP_LIMITS);

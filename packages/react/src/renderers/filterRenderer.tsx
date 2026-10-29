@@ -10,9 +10,7 @@ export const resolveFilterRenderer = (
   globalFilterRenderer?: ReactFilterRenderer,
 ): ReactFilterRenderer | undefined => {
   const renderer = column.filterRenderer;
-  if (typeof renderer === "function") return renderer as ReactFilterRenderer;
-  if (typeof renderer === "string" && filterRenderers[renderer]) {
-    return filterRenderers[renderer];
-  }
+  if (typeof renderer === "string") return filterRenderers[renderer] ?? globalFilterRenderer;
+  if (renderer) return renderer as ReactFilterRenderer;
   return globalFilterRenderer;
 };

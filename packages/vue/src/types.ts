@@ -20,6 +20,8 @@ import type {
   ColumnStateUpdate,
   ColumnLayoutMode,
   EditRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   FilterRendererParams,
   FreezeRowsOptions,
   FrozenRowsState,
@@ -72,13 +74,21 @@ export type VueHeaderRenderer =
   | ((params: HeaderRendererParams) => VNode | string | null)
   | Component;
 
-/**
- * Vue filter renderer: the content of a column's filter popup, as a render
- * function or a component taking FilterRendererParams as props.
- */
-export type VueFilterRenderer =
+/** Content of a column's filter popup: a render function or a component taking FilterRendererParams. */
+export type VueFilterContentRenderer =
   | ((params: FilterRendererParams) => VNode | string | null)
   | Component;
+
+/** Clear control of a custom filter popup: a render function or a component taking FilterClearParams. */
+export type VueFilterClearRenderer =
+  | ((params: FilterClearParams) => VNode | string | null)
+  | Component;
+
+/** Vue filter renderer: the popup content plus its required clear control. */
+export type VueFilterRenderer = FilterRendererDefinition<
+  VueFilterContentRenderer,
+  VueFilterClearRenderer
+>;
 
 /**
  * Vue group header renderer: renders one fragment of a column group, as a

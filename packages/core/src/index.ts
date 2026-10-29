@@ -284,6 +284,8 @@ export type {
   EditRendererParams,
   HeaderRendererParams,
   FilterRendererParams,
+  FilterClearParams,
+  FilterRendererDefinition,
   ColumnGroupHeaderParams,
 
   // Listener types

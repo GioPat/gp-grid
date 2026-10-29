@@ -1,7 +1,7 @@
 // packages/vue/src/renderers/filterRenderer.ts
 
-import { defineComponent, type PropType } from "vue";
-import type { ColumnDefinition, FilterRendererParams } from "@gp-grid/core";
+import { defineComponent, Fragment, h, type PropType, type VNode } from "vue";
+import type { ColumnDefinition, FilterClearParams, FilterRendererParams } from "@gp-grid/core";
 import type { VueFilterRenderer } from "../types";
 import { invokeRenderer } from "./utils";
 
@@ -19,11 +19,28 @@ export const resolveFilterRenderer = (
   return globalFilterRenderer;
 };
 
+const renderClear = (renderer: VueFilterRenderer, params: FilterRendererParams): VNode | null => {
+  const { clear } = renderer;
+  if (clear === null) return null;
+  const clearParams: FilterClearParams = {
+    clear: () => params.apply(null),
+    hasFilter: params.currentFilter !== undefined,
+    labels: params.labels,
+  };
+  const control = clear === "default"
+    ? h("button", { type: "button", class: "gp-grid-filter-btn-clear", onClick: clearParams.clear }, params.labels.clear)
+    : invokeRenderer(clear, clearParams);
+  return h("div", { class: "gp-grid-filter-clear" }, [control]);
+};
+
 export const CustomFilterContent = defineComponent({
   name: "GpGridCustomFilterContent",
   props: {
-    renderer: { type: [Function, Object] as PropType<VueFilterRenderer>, required: true },
+    renderer: { type: Object as PropType<VueFilterRenderer>, required: true },
     params: { type: Object as PropType<FilterRendererParams>, required: true },
   },
-  setup: (props) => () => invokeRenderer(props.renderer, props.params),
+  setup: (props) => () => h(Fragment, [
+    invokeRenderer(props.renderer.content, props.params),
+    renderClear(props.renderer, props.params),
+  ]),
 });

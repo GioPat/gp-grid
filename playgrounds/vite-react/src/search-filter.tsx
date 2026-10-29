@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ColumnFilterModel, FilterRendererParams } from "@gp-grid/react";
+import type { ColumnFilterModel, FilterRendererParams, ReactFilterRenderer } from "@gp-grid/react";
 
 const containsFilter = (value: string): ColumnFilterModel | null => {
   if (value.trim() === "") return null;
@@ -15,7 +15,7 @@ const currentSearch = (filter?: ColumnFilterModel): string => {
 };
 
 /** Search box, cancel and apply only: replaces the built-in filter popup content. */
-export const SearchFilter = ({ apply, close, currentFilter, labels }: FilterRendererParams) => {
+const SearchFilterContent = ({ apply, close, currentFilter, labels }: FilterRendererParams) => {
   const [text, setText] = useState(() => currentSearch(currentFilter));
   return (
     <div className="gp-grid-filter-content">
@@ -42,3 +42,5 @@ export const SearchFilter = ({ apply, close, currentFilter, labels }: FilterRend
     </div>
   );
 };
+
+export const searchFilter: ReactFilterRenderer = { content: SearchFilterContent, clear: "default" };

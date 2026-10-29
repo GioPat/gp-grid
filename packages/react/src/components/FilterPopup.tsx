@@ -5,13 +5,13 @@ import type {
   CellValue,
   ColumnDefinition,
   ColumnFilterModel,
-  FilterRendererParams,
   GridLabels,
 } from "@gp-grid/core";
 import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";
+import { CustomFilter } from "./CustomFilter";
 import { resolveFilterRenderer } from "../renderers/filterRenderer";
 import type { ReactFilterRenderer } from "../types";
 
@@ -148,7 +148,7 @@ export function FilterPopup({
 
       {customRenderer
         ? (
-          <CustomFilterContent
+          <CustomFilter
             key={columnId}
             renderer={customRenderer}
             params={{
@@ -203,12 +203,3 @@ const BuiltInFilterContent = ({
     />
   );
 };
-
-/** Mounted as a component so the renderer's hooks belong to it, not to the popup. */
-const CustomFilterContent = ({
-  renderer,
-  params,
-}: {
-  renderer: ReactFilterRenderer;
-  params: FilterRendererParams;
-}): React.ReactNode => renderer(params);

@@ -23,7 +23,7 @@ import { createDemoServerSource } from "./demo-server-groups";
 import { createDemoPivotSource } from "./demo-pivot";
 import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from "./demo-columnar";
 import { usePivotSchema } from "./use-pivot-schema";
-import { SearchFilter } from "./search-filter";
+import { searchFilter } from "./search-filter";
 
 type DemoPage = "main" | "live-insert";
 
@@ -328,7 +328,7 @@ const columns: ColumnDefinition[] = [
     width: 260,
     headerName: "Bio",
     distinctValues: bioPool,
-    filterRenderer: SearchFilter,
+    filterRenderer: searchFilter,
     // wrapText: long text flows onto new lines (clipped to the fixed row
     // height) instead of truncating with an ellipsis.
     wrapText: true,

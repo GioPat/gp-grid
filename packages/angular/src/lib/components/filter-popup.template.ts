@@ -8,19 +8,29 @@ export const FILTER_POPUP_TEMPLATE = `
   [style.left.px]="popupLeft()"
   [style.minWidth.px]="popupMinWidth()"
   [style.visibility]="positioned() ? 'visible' : 'hidden'"
-  (keydown.escape)="close.emit()"
   (click)="$event.stopPropagation()">
 
   <div class="gp-grid-filter-header">
     {{ filterTitle() }}
   </div>
 
-  @if (customTemplate(); as template) {
+  @if (customRenderer(); as renderer) {
     <!-- Single-item loop keyed by column: recreates the view, and its state, per column. -->
     @for (columnId of [rendererParams().columnId]; track columnId) {
       <ng-container
-        [ngTemplateOutlet]="template"
+        [ngTemplateOutlet]="renderer.content"
         [ngTemplateOutletContext]="{ $implicit: rendererParams() }" />
+      @if (renderer.clear !== null) {
+        <div class="gp-grid-filter-clear">
+          @if (clearTemplate(); as clear) {
+            <ng-container [ngTemplateOutlet]="clear" [ngTemplateOutletContext]="{ $implicit: clearParams() }" />
+          } @else {
+            <button type="button" class="gp-grid-filter-btn-clear" (click)="applyFilter(null)">
+              {{ labels().clear }}
+            </button>
+          }
+        </div>
+      }
     }
   } @else {
     <gp-grid-filter-content

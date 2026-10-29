@@ -955,7 +955,7 @@ if (typeof window !== "undefined") {
         :on-column-schema-rejected="onColumnSchemaRejected"
         :on-frozen-rows-changed="frozen.recordFreezeEvent"
         :cell-renderers="rowGroupRenderers"
-        :filter-renderers="{ searchOnly: SearchFilter }"
+        :filter-renderers="{ searchOnly: { content: SearchFilter, clear: 'default' } }"
         :row-grouping="rowGroupsActive ? rowGroupsArm.grouping : undefined"
         :group-label-column="activeLabelColumn()"
         :group-label-renderer="rowGroupsMode === 'external' ? renderExternalLabel : undefined"

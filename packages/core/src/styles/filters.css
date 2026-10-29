@@ -396,6 +396,14 @@
   border-top: 1px solid var(--gp-grid-border-light);
 }
 
+.gp-grid-filter-clear {
+  display: flex;
+}
+
+:where(.gp-grid-filter-clear) {
+  padding: 0 12px 10px;
+}
+
 .gp-grid-filter-btn-clear,
 .gp-grid-filter-btn-apply {
   flex: 1;

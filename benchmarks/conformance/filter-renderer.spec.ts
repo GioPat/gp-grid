@@ -24,6 +24,12 @@ test("custom filter renderer replaces the popup content", async ({ page }, testI
   await expect(page.locator('[data-cell-row="0"][data-cell-col="1"]')).toContainText("Row 001");
 
   await filterIcon.click();
+  await popup.locator(".gp-grid-filter-clear .gp-grid-filter-btn-clear").click();
+  await expect(popup).toHaveCount(0);
+  await expect.poll(() => filterCount(page)).toBe(0);
+  await expect(page.locator('[data-cell-row="0"][data-cell-col="1"]')).toContainText("Row 000");
+
+  await filterIcon.click();
   // The popup arms its Escape listener one frame after opening.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.keyboard.press("Escape");

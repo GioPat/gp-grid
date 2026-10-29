@@ -13,7 +13,7 @@ import type {
   GridLabels,
 } from '@gp-grid/core';
 import { defaultGridLabels, formatLabel } from '@gp-grid/core';
-import { FilterPopupComponent, type FilterRendererTemplate } from './filter-popup.component';
+import { FilterPopupComponent, type AngularFilterRenderer } from './filter-popup.component';
 
 export interface ActiveFilterPopup {
   colIndex: number;
@@ -95,8 +95,8 @@ export class GridOverlaysComponent {
   isLoading = input<boolean>(false);
   errorMessage = input<string | null>(null);
   labels = input<GridLabels>(defaultGridLabels);
-  filterRenderers = input<Record<string, FilterRendererTemplate>>({});
-  globalFilterRenderer = input<FilterRendererTemplate | null>(null);
+  filterRenderers = input<Record<string, AngularFilterRenderer>>({});
+  globalFilterRenderer = input<AngularFilterRenderer | null>(null);
   totalHeaderHeight = input.required<number>();
   dragState = input.required<DragState>();
   effectiveColumns = input.required<ColumnDefinition[]>();
