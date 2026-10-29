@@ -255,6 +255,51 @@ SFC form: define a component that receives `EditRendererParams` as props and emi
 
 A column group's `headerRenderer` is a `VueGroupHeaderRenderer` (render function or component, inline or a key of the same `header-renderers` registry) and receives `ColumnGroupHeaderParams` (`group`, `groupId`, `band`, `region`, `leafCount`, `columnIds`). The global `header-renderer` does not apply to groups.
 
+### Filter renderers
+
+Replace the filter popup content with `{ content, clear }` (`VueFilterRenderer`). `content` and a custom `clear` are render functions or components; a component receives the params as props.
+
+```vue
+<!-- SearchFilter.vue -->
+<script setup lang="ts">
+import { ref } from "vue";
+import type { ColumnFilterModel, GridLabels } from "@gp-grid/vue";
+
+const props = defineProps<{
+  apply: (filter: ColumnFilterModel | null) => void;
+  close: () => void;
+  currentFilter?: ColumnFilterModel;
+  labels: GridLabels;
+}>();
+
+const condition = props.currentFilter?.groups[0]?.conditions[0];
+const text = ref(condition?.type === "text" ? condition.value ?? "" : "");
+
+const applySearch = (): void => props.apply(text.value.trim() === "" ? null : {
+  groups: [{ conditions: [{ type: "text", operator: "contains", value: text.value }], combination: "and" }],
+  combination: "and",
+});
+</script>
+
+<template>
+  <div class="gp-grid-filter-content">
+    <input v-model="text" class="gp-grid-filter-search" :placeholder="labels.searchPlaceholder" @keydown.enter="applySearch" />
+    <div class="gp-grid-filter-buttons">
+      <button type="button" @click="close">Cancel</button>
+      <button type="button" class="gp-grid-filter-btn-apply" @click="applySearch">{{ labels.apply }}</button>
+    </div>
+  </div>
+</template>
+```
+
+```ts
+import SearchFilter from "./SearchFilter.vue";
+const columns = [{ field: "bio", cellDataType: "text", width: 260, filterRenderer: { content: SearchFilter, clear: "default" } }];
+// …or by key: :filter-renderers="{ search: { content: SearchFilter, clear: 'default' } }" with filterRenderer: "search"
+```
+
+A custom clear control gets `FilterClearParams` (`clear()`, `hasFilter`, `labels`); `clear: null` renders none. Types: `VueFilterRenderer`, `VueFilterContentRenderer`, `VueFilterClearRenderer`.
+
 ## Listening to changes
 
 ```vue
@@ -683,9 +728,11 @@ two options. See the SKILL.md "Writes, undo and redo" section and [docs/features
 | `:cell-renderers` | `Record<string, VueCellRenderer>` | `{}` |
 | `:edit-renderers` | `Record<string, VueEditRenderer>` | `{}` |
 | `:header-renderers` | `Record<string, VueHeaderRenderer>` | `{}` |
+| `:filter-renderers` | `Record<string, VueFilterRenderer>` | `{}` |
 | `:cell-renderer` | `VueCellRenderer` | — |
 | `:edit-renderer` | `VueEditRenderer` | — |
 | `:header-renderer` | `VueHeaderRenderer` | — |
+| `:filter-renderer` | `VueFilterRenderer` (global fallback) | — |
 | `:pin-icon` | `GridIcon` | push-pin SVG |
 | `:initial-width` / `:initial-height` | `number` | — |
 | `:highlighting` | `HighlightingOptions<TData>` | — |

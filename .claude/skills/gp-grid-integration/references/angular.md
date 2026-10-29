@@ -360,6 +360,45 @@ Important details:
 
 The TemplateRef form is by far the most idiomatic in Angular.
 
+### Filter renderers
+
+`filterRenderer` is different: it is an `AngularFilterRenderer = { content, clear }` object (or a key of `[filterRenderers]`), not a single template. `content` is a `FilterContentTemplate` whose context is `FilterRendererParams`; `clear` is required: `'default'` (the grid's Clear button), a `FilterClearTemplate` (context `FilterClearParams`: `clear()`, `hasFilter`, `labels`) or `null`. Only templates render; a function definition is ignored like a function header renderer.
+
+```ts
+@Component({
+  selector: "app-search-filter",
+  standalone: true,
+  template: `
+    <div class="gp-grid-filter-content">
+      <input #search class="gp-grid-filter-search" [placeholder]="params().labels.searchPlaceholder"
+        (keydown.enter)="apply(search.value)" />
+      <div class="gp-grid-filter-buttons">
+        <button type="button" (click)="params().close()">Cancel</button>
+        <button type="button" class="gp-grid-filter-btn-apply" (click)="apply(search.value)">{{ params().labels.apply }}</button>
+      </div>
+    </div>
+  `,
+})
+export class SearchFilterComponent {
+  params = input.required<FilterRendererParams>();
+
+  protected apply(value: string): void {
+    this.params().apply(value.trim() === "" ? null : {
+      groups: [{ conditions: [{ type: "text", operator: "contains", value }], combination: "and" }],
+      combination: "and",
+    });
+  }
+}
+
+// In the grid's host component (imports: [GpGridComponent, SearchFilterComponent]):
+//   <ng-template #searchFilter let-params><app-search-filter [params]="params" /></ng-template>
+@ViewChild("searchFilter", { static: true }) searchFilter!: FilterContentTemplate;
+// in ngAfterViewInit:
+{ field: "bio", cellDataType: "text", width: 260, filterRenderer: { content: this.searchFilter, clear: "default" } }
+```
+
+The content view is recreated per column, so state inside it resets when the popup moves. Escape and click-outside close the popup as with the built-in content.
+
 ## Signals-friendly columns (alternative)
 
 If you prefer signals over `cdr.detectChanges()`, drive `columns` from a `signal` that you set in `AfterViewInit`:
@@ -778,9 +817,11 @@ Inputs:
 | `[darkMode]` | `boolean` | `false` |
 | `[cellRenderers]` | `Record<string, CellRendererTemplate>` | `{}` |
 | `[headerRenderers]` | `HeaderRendererRegistry` (column and group templates) | `{}` |
+| `[filterRenderers]` | `Record<string, AngularFilterRenderer>` | `{}` |
 | `[editRenderers]` | `Record<string, EditRendererTemplate>` | `{}` |
 | `[cellRenderer]` | `CellRendererTemplate \| null` | `null` |
 | `[headerRenderer]` | `HeaderRendererTemplate \| null` | `null` |
+| `[filterRenderer]` | `AngularFilterRenderer \| null` (global fallback) | `null` |
 | `[pinIcon]` | `GridIcon` | push-pin SVG |
 | `[editRenderer]` | `EditRendererTemplate \| null` | `null` |
 | `[highlighting]` | `HighlightingOptions \| null` | `null` |
