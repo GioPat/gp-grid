@@ -18,6 +18,7 @@ import StatusBadge from "./renderers/StatusBadge.vue";
 import Bold from "./renderers/Bold.vue";
 import Tags from "./renderers/Tags.vue";
 import AgeBucket from "./renderers/AgeBucket.vue";
+import SearchFilter from "./renderers/SearchFilter.vue";
 import { createDemoServerSource } from "./demo-server-groups";
 import { createDemoPivotSource } from "./demo-pivot";
 import { usePivotSchema } from "./use-pivot-schema";
@@ -151,6 +152,7 @@ const columns: ColumnDefinition[] = [
         width: 260,
         headerName: "Bio",
         distinctValues: bioPool,
+        filterRenderer: SearchFilter,
         // wrapText: long text flows onto new lines (clipped to the fixed row
         // height) instead of truncating with an ellipsis.
         wrapText: true,

@@ -99,7 +99,7 @@ import {
 import { createEnginePivotFixture } from "./conformance-pivot";
 import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
-import { FILTER_RENDERERS } from "./conformance-filter-renderer";
+import { SearchFilter } from "./search-filter";
 
 interface ConformanceRow {
   id: number;
@@ -988,7 +988,7 @@ const hideColumn = useCallback(() => {
             onColumnSchemaRejected={onColumnSchemaRejected}
             onFrozenRowsChanged={frozen.recordFreezeEvent}
             cellRenderers={ROW_GROUP_RENDERERS}
-            filterRenderers={FILTER_RENDERERS}
+            filterRenderers={{ searchOnly: SearchFilter }}
             rowGrouping={rowGroupsActive ? rowGroupsArm.grouping : undefined}
             groupLabelColumn={activeLabelColumn()}
             groupLabelRenderer={rowGroupsMode === "external" ? renderExternalLabel : undefined}

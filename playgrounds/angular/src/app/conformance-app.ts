@@ -16,7 +16,6 @@ import type {
   ColumnResizedEvent,
   ColumnStateSnapshot,
   ColumnStateUpdate,
-  ColumnFilterModel,
   ColumnLayoutMode,
   FilterRendererTemplate,
   FreezeRowsOptions,
@@ -101,6 +100,7 @@ import {
 import { createEnginePivotFixture } from './conformance-pivot';
 import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from './conformance-writes';
 import { createPivotSchemaBinding } from './pivot-schema-binding';
+import { SearchFilterComponent } from './search-filter.component';
 
 interface ConformanceRow {
   id: number;
@@ -240,7 +240,7 @@ const createColumnarFixture = () => {
 
 @Component({
   selector: 'app-root',
-  imports: [GpGridComponent],
+  imports: [GpGridComponent, SearchFilterComponent],
   template: `
     <!-- PRD 008: prints the renderer's rowKind, so a spec can read it. -->
     <ng-template #rowKindProbe let-params>
@@ -256,11 +256,7 @@ const createColumnarFixture = () => {
           (click)="params.toggle()"></button>}</span>
     </ng-template>
     <ng-template #searchFilter let-params>
-      <div class="gp-grid-filter-content">
-        <input #searchInput data-testid="custom-filter-input" />
-        <button type="button" data-testid="custom-filter-cancel" (click)="params.close()">Cancel</button>
-        <button type="button" data-testid="custom-filter-apply" (click)="params.apply(containsFilter(searchInput.value))">Apply</button>
-      </div>
+      <app-search-filter [params]="params" />
     </ng-template>
     <main data-conformance-framework="angular">
       <div class="cf-controls">
@@ -528,11 +524,6 @@ export class ConformanceApp implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('rowKindProbe', { static: true }) protected rowKindProbe!: CellRendererTemplate;
   @ViewChild('externalLabel', { static: true }) protected externalLabel!: GroupLabelRendererTemplate;
   @ViewChild('searchFilter', { static: true }) protected searchFilter!: FilterRendererTemplate;
-
-  protected containsFilter = (value: string): ColumnFilterModel => ({
-    groups: [{ conditions: [{ type: 'text', operator: 'contains', value }], combination: 'and' }],
-    combination: 'and',
-  });
   protected rowGroupRenderers: Record<string, CellRendererTemplate> = {};
   protected readonly bandHeights = signal<readonly number[]>(NO_BAND_HEIGHTS);
   protected readonly groupLimits = signal<ColumnGroupLimits>(NO_GROUP_LIMITS);

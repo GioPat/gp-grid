@@ -96,7 +96,7 @@ import {
 import { createEnginePivotFixture } from "./conformance-pivot";
 import { createWritesFixture, WRITES_COLUMNS, WRITES_HEADER_HEIGHT, WRITES_HISTORY, WRITES_ROW_HEIGHT } from "./conformance-writes";
 import { usePivotSchema } from "./use-pivot-schema";
-import ConformanceSearchFilter from "./ConformanceSearchFilter.vue";
+import SearchFilter from "./renderers/SearchFilter.vue";
 
 interface ConformanceRow {
   id: number;
@@ -955,7 +955,7 @@ if (typeof window !== "undefined") {
         :on-column-schema-rejected="onColumnSchemaRejected"
         :on-frozen-rows-changed="frozen.recordFreezeEvent"
         :cell-renderers="rowGroupRenderers"
-        :filter-renderers="{ searchOnly: ConformanceSearchFilter }"
+        :filter-renderers="{ searchOnly: SearchFilter }"
         :row-grouping="rowGroupsActive ? rowGroupsArm.grouping : undefined"
         :group-label-column="activeLabelColumn()"
         :group-label-renderer="rowGroupsMode === 'external' ? renderExternalLabel : undefined"

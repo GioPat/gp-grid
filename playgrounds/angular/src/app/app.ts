@@ -9,6 +9,7 @@ import type {
   CellValue,
   EditRendererParams,
   EditRendererTemplate,
+  FilterRendererTemplate,
   FreezeRowsOptions,
   FrozenRowsState,
   GridLabels,
@@ -22,6 +23,7 @@ import { createDemoServerSource } from './demo-server-groups';
 import { createDemoPivotSource } from './demo-pivot';
 import { createPivotSchemaBinding } from './pivot-schema-binding';
 import { createDemoColumnarSource, createWideColumns, WIDE_COLUMN_COUNT } from './demo-columnar';
+import { SearchFilterComponent } from './search-filter.component';
 
 interface Person {
   id: number;
@@ -128,7 +130,7 @@ const ROWS = generateRows(1_500_000);
 
 @Component({
   selector: 'app-root',
-  imports: [GpGridComponent, FormsModule],
+  imports: [GpGridComponent, FormsModule, SearchFilterComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
   providers: [
@@ -154,6 +156,7 @@ export class App implements AfterViewInit, OnDestroy {
   @ViewChild('ageBadge', { static: true }) ageBadge!: CellRendererTemplate;
   @ViewChild('cityHeader', { static: true }) cityHeader!: HeaderRendererTemplate;
   @ViewChild('cityEditor', { static: true }) cityEditor!: EditRendererTemplate;
+  @ViewChild('searchFilter', { static: true }) searchFilter!: FilterRendererTemplate;
   @ViewChild(GpGridComponent) gridComponent?: GpGridComponent;
 
   protected readonly cityOptions = CITIES;
@@ -339,7 +342,7 @@ export class App implements AfterViewInit, OnDestroy {
       // fixed row height) instead of truncating with an ellipsis. Not editable so
       // double-click opens the read-only peek overlay (once the Angular wrapper
       // renders one — currently behaviour-only).
-      { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS, wrapText: true },
+      { field: 'bio', cellDataType: 'text', headerName: 'Bio', width: 260, sortable: true, filterable: true, distinctValues: BIOS, wrapText: true, filterRenderer: this.searchFilter },
       { field: 'createdAt', cellDataType: 'dateTime', headerName: 'Created', width: 200, sortable: true, filterable: true, valueFormatter: (v) => (v instanceof Date ? v.toLocaleString() : '') },
       { field: 'status', cellDataType: 'text', headerName: 'Status', width: 110, sortable: true, filterable: true },
       { field: 'salary', cellDataType: 'number', headerName: 'Salary', width: 130, sortable: true, filterable: true, valueFormatter: formatSalary },
