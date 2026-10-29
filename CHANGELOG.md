@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.0.1...gp-grid-v1.1.0) (2026-10-29)
+
+
+### ✨ Features
+
+* **filter-renderer:** custom filter popup content ([#116](https://github.com/GioPat/gp-grid/issues/116)) ([a3eca30](https://github.com/GioPat/gp-grid/commit/a3eca3067e432ebbbd426dca726adb7d4a52ac97))
+* **filter-renderer:** require an explicit clear control on custom filters ([c062023](https://github.com/GioPat/gp-grid/commit/c06202325f1b9f60a4acb7f15e5ce09f9fe7fc57))
+
+
+### 📝 Documentation
+
+* **skill:** custom filter renderers ([673a5fa](https://github.com/GioPat/gp-grid/commit/673a5fa1035fcfe2137144faf8c9f44f6624ef5b))
+
 ## [1.0.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.0.0...gp-grid-v1.0.1) (2026-10-26)
 
 
