@@ -463,6 +463,7 @@ export {
   inlineOffset,
   readContainerBounds,
   fixedLeftForInline,
+  readFixedOrigin,
   normalizeHorizontalKey,
   AutoScrollDriver,
   PendingRowDragController,
@@ -484,6 +485,7 @@ export type {
   CellPointerAction,
   FillPointerAction,
   DragEndResult,
+  FixedOrigin,
 } from "./adapter";
 
 /** Shared pointer-interaction thresholds and the group expander's pointer down */

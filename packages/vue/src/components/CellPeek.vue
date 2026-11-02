@@ -6,7 +6,7 @@ import type {
   ColumnDefinition,
   GridCore,
 } from "@gp-grid/core";
-import { bindPeekSelectAll, fixedLeftForInline } from "@gp-grid/core";
+import { bindPeekSelectAll, fixedLeftForInline, readFixedOrigin } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import type { Row, VueCellRenderer } from "../types";
 
@@ -70,8 +70,9 @@ const updatePosition = (): void => {
   const rightInset = Math.max(0, fullLeft + bounds.width - clippedLeft - clippedWidth);
 
   const origin = container.getBoundingClientRect();
-  top.value = origin.top + bounds.top;
-  left.value = fullLeft;
+  const fixedOrigin = readFixedOrigin(overlay);
+  top.value = origin.top + bounds.top - fixedOrigin.top;
+  left.value = fullLeft - fixedOrigin.left;
   width.value = bounds.width;
   clipPath.value = `inset(0 ${rightInset}px 0 ${leftInset}px)`;
   positioned.value = true;

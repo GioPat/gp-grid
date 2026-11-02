@@ -14,7 +14,7 @@ import type {
   GridCore,
   RowId,
 } from "@gp-grid/core";
-import { bindPeekSelectAll, fixedLeftForInline } from "@gp-grid/core";
+import { bindPeekSelectAll, fixedLeftForInline, readFixedOrigin } from "@gp-grid/core";
 import { renderCell } from "../renderers/cellRenderer";
 import type { ReactCellRenderer } from "../types";
 
@@ -101,9 +101,10 @@ export function CellPeek<TData = unknown>({
     const rightInset = Math.max(0, left + bounds.width - clippedLeft - clippedWidth);
 
     const origin = container.getBoundingClientRect();
+    const fixedOrigin = readFixedOrigin(overlay);
     setStyle({
-      top: origin.top + bounds.top,
-      left,
+      top: origin.top + bounds.top - fixedOrigin.top,
+      left: left - fixedOrigin.left,
       width: bounds.width,
       clipPath: `inset(0 ${rightInset}px 0 ${leftInset}px)`,
       visibility: "visible",

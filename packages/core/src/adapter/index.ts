@@ -8,6 +8,8 @@ export {
   fixedLeftForInline,
   normalizeHorizontalKey,
 } from "./inline-axis";
+export { readFixedOrigin } from "./fixed-origin";
+export type { FixedOrigin } from "./fixed-origin";
 export { AutoScrollDriver } from "./auto-scroll";
 export { PendingRowDragController } from "./pending-row-drag";
 export type { PendingRowDragDeps } from "./pending-row-drag";

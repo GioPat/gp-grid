@@ -19,6 +19,7 @@ import {
   fixedLeftForInline,
   formatCellValue,
   getFieldValue,
+  readFixedOrigin,
   type CellPosition,
   type CellRendererParams,
   type CellValue,
@@ -199,8 +200,9 @@ export class CellPeekComponent implements AfterViewInit, OnDestroy {
     // The overlay is position:fixed, so the cell's viewport-space bounds are
     // offset by the body client area's screen origin.
     const origin = container.getBoundingClientRect();
-    this.top.set(origin.top + bounds.top);
-    this.left.set(left);
+    const fixedOrigin = readFixedOrigin(overlay);
+    this.top.set(origin.top + bounds.top - fixedOrigin.top);
+    this.left.set(left - fixedOrigin.left);
     this.width.set(bounds.width);
     this.clipPath.set(`inset(0 ${rightInset}px 0 ${leftInset}px)`);
     this.positioned.set(true);
