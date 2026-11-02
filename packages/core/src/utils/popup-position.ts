@@ -1,5 +1,7 @@
 // packages/core/src/utils/popup-position.ts
 
+import { readFixedOrigin } from "../adapter/fixed-origin";
+
 /**
  * Framework-agnostic popup positioning utility.
  * Calculates the position for a popup element anchored to a header cell,
@@ -16,9 +18,9 @@ const DEFAULT_GAP = 4;
 const DEFAULT_VIEWPORT_PADDING = 8;
 
 /**
- * Calculate the position for a filter popup anchored below a header cell.
- * Clamps to viewport edges and flips above the header if there is not enough
- * space below.
+ * Calculate the `position: fixed` coordinates for a filter popup anchored below
+ * a header cell. Clamps to viewport edges and flips above the header if there
+ * is not enough space below.
  */
 export const calculateFilterPopupPosition = (
   headerCell: HTMLElement,
@@ -48,5 +50,6 @@ export const calculateFilterPopupPosition = (
   // Final clamp to top edge
   top = Math.max(viewportPadding, top);
 
-  return { top, left, minWidth };
+  const origin = readFixedOrigin(popupEl);
+  return { top: top - origin.top, left: left - origin.left, minWidth };
 };
