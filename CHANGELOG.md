@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.1.0...gp-grid-v1.1.1) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* anchor point for popups ([639ed93](https://github.com/GioPat/gp-grid/commit/639ed93c0bbe9a7e37aaa9ac153b26f6bdfca95c))
+* anchor point for popups ([d8ed9c8](https://github.com/GioPat/gp-grid/commit/d8ed9c8c1a915aca06226a715ea983ab45352535))
+
 ## [1.1.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.0.1...gp-grid-v1.1.0) (2026-10-29)
 
 
