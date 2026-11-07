@@ -2,6 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -10,9 +12,10 @@ import type {
   ColumnDefinition,
   ColumnFilterModel,
   DragState,
+  FixedOrigin,
   GridLabels,
 } from '@gp-grid/core';
-import { defaultGridLabels, formatLabel } from '@gp-grid/core';
+import { defaultGridLabels, formatLabel, readFixedOriginIn } from '@gp-grid/core';
 import { FilterPopupComponent, type AngularFilterRenderer } from './filter-popup.component';
 
 export interface ActiveFilterPopup {
@@ -22,6 +25,8 @@ export interface ActiveFilterPopup {
   currentFilter?: ColumnFilterModel;
   anchorEl: HTMLElement | null;
 }
+
+const NO_ORIGIN: FixedOrigin = { top: 0, left: 0 };
 
 const TEMPLATE = `
   @if (filterPopup(); as fp) {
@@ -60,8 +65,8 @@ const TEMPLATE = `
   @if (columnMove(); as cm) {
     <div
       class="gp-grid-column-move-ghost"
-      [style.left.px]="cm.currentX - cm.ghostWidth / 2"
-      [style.top.px]="cm.currentY - cm.ghostHeight / 2"
+      [style.left.px]="cm.currentX - cm.ghostWidth / 2 - ghostOrigin().left"
+      [style.top.px]="cm.currentY - cm.ghostHeight / 2 - ghostOrigin().top"
       [style.width.px]="cm.ghostWidth"
       [style.height.px]="cm.ghostHeight">
       {{ columnMoveGhostText() }}
@@ -76,8 +81,8 @@ const TEMPLATE = `
   @if (rowDragGhost(); as rd) {
     <div
       class="gp-grid-row-drag-ghost"
-      [style.left.px]="rd.currentX + 12"
-      [style.top.px]="rd.currentY - rd.sourceRowHeight / 2"
+      [style.left.px]="rd.currentX + 12 - ghostOrigin().left"
+      [style.top.px]="rd.currentY - rd.sourceRowHeight / 2 - ghostOrigin().top"
       [style.width.px]="rowDragGhostWidth()"
       [style.height.px]="rd.sourceRowHeight"></div>
   }
@@ -91,6 +96,8 @@ const TEMPLATE = `
   template: TEMPLATE,
 })
 export class GridOverlaysComponent {
+  private readonly host: HTMLElement = inject(ElementRef).nativeElement;
+
   filterPopup = input<ActiveFilterPopup | null>(null);
   isLoading = input<boolean>(false);
   errorMessage = input<string | null>(null);
@@ -122,6 +129,15 @@ export class GridOverlaysComponent {
     const rr = this.dragState().rowResize;
     if (this.dragState().dragType !== 'row-resize' || rr === null) return null;
     return this.totalHeaderHeight() + rr.lineY;
+  });
+
+  private dragType = computed(() => this.dragState().dragType);
+
+  /** Read once per drag: the probe forces a layout, too costly on every move. */
+  protected ghostOrigin = computed((): FixedOrigin => {
+    const dragType = this.dragType();
+    const hasGhost = dragType === 'column-move' || dragType === 'row-drag';
+    return hasGhost ? readFixedOriginIn(this.host) : NO_ORIGIN;
   });
 
   protected columnMove = computed(() => {

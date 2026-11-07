@@ -1,7 +1,7 @@
 // packages/core/tests/fixed-origin.test.ts
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFixedOrigin } from "../src/adapter/fixed-origin";
+import { readFixedOrigin, readFixedOriginIn } from "../src/adapter/fixed-origin";
 import { calculateFilterPopupPosition } from "../src/utils/popup-position";
 
 const rect = (left: number, top: number, width = 0, height = 0): DOMRect =>
@@ -43,6 +43,16 @@ describe("readFixedOrigin", () => {
     stubLayout(0, 0, new Map());
 
     expect(readFixedOrigin(popup)).toEqual({ top: 0, left: 0 });
+  });
+});
+
+describe("readFixedOriginIn", () => {
+  it("measures the fixed containing block inside the host and leaves no probe behind", () => {
+    const { host } = mount();
+    stubLayout(120, 80, new Map());
+
+    expect(readFixedOriginIn(host)).toEqual({ top: 80, left: 120 });
+    expect(host.children).toHaveLength(2);
   });
 });
 

@@ -52,3 +52,20 @@ test("the cell peek covers its cell under a transformed, contained ancestor", as
   expect(placed.y).toBeCloseTo(anchor.y, 0);
   expect(pageErrors).toEqual([]);
 });
+
+test("the column move ghost follows the pointer under a transformed, contained ancestor", async ({ page }, testInfo) => {
+  const pageErrors = await openFixture(page, testInfo.project.name);
+  await wrapInContainingBlock(page);
+  const header = await box(page.locator('.gp-grid-header-cell[data-col-index="2"]'));
+  const pointer = { x: header.x + header.width / 2, y: header.y + header.height / 2 };
+
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  await page.mouse.move(pointer.x + 40, pointer.y + 10, { steps: 6 });
+  const ghost = await box(page.locator(".gp-grid-column-move-ghost"));
+  await page.mouse.up();
+
+  expect(ghost.x + ghost.width / 2).toBeCloseTo(pointer.x + 40, 0);
+  expect(ghost.y + ghost.height / 2).toBeCloseTo(pointer.y + 10, 0);
+  expect(pageErrors).toEqual([]);
+});
