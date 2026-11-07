@@ -12,7 +12,8 @@
       "tsdown.config.ts",
       "tsconfig.json",
       "tsconfig.build.json",
-      "!src/sorting/sort-worker-code.ts"
+      "!src/sorting/sort-worker-code.ts",
+      "!src/styles/grid-styles.ts"
     ]
   }
 }

@@ -141,9 +141,10 @@ Candidate benchmarks record the local production artifact paths and hashes. Set
 PowerShell, for example `"BENCH_ROW_COUNTS=100000,1000000"` when invoking
 `cross-env` from the benchmark workspace.
 
-Two files in `packages/core` are build artifacts and must not be edited by hand:
+Three files in `packages/core` are build artifacts and must not be edited by hand:
 
 - `dist/styles.css` is bundled from `src/styles/*.css` with Lightning CSS (minified in `build:production`). The wrappers copy it into their own `dist/`.
+- `src/styles/grid-styles.ts` (git-ignored) is the same stylesheet, always minified, exported as the `gridStyles` string for CSS-in-JS hosts. It is regenerated on install, build and test; run `pnpm --filter @gp-grid/core build:styles` to rebuild it manually.
 - `src/sorting/sort-worker-code.ts` (git-ignored) is the sort Web Worker `src/sorting/sort-worker.script.ts` bundled and minified into a string. It is regenerated on install, build and test; run `pnpm --filter @gp-grid/core build:worker` to rebuild it manually.
 
 ## Donations

@@ -496,3 +496,6 @@ export type {
 /** Shared pointer-interaction thresholds and the group expander's pointer down */
 export { TAP_SLOP_PX, ROW_DRAG_HOLD_MS, groupTogglePointerDown } from "./input";
 export type { GroupTogglePointerEvent } from "./input";
+
+/** Stylesheet as a string (same rules as dist/styles.css) */
+export { gridStyles } from "./styles/grid-styles";

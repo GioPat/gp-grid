@@ -32,9 +32,10 @@ Bundlers: `tsdown` (rolldown) for `core`, `react` and `vue`, configured in each 
 
 ### Build artifacts
 
-Two files in `packages/core` are produced by the build. Never hand-edit them:
+Three files in `packages/core` are produced by the build. Never hand-edit them:
 
-- `dist/styles.css` - bundled from `src/styles/index.css` (which `@import`s the module files in `src/styles/*.css`) with Lightning CSS in `tsdown.config.ts` (`onSuccess`). It is minified only when tsdown runs with `--minify` (`build:production`). The CSS is **not** exported as a JS string; React/Vue/Angular copy this file into their own `dist/`.
+- `dist/styles.css` - bundled from `src/styles/index.css` (which `@import`s the module files in `src/styles/*.css`) with Lightning CSS in `tsdown.config.ts` (`onSuccess`). It is minified only when tsdown runs with `--minify` (`build:production`). React/Vue/Angular copy this file into their own `dist/`.
+- `src/styles/grid-styles.ts` - git-ignored. `scripts/build-styles.ts` writes the same bundle, always minified, as the `gridStyles` string exported from every package's main entry (for hosts that forbid CSS imports, e.g. Grafana plugins with Emotion). It is regenerated at the same points as the worker below (`prepare`, `build:prepare`, `tests/global-setup.ts`) and manually with `pnpm --filter @gp-grid/core build:styles`. `jsr.json` un-ignores it like the worker; keep that entry.
 - `src/sorting/sort-worker-code.ts` - git-ignored. `scripts/build-worker.ts` bundles and minifies the typed worker source `src/sorting/sort-worker.script.ts` (tsdown, IIFE, in memory) into the `SORT_WORKER_CODE` string that `WorkerPool` loads through a Blob URL. It is regenerated on `pnpm install` (core `prepare` script), before every tsdown build (`build:prepare` hook), before vitest (`tests/global-setup.ts`) and manually with `pnpm --filter @gp-grid/core build:worker`. If the file is missing, run one of those. Edit `sort-worker.script.ts`, never the generated file. JSR publishes from `src/` and skips git-ignored files, so `jsr.json` un-ignores this one via `publish.exclude: ["!src/sorting/sort-worker-code.ts"]` - keep that entry.
 
 ## Constraints
