@@ -31,6 +31,7 @@ import type {
   InitialStateArgs,
 } from "@gp-grid/core";
 import { CellPeek, FilterPopup, GridHeader, GridBody } from "./components";
+import { DragGhosts } from "./components/DragGhosts";
 import type { ResizeHandleActions } from "./components/ResizeHandle";
 import { gridReducer, createInitialState } from "./gridState";
 import type { GridState, GridAction } from "./gridState/types";
@@ -835,51 +836,13 @@ export function Grid<TData = unknown>(
         />
       )}
 
-      {/* Column move ghost */}
-      {dragState.dragType === "column-move" && dragState.columnMove && (() => {
-        const cm = dragState.columnMove;
-        const column = effectiveColumns[cm.sourceColIndex];
-        const headerText = column?.headerName ?? column?.field ?? "";
-        return (
-          <>
-            <div
-              className="gp-grid-column-move-ghost"
-              style={{
-                left: cm.currentX - cm.ghostWidth / 2,
-                top: cm.currentY - cm.ghostHeight / 2,
-                width: cm.ghostWidth,
-                height: cm.ghostHeight,
-              }}
-            >
-              {headerText}
-            </div>
-            {cm.dropTargetIndex !== null && (
-              <div
-                className="gp-grid-column-drop-indicator"
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  insetInlineStart: cm.dropIndicatorX,
-                  height: totalHeaderHeight,
-                }}
-              />
-            )}
-          </>
-        );
-      })()}
-
-      {/* Row drag ghost (fixed position, follows cursor) */}
-      {dragState.dragType === "row-drag" && dragState.rowDrag && (
-        <div
-          className="gp-grid-row-drag-ghost"
-          style={{
-            left: dragState.rowDrag.currentX + 12,
-            top: dragState.rowDrag.currentY - dragState.rowDrag.sourceRowHeight / 2,
-            width: Math.min(300, totalWidth),
-            height: dragState.rowDrag.sourceRowHeight,
-          }}
-        />
-      )}
+      <DragGhosts
+        dragState={dragState}
+        columns={effectiveColumns}
+        totalHeaderHeight={totalHeaderHeight}
+        totalWidth={totalWidth}
+        hostRef={outerContainerRef}
+      />
     </div>
   );
 }

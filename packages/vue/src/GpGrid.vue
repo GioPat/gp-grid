@@ -33,6 +33,7 @@ import FilterPopup from "./components/FilterPopup.vue";
 import GridHeader from "./components/GridHeader.vue";
 import GridBody from "./components/GridBody.vue";
 import CellPeek from "./components/CellPeek.vue";
+import DragGhosts from "./components/DragGhosts.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -734,39 +735,12 @@ defineExpose({
       }"
     />
 
-    <!-- Column move ghost -->
-    <template v-if="dragState.dragType === 'column-move' && dragState.columnMove">
-      <div
-        class="gp-grid-column-move-ghost"
-        :style="{
-          left: `${dragState.columnMove!.currentX - dragState.columnMove!.ghostWidth / 2}px`,
-          top: `${dragState.columnMove!.currentY - dragState.columnMove!.ghostHeight / 2}px`,
-          width: `${dragState.columnMove!.ghostWidth}px`,
-          height: `${dragState.columnMove!.ghostHeight}px`,
-        }"
-      >
-        {{ effectiveColumns[dragState.columnMove!.sourceColIndex]?.headerName ?? effectiveColumns[dragState.columnMove!.sourceColIndex]?.field ?? '' }}
-      </div>
-      <div
-        v-if="dragState.columnMove!.dropTargetIndex !== null"
-        class="gp-grid-column-drop-indicator"
-        :style="{
-          insetInlineStart: `${dragState.columnMove.dropIndicatorX}px`,
-          height: `${totalHeaderHeight}px`,
-        }"
-      />
-    </template>
-
-    <!-- Row drag ghost (fixed position, follows cursor) -->
-    <div
-      v-if="dragState.dragType === 'row-drag' && dragState.rowDrag"
-      class="gp-grid-row-drag-ghost"
-      :style="{
-        left: `${dragState.rowDrag!.currentX + 12}px`,
-        top: `${dragState.rowDrag!.currentY - dragState.rowDrag!.sourceRowHeight / 2}px`,
-        width: `${Math.min(300, totalWidth)}px`,
-        height: `${dragState.rowDrag!.sourceRowHeight}px`,
-      }"
+    <DragGhosts
+      :drag-state="dragState"
+      :columns="effectiveColumns"
+      :total-header-height="totalHeaderHeight"
+      :total-width="totalWidth"
+      :host="outerContainerRef"
     />
   </div>
 </template>
