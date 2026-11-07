@@ -46,6 +46,8 @@ Stylesheets are not auto-injected (since `v0.11.0`). Import the CSS exactly **on
 - Vue: `import "@gp-grid/vue/dist/styles.css";` in `main.ts`
 - Angular: add `@import "@gp-grid/angular/dist/styles.css";` to `styles.css`, or list it in `angular.json` → `architect.build.options.styles`
 
+If the host forbids global CSS imports (e.g. Grafana plugins, whose validator requires Emotion), use the `gridStyles` string exported by every package instead of the file. See `references/core.md` → CSS.
+
 Forgetting this is the #2 setup bug ("the grid renders but looks unstyled / no borders / no header background").
 
 ### Column definition (`ColumnDefinition`)
