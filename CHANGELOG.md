@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.1.2...gp-grid-v1.2.0) (2026-11-07)
+
+
+### ✨ Features
+
+* **styles:** export the stylesheet as the gridStyles string ([7d24e73](https://github.com/GioPat/gp-grid/commit/7d24e735025e5b10c4827062bbb4e5f8ecf77a5c))
+
+
+### 📝 Documentation
+
+* **skill:** gridStyles string for CSS-in-JS hosts ([297dc28](https://github.com/GioPat/gp-grid/commit/297dc281ca527552ab5e60f268818ddf2b555c17))
+
 ## [1.1.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.1.1...gp-grid-v1.1.2) (2026-11-07)
 
 
