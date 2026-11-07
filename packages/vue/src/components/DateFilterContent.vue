@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { getDateOperatorOptions } from "@gp-grid/core";
+import { formatDateFilterInput, getDateOperatorOptions } from "@gp-grid/core";
 import type {
   ColumnFilterModel,
   DateFilterCondition,
+  DateFilterInputType,
   DateFilterOperator,
   FilterConditionGroup,
   GridLabels,
@@ -15,6 +16,7 @@ import {
 
 const props = defineProps<{
   currentFilter?: ColumnFilterModel;
+  inputType: DateFilterInputType;
   labels: GridLabels;
 }>();
 
@@ -25,13 +27,6 @@ const emit = defineEmits<{
 
 const operators = computed(() => getDateOperatorOptions(props.labels));
 
-const formatDateForInput = (date: Date | string | undefined): string => {
-  if (!date) return "";
-  const normalizedDate = typeof date === "string" ? new Date(date) : date;
-  if (Number.isNaN(normalizedDate.getTime())) return "";
-  return normalizedDate.toISOString().split("T")[0]!;
-};
-
 const initialGroups = computed((): LocalFilterGroup<DateFilterOperator>[] => {
   if (props.currentFilter?.groups.length) {
     return props.currentFilter.groups.map((group) => ({
@@ -40,8 +35,8 @@ const initialGroups = computed((): LocalFilterGroup<DateFilterOperator>[] => {
         const dateCondition = condition as DateFilterCondition;
         return {
           operator: dateCondition.operator,
-          value: formatDateForInput(dateCondition.value),
-          valueTo: formatDateForInput(dateCondition.valueTo),
+          value: formatDateFilterInput(dateCondition.value, props.inputType),
+          valueTo: formatDateFilterInput(dateCondition.valueTo, props.inputType),
         };
       }),
     }));
@@ -163,14 +158,14 @@ const handleClear = (): void => emit("apply", null);
               </select>
               <input
                 v-if="condition.operator !== 'blank' && condition.operator !== 'notBlank'"
-                type="date"
+                :type="inputType"
                 :value="condition.value"
                 @input="updateCondition(groupIndex, conditionIndex, { value: ($event.target as HTMLInputElement).value })"
               />
               <template v-if="condition.operator === 'between'">
                 <span class="gp-grid-filter-to">{{ labels.betweenSeparator }}</span>
                 <input
-                  type="date"
+                  :type="inputType"
                   :value="condition.valueTo"
                   @input="updateCondition(groupIndex, conditionIndex, { valueTo: ($event.target as HTMLInputElement).value })"
                 />

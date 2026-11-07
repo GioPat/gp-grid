@@ -7,7 +7,7 @@ import type {
   ColumnFilterModel,
   GridLabels,
 } from "@gp-grid/core";
-import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
+import { calculateFilterPopupPosition, formatLabel, getDateFilterInputType } from "@gp-grid/core";
 import { TextFilterContent } from "./TextFilterContent";
 import { NumberFilterContent } from "./NumberFilterContent";
 import { DateFilterContent } from "./DateFilterContent";
@@ -194,7 +194,9 @@ const BuiltInFilterContent = ({
 }: BuiltInFilterContentProps): React.ReactNode => {
   const dataType = column.cellDataType;
   if (dataType === "number") return <NumberFilterContent {...shared} />;
-  if (DATE_TYPES.has(dataType)) return <DateFilterContent {...shared} />;
+  if (DATE_TYPES.has(dataType)) {
+    return <DateFilterContent inputType={getDateFilterInputType(dataType)} {...shared} />;
+  }
   return (
     <TextFilterContent
       distinctValues={distinctValues}

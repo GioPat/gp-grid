@@ -32,6 +32,12 @@ export const FILTER_POPUP_TEMPLATE = `
         </div>
       }
     }
+  } @else if (dateInputType(); as inputType) {
+    <gp-grid-date-filter-content
+      [currentFilter]="currentFilter()"
+      [inputType]="inputType"
+      [labels]="labels()"
+      (apply)="applyFilter($event)" />
   } @else {
     <gp-grid-filter-content
       [column]="column()"

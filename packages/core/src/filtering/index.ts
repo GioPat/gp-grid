@@ -8,8 +8,6 @@ import type {
   TextFilterOperator,
   NumberFilterCondition,
   NumberFilterOperator,
-  DateFilterCondition,
-  DateFilterOperator,
   ColumnFilterInput,
   ColumnFilterModel,
   FilterConditionGroup,
@@ -18,21 +16,9 @@ import type {
 import { formatCellValue } from "../utils/format-helpers";
 import { isBlankCellValue, rawValueKey } from "./distinct-entries";
 import { normalizeColumnFilterModel } from "./normalize";
+import { evaluateDateCondition } from "./date-condition";
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Check if two dates are on the same day.
- */
-export function isSameDay(date1: Date, date2: Date): boolean {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
-}
+export { isSameDay, evaluateDateCondition } from "./date-condition";
 
 // Blank detection is shared with the popup helpers (`isBlankCellValue` in
 // distinct-entries.ts) so the "(Blanks)" checkbox and the filter evaluation
@@ -149,52 +135,6 @@ export function evaluateNumberCondition(
   const filterValue = condition.value ?? 0;
   const filterValueTo = condition.valueTo ?? 0;
   return NUMBER_OPERATORS[condition.operator](numValue, filterValue, filterValueTo);
-}
-
-// =============================================================================
-// Date Filter Conditions
-// =============================================================================
-
-const DATE_OPERATORS: Record<
-  Exclude<DateFilterOperator, "blank" | "notBlank">,
-  (d: Date, f: Date, fTo: Date) => boolean
-> = {
-  "=": (d, f) => isSameDay(d, f),
-  "!=": (d, f) => !isSameDay(d, f),
-  ">": (d, f) => d.getTime() > f.getTime(),
-  "<": (d, f) => d.getTime() < f.getTime(),
-  between: (d, f, fTo) => {
-    const t = d.getTime();
-    return t >= f.getTime() && t <= fTo.getTime();
-  },
-};
-
-/**
- * Evaluate a date filter condition against a cell value.
- */
-export function evaluateDateCondition(
-  cellValue: CellValue,
-  condition: DateFilterCondition,
-): boolean {
-  const isBlank = cellValue == null || cellValue === "";
-
-  if (condition.operator === "blank") return isBlank;
-  if (condition.operator === "notBlank") return !isBlank;
-  if (isBlank) return false;
-
-  const dateValue = cellValue instanceof Date
-    ? cellValue
-    : new Date(formatCellValue(cellValue));
-  if (Number.isNaN(dateValue.getTime())) return false;
-
-  const filterDate = condition.value instanceof Date
-    ? condition.value
-    : new Date(String(condition.value ?? ""));
-  const filterDateTo = condition.valueTo instanceof Date
-    ? condition.valueTo
-    : new Date(String(condition.valueTo ?? ""));
-
-  return DATE_OPERATORS[condition.operator](dateValue, filterDate, filterDateTo);
 }
 
 // =============================================================================

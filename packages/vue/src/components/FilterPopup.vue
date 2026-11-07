@@ -7,7 +7,7 @@ import type {
   FilterRendererParams,
   GridLabels,
 } from "@gp-grid/core";
-import { calculateFilterPopupPosition, formatLabel } from "@gp-grid/core";
+import { calculateFilterPopupPosition, formatLabel, getDateFilterInputType } from "@gp-grid/core";
 import { useFilterPopup } from "../composables/useFilterPopup";
 import TextFilterContent from "./TextFilterContent.vue";
 import NumberFilterContent from "./NumberFilterContent.vue";
@@ -173,6 +173,7 @@ const popupStyle = computed(() => ({
     <DateFilterContent
       v-else-if="isDateType"
       :current-filter="currentFilter"
+      :input-type="getDateFilterInputType(dataType)"
       :labels="labels"
       @apply="handleApply"
       @close="handleClose"
