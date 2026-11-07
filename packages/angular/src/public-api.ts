@@ -226,3 +226,4 @@ export {
 
 export type { MutableDataSource } from '@gp-grid/core';
 export { GridCore } from '@gp-grid/core';
+export { gridStyles } from '@gp-grid/core';

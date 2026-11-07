@@ -230,3 +230,5 @@ export type { MutableDataSource } from "@gp-grid/core";
 
 // Re-export GridCore class for typing (used with GridRef)
 export { GridCore } from "@gp-grid/core";
+
+export { gridStyles } from "@gp-grid/core";

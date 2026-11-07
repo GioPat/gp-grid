@@ -49,7 +49,8 @@
     "build": "tsdown --clean --sourcemap",
     "build:production": "tsdown --clean --minify --treeshake --dts --tsconfig tsconfig.build.json",
     "build:worker": "node scripts/build-worker.ts",
-    "prepare": "node scripts/build-worker.ts",
+    "build:styles": "node scripts/build-styles.ts",
+    "prepare": "node scripts/build-worker.ts && node scripts/build-styles.ts",
     "test": "vitest",
     "bench": "vitest bench"
   },

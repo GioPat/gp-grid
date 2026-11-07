@@ -40,3 +40,7 @@ profiling/results
 # Source: packages/core/src/sorting/sort-worker.script.ts
 # Generator: packages/core/scripts/build-worker.ts (runs on install, build and test)
 packages/core/src/sorting/sort-worker-code.ts
+# Generated build artifact: the minified stylesheet as a string.
+# Source: packages/core/src/styles/*.css
+# Generator: packages/core/scripts/build-styles.ts (runs on install, build and test)
+packages/core/src/styles/grid-styles.ts

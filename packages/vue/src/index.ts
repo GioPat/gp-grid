@@ -79,6 +79,8 @@ export {
   PIVOT_LABEL_COLUMN_ID,
   // GridCore class (for typing component refs)
   GridCore,
+  // Stylesheet as a string
+  gridStyles,
 } from "@gp-grid/core";
 
 export type {

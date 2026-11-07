@@ -1,16 +1,13 @@
 import { defineConfig } from "tsdown";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { bundle as bundleCss } from "lightningcss";
 import { writeSortWorkerModule } from "./scripts/build-worker.ts";
+import { bundleStyles, writeStylesModule } from "./scripts/build-styles.ts";
 
-const STYLES_ENTRY = "src/styles/index.css";
 const STYLES_OUTPUT = "dist/styles.css";
 
-/** Bundle src/styles/*.css (via @import) into a single dist/styles.css. */
 const buildStyles = (minify: boolean): void => {
-  const { code } = bundleCss({ filename: STYLES_ENTRY, minify });
   mkdirSync("dist", { recursive: true });
-  writeFileSync(STYLES_OUTPUT, code);
+  writeFileSync(STYLES_OUTPUT, bundleStyles(minify));
   console.log(`✓ ${STYLES_OUTPUT} written (${minify ? "minified" : "readable"})`);
 };
 
@@ -23,6 +20,7 @@ export default defineConfig((cli) => {
     hooks: {
       "build:prepare": async () => {
         await writeSortWorkerModule();
+        writeStylesModule();
       },
     },
     onSuccess: () => buildStyles(minify),
