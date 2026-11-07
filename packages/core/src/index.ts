@@ -95,6 +95,11 @@ export {
   isBlankCellValue,
 } from "./filtering/distinct-entries";
 export type { DistinctValueEntry } from "./filtering/distinct-entries";
+export {
+  getDateFilterInputType,
+  formatDateFilterInput,
+} from "./filtering/date-values";
+export type { DateFilterInputType } from "./filtering/date-values";
 
 /** Field helpers (from indexed-data-store) */
 export { getFieldValue, setFieldValue } from "./indexed-data-store/index";

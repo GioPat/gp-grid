@@ -265,6 +265,7 @@
 
 .gp-grid-filter-row input[type="number"],
 .gp-grid-filter-row input[type="date"],
+.gp-grid-filter-row input[type="datetime-local"],
 .gp-grid-filter-row input[type="text"],
 .gp-grid-filter-text-input {
   flex: 1;
@@ -275,6 +276,7 @@
 
 :where(.gp-grid-filter-row input[type="number"]),
 :where(.gp-grid-filter-row input[type="date"]),
+:where(.gp-grid-filter-row input[type="datetime-local"]),
 :where(.gp-grid-filter-row input[type="text"]),
 :where(.gp-grid-filter-text-input) {
   padding: 0 8px;
@@ -284,6 +286,15 @@
   border-radius: 4px;
   background-color: var(--gp-grid-input-bg);
   color: var(--gp-grid-text);
+}
+
+/* Native date inputs clip their value below their intrinsic width, so wrap instead of shrinking */
+.gp-grid-filter-date .gp-grid-filter-row {
+  flex-wrap: wrap;
+}
+
+.gp-grid-filter-date .gp-grid-filter-row input {
+  flex: 1 0 auto;
 }
 
 :where(.gp-grid-filter-row input:focus) {

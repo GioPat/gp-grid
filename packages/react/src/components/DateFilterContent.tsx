@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo } from "react";
-import { getDateOperatorOptions } from "@gp-grid/core";
+import { formatDateFilterInput, getDateOperatorOptions } from "@gp-grid/core";
 import type {
   ColumnFilterModel,
   DateFilterCondition,
+  DateFilterInputType,
   DateFilterOperator,
   FilterConditionGroup,
   GridLabels,
@@ -15,6 +16,7 @@ import {
 
 export interface DateFilterContentProps {
   currentFilter?: ColumnFilterModel;
+  inputType: DateFilterInputType;
   labels: GridLabels;
   onApply: (filter: ColumnFilterModel | null) => void;
   onClose: () => void;
@@ -32,15 +34,9 @@ const createCondition = (): Condition => ({
   valueTo: "",
 });
 
-const formatDateForInput = (date: Date | string | undefined): string => {
-  if (!date) return "";
-  const normalizedDate = typeof date === "string" ? new Date(date) : date;
-  if (Number.isNaN(normalizedDate.getTime())) return "";
-  return normalizedDate.toISOString().split("T")[0]!;
-};
-
 const initialGroupsFor = (
   filter: ColumnFilterModel | undefined,
+  inputType: DateFilterInputType,
 ): LocalFilterGroup<Condition>[] => {
   if (filter?.groups.length) {
     return filter.groups.map((group) => ({
@@ -49,8 +45,8 @@ const initialGroupsFor = (
         const dateCondition = condition as DateFilterCondition;
         return {
           operator: dateCondition.operator,
-          value: formatDateForInput(dateCondition.value),
-          valueTo: formatDateForInput(dateCondition.valueTo),
+          value: formatDateFilterInput(dateCondition.value, inputType),
+          valueTo: formatDateFilterInput(dateCondition.valueTo, inputType),
         };
       }),
     }));
@@ -70,13 +66,14 @@ const isValidCondition = (condition: Condition): boolean => {
 
 export function DateFilterContent({
   currentFilter,
+  inputType,
   labels,
   onApply,
 }: DateFilterContentProps): React.ReactNode {
   const operators = useMemo(() => getDateOperatorOptions(labels), [labels]);
   const initialGroups = useMemo(
-    () => initialGroupsFor(currentFilter),
-    [currentFilter],
+    () => initialGroupsFor(currentFilter, inputType),
+    [currentFilter, inputType],
   );
   const {
     groups,
@@ -165,7 +162,7 @@ export function DateFilterContent({
                     </select>
                     {condition.operator !== "blank" && condition.operator !== "notBlank" && (
                       <input
-                        type="date"
+                        type={inputType}
                         value={condition.value}
                         onChange={(event) => updateCondition(groupIndex, conditionIndex, {
                           value: event.target.value,
@@ -176,7 +173,7 @@ export function DateFilterContent({
                       <>
                         <span className="gp-grid-filter-to">{labels.betweenSeparator}</span>
                         <input
-                          type="date"
+                          type={inputType}
                           value={condition.valueTo}
                           onChange={(event) => updateCondition(groupIndex, conditionIndex, {
                             valueTo: event.target.value,

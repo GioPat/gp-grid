@@ -13,11 +13,18 @@ import {
   ElementRef,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { calculateFilterPopupPosition, defaultGridLabels, formatLabel } from '@gp-grid/core';
+import {
+  calculateFilterPopupPosition,
+  defaultGridLabels,
+  formatLabel,
+  getDateFilterInputType,
+} from '@gp-grid/core';
 import type {
   ColumnDefinition,
+  CellDataType,
   CellValue,
   ColumnFilterModel,
+  DateFilterInputType,
   FilterClearParams,
   FilterRendererDefinition,
   FilterRendererParams,
@@ -25,12 +32,15 @@ import type {
 } from '@gp-grid/core';
 import { FILTER_POPUP_TEMPLATE } from './filter-popup.template';
 import { FilterContentComponent } from './filter-content.component';
+import { DateFilterContentComponent } from './date-filter-content.component';
 import { resolveColId } from './filter-popup/filter-logic';
 
 export type FilterContentTemplate = TemplateRef<{ $implicit: FilterRendererParams }>;
 export type FilterClearTemplate = TemplateRef<{ $implicit: FilterClearParams }>;
 /** Custom filter popup: content template plus its required clear control. */
 export type AngularFilterRenderer = FilterRendererDefinition<FilterContentTemplate, FilterClearTemplate>;
+
+const DATE_TYPES = new Set<CellDataType>(['date', 'dateString', 'dateTime', 'dateTimeString']);
 
 const isAngularFilterRenderer = (renderer: unknown): renderer is AngularFilterRenderer =>
   typeof renderer === 'object' && renderer !== null &&
@@ -39,7 +49,7 @@ const isAngularFilterRenderer = (renderer: unknown): renderer is AngularFilterRe
 @Component({
   selector: 'gp-grid-filter-popup',
   standalone: true,
-  imports: [NgTemplateOutlet, FilterContentComponent],
+  imports: [NgTemplateOutlet, FilterContentComponent, DateFilterContentComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: FILTER_POPUP_TEMPLATE,
 })
@@ -93,6 +103,12 @@ export class FilterPopupComponent implements AfterViewInit, OnDestroy {
     apply: (filter) => this.applyFilter(filter),
     close: () => this.close.emit(),
   }));
+
+  /** `null` for non-date columns, which use the text or number filter. */
+  protected dateInputType = computed((): DateFilterInputType | null => {
+    const dataType = this.column().cellDataType;
+    return DATE_TYPES.has(dataType) ? getDateFilterInputType(dataType) : null;
+  });
 
   protected filterTitle(): string {
     const column = this.column();
