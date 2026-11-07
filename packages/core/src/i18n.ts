@@ -16,13 +16,13 @@ export interface GridFilterOperatorLabels {
   startsWith: string;
   /** Text operator: ends with */
   endsWith: string;
-  /** Shared "equals" (= for number/date, equals for text) */
+  /** Shared "equals" (= for number, equals for text) */
   equals: string;
   /** Shared "does not equal" (!= / notEquals) */
   notEquals: string;
-  /** Number/date operator: greater than */
+  /** Number operator: greater than */
   greaterThan: string;
-  /** Number/date operator: less than */
+  /** Number operator: less than */
   lessThan: string;
   /** Number operator: greater than or equal */
   greaterThanOrEqual: string;
@@ -30,6 +30,14 @@ export interface GridFilterOperatorLabels {
   lessThanOrEqual: string;
   /** Number/date operator: between */
   between: string;
+  /** Date operator: on the same day or minute */
+  on: string;
+  /** Date operator: not on the same day or minute */
+  notOn: string;
+  /** Date operator: after */
+  after: string;
+  /** Date operator: before */
+  before: string;
   /** Shared "is blank" operator */
   blank: string;
   /** Shared "is not blank" operator */
@@ -189,6 +197,10 @@ export const defaultGridLabels: GridLabels = {
     greaterThanOrEqual: "Greater than or equal",
     lessThanOrEqual: "Less than or equal",
     between: "Between",
+    on: "On",
+    notOn: "Not on",
+    after: "After",
+    before: "Before",
     blank: "Is blank",
     notBlank: "Is not blank",
   },

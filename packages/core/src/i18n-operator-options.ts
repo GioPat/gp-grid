@@ -55,10 +55,10 @@ export const getDateOperatorOptions = (
 ): FilterOperatorOption<DateFilterOperator>[] => {
   const op = labels.operators;
   return [
-    { value: "=", label: op.equals },
-    { value: "!=", label: op.notEquals },
-    { value: ">", label: op.greaterThan },
-    { value: "<", label: op.lessThan },
+    { value: "=", label: op.on },
+    { value: "!=", label: op.notOn },
+    { value: ">", label: op.after },
+    { value: "<", label: op.before },
     { value: "between", label: op.between },
     { value: "blank", label: op.blank },
     { value: "notBlank", label: op.notBlank },
