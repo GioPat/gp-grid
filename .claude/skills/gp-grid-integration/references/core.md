@@ -454,11 +454,33 @@ Adapters can call `formatCellValue` (exported from `@gp-grid/core`) to match the
 
 ## CSS
 
-The core ships the canonical stylesheet as a real CSS file, `@gp-grid/core/dist/styles.css` (wrappers copy it to `@gp-grid/<wrapper>/dist/styles.css`). It is not exported as a JS string, so import the file once at the app entry point with your bundler, or link it from HTML:
+The core ships the canonical stylesheet as a real CSS file, `@gp-grid/core/dist/styles.css` (wrappers copy it to `@gp-grid/<wrapper>/dist/styles.css`). Import the file once at the app entry point with your bundler, or link it from HTML:
 
 ```ts
 import "@gp-grid/core/dist/styles.css";
 ```
+
+### CSS-in-JS hosts and shadow roots
+
+Every package (`@gp-grid/core`, `react`, `vue`, `angular`) also exports the same rules, minified, as the `gridStyles` string. Use it only when importing a `.css` file isn't allowed. Bundlers tree-shake it when it's unused.
+
+```tsx
+import { Grid, gridStyles } from "@gp-grid/react";
+import { css } from "@emotion/css";
+
+const gridClass = css(gridStyles, {
+  "& .gp-grid-container": { "--gp-grid-bg": theme.colors.background.primary },
+});
+
+<div className={gridClass} style={{ height: 400 }}>
+  <Grid /* ... */ />
+</div>
+```
+
+- `css()` scopes every rule under its generated class as a descendant selector, so put the class on a **wrapping element**, never on the grid root.
+- The scope adds one class of specificity to every rule, including the `:where()` ones. Pass overrides as later arguments to the **same** `css()` call (equal specificity, later wins) rather than as separate global rules. Theming through the `--gp-grid-*` variables is the cleanest way.
+- Older Emotion setups without scoping can use `injectGlobal(gridStyles)` once, which behaves exactly like importing the file.
+- For a shadow root, inject it into a `<style>` element or a constructed `CSSStyleSheet` (`sheet.replaceSync(gridStyles)`) inside that root.
 
 The CSS uses `:where()` selectors throughout so users can override styles without specificity wars.
 
