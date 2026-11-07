@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { readFixedOriginIn } from "@gp-grid/core";
+import { readFixedOrigin } from "@gp-grid/core";
 import type { ColumnDefinition, DragState, FixedOrigin } from "@gp-grid/core";
 
 const props = defineProps<{
@@ -18,7 +18,7 @@ const dragType = computed(() => props.dragState.dragType);
 // Read once per drag: the probe forces a layout, too costly on every move.
 const origin = computed((): FixedOrigin => {
   const hasGhost = dragType.value === "column-move" || dragType.value === "row-drag";
-  return hasGhost && props.host ? readFixedOriginIn(props.host) : NO_ORIGIN;
+  return hasGhost && props.host ? readFixedOrigin(props.host) : NO_ORIGIN;
 });
 
 const columnMove = computed(() =>

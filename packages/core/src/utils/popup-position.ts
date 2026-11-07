@@ -50,6 +50,6 @@ export const calculateFilterPopupPosition = (
   // Final clamp to top edge
   top = Math.max(viewportPadding, top);
 
-  const origin = readFixedOrigin(popupEl);
+  const origin = readFixedOrigin(popupEl.parentElement ?? popupEl);
   return { top: top - origin.top, left: left - origin.left, minWidth };
 };

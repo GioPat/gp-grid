@@ -1,7 +1,7 @@
 // packages/react/src/components/DragGhosts.tsx
 
 import React, { useMemo } from "react";
-import { readFixedOriginIn } from "@gp-grid/core";
+import { readFixedOrigin } from "@gp-grid/core";
 import type { ColumnDefinition, DragState, FixedOrigin } from "@gp-grid/core";
 
 export interface DragGhostsProps {
@@ -27,7 +27,7 @@ export function DragGhosts({
   const origin = useMemo(() => {
     const host = hostRef.current;
     const hasGhost = dragType === "column-move" || dragType === "row-drag";
-    return hasGhost && host ? readFixedOriginIn(host) : NO_ORIGIN;
+    return hasGhost && host ? readFixedOrigin(host) : NO_ORIGIN;
   }, [dragType, hostRef]);
 
   if (dragType === "column-move" && columnMove) {
