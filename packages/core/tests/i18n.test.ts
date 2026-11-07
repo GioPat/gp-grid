@@ -234,6 +234,11 @@ describe("operator option helpers", () => {
     ]);
   });
 
+  it("date operators use date wording", () => {
+    const labels = getDateOperatorOptions(defaultGridLabels).map((o) => o.label);
+    expect(labels.slice(0, 4)).toEqual(["On", "Not on", "After", "Before"]);
+  });
+
   it("reflects a custom operator label", () => {
     const labels = resolveGridLabels({ operators: { greaterThan: "Superiore" } });
     const greater = getNumberOperatorOptions(labels).find((o) => o.value === ">");
