@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.2](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.1.1...gp-grid-v1.1.2) (2026-11-07)
+
+
+### 🐛 Bug Fixes
+
+* **column-move:** anchor drag ghosts to the fixed containing block ([649695c](https://github.com/GioPat/gp-grid/commit/649695c07965d9ec50b676141658718830cf9887))
+* **filtering:** date wording for date filter operators ([760e840](https://github.com/GioPat/gp-grid/commit/760e840889ebe2db9240f77e77c3f1c0fdf03c90))
+* **filtering:** datetime filter input and date filter popup width ([9e594d6](https://github.com/GioPat/gp-grid/commit/9e594d6915fe4e628b037b3d06af0803a46ece50))
+
+
+### ♻️ Refactoring
+
+* single readFixedOrigin taking the overlay host ([470370d](https://github.com/GioPat/gp-grid/commit/470370d8e1bbe35092515d96477accdeea54fb11))
+
 ## [1.1.1](https://github.com/GioPat/gp-grid/compare/gp-grid-v1.1.0...gp-grid-v1.1.1) (2026-11-02)
 
 
