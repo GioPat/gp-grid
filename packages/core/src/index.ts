@@ -469,7 +469,6 @@ export {
   readContainerBounds,
   fixedLeftForInline,
   readFixedOrigin,
-  readFixedOriginIn,
   normalizeHorizontalKey,
   AutoScrollDriver,
   PendingRowDragController,

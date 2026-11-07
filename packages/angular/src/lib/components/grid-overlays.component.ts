@@ -15,7 +15,7 @@ import type {
   FixedOrigin,
   GridLabels,
 } from '@gp-grid/core';
-import { defaultGridLabels, formatLabel, readFixedOriginIn } from '@gp-grid/core';
+import { defaultGridLabels, formatLabel, readFixedOrigin } from '@gp-grid/core';
 import { FilterPopupComponent, type AngularFilterRenderer } from './filter-popup.component';
 
 export interface ActiveFilterPopup {
@@ -137,7 +137,7 @@ export class GridOverlaysComponent {
   protected ghostOrigin = computed((): FixedOrigin => {
     const dragType = this.dragType();
     const hasGhost = dragType === 'column-move' || dragType === 'row-drag';
-    return hasGhost ? readFixedOriginIn(this.host) : NO_ORIGIN;
+    return hasGhost ? readFixedOrigin(this.host) : NO_ORIGIN;
   });
 
   protected columnMove = computed(() => {

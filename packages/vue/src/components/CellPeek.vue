@@ -70,7 +70,7 @@ const updatePosition = (): void => {
   const rightInset = Math.max(0, fullLeft + bounds.width - clippedLeft - clippedWidth);
 
   const origin = container.getBoundingClientRect();
-  const fixedOrigin = readFixedOrigin(overlay);
+  const fixedOrigin = readFixedOrigin(overlay.parentElement ?? overlay);
   top.value = origin.top + bounds.top - fixedOrigin.top;
   left.value = fullLeft - fixedOrigin.left;
   width.value = bounds.width;

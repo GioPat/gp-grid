@@ -101,7 +101,7 @@ export function CellPeek<TData = unknown>({
     const rightInset = Math.max(0, left + bounds.width - clippedLeft - clippedWidth);
 
     const origin = container.getBoundingClientRect();
-    const fixedOrigin = readFixedOrigin(overlay);
+    const fixedOrigin = readFixedOrigin(overlay.parentElement ?? overlay);
     setStyle({
       top: origin.top + bounds.top - fixedOrigin.top,
       left: left - fixedOrigin.left,

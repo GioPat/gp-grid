@@ -1,7 +1,7 @@
 // packages/core/tests/fixed-origin.test.ts
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFixedOrigin, readFixedOriginIn } from "../src/adapter/fixed-origin";
+import { readFixedOrigin } from "../src/adapter/fixed-origin";
 import { calculateFilterPopupPosition } from "../src/utils/popup-position";
 
 const rect = (left: number, top: number, width = 0, height = 0): DOMRect =>
@@ -30,29 +30,19 @@ afterEach(() => {
 });
 
 describe("readFixedOrigin", () => {
-  it("measures the fixed containing block through the element's parent and leaves no probe behind", () => {
-    const { host, popup } = mount();
-    stubLayout(120, 80, new Map());
-
-    expect(readFixedOrigin(popup)).toEqual({ top: 80, left: 120 });
-    expect(host.children).toHaveLength(2);
-  });
-
-  it("is the viewport origin without a containing ancestor", () => {
-    const { popup } = mount();
-    stubLayout(0, 0, new Map());
-
-    expect(readFixedOrigin(popup)).toEqual({ top: 0, left: 0 });
-  });
-});
-
-describe("readFixedOriginIn", () => {
   it("measures the fixed containing block inside the host and leaves no probe behind", () => {
     const { host } = mount();
     stubLayout(120, 80, new Map());
 
-    expect(readFixedOriginIn(host)).toEqual({ top: 80, left: 120 });
+    expect(readFixedOrigin(host)).toEqual({ top: 80, left: 120 });
     expect(host.children).toHaveLength(2);
+  });
+
+  it("is the viewport origin without a containing ancestor", () => {
+    const { host } = mount();
+    stubLayout(0, 0, new Map());
+
+    expect(readFixedOrigin(host)).toEqual({ top: 0, left: 0 });
   });
 });
 
